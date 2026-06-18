@@ -774,6 +774,21 @@ a {
   font-size: clamp(22px, 5vw, 30px);
 }
 
+.epoch-quote-loading {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted, #8a8475);
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.epoch-quote-error {
+  color: #b4541f;
+  font-size: 16px;
+  font-weight: 600;
+}
+
 .swap-divider {
   display: grid;
   width: 40px;

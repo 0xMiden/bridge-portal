@@ -37,7 +37,6 @@ import {
   shortAddress,
   statusLabel,
   statusTone,
-  seedActivities,
 } from "../lib/bridge-state";
 import {
   useAppKit,
@@ -47,6 +46,8 @@ import {
   useWalletInfo,
 } from "@reown/appkit/react";
 import { type EvmProvider, ensureSepolia } from "../lib/evm-wallet";
+// Type-only import — erased at build, so the eager-WASM adapter never reaches SSR.
+import type { MidenFiWalletContextState } from "@miden-sdk/miden-wallet-adapter-react";
 
 type MidenWalletSnapshot = {
   address: string;
@@ -55,6 +56,8 @@ type MidenWalletSnapshot = {
   balanceText: string;
   noteSyncStatus: string;
   consumableNoteCount: number | null;
+  requestSend?: MidenFiWalletContextState["requestSend"];
+  waitForTransaction?: MidenFiWalletContextState["waitForTransaction"];
 };
 
 const emptyMidenWallet: MidenWalletSnapshot = {
@@ -99,6 +102,15 @@ const MidenWalletButton = dynamic(
   },
 );
 
+// ssr:false keeps the Epoch SDK + eager miden-sdk WASM out of the server render.
+const EpochQuotePreview = dynamic(
+  () => import("./EpochQuotePreview").then((mod) => mod.EpochQuotePreview),
+  {
+    ssr: false,
+    loading: () => <span className="epoch-quote-loading">…</span>,
+  },
+);
+
 function errorMessage(error: unknown) {
   if (error instanceof Error) return error.message;
   if (typeof error === "object" && error && "message" in error)
@@ -132,7 +144,7 @@ export function BridgeExperience() {
   const [walletError, setWalletError] = useState("");
   const [bridgeError, setBridgeError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [activities, setActivities] = useState<Activity[]>(seedActivities);
+  const [activities, setActivities] = useState<Activity[]>([]);
   const [hydrated, setHydrated] = useState(false);
   const [evmMenuOpen, setEvmMenuOpen] = useState(false);
   const [evmCopied, setEvmCopied] = useState(false);
@@ -148,6 +160,19 @@ export function BridgeExperience() {
   );
   const isLiveAgglayerReceive = provider === "agglayer" && mode === "receive";
   const midenAddress = midenWallet.address || launchMidenAccount;
+  // Map the form fields to the Epoch quote's directional roles:
+  // - send (Miden→EVM): Miden wallet is the sender; the EVM recipient is the
+  //   destination field (a 0x address) or the connected Sepolia wallet.
+  // - receive (EVM→Miden): the connected Sepolia wallet is the source; the Miden
+  //   recipient is the destination field or the connected Miden wallet.
+  const epochEvmAddress =
+    mode === "send"
+      ? /^0x[0-9a-fA-F]{40}$/.test(destination.trim())
+        ? destination.trim()
+        : walletAccount
+      : walletAccount;
+  const epochMidenAccount =
+    mode === "send" ? midenAddress : destination.trim() || midenAddress;
   const evmWalletLabel = walletInfo?.name ?? "Sepolia";
   const evmBalanceText = walletConnected
     ? evmBalance || "Balance unavailable"
@@ -211,7 +236,7 @@ export function BridgeExperience() {
       const stored = loadStoredActivities();
       queueMicrotask(() => setActivities(stored));
     } catch {
-      queueMicrotask(() => setActivities(seedActivities));
+      queueMicrotask(() => setActivities([]));
     } finally {
       setHydrated(true);
     }
@@ -455,6 +480,57 @@ export function BridgeExperience() {
           midenTxId: transaction.destinationAddress,
           sourceNetworkId: AGGLAYER_BALI.sourceNetworkId,
           destinationNetworkId: AGGLAYER_BALI.destinationNetworkId,
+        });
+        const updated = [next, ...activities];
+        setActivities(updated);
+        saveActivities(updated);
+        router.push(`/activity/${next.id}`);
+      } catch (error) {
+        setBridgeError(errorMessage(error));
+      } finally {
+        setIsSubmitting(false);
+      }
+      return;
+    }
+
+    if (provider === "epoch") {
+      setIsSubmitting(true);
+      try {
+        // Receive (EVM→Miden) signs a Sepolia deposit, so it needs a connected
+        // EVM wallet on Sepolia. Send (Miden→EVM) signs only on Miden.
+        if (mode === "receive") {
+          if (!walletConnected || !walletProvider || !walletAccount) {
+            await open();
+            return;
+          }
+          await ensureSepolia(walletProvider);
+        }
+
+        // Dynamic import: epoch-execute pulls eager-WASM miden-sdk, so it must
+        // load client-side at click time, never in the server render.
+        const { runEpochTransfer } = await import("../lib/epoch/epoch-execute");
+        const result = await runEpochTransfer({
+          mode,
+          amount,
+          midenAccount: epochMidenAccount,
+          evmAddress: epochEvmAddress,
+          requestSend: midenWallet.requestSend,
+          waitForTransaction: midenWallet.waitForTransaction,
+        });
+
+        const resolvedDestination =
+          mode === "send" ? epochEvmAddress : epochMidenAccount;
+        const next = createActivity(mode, "epoch", amount, {
+          status: "message_observed",
+          eta: "3-6 min",
+          destination: resolvedDestination,
+          txHash: result.sourceTxHash
+            ? shortAddress(result.sourceTxHash)
+            : "0xpending",
+          sourceTxHash: result.sourceTxHash,
+          midenTxId: mode === "send" ? result.midenNoteId : undefined,
+          epochIntentNonce: result.intentNonce,
+          epochSponsor: result.sponsorAddress,
         });
         const updated = [next, ...activities];
         setActivities(updated);
@@ -714,7 +790,19 @@ export function BridgeExperience() {
               </small>
             </div>
             <label className="readonly-amount">
-              <strong>{quote.expectedReceived}</strong>
+              <strong>
+                {provider === "epoch" ? (
+                  <EpochQuotePreview
+                    mode={mode}
+                    amount={amount}
+                    midenAccount={epochMidenAccount}
+                    evmAddress={epochEvmAddress}
+                    fallback={quote.expectedReceived}
+                  />
+                ) : (
+                  quote.expectedReceived
+                )}
+              </strong>
               <span>Expected</span>
             </label>
           </div>
