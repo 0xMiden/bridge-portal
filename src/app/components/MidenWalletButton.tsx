@@ -91,6 +91,12 @@ function MidenWalletButtonInner({
     null,
   );
   const menuRef = useRef<HTMLDivElement>(null);
+  // In-flight guard: requestAssets()/requestConsumableNotes() each open a MidenFi
+  // confirmation popup. Without dedup, concurrent callers (React StrictMode's
+  // double-invoked mount effect, or rapid address/connected changes) stack
+  // multiple popups that never seem to dismiss. Collapse concurrent refreshes
+  // to a single in-flight promise.
+  const refreshInflightRef = useRef<Promise<void> | null>(null);
   const address = wallet.address ?? "";
   const readyState = wallet.wallet?.readyState;
   const ready =
@@ -135,8 +141,14 @@ function MidenWalletButtonInner({
       return;
     }
 
-    void refreshWalletState();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // Do NOT eagerly call requestAssets()/requestConsumableNotes() on connect —
+    // each opens a MidenFi confirmation popup the bridge flow doesn't need, and
+    // they pile up. Balance/notes are fetched on demand via the menu's refresh
+    // button (onClick={refreshWalletState}). Show a neutral connected state here.
+    queueMicrotask(() => {
+      setBalanceText("Connected");
+      setNoteSyncStatus("Refresh to sync");
+    });
   }, [wallet.connected, address]);
 
   useEffect(() => {
@@ -216,7 +228,18 @@ function MidenWalletButtonInner({
 
   async function refreshWalletState() {
     if (!wallet.connected) return;
+    // Collapse concurrent/repeated refreshes into one popup cycle.
+    if (refreshInflightRef.current) return refreshInflightRef.current;
+    const run = doRefreshWalletState();
+    refreshInflightRef.current = run;
+    try {
+      await run;
+    } finally {
+      if (refreshInflightRef.current === run) refreshInflightRef.current = null;
+    }
+  }
 
+  async function doRefreshWalletState() {
     setError("");
     setBalanceText("Syncing assets");
     setNoteSyncStatus("Syncing notes");
