@@ -107,6 +107,7 @@ export function useEpochQuote({
             });
           }
         } catch (err) {
+          console.error("[epoch quote error]", mode, err);
           if (id === reqId.current) {
             setState({ enabled, loading: false, error: errorMessage(err) });
           }

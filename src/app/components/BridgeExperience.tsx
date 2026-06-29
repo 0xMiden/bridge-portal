@@ -773,7 +773,9 @@ export function BridgeExperience() {
                 value={amount}
                 onChange={(event) => setAmount(event.target.value)}
               />
-              <span>{copy.assetIn}</span>
+              {/* Epoch's SIO route bridges USDC<->USDC; the shared `assetIn`
+                  label ("ETH") is only correct for AggLayer. */}
+              <span>{provider === "epoch" ? "USDC" : copy.assetIn}</span>
             </label>
           </div>
 
