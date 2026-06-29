@@ -70,10 +70,12 @@ export const providers: Record<
   },
   agglayer: {
     label: "AggLayer",
-    badge: "Testnet",
-    route: "AggLayer testnet route",
+    badge: "Soon",
+    route: "Coming soon",
     disclosure:
       "AggLayer testnet routing depends on source confirmation and the bridge message becoming available to Miden.",
+    // Disabled for the Epoch-only launch; re-enable when AggLayer Send is built (#8).
+    disabled: true,
   },
   epoch: {
     label: "Epoch",
