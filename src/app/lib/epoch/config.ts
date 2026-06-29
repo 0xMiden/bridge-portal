@@ -39,6 +39,11 @@ export const MIDEN_MIN_RECLAIM_BLOCKS = 1000;
  * returns it directly when set; leave it blank to fall back to reading it from
  * the chain head (`BlockHeader.nativeAssetId()`) instead.
  */
-export const MIDEN_NATIVE_TOKEN_SYMBOL = "MIDEN";
+// Miden-side bridge token = USDC on Miden testnet (Epoch's SIO route is USDC<->USDC).
+// Faucet id refreshed for the v0.15 testnet genesis — the old 0.14-era id
+// (0x0a7d175ed63ec5200fb2ced86f6aa5) no longer resolves and the allocator returns
+// "A quote isn't available". Current value from epochprotocol/miden-integration-example
+// (constants/miden-tokens.ts). 6 decimals.
+export const MIDEN_NATIVE_TOKEN_SYMBOL = "USDC";
 export const MIDEN_NATIVE_TOKEN_DECIMALS = 6;
-export const MIDEN_NATIVE_FAUCET_ID = "0x0a7d175ed63ec5200fb2ced86f6aa5";
+export const MIDEN_NATIVE_FAUCET_ID = "0x2458e5446128e6b150b75b8ebd9ce1";
