@@ -23,7 +23,7 @@ export {
   MIDEN_NATIVE_TOKEN_DECIMALS,
   MIDEN_NATIVE_TOKEN_SYMBOL,
 } from "./config";
-export { getCurrentMidenBlock, getNativeMidenFaucetId } from "./chain";
+export { getCurrentMidenBlock } from "./chain";
 export {
   createBridgeP2IDNoteCallback,
   useCreateBridgeP2IDNote,

@@ -3,10 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { parseUnits } from "viem";
 
-import {
-  MIDEN_NATIVE_TOKEN_DECIMALS,
-  MIDEN_NATIVE_TOKEN_SYMBOL,
-} from "./config";
+import { MIDEN_NATIVE_TOKEN_DECIMALS } from "./config";
 import { quoteEpochReceive, quoteEpochSend } from "./epoch-quote";
 
 export interface EpochQuoteState {
