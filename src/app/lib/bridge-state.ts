@@ -41,6 +41,10 @@ export type Activity = {
   readyForClaim?: boolean;
   sourceNetworkId?: number;
   destinationNetworkId?: number;
+  /** Epoch intent nonce — `getIntentStatus(epochSponsor, epochIntentNonce)`. */
+  epochIntentNonce?: string;
+  /** Epoch sponsor / user address the intent status is keyed on (EVM 0x). */
+  epochSponsor?: string;
   updatedAt: string;
 };
 
@@ -145,62 +149,10 @@ export const timeline: Array<{ status: ActivityStatus; label: string; detail: st
   },
 ];
 
-export const defaultEvmAddress = "0x71C7656EC7ab88b098defB751B7401B5f6d8976F";
-export const defaultMidenAccount = "mcst1qpr8midenwalletpreviewaccount0000000000000";
 export const explorerUrls = {
   sepolia: "https://sepolia.etherscan.io",
   miden: "https://testnet.midenscan.com",
 };
-
-export const seedActivities: Activity[] = [
-  {
-    id: "act-receive-001",
-    mode: "receive",
-    provider: "agglayer",
-    summary: "Receive 100 ETH on Miden",
-    status: "claim_available",
-    eta: "Ready now",
-    amount: "100",
-    asset: "ETH",
-    destination: "c0ffee000000000000000000c0ffee",
-    bridgeDestinationAddress: "0x00000000c0ffee000000000000000000c0ffee00",
-    txHash: "0x9fb3...72ac",
-    sourceTxHash: "0x9fb3f3d6b7c0e2a947a0d9b0327d6de063a08f46d8dc6f2ced343b9a7e1772ac",
-    midenTxId: "0x0490ad6902c47f34e8a1dc57a85b6c019a14cf27b0130d4ba6b9134fd08f72ac",
-    updatedAt: "2 min ago",
-  },
-  {
-    id: "act-send-002",
-    mode: "send",
-    provider: "agglayer",
-    summary: "Send 0.25 ETH to Sepolia",
-    status: "source_finality",
-    eta: "8 min",
-    amount: "0.25",
-    asset: "ETH",
-    destination: defaultEvmAddress,
-    txHash: "0x52a1...b91e",
-    sourceTxHash: "0x0490ad69e87c19c0c2c4b7951b87f0013c98bf5d90b7e14acbe821471ad5b91e",
-    destinationTxHash: "0x52a18acb48115396081a3d4f1e7b58e45f0ff687a3af3ff6d83b947d85cdb91e",
-    updatedAt: "12 min ago",
-  },
-  {
-    id: "act-receive-003",
-    mode: "receive",
-    provider: "epoch",
-    summary: "Receive 0.4 ETH on Miden",
-    status: "failed",
-    eta: "Needs retry",
-    amount: "0.4",
-    asset: "ETH",
-    destination: "a11ce0000000000000000000a11ce0",
-    bridgeDestinationAddress: "0x00000000a11ce0000000000000000000a11ce000",
-    txHash: "0x31cc...e010",
-    sourceTxHash: "0x31cc2df2871077df360a531ee8da8aa27a90683e37e0ff94d9ef3e3d762fe010",
-    midenTxId: "0x0490ad6960b9ad9386602830e8bd7d467641dd32eb7d06263f3b0e622f64e010",
-    updatedAt: "1 hr ago",
-  },
-];
 
 export function shortAddress(value: string) {
   if (value.length <= 16) return value;
@@ -332,11 +284,11 @@ function normalizeActivity(activity: Activity): Activity {
   return { ...activity, mode, summary };
 }
 
-export function loadStoredActivities() {
+export function loadStoredActivities(): Activity[] {
   const raw = window.localStorage.getItem(activityStorageKey);
-  if (!raw) return seedActivities;
+  if (!raw) return [];
   const parsed = JSON.parse(raw) as Activity[];
-  return Array.isArray(parsed) && parsed.length > 0 ? parsed.map(normalizeActivity) : seedActivities;
+  return Array.isArray(parsed) ? parsed.map(normalizeActivity) : [];
 }
 
 export function saveActivities(activities: Activity[]) {

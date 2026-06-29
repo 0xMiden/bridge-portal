@@ -3,24 +3,32 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
-    "build": "next build",
+    "dev": "next dev --webpack",
+    "build": "next build --webpack",
     "start": "next start --hostname 0.0.0.0",
     "lint": "eslint",
     "test": "vitest run",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@miden-sdk/miden-sdk": "^0.14.4",
-    "@miden-sdk/miden-wallet-adapter-base": "^0.14.3",
-    "@miden-sdk/miden-wallet-adapter-react": "^0.14.3",
-    "@miden-sdk/react": "^0.14.4",
-    "@walletconnect/ethereum-provider": "^2.23.9",
+    "@epoch-protocol/epoch-intents-sdk": "^1.0.23",
+    "@miden-sdk/miden-sdk": "^0.15.3",
+    "@miden-sdk/miden-wallet-adapter-base": "^0.15.1",
+    "@miden-sdk/miden-wallet-adapter-react": "^0.15.1",
+    "@miden-sdk/react": "^0.15.3",
+    "@reown/appkit": "^1.8.20",
+    "@reown/appkit-adapter-wagmi": "^1.8.20",
+    "@tanstack/react-query": "^5.101.0",
     "lucide-react": "^1.16.0",
     "next": "16.2.6",
     "react": "19.2.4",
     "react-dom": "19.2.4",
-    "viem": "^2.51.0"
+    "viem": "^2.51.0",
+    "wagmi": "^2.19.5"
+  },
+  "overrides": {
+    "@wagmi/core": "2.22.1",
+    "@wagmi/connectors": "6.2.0"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
@@ -32,5 +40,6 @@
     "tailwindcss": "^4",
     "typescript": "^5",
     "vitest": "^2.1.9"
-  }
+  },
+  "packageManager": "yarn@4.10.3+sha512.c38cafb5c7bb273f3926d04e55e1d8c9dfa7d9c3ea1f36a4868fa028b9e5f72298f0b7f401ad5eb921749eb012eb1c3bb74bf7503df3ee43fd600d14a018266f"
 }

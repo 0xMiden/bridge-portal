@@ -18,7 +18,12 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { formatEther } from "viem";
-import { AGGLAYER_BALI, buildSepoliaDepositTransaction, isMidenAccountHex, normalizeMidenAccountHex } from "../lib/agglayer";
+import {
+  AGGLAYER_BALI,
+  buildSepoliaDepositTransaction,
+  isMidenAccountHex,
+  normalizeMidenAccountHex,
+} from "../lib/agglayer";
 import {
   type BridgeProvider,
   type FlowMode,
@@ -32,16 +37,17 @@ import {
   shortAddress,
   statusLabel,
   statusTone,
-  seedActivities,
 } from "../lib/bridge-state";
 import {
-  type EvmConnectionKind,
-  type EvmProvider,
-  connectEvmProvider,
-  ensureSepolia,
-  evmConnectionLabel,
-  getExistingEvmConnection,
-} from "../lib/evm-wallet";
+  useAppKit,
+  useAppKitAccount,
+  useAppKitProvider,
+  useDisconnect,
+  useWalletInfo,
+} from "@reown/appkit/react";
+import { type EvmProvider, ensureSepolia } from "../lib/evm-wallet";
+// Type-only import — erased at build, so the eager-WASM adapter never reaches SSR.
+import type { MidenFiWalletContextState } from "@miden-sdk/miden-wallet-adapter-react";
 
 type MidenWalletSnapshot = {
   address: string;
@@ -50,6 +56,8 @@ type MidenWalletSnapshot = {
   balanceText: string;
   noteSyncStatus: string;
   consumableNoteCount: number | null;
+  requestSend?: MidenFiWalletContextState["requestSend"];
+  waitForTransaction?: MidenFiWalletContextState["waitForTransaction"];
 };
 
 const emptyMidenWallet: MidenWalletSnapshot = {
@@ -62,7 +70,8 @@ const emptyMidenWallet: MidenWalletSnapshot = {
 };
 
 function providerFromParam(value: string | null): BridgeProvider | null {
-  if (value === "near-intents" || value === "agglayer" || value === "epoch") return value;
+  if (value === "near-intents" || value === "agglayer" || value === "epoch")
+    return value;
   return null;
 }
 
@@ -72,27 +81,40 @@ function modeFromIntent(value: string | null): FlowMode | null {
   return null;
 }
 
-const MidenWalletButton = dynamic(() => import("./MidenWalletButton").then((mod) => mod.MidenWalletButton), {
-  ssr: false,
-  loading: () => (
-    <button className="wallet-button wallet-pill" type="button" disabled>
-      <span className="wallet-icon">
-        <ShieldCheck size={16} aria-hidden="true" />
-      </span>
-      <span className="wallet-copy">
-        <small>
-          <span className="wallet-status-dot pending" />
-          Miden
-        </small>
-        <span>Loading</span>
-      </span>
-    </button>
-  ),
-});
+const MidenWalletButton = dynamic(
+  () => import("./MidenWalletButton").then((mod) => mod.MidenWalletButton),
+  {
+    ssr: false,
+    loading: () => (
+      <button className="wallet-button wallet-pill" type="button" disabled>
+        <span className="wallet-icon">
+          <ShieldCheck size={16} aria-hidden="true" />
+        </span>
+        <span className="wallet-copy">
+          <small>
+            <span className="wallet-status-dot pending" />
+            Miden
+          </small>
+          <span>Loading</span>
+        </span>
+      </button>
+    ),
+  },
+);
+
+// ssr:false keeps the Epoch SDK + eager miden-sdk WASM out of the server render.
+const EpochQuotePreview = dynamic(
+  () => import("./EpochQuotePreview").then((mod) => mod.EpochQuotePreview),
+  {
+    ssr: false,
+    loading: () => <span className="epoch-quote-loading">…</span>,
+  },
+);
 
 function errorMessage(error: unknown) {
   if (error instanceof Error) return error.message;
-  if (typeof error === "object" && error && "message" in error) return String(error.message);
+  if (typeof error === "object" && error && "message" in error)
+    return String(error.message);
   return "Something went wrong. Try again.";
 }
 
@@ -104,21 +126,25 @@ function compactTokenAmount(value: string) {
 
 export function BridgeExperience() {
   const router = useRouter();
+  const { open } = useAppKit();
+  const { address, isConnected } = useAppKitAccount();
+  const { walletProvider } = useAppKitProvider<EvmProvider>("eip155");
+  const { disconnect } = useDisconnect();
+  const { walletInfo } = useWalletInfo();
   const [provider, setProvider] = useState<BridgeProvider>("agglayer");
   const [mode, setMode] = useState<FlowMode>("receive");
   const [amount, setAmount] = useState("100");
   const [destination, setDestination] = useState("");
-  const [evmProvider, setEvmProvider] = useState<EvmProvider | null>(null);
-  const [evmConnectionKind, setEvmConnectionKind] = useState<EvmConnectionKind | "">("");
-  const [walletConnected, setWalletConnected] = useState(false);
-  const [walletAccount, setWalletAccount] = useState("");
+  const walletAccount = address ?? "";
+  const walletConnected = isConnected && Boolean(address);
   const [evmBalance, setEvmBalance] = useState("");
-  const [midenWallet, setMidenWallet] = useState<MidenWalletSnapshot>(emptyMidenWallet);
+  const [midenWallet, setMidenWallet] =
+    useState<MidenWalletSnapshot>(emptyMidenWallet);
   const [launchMidenAccount, setLaunchMidenAccount] = useState("");
   const [walletError, setWalletError] = useState("");
   const [bridgeError, setBridgeError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [activities, setActivities] = useState<Activity[]>(seedActivities);
+  const [activities, setActivities] = useState<Activity[]>([]);
   const [hydrated, setHydrated] = useState(false);
   const [evmMenuOpen, setEvmMenuOpen] = useState(false);
   const [evmCopied, setEvmCopied] = useState(false);
@@ -128,16 +154,45 @@ export function BridgeExperience() {
 
   const copy = modes[mode];
   const providerCopy = providers[provider];
-  const quote = useMemo(() => quoteFor(mode, provider, amount), [amount, mode, provider]);
+  const quote = useMemo(
+    () => quoteFor(mode, provider, amount),
+    [amount, mode, provider],
+  );
   const isLiveAgglayerReceive = provider === "agglayer" && mode === "receive";
   const midenAddress = midenWallet.address || launchMidenAccount;
-  const evmWalletLabel = evmConnectionLabel(evmConnectionKind);
-  const evmBalanceText = walletConnected ? evmBalance || "Balance unavailable" : "Not connected";
-  const midenBalanceText = midenWallet.connected ? midenWallet.balanceText : launchMidenAccount ? "Launch account" : "Not connected";
+  // Map the form fields to the Epoch quote's directional roles:
+  // - send (Miden→EVM): Miden wallet is the sender; the EVM recipient is the
+  //   destination field (a 0x address) or the connected Sepolia wallet.
+  // - receive (EVM→Miden): the connected Sepolia wallet is the source; the Miden
+  //   recipient is the destination field or the connected Miden wallet.
+  const epochEvmAddress =
+    mode === "send"
+      ? /^0x[0-9a-fA-F]{40}$/.test(destination.trim())
+        ? destination.trim()
+        : walletAccount
+      : walletAccount;
+  const epochMidenAccount =
+    mode === "send" ? midenAddress : destination.trim() || midenAddress;
+  const evmWalletLabel = walletInfo?.name ?? "Sepolia";
+  const evmBalanceText = walletConnected
+    ? evmBalance || "Balance unavailable"
+    : "Not connected";
+  const midenBalanceText = midenWallet.connected
+    ? midenWallet.balanceText
+    : launchMidenAccount
+      ? "Launch account"
+      : "Not connected";
   const sourceBalance = mode === "receive" ? evmBalanceText : midenBalanceText;
-  const destinationBalance = mode === "receive" ? midenBalanceText : evmBalanceText;
-  const hasDestination = Boolean(destination.trim() || (mode === "receive" ? midenAddress : walletAccount));
-  const routeTone = providers[provider].disabled ? "disabled" : provider === "near-intents" ? "mock" : "testnet";
+  const destinationBalance =
+    mode === "receive" ? midenBalanceText : evmBalanceText;
+  const hasDestination = Boolean(
+    destination.trim() || (mode === "receive" ? midenAddress : walletAccount),
+  );
+  const routeTone = providers[provider].disabled
+    ? "disabled"
+    : provider === "near-intents"
+      ? "mock"
+      : "testnet";
   const routeNote =
     provider === "near-intents"
       ? "NEAR Intents is paused in this build while AggLayer and Epoch are the active testnet routes."
@@ -162,20 +217,26 @@ export function BridgeExperience() {
       ? `Leave empty to use connected Miden wallet ${shortAddress(midenAddress)}, or paste a 30-hex account ID to override.`
       : launchMidenAccount
         ? `Preloaded from wallet launch: ${shortAddress(launchMidenAccount)}. Connect MidenFi before signing Miden-side actions.`
-      : "Connect Miden wallet, or paste a 30-hex Miden account ID from the Miden CLI."
+        : "Connect Miden wallet, or paste a 30-hex Miden account ID from the Miden CLI."
     : mode === "send" && walletConnected
       ? `Leave empty to use connected Sepolia wallet ${shortAddress(walletAccount)}, or paste another address.`
       : "Paste the destination account for this transfer.";
-  const showDestinationHelp = isLiveAgglayerReceive || (mode === "send" && walletConnected);
-  const destinationPlaceholder = isLiveAgglayerReceive ? "Miden account ID or address" : copy.destinationPlaceholder;
-  const handleMidenWalletState = useCallback((next: MidenWalletSnapshot) => setMidenWallet(next), []);
+  const showDestinationHelp =
+    isLiveAgglayerReceive || (mode === "send" && walletConnected);
+  const destinationPlaceholder = isLiveAgglayerReceive
+    ? "Miden account ID or address"
+    : copy.destinationPlaceholder;
+  const handleMidenWalletState = useCallback(
+    (next: MidenWalletSnapshot) => setMidenWallet(next),
+    [],
+  );
 
   useEffect(() => {
     try {
       const stored = loadStoredActivities();
       queueMicrotask(() => setActivities(stored));
     } catch {
-      queueMicrotask(() => setActivities(seedActivities));
+      queueMicrotask(() => setActivities([]));
     } finally {
       setHydrated(true);
     }
@@ -184,13 +245,22 @@ export function BridgeExperience() {
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const nextMode = modeFromIntent(params.get("intent") ?? params.get("mode"));
-    const nextProvider = providerFromParam(params.get("provider") ?? params.get("route"));
-    const nextMidenAccount = params.get("midenAccount") ?? params.get("miden_account") ?? params.get("account");
-    const nextEvmAddress = params.get("evmAddress") ?? params.get("evm_address") ?? params.get("recipient");
+    const nextProvider = providerFromParam(
+      params.get("provider") ?? params.get("route"),
+    );
+    const nextMidenAccount =
+      params.get("midenAccount") ??
+      params.get("miden_account") ??
+      params.get("account");
+    const nextEvmAddress =
+      params.get("evmAddress") ??
+      params.get("evm_address") ??
+      params.get("recipient");
     const resolvedMode = nextMode ?? "receive";
 
     queueMicrotask(() => {
-      if (nextProvider && !providers[nextProvider].disabled) setProvider(nextProvider);
+      if (nextProvider && !providers[nextProvider].disabled)
+        setProvider(nextProvider);
       if (nextMode) setMode(nextMode);
 
       if (nextMidenAccount) {
@@ -215,7 +285,8 @@ export function BridgeExperience() {
     if (!evmMenuOpen) return;
 
     function closeMenu(event: MouseEvent | PointerEvent) {
-      if (!evmMenuRef.current?.contains(event.target as Node)) setEvmMenuOpen(false);
+      if (!evmMenuRef.current?.contains(event.target as Node))
+        setEvmMenuOpen(false);
     }
 
     function closeOnEscape(event: KeyboardEvent) {
@@ -234,7 +305,8 @@ export function BridgeExperience() {
     if (!routeMenuOpen) return;
 
     function closeMenu(event: MouseEvent | PointerEvent) {
-      if (!routeMenuRef.current?.contains(event.target as Node)) setRouteMenuOpen(false);
+      if (!routeMenuRef.current?.contains(event.target as Node))
+        setRouteMenuOpen(false);
     }
 
     function closeOnEscape(event: KeyboardEvent) {
@@ -250,55 +322,20 @@ export function BridgeExperience() {
   }, [routeMenuOpen]);
 
   useEffect(() => {
-    getExistingEvmConnection()
-      .then(async (connection) => {
-        if (!connection) return;
-        const accounts = await connection.provider.request<string[]>({ method: "eth_accounts" });
-        const account = accounts[0] ?? "";
-        setEvmProvider(connection.provider);
-        setEvmConnectionKind(connection.kind);
-        setEvmBalance("");
-        setWalletAccount(account);
-        setWalletConnected(Boolean(account));
-      })
-      .catch(() => undefined);
-  }, []);
-
-  useEffect(() => {
-    if (!evmProvider) return;
-    const handleAccounts = (...args: unknown[]) => {
-      const accounts = Array.isArray(args[0]) ? (args[0] as string[]) : [];
-      const account = accounts[0] ?? "";
-      setEvmBalance("");
-      setWalletAccount(account);
-      setWalletConnected(Boolean(account));
-    };
-    const handleDisconnect = () => {
-      setEvmProvider(null);
-      setEvmConnectionKind("");
-      setEvmBalance("");
-      setWalletAccount("");
-      setWalletConnected(false);
-      setEvmMenuOpen(false);
-    };
-
-    evmProvider.on?.("accountsChanged", handleAccounts);
-    evmProvider.on?.("disconnect", handleDisconnect);
-    return () => {
-      evmProvider.removeListener?.("accountsChanged", handleAccounts);
-      evmProvider.removeListener?.("disconnect", handleDisconnect);
-    };
-  }, [evmProvider]);
-
-  useEffect(() => {
     if (!walletAccount) return;
 
     let cancelled = false;
     fetch(`/api/sepolia/balance?address=${walletAccount}`)
-      .then((response) => (response.ok ? response.json() : Promise.reject(new Error("Unable to fetch balance"))))
+      .then((response) =>
+        response.ok
+          ? response.json()
+          : Promise.reject(new Error("Unable to fetch balance")),
+      )
       .then((payload: { balanceWei: string }) => {
         if (cancelled) return;
-        setEvmBalance(`${compactTokenAmount(formatEther(BigInt(payload.balanceWei)))} ETH`);
+        setEvmBalance(
+          `${compactTokenAmount(formatEther(BigInt(payload.balanceWei)))} ETH`,
+        );
       })
       .catch(() => {
         if (!cancelled) setEvmBalance("");
@@ -320,7 +357,11 @@ export function BridgeExperience() {
     if (providers[nextProvider].disabled) return;
     setProvider(nextProvider);
     setBridgeError("");
-    if (nextProvider === "agglayer" && mode === "receive" && !isMidenAccountHex(destination)) {
+    if (
+      nextProvider === "agglayer" &&
+      mode === "receive" &&
+      !isMidenAccountHex(destination)
+    ) {
       setDestination("");
     }
   }
@@ -330,56 +371,22 @@ export function BridgeExperience() {
     setRouteMenuOpen(false);
   }
 
-  async function connectWalletSession() {
+  async function openWalletModal() {
     setWalletError("");
-    const connection = await connectEvmProvider();
-    const accounts = await connection.provider.request<string[]>({ method: "eth_accounts" });
-    const account = accounts[0] ?? "";
-    setEvmProvider(connection.provider);
-    setEvmConnectionKind(connection.kind);
-    setEvmBalance("");
-    setWalletAccount(account);
-    setWalletConnected(Boolean(account));
-    return { account, provider: connection.provider };
-  }
-
-  async function connectWallet() {
-    const session = await connectWalletSession();
-    return session.account;
+    try {
+      await open();
+    } catch (error) {
+      setWalletError(errorMessage(error));
+    }
   }
 
   async function openWalletPermissions() {
     setWalletError("");
-    const provider = evmProvider;
-    if (!provider) return;
-
+    setEvmMenuOpen(false);
     try {
-      await provider.request({
-        method: "wallet_requestPermissions",
-        params: [{ eth_accounts: {} }],
-      });
-      const accounts = await provider.request<string[]>({ method: "eth_accounts" });
-      const account = accounts[0] ?? "";
-      setEvmBalance("");
-      setWalletAccount(account);
-      setWalletConnected(Boolean(account));
-      setEvmMenuOpen(false);
-    } catch (permissionError) {
-      const code =
-        typeof permissionError === "object" && permissionError && "code" in permissionError
-          ? Number(permissionError.code)
-          : 0;
-      if (code === 4001) {
-        setWalletError("Wallet account permission was rejected.");
-        return;
-      }
-
-      try {
-        await connectWallet();
-        setEvmMenuOpen(false);
-      } catch (connectError) {
-        setWalletError(errorMessage(connectError));
-      }
+      await open({ view: "Account" });
+    } catch (error) {
+      setWalletError(errorMessage(error));
     }
   }
 
@@ -395,21 +402,21 @@ export function BridgeExperience() {
     }
   }
 
-  function forgetEvmWallet() {
-    void evmProvider?.disconnect?.().catch(() => undefined);
-    setEvmProvider(null);
-    setEvmConnectionKind("");
-    setEvmBalance("");
-    setWalletAccount("");
-    setWalletConnected(false);
+  async function forgetEvmWallet() {
     setEvmMenuOpen(false);
+    setWalletError("");
+    try {
+      await disconnect();
+    } catch {
+      // Ignore disconnect failures; account state is driven by AppKit hooks.
+    }
+    setEvmBalance("");
   }
 
   async function switchSepoliaFromMenu() {
     try {
-      const provider = evmProvider;
-      if (!provider) throw new Error("Connect your EVM wallet first.");
-      await ensureSepolia(provider);
+      if (!walletProvider) throw new Error("Connect your EVM wallet first.");
+      await ensureSepolia(walletProvider);
       setEvmMenuOpen(false);
     } catch (error) {
       setWalletError(errorMessage(error));
@@ -418,15 +425,11 @@ export function BridgeExperience() {
 
   async function handleEvmWalletClick() {
     if (walletConnected) {
-      setEvmMenuOpen((open) => !open);
+      setEvmMenuOpen((isOpen) => !isOpen);
       return;
     }
 
-    try {
-      await connectWallet();
-    } catch (error) {
-      setWalletError(errorMessage(error));
-    }
+    await openWalletModal();
   }
 
   async function submitTransfer() {
@@ -436,23 +439,25 @@ export function BridgeExperience() {
     if (isLiveAgglayerReceive) {
       setIsSubmitting(true);
       try {
-        let activeProvider = evmProvider;
-        let account = walletAccount;
-        if (!activeProvider || !account) {
-          const session = await connectWalletSession();
-          activeProvider = session.provider;
-          account = session.account;
+        if (!walletConnected || !walletProvider || !walletAccount) {
+          await open();
+          return;
         }
-        if (!account) return;
+        const account = walletAccount;
 
-        await ensureSepolia(activeProvider);
+        await ensureSepolia(walletProvider);
         const destinationAccount = destination.trim() || midenAddress;
         if (!destinationAccount) {
-          throw new Error("Connect Miden wallet or paste a Miden account ID before receiving.");
+          throw new Error(
+            "Connect Miden wallet or paste a Miden account ID before receiving.",
+          );
         }
         const midenAccountId = normalizeMidenAccountHex(destinationAccount);
-        const transaction = buildSepoliaDepositTransaction({ amountEth: amount, midenAccountId });
-        const txHash = await activeProvider.request<string>({
+        const transaction = buildSepoliaDepositTransaction({
+          amountEth: amount,
+          midenAccountId,
+        });
+        const txHash = await walletProvider.request<string>({
           method: "eth_sendTransaction",
           params: [
             {
@@ -488,8 +493,62 @@ export function BridgeExperience() {
       return;
     }
 
-    const resolvedDestination = destination.trim() || (mode === "receive" ? midenAddress : walletAccount);
-    const next = createActivity(mode, provider, amount, { destination: resolvedDestination });
+    if (provider === "epoch") {
+      setIsSubmitting(true);
+      try {
+        // Receive (EVM→Miden) signs a Sepolia deposit, so it needs a connected
+        // EVM wallet on Sepolia. Send (Miden→EVM) signs only on Miden.
+        if (mode === "receive") {
+          if (!walletConnected || !walletProvider || !walletAccount) {
+            await open();
+            return;
+          }
+          await ensureSepolia(walletProvider);
+        }
+
+        // Dynamic import: epoch-execute pulls eager-WASM miden-sdk, so it must
+        // load client-side at click time, never in the server render.
+        const { runEpochTransfer } = await import("../lib/epoch/epoch-execute");
+        const result = await runEpochTransfer({
+          mode,
+          amount,
+          midenAccount: epochMidenAccount,
+          evmAddress: epochEvmAddress,
+          requestSend: midenWallet.requestSend,
+          waitForTransaction: midenWallet.waitForTransaction,
+        });
+
+        const resolvedDestination =
+          mode === "send" ? epochEvmAddress : epochMidenAccount;
+        const next = createActivity(mode, "epoch", amount, {
+          status: "message_observed",
+          eta: "3-6 min",
+          destination: resolvedDestination,
+          txHash: result.sourceTxHash
+            ? shortAddress(result.sourceTxHash)
+            : "0xpending",
+          sourceTxHash: result.sourceTxHash,
+          midenTxId: mode === "send" ? result.midenNoteId : undefined,
+          epochIntentNonce: result.intentNonce,
+          epochSponsor: result.sponsorAddress,
+        });
+        const updated = [next, ...activities];
+        setActivities(updated);
+        saveActivities(updated);
+        router.push(`/activity/${next.id}`);
+      } catch (error) {
+        setBridgeError(errorMessage(error));
+      } finally {
+        setIsSubmitting(false);
+      }
+      return;
+    }
+
+    const resolvedDestination =
+      destination.trim() || (mode === "receive" ? midenAddress : walletAccount);
+    const next = createActivity(mode, provider, amount, {
+      destination: resolvedDestination,
+    });
     const updated = [next, ...activities];
     setActivities(updated);
     saveActivities(updated);
@@ -500,7 +559,13 @@ export function BridgeExperience() {
     <main className="app-shell">
       <header className="topbar">
         <Link className="brand" href="/" aria-label="Miden bridge home">
-          <Image src="/miden-logo-horizontal.svg" alt="Miden" width={112} height={34} priority />
+          <Image
+            src="/miden-logo-horizontal.svg"
+            alt="Miden"
+            width={112}
+            height={34}
+            priority
+          />
           <span>Bridge</span>
         </Link>
 
@@ -513,22 +578,41 @@ export function BridgeExperience() {
               aria-expanded={walletConnected ? evmMenuOpen : undefined}
               aria-haspopup={walletConnected ? "menu" : undefined}
             >
-              <span className={`wallet-icon ${walletConnected ? "connected" : ""}`}>
+              <span
+                className={`wallet-icon ${walletConnected ? "connected" : ""}`}
+              >
                 <Wallet size={16} aria-hidden="true" />
               </span>
               <span className="wallet-copy">
                 <small>
-                  <span className={`wallet-status-dot ${walletConnected ? "connected" : ""}`} />
+                  <span
+                    className={`wallet-status-dot ${walletConnected ? "connected" : ""}`}
+                  />
                   {evmWalletLabel}
                 </small>
-                <span>{walletConnected ? shortAddress(walletAccount) : "Connect wallet"}</span>
+                <span>
+                  {walletConnected
+                    ? shortAddress(walletAccount)
+                    : "Connect wallet"}
+                </span>
               </span>
-              {walletConnected ? <span className="wallet-balance">{evmBalanceText}</span> : null}
-              {walletConnected ? <ChevronDown className="wallet-menu-chevron" size={15} aria-hidden="true" /> : null}
+              {walletConnected ? (
+                <span className="wallet-balance">{evmBalanceText}</span>
+              ) : null}
+              {walletConnected ? (
+                <ChevronDown
+                  className="wallet-menu-chevron"
+                  size={15}
+                  aria-hidden="true"
+                />
+              ) : null}
             </button>
 
             {walletConnected ? (
-              <div className={`wallet-actions-menu ${evmMenuOpen ? "open" : ""}`} role="menu">
+              <div
+                className={`wallet-actions-menu ${evmMenuOpen ? "open" : ""}`}
+                role="menu"
+              >
                 <div className="wallet-menu-summary">
                   <span className="wallet-menu-avatar connected">
                     <Wallet size={16} aria-hidden="true" />
@@ -540,15 +624,30 @@ export function BridgeExperience() {
                     </small>
                   </span>
                 </div>
-                <button type="button" role="menuitem" className="wallet-menu-item" onClick={openWalletPermissions}>
+                <button
+                  type="button"
+                  role="menuitem"
+                  className="wallet-menu-item"
+                  onClick={openWalletPermissions}
+                >
                   <RefreshCcw size={15} aria-hidden="true" />
                   <span>Account permissions</span>
                 </button>
-                <button type="button" role="menuitem" className="wallet-menu-item" onClick={switchSepoliaFromMenu}>
+                <button
+                  type="button"
+                  role="menuitem"
+                  className="wallet-menu-item"
+                  onClick={switchSepoliaFromMenu}
+                >
                   <ShieldCheck size={15} aria-hidden="true" />
                   <span>Switch to Sepolia</span>
                 </button>
-                <button type="button" role="menuitem" className="wallet-menu-item" onClick={copyEvmAddress}>
+                <button
+                  type="button"
+                  role="menuitem"
+                  className="wallet-menu-item"
+                  onClick={copyEvmAddress}
+                >
                   <Copy size={15} aria-hidden="true" />
                   <span>{evmCopied ? "Copied" : "Copy address"}</span>
                 </button>
@@ -563,7 +662,12 @@ export function BridgeExperience() {
                   <span>View on Etherscan</span>
                 </a>
                 <span className="wallet-menu-separator" />
-                <button type="button" role="menuitem" className="wallet-menu-item danger" onClick={forgetEvmWallet}>
+                <button
+                  type="button"
+                  role="menuitem"
+                  className="wallet-menu-item danger"
+                  onClick={forgetEvmWallet}
+                >
                   <LogOut size={15} aria-hidden="true" />
                   <span>Forget in app</span>
                 </button>
@@ -574,7 +678,9 @@ export function BridgeExperience() {
           <MidenWalletButton onStateChange={handleMidenWalletState} />
         </div>
       </header>
-      {midenWallet.error ? <p className="form-error topbar-error">{midenWallet.error}</p> : null}
+      {midenWallet.error ? (
+        <p className="form-error topbar-error">{midenWallet.error}</p>
+      ) : null}
 
       <section className="swap-stage">
         <section className="swap-card" aria-label="Miden bridge">
@@ -594,7 +700,11 @@ export function BridgeExperience() {
               </button>
 
               {routeMenuOpen ? (
-                <div className="route-options-menu open" role="listbox" aria-label="Bridge route">
+                <div
+                  className="route-options-menu open"
+                  role="listbox"
+                  aria-label="Bridge route"
+                >
                   {(Object.keys(providers) as BridgeProvider[]).map((key) => {
                     const option = providers[key];
                     const selected = key === provider;
@@ -623,14 +733,28 @@ export function BridgeExperience() {
             </div>
           </div>
           <div className="route-status-line">
-            <span className={`route-pill ${routeTone}`}>{providerCopy.badge}</span>
+            <span className={`route-pill ${routeTone}`}>
+              {providerCopy.badge}
+            </span>
             <span>{providerCopy.route}</span>
           </div>
-          {walletError ? <p className="form-error compact">{walletError}</p> : null}
+          {walletError ? (
+            <p className="form-error compact">{walletError}</p>
+          ) : null}
 
-          <div className="mode-switch" role="group" aria-label="Cross-chain direction" data-active={mode}>
+          <div
+            className="mode-switch"
+            role="group"
+            aria-label="Cross-chain direction"
+            data-active={mode}
+          >
             {(Object.keys(modes) as FlowMode[]).map((item) => (
-              <button key={item} type="button" aria-pressed={item === mode} onClick={() => selectMode(item)}>
+              <button
+                key={item}
+                type="button"
+                aria-pressed={item === mode}
+                onClick={() => selectMode(item)}
+              >
                 {modes[item].label}
               </button>
             ))}
@@ -649,7 +773,9 @@ export function BridgeExperience() {
                 value={amount}
                 onChange={(event) => setAmount(event.target.value)}
               />
-              <span>{copy.assetIn}</span>
+              {/* Epoch's SIO route bridges USDC<->USDC; the shared `assetIn`
+                  label ("ETH") is only correct for AggLayer. */}
+              <span>{provider === "epoch" ? "USDC" : copy.assetIn}</span>
             </label>
           </div>
 
@@ -661,10 +787,24 @@ export function BridgeExperience() {
             <div>
               <span>To</span>
               <strong>{copy.to}</strong>
-              <small className="balance-line">Wallet balance {destinationBalance}</small>
+              <small className="balance-line">
+                Wallet balance {destinationBalance}
+              </small>
             </div>
             <label className="readonly-amount">
-              <strong>{quote.expectedReceived}</strong>
+              <strong>
+                {provider === "epoch" ? (
+                  <EpochQuotePreview
+                    mode={mode}
+                    amount={amount}
+                    midenAccount={epochMidenAccount}
+                    evmAddress={epochEvmAddress}
+                    fallback={quote.expectedReceived}
+                  />
+                ) : (
+                  quote.expectedReceived
+                )}
+              </strong>
               <span>Expected</span>
             </label>
           </div>
@@ -712,7 +852,12 @@ export function BridgeExperience() {
             </div>
           </div>
 
-          <button className="primary-button" type="button" onClick={submitTransfer} disabled={isSubmitting}>
+          <button
+            className="primary-button"
+            type="button"
+            onClick={submitTransfer}
+            disabled={isSubmitting}
+          >
             {primaryActionLabel}
             <ArrowRight size={18} aria-hidden="true" />
           </button>
@@ -731,12 +876,19 @@ export function BridgeExperience() {
           {activities.length > 0 ? (
             <div className="home-activity-list">
               {activities.slice(0, 3).map((activity) => (
-                <Link className="home-activity-item" href={`/activity/${activity.id}`} key={activity.id}>
-                  <span className={`status-dot ${statusTone(activity.status)}`} />
+                <Link
+                  className="home-activity-item"
+                  href={`/activity/${activity.id}`}
+                  key={activity.id}
+                >
+                  <span
+                    className={`status-dot ${statusTone(activity.status)}`}
+                  />
                   <span className="activity-copy">
                     <strong>{activity.summary}</strong>
                     <small>
-                      {providers[activity.provider].label} - {statusLabel(activity.status)}
+                      {providers[activity.provider].label} -{" "}
+                      {statusLabel(activity.status)}
                     </small>
                   </span>
                   <span className="activity-meta">
@@ -752,7 +904,10 @@ export function BridgeExperience() {
           ) : (
             <div className="home-activity-empty">
               <strong>No transfers yet</strong>
-              <span>Cross-chain activity will appear here after your first receive or send.</span>
+              <span>
+                Cross-chain activity will appear here after your first receive
+                or send.
+              </span>
             </div>
           )}
         </section>

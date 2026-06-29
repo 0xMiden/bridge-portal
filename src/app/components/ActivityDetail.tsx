@@ -14,7 +14,11 @@ import {
 import Image from "next/image";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { AGGLAYER_BALI, type AgglayerClaimPlan, type AgglayerDepositStatus } from "../lib/agglayer";
+import {
+  AGGLAYER_BALI,
+  type AgglayerClaimPlan,
+  type AgglayerDepositStatus,
+} from "../lib/agglayer";
 import {
   agglayerPollMs,
   type BridgeMonitorObservation,
@@ -29,18 +33,23 @@ import {
   providers,
   quoteFor,
   saveActivities,
-  seedActivities,
   sourceExplorer,
   statusLabel,
   statusTone,
   destinationExplorer,
   timeline,
 } from "../lib/bridge-state";
-import { connectEvmProvider, ensureSepolia } from "../lib/evm-wallet";
+import {
+  useAppKit,
+  useAppKitAccount,
+  useAppKitProvider,
+} from "@reown/appkit/react";
+import { type EvmProvider, ensureSepolia } from "../lib/evm-wallet";
 
 function errorMessage(error: unknown) {
   if (error instanceof Error) return error.message;
-  if (typeof error === "object" && error && "message" in error) return String(error.message);
+  if (typeof error === "object" && error && "message" in error)
+    return String(error.message);
   return "Something went wrong. Try again.";
 }
 
@@ -61,49 +70,75 @@ function isSepoliaAddress(value: string | undefined) {
 function matchingDeposit(status: AgglayerDepositStatus, sourceTxHash?: string) {
   if (!sourceTxHash) return status.latestDeposit;
   const normalized = sourceTxHash.toLowerCase();
-  return status.deposits.find((deposit) => deposit.tx_hash?.toLowerCase() === normalized) ?? null;
+  return (
+    status.deposits.find(
+      (deposit) => deposit.tx_hash?.toLowerCase() === normalized,
+    ) ?? null
+  );
 }
 
 function claimPlanDepositCount(plan: AgglayerClaimPlan) {
-  const deposit = plan.deposit as
-    | {
-        depositCnt?: string | number;
-        deposit_cnt?: string | number;
-      }
-    | null;
+  const deposit = plan.deposit as {
+    depositCnt?: string | number;
+    deposit_cnt?: string | number;
+  } | null;
   return deposit?.depositCnt ?? deposit?.deposit_cnt;
 }
 
 async function fetchSepoliaTx(hash: string): Promise<ChainTxObservation> {
-  const response = await fetch(`/api/sepolia/transaction?hash=${hash}`, { cache: "no-store" });
-  const payload = (await response.json()) as ChainTxObservation | { error?: string };
+  const response = await fetch(`/api/sepolia/transaction?hash=${hash}`, {
+    cache: "no-store",
+  });
+  const payload = (await response.json()) as
+    | ChainTxObservation
+    | { error?: string };
   if (!response.ok) {
-    throw new Error("error" in payload ? payload.error ?? "Unable to read Sepolia transaction." : "Unable to read Sepolia transaction.");
+    throw new Error(
+      "error" in payload
+        ? (payload.error ?? "Unable to read Sepolia transaction.")
+        : "Unable to read Sepolia transaction.",
+    );
   }
   return payload as ChainTxObservation;
 }
 
 export function ActivityDetail({ id }: { id: string }) {
-  const [activities, setActivities] = useState<Activity[]>(seedActivities);
+  const [activities, setActivities] = useState<Activity[]>([]);
   const [claimBusy, setClaimBusy] = useState(false);
   const [claimError, setClaimError] = useState("");
   const [monitorError, setMonitorError] = useState("");
   const [lastChecked, setLastChecked] = useState("");
-  const activity = activities.find((item) => item.id === id) ?? seedActivities.find((item) => item.id === id);
+  const { open } = useAppKit();
+  const { address, isConnected } = useAppKitAccount();
+  const { walletProvider } = useAppKitProvider<EvmProvider>("eip155");
+  const activity = activities.find((item) => item.id === id);
   const quote = useMemo(
-    () => (activity ? quoteFor(activity.mode, activity.provider, activity.amount) : null),
+    () =>
+      activity
+        ? quoteFor(activity.mode, activity.provider, activity.amount)
+        : null,
     [activity],
   );
   const modeCopy = activity ? modes[activity.mode] : null;
   const sourceLink = activity ? sourceExplorer(activity) : null;
   const destinationLink = activity ? destinationExplorer(activity) : null;
-  const agglayerMonitorLink = activity?.provider === "agglayer" ? AGGLAYER_BALI.monitorUrl : null;
-  const currentIndex = activity ? timeline.findIndex((step) => step.status === activity.status) : -1;
-  const needsRecovery = activity?.status === "claim_available" || activity?.status === "failed";
+  const agglayerMonitorLink =
+    activity?.provider === "agglayer" ? AGGLAYER_BALI.monitorUrl : null;
+  const currentIndex = activity
+    ? timeline.findIndex((step) => step.status === activity.status)
+    : -1;
+  const needsRecovery =
+    activity?.status === "claim_available" || activity?.status === "failed";
   const canClaimOnSepolia =
-    activity?.provider === "agglayer" && activity.mode === "send" && activity.status === "claim_available" && Boolean(activity.depositCount);
+    activity?.provider === "agglayer" &&
+    activity.mode === "send" &&
+    activity.status === "claim_available" &&
+    Boolean(activity.depositCount);
   const settlement = activity ? settlementRows(activity) : [];
-  const receiptTitle = activity?.mode === "send" ? "Cross-chain send receipt" : "Cross-chain receive receipt";
+  const receiptTitle =
+    activity?.mode === "send"
+      ? "Cross-chain send receipt"
+      : "Cross-chain receive receipt";
   const receiptAmountLabel =
     activity?.status === "complete"
       ? activity.mode === "receive"
@@ -123,18 +158,24 @@ export function ActivityDetail({ id }: { id: string }) {
             ? "Claim funds on the destination side."
             : activity?.status === "claim_submitted"
               ? "Wait for the Sepolia claim transaction to confirm."
-            : activity?.status === "failed"
-              ? "Retry claim or export diagnostics for support."
-              : "Funds are available in the destination account.";
+              : activity?.status === "failed"
+                ? "Retry claim or export diagnostics for support."
+                : "Funds are available in the destination account.";
 
   const observeActivity = useCallback(
     (activityId: string, observation: BridgeMonitorObservation) => {
       setActivities((current) => {
-        const currentActivity = current.find((item) => item.id === activityId) ?? activity;
+        const currentActivity =
+          current.find((item) => item.id === activityId) ?? activity;
         if (!currentActivity) return current;
-        const nextActivity = deriveMonitoredActivity(currentActivity, observation);
+        const nextActivity = deriveMonitoredActivity(
+          currentActivity,
+          observation,
+        );
         const updated = current.some((item) => item.id === activityId)
-          ? current.map((item) => (item.id === activityId ? nextActivity : item))
+          ? current.map((item) =>
+              item.id === activityId ? nextActivity : item,
+            )
           : [nextActivity, ...current];
         saveActivities(updated);
         setLastChecked(observation.checkedAt);
@@ -150,12 +191,17 @@ export function ActivityDetail({ id }: { id: string }) {
       const stored = loadStoredActivities();
       queueMicrotask(() => setActivities(stored));
     } catch {
-      queueMicrotask(() => setActivities(seedActivities));
+      queueMicrotask(() => setActivities([]));
     }
   }, []);
 
   useEffect(() => {
-    if (!activity?.bridgeDestinationAddress || activity.provider !== "agglayer" || activity.mode !== "receive") return;
+    if (
+      !activity?.bridgeDestinationAddress ||
+      activity.provider !== "agglayer" ||
+      activity.mode !== "receive"
+    )
+      return;
     if (activity.status === "complete" || activity.status === "failed") return;
 
     let cancelled = false;
@@ -163,13 +209,16 @@ export function ActivityDetail({ id }: { id: string }) {
     const bridgeDestinationAddress = activity.bridgeDestinationAddress;
     const sourceTxHash = activity.sourceTxHash;
     async function pollAgglayerStatus() {
-      const response = await fetch(`/api/agglayer/deposits?destinationAddress=${bridgeDestinationAddress}`);
+      const response = await fetch(
+        `/api/agglayer/deposits?destinationAddress=${bridgeDestinationAddress}`,
+      );
       if (!response.ok || cancelled) return;
       const status = (await response.json()) as AgglayerDepositStatus;
       const latestDeposit = matchingDeposit(status, sourceTxHash);
 
       setActivities((current) => {
-        const currentActivity = current.find((item) => item.id === activityId) ?? activity;
+        const currentActivity =
+          current.find((item) => item.id === activityId) ?? activity;
         if (!currentActivity) return current;
         const updatedActivity = deriveMonitoredActivity(currentActivity, {
           checkedAt: "Just now",
@@ -195,10 +244,23 @@ export function ActivityDetail({ id }: { id: string }) {
       cancelled = true;
       window.clearInterval(interval);
     };
-  }, [activity, activity?.bridgeDestinationAddress, activity?.id, activity?.mode, activity?.provider, activity?.sourceTxHash, activity?.status]);
+  }, [
+    activity,
+    activity?.bridgeDestinationAddress,
+    activity?.id,
+    activity?.mode,
+    activity?.provider,
+    activity?.sourceTxHash,
+    activity?.status,
+  ]);
 
   useEffect(() => {
-    if (!activity || activity.provider !== "agglayer" || activity.mode !== "receive") return;
+    if (
+      !activity ||
+      activity.provider !== "agglayer" ||
+      activity.mode !== "receive"
+    )
+      return;
     if (activity.status === "complete" || activity.status === "failed") return;
     if (!isSepoliaTxHash(activity.sourceTxHash)) return;
 
@@ -223,10 +285,21 @@ export function ActivityDetail({ id }: { id: string }) {
       window.clearInterval(interval);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activity?.id, activity?.mode, activity?.provider, activity?.sourceTxHash, activity?.status]);
+  }, [
+    activity?.id,
+    activity?.mode,
+    activity?.provider,
+    activity?.sourceTxHash,
+    activity?.status,
+  ]);
 
   useEffect(() => {
-    if (!activity || activity.provider !== "agglayer" || activity.mode !== "send") return;
+    if (
+      !activity ||
+      activity.provider !== "agglayer" ||
+      activity.mode !== "send"
+    )
+      return;
     if (activity.status === "complete" || activity.status === "failed") return;
     if (!isSepoliaAddress(activity.destination)) return;
     if (activity.status === "claim_submitted") return;
@@ -239,17 +312,27 @@ export function ActivityDetail({ id }: { id: string }) {
 
     async function pollClaimReadiness() {
       try {
-        const response = await fetch("/api/bridge/agglayer/l2/withdraw/claim/plan", {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({
-            ethAccountId: destination,
-            depositCount: optionalDepositCount(expectedDepositCount),
-          }),
-          cache: "no-store",
-        });
-        const plan = (await response.json()) as AgglayerClaimPlan | { message?: string };
-        if (!response.ok) throw new Error("message" in plan ? plan.message ?? "Unable to read claim readiness." : "Unable to read claim readiness.");
+        const response = await fetch(
+          "/api/bridge/agglayer/l2/withdraw/claim/plan",
+          {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({
+              ethAccountId: destination,
+              depositCount: optionalDepositCount(expectedDepositCount),
+            }),
+            cache: "no-store",
+          },
+        );
+        const plan = (await response.json()) as
+          | AgglayerClaimPlan
+          | { message?: string };
+        if (!response.ok)
+          throw new Error(
+            "message" in plan
+              ? (plan.message ?? "Unable to read claim readiness.")
+              : "Unable to read claim readiness.",
+          );
         if (!("readyForClaim" in plan)) return;
         if (cancelled) return;
         observeActivity(activityId, {
@@ -271,10 +354,22 @@ export function ActivityDetail({ id }: { id: string }) {
       window.clearInterval(interval);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activity?.depositCount, activity?.destination, activity?.id, activity?.mode, activity?.provider, activity?.status]);
+  }, [
+    activity?.depositCount,
+    activity?.destination,
+    activity?.id,
+    activity?.mode,
+    activity?.provider,
+    activity?.status,
+  ]);
 
   useEffect(() => {
-    if (!activity || activity.provider !== "agglayer" || activity.mode !== "send") return;
+    if (
+      !activity ||
+      activity.provider !== "agglayer" ||
+      activity.mode !== "send"
+    )
+      return;
     if (activity.status !== "claim_submitted") return;
     const claimHash = activity.claimTxHash ?? activity.destinationTxHash;
     if (!isSepoliaTxHash(claimHash)) return;
@@ -299,11 +394,20 @@ export function ActivityDetail({ id }: { id: string }) {
       window.clearInterval(interval);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activity?.claimTxHash, activity?.destinationTxHash, activity?.id, activity?.mode, activity?.provider, activity?.status]);
+  }, [
+    activity?.claimTxHash,
+    activity?.destinationTxHash,
+    activity?.id,
+    activity?.mode,
+    activity?.provider,
+    activity?.status,
+  ]);
 
   function updateActivity(nextActivity: Activity) {
     const updated = activities.some((item) => item.id === nextActivity.id)
-      ? activities.map((item) => (item.id === nextActivity.id ? nextActivity : item))
+      ? activities.map((item) =>
+          item.id === nextActivity.id ? nextActivity : item,
+        )
       : [nextActivity, ...activities];
     setActivities(updated);
     saveActivities(updated);
@@ -311,12 +415,22 @@ export function ActivityDetail({ id }: { id: string }) {
 
   function markFailed() {
     if (!activity) return;
-    updateActivity({ ...activity, status: "failed", eta: "Needs retry", updatedAt: "Just now" });
+    updateActivity({
+      ...activity,
+      status: "failed",
+      eta: "Needs retry",
+      updatedAt: "Just now",
+    });
   }
 
   function retryClaim() {
     if (!activity) return;
-    updateActivity({ ...activity, status: "message_observed", eta: "2 min", updatedAt: "Just now" });
+    updateActivity({
+      ...activity,
+      status: "message_observed",
+      eta: "2 min",
+      updatedAt: "Just now",
+    });
   }
 
   async function claimOnSepolia() {
@@ -326,33 +440,54 @@ export function ActivityDetail({ id }: { id: string }) {
     setClaimError("");
     try {
       const destinationAddress = activity.destination;
-      if (!destinationAddress || !/^0x[0-9a-fA-F]{40}$/.test(destinationAddress)) {
-        throw new Error("This activity is missing the Sepolia destination address needed to look up the claim proof.");
+      if (
+        !destinationAddress ||
+        !/^0x[0-9a-fA-F]{40}$/.test(destinationAddress)
+      ) {
+        throw new Error(
+          "This activity is missing the Sepolia destination address needed to look up the claim proof.",
+        );
       }
 
-      const { provider } = await connectEvmProvider();
-      const accounts = await provider.request<string[]>({ method: "eth_accounts" });
-      const account = accounts[0];
-      if (!account) throw new Error("Connect a Sepolia wallet to pay gas for claimAsset.");
-      await ensureSepolia(provider);
+      if (!isConnected || !walletProvider || !address) {
+        await open();
+        return;
+      }
+      const account = address;
+      await ensureSepolia(walletProvider);
 
-      const response = await fetch("/api/bridge/agglayer/l2/withdraw/claim/plan", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          ethAccountId: destinationAddress,
-          depositCount: optionalDepositCount(activity.depositCount),
-        }),
-      });
-      const plan = (await response.json()) as AgglayerClaimPlan | { message?: string; detail?: string };
+      const response = await fetch(
+        "/api/bridge/agglayer/l2/withdraw/claim/plan",
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            ethAccountId: destinationAddress,
+            depositCount: optionalDepositCount(activity.depositCount),
+          }),
+        },
+      );
+      const plan = (await response.json()) as
+        | AgglayerClaimPlan
+        | { message?: string; detail?: string };
       if (!response.ok) {
-        throw new Error("message" in plan ? plan.message ?? "Unable to build claim plan." : "Unable to build claim plan.");
+        throw new Error(
+          "message" in plan
+            ? (plan.message ?? "Unable to build claim plan.")
+            : "Unable to build claim plan.",
+        );
       }
-      if (!("readyForClaim" in plan) || !plan.readyForClaim || !plan.transaction) {
-        throw new Error("AggLayer proof is not ready yet. Keep this transfer in activity and try again later.");
+      if (
+        !("readyForClaim" in plan) ||
+        !plan.readyForClaim ||
+        !plan.transaction
+      ) {
+        throw new Error(
+          "AggLayer proof is not ready yet. Keep this transfer in activity and try again later.",
+        );
       }
 
-      const txHash = await provider.request<string>({
+      const txHash = await walletProvider.request<string>({
         method: "eth_sendTransaction",
         params: [
           {
@@ -407,7 +542,13 @@ export function ActivityDetail({ id }: { id: string }) {
     <main className="detail-shell">
       <header className="detail-topbar">
         <Link className="brand" href="/" aria-label="Back to bridge">
-          <Image src="/miden-logo-horizontal.svg" alt="Miden" width={112} height={34} priority />
+          <Image
+            src="/miden-logo-horizontal.svg"
+            alt="Miden"
+            width={112}
+            height={34}
+            priority
+          />
           <span>Bridge</span>
         </Link>
         <Link className="back-link" href="/">
@@ -437,7 +578,9 @@ export function ActivityDetail({ id }: { id: string }) {
                   <h1>{receiptTitle}</h1>
                   <span>{activity.id}</span>
                 </div>
-                <span className={`status-badge ${statusTone(activity.status)}`}>{statusLabel(activity.status)}</span>
+                <span className={`status-badge ${statusTone(activity.status)}`}>
+                  {statusLabel(activity.status)}
+                </span>
               </div>
 
               <div className="receipt-amount">
@@ -454,33 +597,56 @@ export function ActivityDetail({ id }: { id: string }) {
                 <div>
                   <span>From</span>
                   <strong>{modeCopy?.from}</strong>
-                  <small>{activity.mode === "receive" ? activity.sourceTxHash ?? activity.txHash : activity.midenTxId ?? activity.txHash}</small>
+                  <small>
+                    {activity.mode === "receive"
+                      ? (activity.sourceTxHash ?? activity.txHash)
+                      : (activity.midenTxId ?? activity.txHash)}
+                  </small>
                 </div>
                 <ArrowRight size={18} aria-hidden="true" />
                 <div>
                   <span>To</span>
                   <strong>{modeCopy?.to}</strong>
-                  <small>{activity.mode === "receive" ? activity.midenTxId ?? activity.txHash : activity.destinationTxHash ?? activity.txHash}</small>
+                  <small>
+                    {activity.mode === "receive"
+                      ? (activity.midenTxId ?? activity.txHash)
+                      : (activity.destinationTxHash ?? activity.txHash)}
+                  </small>
                 </div>
               </div>
 
               <div className="receipt-explorer-grid">
                 {sourceLink ? (
-                  <a href={sourceLink.href} target="_blank" rel="noreferrer" className="explorer-link">
+                  <a
+                    href={sourceLink.href}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="explorer-link"
+                  >
                     <span>Source proof</span>
                     <strong>{sourceLink.label}</strong>
                     <ExternalLink size={15} aria-hidden="true" />
                   </a>
                 ) : null}
                 {destinationLink ? (
-                  <a href={destinationLink.href} target="_blank" rel="noreferrer" className="explorer-link">
+                  <a
+                    href={destinationLink.href}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="explorer-link"
+                  >
                     <span>Destination proof</span>
                     <strong>{destinationLink.label}</strong>
                     <ExternalLink size={15} aria-hidden="true" />
                   </a>
                 ) : null}
                 {agglayerMonitorLink ? (
-                  <a href={agglayerMonitorLink} target="_blank" rel="noreferrer" className="explorer-link">
+                  <a
+                    href={agglayerMonitorLink}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="explorer-link"
+                  >
                     <span>Public monitor</span>
                     <strong>Gateway FM Bali</strong>
                     <ExternalLink size={15} aria-hidden="true" />
@@ -489,15 +655,29 @@ export function ActivityDetail({ id }: { id: string }) {
               </div>
 
               <div className="receipt-lines">
-                <ReceiptLine label="Route" value={providers[activity.provider].label} />
+                <ReceiptLine
+                  label="Route"
+                  value={providers[activity.provider].label}
+                />
                 <ReceiptLine label="ETA" value={activity.eta} />
-                <ReceiptLine label="Minimum received" value={quote.minReceived} />
+                <ReceiptLine
+                  label="Minimum received"
+                  value={quote.minReceived}
+                />
                 <ReceiptLine label="Network fee" value={quote.networkFee} />
                 <ReceiptLine label="Bridge fee" value={quote.bridgeFee} />
                 <ReceiptLine label="Relayer fee" value={quote.relayerFee} />
-                {activity.depositCount ? <ReceiptLine label="AggLayer bridge event" value={`#${activity.depositCount}`} /> : null}
+                {activity.depositCount ? (
+                  <ReceiptLine
+                    label="AggLayer bridge event"
+                    value={`#${activity.depositCount}`}
+                  />
+                ) : null}
                 {activity.bridgeDestinationAddress ? (
-                  <ReceiptLine label="Bridge destination" value={activity.bridgeDestinationAddress} />
+                  <ReceiptLine
+                    label="Bridge destination"
+                    value={activity.bridgeDestinationAddress}
+                  />
                 ) : null}
               </div>
 
@@ -517,12 +697,22 @@ export function ActivityDetail({ id }: { id: string }) {
 
               <div className="timeline">
                 {timeline.map((step, index) => {
-                  const isDone = currentIndex > index || activity.status === "complete";
+                  const isDone =
+                    currentIndex > index || activity.status === "complete";
                   const isCurrent = step.status === activity.status;
                   return (
-                    <div className={`timeline-step ${isDone ? "done" : ""} ${isCurrent ? "current" : ""}`} key={step.status}>
+                    <div
+                      className={`timeline-step ${isDone ? "done" : ""} ${isCurrent ? "current" : ""}`}
+                      key={step.status}
+                    >
                       <div className="step-icon">
-                        {isDone ? <CheckCircle2 size={18} /> : isCurrent ? <RefreshCcw size={17} /> : <Circle size={16} />}
+                        {isDone ? (
+                          <CheckCircle2 size={18} />
+                        ) : isCurrent ? (
+                          <RefreshCcw size={17} />
+                        ) : (
+                          <Circle size={16} />
+                        )}
                       </div>
                       <div>
                         <strong>{step.label}</strong>
@@ -545,12 +735,22 @@ export function ActivityDetail({ id }: { id: string }) {
                       ? "Waiting for a Miden bridge event id before polling Sepolia claim proofs."
                       : "Sepolia receipts poll every 12s. AggLayer rows and proofs poll every 30s."}
                 </span>
-                <small>{lastChecked ? `Last checked ${lastChecked}` : "Starting automatic checks"}</small>
-                {monitorError ? <p className="form-error compact">{monitorError}</p> : null}
+                <small>
+                  {lastChecked
+                    ? `Last checked ${lastChecked}`
+                    : "Starting automatic checks"}
+                </small>
+                {monitorError ? (
+                  <p className="form-error compact">{monitorError}</p>
+                ) : null}
               </div>
 
               <div className="detail-actions">
-                <button className="secondary-button" type="button" onClick={markFailed}>
+                <button
+                  className="secondary-button"
+                  type="button"
+                  onClick={markFailed}
+                >
                   Mark as stuck
                 </button>
               </div>
@@ -562,7 +762,11 @@ export function ActivityDetail({ id }: { id: string }) {
               <div className="detail-title">
                 <div>
                   <p className="kicker">Settlement</p>
-                  <h2>{activity.mode === "receive" ? "Miden wallet state" : "Sepolia claim state"}</h2>
+                  <h2>
+                    {activity.mode === "receive"
+                      ? "Miden wallet state"
+                      : "Sepolia claim state"}
+                  </h2>
                 </div>
               </div>
 
@@ -573,11 +777,15 @@ export function ActivityDetail({ id }: { id: string }) {
               </div>
             </section>
 
-            <section className={`detail-card recovery-card ${needsRecovery ? "needs-action" : ""}`}>
+            <section
+              className={`detail-card recovery-card ${needsRecovery ? "needs-action" : ""}`}
+            >
               <div className="detail-title">
                 <div>
                   <p className="kicker">Claim and recovery</p>
-                  <h2>{needsRecovery ? "Action available" : "No action needed"}</h2>
+                  <h2>
+                    {needsRecovery ? "Action available" : "No action needed"}
+                  </h2>
                 </div>
               </div>
 
@@ -603,11 +811,13 @@ export function ActivityDetail({ id }: { id: string }) {
                       ? "Settled"
                       : activity.claimTxHash
                         ? "Submitted"
-                        : activity.status === "claim_available" && (activity.mode === "receive" || activity.depositCount)
+                        : activity.status === "claim_available" &&
+                            (activity.mode === "receive" ||
+                              activity.depositCount)
                           ? "Ready"
                           : activity.status === "claim_available"
                             ? "Needs bridge event id"
-                          : "Not ready"
+                            : "Not ready"
                   }
                 />
               </div>
@@ -615,20 +825,31 @@ export function ActivityDetail({ id }: { id: string }) {
               <p className="recovery-copy">
                 {activity.status === "failed"
                   ? "This transfer is stuck. Retry claim, use manual claim, or export diagnostics for support."
-                  : activity.status === "claim_available" && activity.mode === "send" && !activity.depositCount
+                  : activity.status === "claim_available" &&
+                      activity.mode === "send" &&
+                      !activity.depositCount
                     ? "This send needs a specific AggLayer bridge event id before claimAsset can be submitted safely."
-                  : activity.status === "claim_available"
-                    ? "Funds are ready to claim on the destination side."
-                    : "Recovery tools appear here when the transfer needs a user action."}
+                    : activity.status === "claim_available"
+                      ? "Funds are ready to claim on the destination side."
+                      : "Recovery tools appear here when the transfer needs a user action."}
               </p>
 
               <div className="recovery-actions">
                 {canClaimOnSepolia ? (
-                  <button className="primary-button compact-action" type="button" onClick={claimOnSepolia} disabled={claimBusy}>
+                  <button
+                    className="primary-button compact-action"
+                    type="button"
+                    onClick={claimOnSepolia}
+                    disabled={claimBusy}
+                  >
                     {claimBusy ? "Waiting for wallet" : "Claim on Sepolia"}
                   </button>
                 ) : null}
-                <button className="secondary-button" type="button" onClick={retryClaim}>
+                <button
+                  className="secondary-button"
+                  type="button"
+                  onClick={retryClaim}
+                >
                   Retry claim
                 </button>
                 <button
@@ -639,12 +860,18 @@ export function ActivityDetail({ id }: { id: string }) {
                 >
                   Manual claim
                 </button>
-                <button className="secondary-button" type="button" onClick={exportDiagnostic}>
+                <button
+                  className="secondary-button"
+                  type="button"
+                  onClick={exportDiagnostic}
+                >
                   <Download size={16} aria-hidden="true" />
                   Export
                 </button>
               </div>
-              {claimError ? <p className="form-error compact">{claimError}</p> : null}
+              {claimError ? (
+                <p className="form-error compact">{claimError}</p>
+              ) : null}
             </section>
           </aside>
         </section>
@@ -668,21 +895,34 @@ function settlementRows(activity: Activity) {
       {
         label: "Miden claim",
         value:
-          activity.status === "message_observed" || activity.status === "claim_available" || activity.status === "complete"
+          activity.status === "message_observed" ||
+          activity.status === "claim_available" ||
+          activity.status === "complete"
             ? "Bridge message available"
             : "Waiting for bridge message",
       },
       {
         label: "Note sync",
-        value: activity.status === "complete" ? "Synced" : activity.status === "claim_available" ? "Ready for wallet sync" : "Pending",
+        value:
+          activity.status === "complete"
+            ? "Synced"
+            : activity.status === "claim_available"
+              ? "Ready for wallet sync"
+              : "Pending",
       },
       {
         label: "Note consume",
-        value: activity.status === "complete" ? "Consumed" : "Awaiting wallet consume",
+        value:
+          activity.status === "complete"
+            ? "Consumed"
+            : "Awaiting wallet consume",
       },
       {
         label: "Claim settlement",
-        value: activity.status === "complete" ? "Balance settled" : "Not wallet-settled",
+        value:
+          activity.status === "complete"
+            ? "Balance settled"
+            : "Not wallet-settled",
       },
     ];
   }
@@ -711,11 +951,20 @@ function settlementRows(activity: Activity) {
     },
     {
       label: "Sepolia claim",
-      value: activity.claimTxHash ? "Submitted" : activity.status === "claim_available" ? "Ready to submit" : "Not ready",
+      value: activity.claimTxHash
+        ? "Submitted"
+        : activity.status === "claim_available"
+          ? "Ready to submit"
+          : "Not ready",
     },
     {
       label: "Claim settlement",
-      value: activity.status === "complete" ? "Settled on Sepolia" : activity.claimTxHash ? "Waiting confirmation" : "Not started",
+      value:
+        activity.status === "complete"
+          ? "Settled on Sepolia"
+          : activity.claimTxHash
+            ? "Waiting confirmation"
+            : "Not started",
     },
   ];
 }
