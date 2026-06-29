@@ -23,6 +23,31 @@ const nextConfig: NextConfig = {
       },
     ];
   },
+  // @miden-sdk v0.15's wasm-bindgen glue (dist/st|mt/*.js) opens with CommonJS
+  // interop shims, so webpack treats it as CJS and can't see its named
+  // re-exports (NoteArray, ForeignAccountArray, …) → "X is not exported".
+  // Force ESM parsing for the SDK dist so the named exports resolve. Also alias
+  // optional wallet-connector deps we don't use (pulled in by wagmi/AppKit).
+  webpack: (config) => {
+    config.module = config.module ?? {};
+    config.module.rules = config.module.rules ?? [];
+    // @miden-sdk's wasm-bindgen glue re-exports its classes (NoteArray, …) through
+    // a rollup CJS-interop file, which webpack's static analysis can't follow — it
+    // errors "X is not exported" even though the exports exist at runtime. Downgrade
+    // the export-presence check for @miden-sdk so the build proceeds; the named
+    // exports resolve correctly at runtime via webpack's CJS interop.
+    config.module.rules.push({
+      test: /\.m?js$/,
+      include: /node_modules[\\/]@miden-sdk[\\/]/,
+      parser: { exportsPresence: false },
+    });
+    config.resolve = config.resolve ?? {};
+    config.resolve.alias = {
+      ...config.resolve.alias,
+      "@react-native-async-storage/async-storage": false,
+    };
+    return config;
+  },
 };
 
 export default nextConfig;
