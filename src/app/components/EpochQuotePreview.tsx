@@ -44,9 +44,12 @@ export function EpochQuotePreview({
   }
 
   if (quote.error) {
+    // Distinguish the allocator's "no quote available" (no solver liquidity for
+    // this token/amount right now — retryable) from an actual integration error.
+    const noLiquidity = /quote isn'?t available|not available/i.test(quote.error);
     return (
       <span className="epoch-quote-error" title={quote.error}>
-        Quote unavailable
+        {noLiquidity ? "No quote right now" : "Quote error"}
       </span>
     );
   }

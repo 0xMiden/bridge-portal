@@ -45,6 +45,10 @@ import {
   useAppKitProvider,
 } from "@reown/appkit/react";
 import { type EvmProvider, ensureSepolia } from "../lib/evm-wallet";
+import { epochActivityStatus } from "../lib/epoch/epoch-status";
+import { MIDEN_DESTINATION_CHAIN_ID } from "../lib/epoch/config";
+
+const SEPOLIA_CHAIN_ID = 11155111;
 
 function errorMessage(error: unknown) {
   if (error instanceof Error) return error.message;
@@ -119,6 +123,57 @@ export function ActivityDetail({ id }: { id: string }) {
         : null,
     [activity],
   );
+
+  // Epoch: poll getIntentStatus and advance the activity state machine until terminal.
+  useEffect(() => {
+    if (
+      activity?.provider !== "epoch" ||
+      !activity.epochIntentNonce ||
+      !activity.epochSponsor
+    )
+      return;
+    if (activity.status === "complete" || activity.status === "failed") return;
+
+    const controller = new AbortController();
+    const activityId = activity.id;
+    const sponsor = activity.epochSponsor;
+    const nonce = activity.epochIntentNonce;
+    const destinationChainId =
+      activity.mode === "receive" ? MIDEN_DESTINATION_CHAIN_ID : SEPOLIA_CHAIN_ID;
+
+    (async () => {
+      // epoch-execute pulls the eager-WASM Miden SDK; import lazily so it stays
+      // out of SSR (mirrors BridgeExperience.submitTransfer).
+      const { pollEpochIntentStatus } = await import("../lib/epoch/epoch-execute");
+      await pollEpochIntentStatus({
+        sponsorAddress: sponsor,
+        intentNonce: nonce,
+        signal: controller.signal,
+        onUpdate: (statuses) => {
+          const nextStatus = epochActivityStatus(statuses, destinationChainId);
+          setActivities((current) => {
+            const updated = current.map((item) =>
+              item.id === activityId
+                ? { ...item, status: nextStatus, updatedAt: "Just now" }
+                : item,
+            );
+            saveActivities(updated);
+            return updated;
+          });
+          setLastChecked("Just now");
+        },
+      });
+    })().catch(() => undefined);
+
+    return () => controller.abort();
+  }, [
+    activity?.provider,
+    activity?.epochIntentNonce,
+    activity?.epochSponsor,
+    activity?.id,
+    activity?.mode,
+    activity?.status,
+  ]);
   const modeCopy = activity ? modes[activity.mode] : null;
   const sourceLink = activity ? sourceExplorer(activity) : null;
   const destinationLink = activity ? destinationExplorer(activity) : null;

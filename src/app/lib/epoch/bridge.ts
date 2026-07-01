@@ -216,7 +216,6 @@ export async function getEVMToMidenQuote(
   sponsorAddress: string,
 ): Promise<EVMToMidenQuote> {
   const taskDataParams = buildEVMToMidenTaskDataParams(params);
-  console.log("Task Data Paramas", taskDataParams);
   const { taskTypeString, intentData } = await sdk.getTaskData(taskDataParams);
 
   const quoteResult = await sdk.getIntentQuote({
