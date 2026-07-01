@@ -131,7 +131,7 @@ export function BridgeExperience() {
   const { walletProvider } = useAppKitProvider<EvmProvider>("eip155");
   const { disconnect } = useDisconnect();
   const { walletInfo } = useWalletInfo();
-  const [provider, setProvider] = useState<BridgeProvider>("agglayer");
+  const [provider, setProvider] = useState<BridgeProvider>("epoch");
   const [mode, setMode] = useState<FlowMode>("receive");
   const [amount, setAmount] = useState("100");
   const [destination, setDestination] = useState("");
@@ -705,7 +705,9 @@ export function BridgeExperience() {
                   role="listbox"
                   aria-label="Bridge route"
                 >
-                  {(Object.keys(providers) as BridgeProvider[]).map((key) => {
+                  {(Object.keys(providers) as BridgeProvider[])
+                    .filter((key) => !providers[key].disabled)
+                    .map((key) => {
                     const option = providers[key];
                     const selected = key === provider;
                     const disabled = option.disabled === true;
