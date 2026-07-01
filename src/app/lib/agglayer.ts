@@ -4,7 +4,10 @@ export const AGGLAYER_BALI = {
   sepoliaChainId: 11155111,
   sepoliaChainHex: "0xaa36a7",
   sepoliaBridgeAddress: "0x1348947e282138d8f377b467f7d9c2eb0f335d1f",
-  destinationNetworkId: 76,
+  // Miden rollup network id on v15/bali. Rollup 76 was dropped and replaced by
+  // 78 (per gateway-fm/miden-agglayer bali monitor). Inbound `bridgeAsset`
+  // destinationNetwork and outbound claim `globalIndex`/`net_id` all use this.
+  destinationNetworkId: 78,
   sourceNetworkId: 0,
   nativeTokenAddress: "0x0000000000000000000000000000000000000000",
   gasLimit: BigInt(300000),
