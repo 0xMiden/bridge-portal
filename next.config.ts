@@ -1,7 +1,13 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  // @opennextjs/cloudflare consumes the standalone server output.
   output: "standalone",
+  // Pin the file-tracing root to this project. Otherwise Next infers a parent
+  // dir (a stray ~/package-lock.json) as the workspace root and nests the
+  // standalone output under the full path, so opennext can't find
+  // .next/standalone/.next/server/*.
+  outputFileTracingRoot: __dirname,
   allowedDevOrigins: ["127.0.0.1", "homelab.tail477b3c.ts.net"],
   // NOTE: We intentionally do NOT set cross-origin isolation (COOP/COEP/CORP).
   // - COOP: same-origin breaks wallet connectors that rely on popups with

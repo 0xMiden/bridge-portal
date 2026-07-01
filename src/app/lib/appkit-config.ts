@@ -12,7 +12,14 @@ export const wagmiAdapter = new WagmiAdapter({
   ssr: true,
 });
 
-const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+// Use the real page origin in the browser (where createAppKit consumes this),
+// so the WalletConnect metadata.url matches the actual host on any deploy —
+// no per-env config and no "metadata.url differs from page url" warning.
+// Falls back to NEXT_PUBLIC_APP_URL during SSR (where window is undefined).
+const appUrl =
+  typeof window !== "undefined"
+    ? window.location.origin
+    : process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
 
 export const metadata = {
   name: "Miden Bridge",
