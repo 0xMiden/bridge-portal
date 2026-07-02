@@ -24,8 +24,10 @@
 //   client.newB2AggTransactionRequest(...) / TransactionRequestBuilder.
 // NOTE: this final arg order differs from the wallet branch's pre-merge draft.
 
-export const MIDEN_BRIDGE_ID = "0xc98bb07c188cd2500e13f68a069cdc";
-export const MIDEN_AGGLAYER_FAUCET_ID = "0xe63ba7bc2c19ff603c52c67fa4426d";
+// Post-2026-06-24 rollup-78 relaunch (gateway.fm PARAMETERS.md).
+// bech32: bridge mcst1az3zas25lx3kmyge2074eynq5um0mm2h, faucet mcst1aqu8zjdwvcgkeug5a67kpwmnsym6qdsd
+export const MIDEN_BRIDGE_ID = "0xa22ec154f9a36d911953fd5c9260a7";
+export const MIDEN_AGGLAYER_FAUCET_ID = "0x387149ae66116cf114eebd60bb7381";
 
 // Agglayer network id of the EVM destination (Sepolia / L1 origin network) used
 // as the destination network when bridging Miden → EVM.

@@ -4,10 +4,11 @@ export const AGGLAYER_BALI = {
   sepoliaChainId: 11155111,
   sepoliaChainHex: "0xaa36a7",
   sepoliaBridgeAddress: "0x1348947e282138d8f377b467f7d9c2eb0f335d1f",
-  // Miden rollup network id on v15/bali (the on-chain PolygonZkEVMBridge
-  // networkID used as the inbound `bridgeAsset` destinationNetwork). Distinct
-  // from the bridge indexer's internal net id (1) used for claim lookups.
-  destinationNetworkId: 76,
+  // Miden rollup network id on v15/bali, post the 2026-06-24 rollup-78
+  // relaunch — used as the inbound `bridgeAsset` destinationNetwork AND as the
+  // bridge indexer's origin net id for L2→L1 claim lookups. Authoritative:
+  // gateway.fm PARAMETERS.md (rollup 78; rollup 76/73 are explicitly stale).
+  destinationNetworkId: 78,
   sourceNetworkId: 0,
   nativeTokenAddress: "0x0000000000000000000000000000000000000000",
   gasLimit: BigInt(300000),
@@ -16,7 +17,7 @@ export const AGGLAYER_BALI = {
   sepoliaRpcUrl: "https://ethereum-sepolia-rpc.publicnode.com",
   sepoliaExplorer: "https://sepolia.etherscan.io",
   midenExplorer: "https://testnet.midenscan.com",
-  midenEthFaucetId: "mcst1arnrhfau9svl7cpu2tr8lfzzd5j87wwe",
+  midenEthFaucetId: "mcst1aqu8zjdwvcgkeug5a67kpwmnsym6qdsd",
   midenEthDecimals: 8,
 } as const;
 

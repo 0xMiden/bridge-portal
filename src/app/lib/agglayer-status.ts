@@ -64,15 +64,17 @@ interface MerkleProofResponse {
 const BRIDGE_SERVICE_URL = BRIDGES_API.replace(/\/bridges$/, "");
 
 // The most recent Miden→EVM (L2→L1) deposit to `l1Dest` that's ready to claim
-// on L1, or null. L2-logged deposits carry `network_id === 1` in this indexer
-// (the bridge-service's internal net id for the Miden rollup — distinct from the
-// on-chain rollup id used as `bridgeAsset` destinationNetwork).
+// on L1, or null. Per gateway.fm PARAMETERS.md, a bridge-out exit is indexed
+// with the Miden rollup as origin (`network_id === 78`, post rollup-78
+// relaunch) and Ethereum L1 as destination (`dest_net === 0`). Note: with
+// `bridge-autoclaim` enabled, ready exits are usually claimed automatically —
+// this manual lookup is the fallback path.
 export async function findClaimableMidenToEvmDeposit(
   l1Dest: string,
 ): Promise<AgglayerDeposit | null> {
   const deposits = await fetchDeposits(l1Dest);
   const claimable = deposits
-    .filter((d) => d.ready_for_claim && d.network_id === 1)
+    .filter((d) => d.ready_for_claim && d.network_id === 78 && d.dest_net === 0)
     .sort((a, b) => b.deposit_cnt - a.deposit_cnt);
   return claimable[0] ?? null;
 }
