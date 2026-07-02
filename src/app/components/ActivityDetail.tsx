@@ -14,11 +14,9 @@ import {
 import Image from "next/image";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import {
-  AGGLAYER_BALI,
-  type AgglayerClaimPlan,
-  type AgglayerDepositStatus,
-} from "../lib/agglayer";
+import { AGGLAYER_BALI, type AgglayerDepositStatus } from "../lib/agglayer";
+import { buildAgglayerClaimTransaction } from "../lib/agglayer-claim";
+import { findClaimableMidenToEvmDeposit } from "../lib/agglayer-status";
 import {
   agglayerPollMs,
   type BridgeMonitorObservation,
@@ -57,12 +55,6 @@ function errorMessage(error: unknown) {
   return "Something went wrong. Try again.";
 }
 
-function optionalDepositCount(value: string | undefined) {
-  if (!value) return undefined;
-  const parsed = Number(value);
-  return Number.isSafeInteger(parsed) && parsed >= 0 ? parsed : undefined;
-}
-
 function isSepoliaTxHash(value: string | undefined) {
   return Boolean(value && /^0x[0-9a-fA-F]{64}$/.test(value));
 }
@@ -79,14 +71,6 @@ function matchingDeposit(status: AgglayerDepositStatus, sourceTxHash?: string) {
       (deposit) => deposit.tx_hash?.toLowerCase() === normalized,
     ) ?? null
   );
-}
-
-function claimPlanDepositCount(plan: AgglayerClaimPlan) {
-  const deposit = plan.deposit as {
-    depositCnt?: string | number;
-    deposit_cnt?: string | number;
-  } | null;
-  return deposit?.depositCnt ?? deposit?.deposit_cnt;
 }
 
 async function fetchSepoliaTx(hash: string): Promise<ChainTxObservation> {
@@ -358,43 +342,23 @@ export function ActivityDetail({ id }: { id: string }) {
     if (activity.status === "complete" || activity.status === "failed") return;
     if (!isSepoliaAddress(activity.destination)) return;
     if (activity.status === "claim_submitted") return;
-    if (!activity.depositCount) return;
 
     let cancelled = false;
     const activityId = activity.id;
-    const destination = activity.destination;
-    const expectedDepositCount = activity.depositCount;
+    const destination = activity.destination as string; // guarded by isSepoliaAddress above
 
+    // Direct against the public bridge indexer (no local backend proxy): the
+    // deposit is discoverable by its Sepolia destination address, so readiness
+    // + deposit_cnt come straight from the claimable row.
     async function pollClaimReadiness() {
       try {
-        const response = await fetch(
-          "/api/bridge/agglayer/l2/withdraw/claim/plan",
-          {
-            method: "POST",
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify({
-              ethAccountId: destination,
-              depositCount: optionalDepositCount(expectedDepositCount),
-            }),
-            cache: "no-store",
-          },
-        );
-        const plan = (await response.json()) as
-          | AgglayerClaimPlan
-          | { message?: string };
-        if (!response.ok)
-          throw new Error(
-            "message" in plan
-              ? (plan.message ?? "Unable to read claim readiness.")
-              : "Unable to read claim readiness.",
-          );
-        if (!("readyForClaim" in plan)) return;
+        const deposit = await findClaimableMidenToEvmDeposit(destination);
         if (cancelled) return;
         observeActivity(activityId, {
           checkedAt: "Just now",
           claimPlan: {
-            readyForClaim: plan.readyForClaim,
-            depositCount: claimPlanDepositCount(plan),
+            readyForClaim: Boolean(deposit),
+            depositCount: deposit?.deposit_cnt,
           },
         });
       } catch (error) {
@@ -511,46 +475,26 @@ export function ActivityDetail({ id }: { id: string }) {
       const account = address;
       await ensureSepolia(walletProvider);
 
-      const response = await fetch(
-        "/api/bridge/agglayer/l2/withdraw/claim/plan",
-        {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({
-            ethAccountId: destinationAddress,
-            depositCount: optionalDepositCount(activity.depositCount),
-          }),
-        },
-      );
-      const plan = (await response.json()) as
-        | AgglayerClaimPlan
-        | { message?: string; detail?: string };
-      if (!response.ok) {
-        throw new Error(
-          "message" in plan
-            ? (plan.message ?? "Unable to build claim plan.")
-            : "Unable to build claim plan.",
-        );
-      }
-      if (
-        !("readyForClaim" in plan) ||
-        !plan.readyForClaim ||
-        !plan.transaction
-      ) {
+      // Build the claim client-side against the public bridge indexer: find the
+      // deposit ready to claim on Sepolia for this destination, pull its merkle
+      // proof, and encode `claimAsset`. No local backend proxy involved.
+      const deposit = await findClaimableMidenToEvmDeposit(destinationAddress);
+      if (!deposit) {
         throw new Error(
           "AggLayer proof is not ready yet. Keep this transfer in activity and try again later.",
         );
       }
+
+      const claimTx = await buildAgglayerClaimTransaction(deposit);
 
       const txHash = await walletProvider.request<string>({
         method: "eth_sendTransaction",
         params: [
           {
             from: account,
-            to: plan.transaction.to,
-            data: plan.transaction.data,
-            value: plan.transaction.value,
-            gas: plan.transaction.gas,
+            to: claimTx.to,
+            data: claimTx.data,
+            value: claimTx.value,
           },
         ],
       });

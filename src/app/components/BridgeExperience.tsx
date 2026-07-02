@@ -159,6 +159,10 @@ export function BridgeExperience() {
     [amount, mode, provider],
   );
   const isLiveAgglayerReceive = provider === "agglayer" && mode === "receive";
+  // AggLayer outbound (Miden→Sepolia) can't build the B2AGG note yet — the
+  // published @miden-sdk has no way to attach the NetworkAccountTarget to a
+  // custom-script note (see lib/agglayer-b2agg.ts). Gate it honestly.
+  const isAgglayerSendUnavailable = provider === "agglayer" && mode === "send";
   const midenAddress = midenWallet.address || launchMidenAccount;
   // Map the form fields to the Epoch quote's directional roles:
   // - send (Miden→EVM): Miden wallet is the sender; the EVM recipient is the
@@ -199,11 +203,13 @@ export function BridgeExperience() {
       : provider === "agglayer"
         ? mode === "receive"
           ? "Slow testnet route. Your Sepolia wallet sends to Miden through AggLayer with no provider bridge fee."
-          : "Slow testnet route. Miden-side bridge note creation is tracked separately; claimAsset is submitted on Sepolia when proof is ready."
+          : "Miden→Sepolia send isn't available yet — it needs Miden SDK B2AGG note support. Use Epoch to send, or AggLayer to receive."
         : "Testnet route. Epoch integration status is tracked from activity details.";
   const primaryActionLabel = isSubmitting
     ? "Waiting for wallet"
-    : isLiveAgglayerReceive && !walletConnected
+    : isAgglayerSendUnavailable
+      ? "Send available soon"
+      : isLiveAgglayerReceive && !walletConnected
       ? "Connect Sepolia wallet"
       : isLiveAgglayerReceive && !hasDestination
         ? "Add Miden account"
@@ -435,6 +441,13 @@ export function BridgeExperience() {
   async function submitTransfer() {
     setBridgeError("");
     setWalletError("");
+
+    if (isAgglayerSendUnavailable) {
+      setBridgeError(
+        "AggLayer Miden→Sepolia send isn't available yet — it needs the Miden SDK's B2AGG note support. Use Epoch for Miden→Sepolia, or switch to Receive for AggLayer.",
+      );
+      return;
+    }
 
     if (isLiveAgglayerReceive) {
       setIsSubmitting(true);
@@ -858,7 +871,7 @@ export function BridgeExperience() {
             className="primary-button"
             type="button"
             onClick={submitTransfer}
-            disabled={isSubmitting}
+            disabled={isSubmitting || isAgglayerSendUnavailable}
           >
             {primaryActionLabel}
             <ArrowRight size={18} aria-hidden="true" />

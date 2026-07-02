@@ -4,6 +4,9 @@ export const AGGLAYER_BALI = {
   sepoliaChainId: 11155111,
   sepoliaChainHex: "0xaa36a7",
   sepoliaBridgeAddress: "0x1348947e282138d8f377b467f7d9c2eb0f335d1f",
+  // Miden rollup network id on v15/bali (the on-chain PolygonZkEVMBridge
+  // networkID used as the inbound `bridgeAsset` destinationNetwork). Distinct
+  // from the bridge indexer's internal net id (1) used for claim lookups.
   destinationNetworkId: 76,
   sourceNetworkId: 0,
   nativeTokenAddress: "0x0000000000000000000000000000000000000000",
