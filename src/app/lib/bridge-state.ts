@@ -70,12 +70,10 @@ export const providers: Record<
   },
   agglayer: {
     label: "AggLayer",
-    badge: "Soon",
-    route: "Coming soon",
+    badge: "Testnet",
+    route: "AggLayer testnet route",
     disclosure:
-      "AggLayer testnet routing depends on source confirmation and the bridge message becoming available to Miden.",
-    // Disabled for the Epoch-only launch; re-enable when AggLayer Send is built (#8).
-    disabled: true,
+      "AggLayer routes Sepolia→Miden through the canonical bridge with no provider fee. Miden→Sepolia send is not available yet (needs Miden SDK B2AGG note support); the Sepolia-side claimAsset is built in-app once the outbound note lands.",
   },
   epoch: {
     label: "Epoch",
