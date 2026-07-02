@@ -17,7 +17,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { formatEther } from "viem";
+import { formatEther, parseUnits } from "viem";
 import {
   AGGLAYER_BALI,
   buildSepoliaDepositTransaction,
@@ -57,6 +57,7 @@ type MidenWalletSnapshot = {
   noteSyncStatus: string;
   consumableNoteCount: number | null;
   requestSend?: MidenFiWalletContextState["requestSend"];
+  requestTransaction?: MidenFiWalletContextState["requestTransaction"];
   waitForTransaction?: MidenFiWalletContextState["waitForTransaction"];
 };
 
@@ -159,10 +160,9 @@ export function BridgeExperience() {
     [amount, mode, provider],
   );
   const isLiveAgglayerReceive = provider === "agglayer" && mode === "receive";
-  // AggLayer outbound (Miden→Sepolia) can't build the B2AGG note yet — the
-  // published @miden-sdk has no way to attach the NetworkAccountTarget to a
-  // custom-script note (see lib/agglayer-b2agg.ts). Gate it honestly.
-  const isAgglayerSendUnavailable = provider === "agglayer" && mode === "send";
+  // AggLayer outbound (Miden→Sepolia): builds a B2AGG bridge-out note via the
+  // SDK (Note.createB2AggNote) and submits it through the MidenFi wallet.
+  const isLiveAgglayerSend = provider === "agglayer" && mode === "send";
   const midenAddress = midenWallet.address || launchMidenAccount;
   // Map the form fields to the Epoch quote's directional roles:
   // - send (Miden→EVM): Miden wallet is the sender; the EVM recipient is the
@@ -203,12 +203,14 @@ export function BridgeExperience() {
       : provider === "agglayer"
         ? mode === "receive"
           ? "Slow testnet route. Your Sepolia wallet sends to Miden through AggLayer with no provider bridge fee."
-          : "Miden→Sepolia send isn't available yet — it needs Miden SDK B2AGG note support. Use Epoch to send, or AggLayer to receive."
+          : "Bridge out from Miden through AggLayer. The Sepolia claim is auto-submitted once the exit settles (~30-90 min)."
         : "Testnet route. Epoch integration status is tracked from activity details.";
   const primaryActionLabel = isSubmitting
     ? "Waiting for wallet"
-    : isAgglayerSendUnavailable
-      ? "Send available soon"
+    : isLiveAgglayerSend && !midenWallet.connected
+      ? "Connect Miden wallet"
+      : isLiveAgglayerSend
+        ? "Bridge out to Sepolia"
       : isLiveAgglayerReceive && !walletConnected
       ? "Connect Sepolia wallet"
       : isLiveAgglayerReceive && !hasDestination
@@ -442,10 +444,60 @@ export function BridgeExperience() {
     setBridgeError("");
     setWalletError("");
 
-    if (isAgglayerSendUnavailable) {
-      setBridgeError(
-        "AggLayer Miden→Sepolia send isn't available yet — it needs the Miden SDK's B2AGG note support. Use Epoch for Miden→Sepolia, or switch to Receive for AggLayer.",
-      );
+    if (provider === "agglayer" && mode === "send") {
+      setIsSubmitting(true);
+      try {
+        const senderAddress = midenAddress;
+        if (
+          !midenWallet.connected ||
+          !midenWallet.requestTransaction ||
+          !midenWallet.waitForTransaction ||
+          !senderAddress
+        ) {
+          throw new Error(
+            "Connect your MidenFi wallet before bridging out to Sepolia.",
+          );
+        }
+        const destinationAddress = destination.trim() || walletAccount;
+        if (!/^0x[0-9a-fA-F]{40}$/.test(destinationAddress)) {
+          throw new Error(
+            "Enter a valid Sepolia (0x…) destination, or connect your Sepolia wallet.",
+          );
+        }
+        const unitsAmount = parseUnits(amount, AGGLAYER_BALI.midenEthDecimals);
+        if (unitsAmount <= BigInt(0)) {
+          throw new Error("Enter an amount greater than zero.");
+        }
+
+        // Dynamic import: agglayer-execute pulls the eager-WASM SDK + wallet
+        // adapter, so it must load client-side at click time, never in SSR.
+        const { runAgglayerSend } = await import("../lib/agglayer-execute");
+        const { txId } = await runAgglayerSend({
+          amount: unitsAmount,
+          destinationAddress,
+          senderAddress,
+          requestTransaction: midenWallet.requestTransaction,
+          waitForTransaction: midenWallet.waitForTransaction,
+        });
+
+        const next = createActivity(mode, provider, amount, {
+          status: "message_observed",
+          eta: "30-90 min",
+          destination: destinationAddress,
+          midenTxId: txId,
+          // origin = Miden rollup 78, destination = Ethereum L1 (0)
+          sourceNetworkId: AGGLAYER_BALI.destinationNetworkId,
+          destinationNetworkId: AGGLAYER_BALI.sourceNetworkId,
+        });
+        const updated = [next, ...activities];
+        setActivities(updated);
+        saveActivities(updated);
+        router.push(`/activity/${next.id}`);
+      } catch (error) {
+        setBridgeError(errorMessage(error));
+      } finally {
+        setIsSubmitting(false);
+      }
       return;
     }
 
@@ -871,7 +923,7 @@ export function BridgeExperience() {
             className="primary-button"
             type="button"
             onClick={submitTransfer}
-            disabled={isSubmitting || isAgglayerSendUnavailable}
+            disabled={isSubmitting}
           >
             {primaryActionLabel}
             <ArrowRight size={18} aria-hidden="true" />

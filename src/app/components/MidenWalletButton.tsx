@@ -34,6 +34,9 @@ type MidenWalletSnapshot = {
    * Undefined until the MidenFi adapter connects.
    */
   requestSend?: MidenFiWalletContextState["requestSend"];
+  // requestTransaction submits a custom (pre-built) TransactionRequest — the
+  // AggLayer B2AGG bridge-out note goes through this, not requestSend.
+  requestTransaction?: MidenFiWalletContextState["requestTransaction"];
   waitForTransaction?: MidenFiWalletContextState["waitForTransaction"];
 };
 
@@ -117,6 +120,7 @@ function MidenWalletButtonInner({
       noteSyncStatus,
       consumableNoteCount,
       requestSend: wallet.requestSend,
+      requestTransaction: wallet.requestTransaction,
       waitForTransaction: wallet.waitForTransaction,
     });
   }, [
@@ -128,6 +132,7 @@ function MidenWalletButtonInner({
     onStateChange,
     wallet.connected,
     wallet.requestSend,
+    wallet.requestTransaction,
     wallet.waitForTransaction,
   ]);
 
