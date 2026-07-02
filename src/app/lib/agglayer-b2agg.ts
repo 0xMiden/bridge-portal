@@ -4,11 +4,21 @@
 // (src/lib/agglayer/b2agg/{constant,index}.ts). The whole B2AGG note — script,
 // NetworkAccountTarget attachment, 6 input felts, and the fungible asset — is
 // built by a SINGLE SDK factory, `Note.createB2AggNote(...)`. That method is
-// NOT in the published `@miden-sdk/miden-sdk` (verified against 0.15.2/0.15.3;
-// only createP2IDNote / createP2IDENote ship). The wallet branch links an
-// unreleased/forked SDK build. Until that build is published, the send path
-// throws the guard below; the real call is kept in a comment so it drops in
-// verbatim the moment the SDK exposes the factory.
+// NOT in any published `@miden-sdk/miden-sdk` (0.14.x–0.15.3; only
+// createP2IDNote / createP2IDENote ship). The wallet branch links an
+// unreleased/forked SDK build. Until it's published, the send path throws.
+//
+// Why we can't hand-roll it on the published SDK: a B2AGG note is
+// {custom B2AGG script + NetworkAccountTarget attachment}. The script compiles
+// fine client-side (Assembler.compileNoteScript / NoteScript.deserialize) and
+// the attachment word is buildable (NoteAttachment.fromWord), but there is NO
+// JS API to attach an attachment to a custom-script note: on the 0.15 surface
+// attachments live in NoteMetadata, whose JS constructor is attachment-less by
+// design, the generic `new Note(assets, metadata, recipient)` takes no
+// attachment, and the only attachment-accepting builders (createP2ID[E]Note)
+// hardwire the P2ID script. So the bridge NTX's active_account_matches_target
+// assert could never be satisfied. Fix belongs in the SDK, not here.
+// The real call is kept in a comment so it drops in verbatim once the SDK ships.
 
 export const MIDEN_BRIDGE_ID = "0xc98bb07c188cd2500e13f68a069cdc";
 export const MIDEN_AGGLAYER_FAUCET_ID = "0xe63ba7bc2c19ff603c52c67fa4426d";
