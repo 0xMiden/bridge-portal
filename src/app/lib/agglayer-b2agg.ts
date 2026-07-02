@@ -1,24 +1,28 @@
 // Outbound Miden→Sepolia (B2AGG) constants and note builder.
 //
-// Ported from 0xMiden/wallet@utk-bridge-integration
-// (src/lib/agglayer/b2agg/{constant,index}.ts). The whole B2AGG note — script,
-// NetworkAccountTarget attachment, 6 input felts, and the fungible asset — is
-// built by a SINGLE SDK factory, `Note.createB2AggNote(...)`. That method is
-// NOT in any published `@miden-sdk/miden-sdk` (0.14.x–0.15.3; only
-// createP2IDNote / createP2IDENote ship). The wallet branch links an
-// unreleased/forked SDK build. Until it's published, the send path throws.
+// The whole B2AGG note — B2AGG script, NetworkAccountTarget attachment, input
+// felts, fungible asset — is built by a SINGLE SDK factory that #[js_export]s
+// the protocol's native `B2AggNote::create`. It can't be hand-rolled on the
+// published SDK: a B2AGG note is {custom script + NetworkAccountTarget
+// attachment}, but the 0.15 JS surface has no way to attach an attachment to a
+// custom-script note (NoteMetadata's ctor is attachment-less, generic
+// `new Note()` takes no attachment, and createP2ID[E]Note hardwire the P2ID
+// script). So it must come from the SDK — and it now HAS:
 //
-// Why we can't hand-roll it on the published SDK: a B2AGG note is
-// {custom B2AGG script + NetworkAccountTarget attachment}. The script compiles
-// fine client-side (Assembler.compileNoteScript / NoteScript.deserialize) and
-// the attachment word is buildable (NoteAttachment.fromWord), but there is NO
-// JS API to attach an attachment to a custom-script note: on the 0.15 surface
-// attachments live in NoteMetadata, whose JS constructor is attachment-less by
-// design, the generic `new Note(assets, metadata, recipient)` takes no
-// attachment, and the only attachment-accepting builders (createP2ID[E]Note)
-// hardwire the P2ID script. So the bridge NTX's active_account_matches_target
-// assert could never be satisfied. Fix belongs in the SDK, not here.
-// The real call is kept in a comment so it drops in verbatim once the SDK ships.
+//   0xMiden/web-sdk#211 (merged 2026-06-29, closes #173) adds it, staged for
+//   release @miden-sdk 0.15.4 (NOT yet published — latest npm is 0.15.3, which
+//   is why the send still throws here). No fork needed; just bump to 0.15.4.
+//
+// When 0.15.4 lands, prefer the HIGH-LEVEL API over hand-assembling a note:
+//   - react:  useBridge() → bridge({ from, bridgeAccount, assetId, amount,
+//               destinationNetwork, destinationAddress })
+//   - client: client.transactions.bridge({ account, bridgeAccount, token,
+//               amount, destinationNetwork, destinationAddress })
+// Low-level (if needed): Note.createB2AggNote(sender, bridgeAccount, assets,
+//   destinationNetwork, destinationAddress) — destinationAddress is the new
+//   EthAddress class (EthAddress.fromHex("0x…")) — then
+//   client.newB2AggTransactionRequest(...) / TransactionRequestBuilder.
+// NOTE: this final arg order differs from the wallet branch's pre-merge draft.
 
 export const MIDEN_BRIDGE_ID = "0xc98bb07c188cd2500e13f68a069cdc";
 export const MIDEN_AGGLAYER_FAUCET_ID = "0xe63ba7bc2c19ff603c52c67fa4426d";
@@ -30,8 +34,8 @@ export const EVM_AGGLAYER_NETWORK_ID = 0;
 export class B2AggNoteUnavailableError extends Error {
   constructor() {
     super(
-      "AggLayer Miden→Sepolia send needs Note.createB2AggNote, which is not in " +
-        "the published @miden-sdk. Waiting on the SDK build that exposes it.",
+      "AggLayer Miden→Sepolia send needs the B2AGG bridge API (web-sdk#211), " +
+        "shipping in @miden-sdk 0.15.4 — not yet published (latest is 0.15.3).",
     );
     this.name = "B2AggNoteUnavailableError";
   }
@@ -42,21 +46,22 @@ export class B2AggNoteUnavailableError extends Error {
  * faucet asset from `senderAddress` (Miden bech32) out to `destinationAddress`
  * (Sepolia, 20-byte EVM address) via the Miden bridge account.
  *
- * Blocked on the SDK: throws until `Note.createB2AggNote` is published. The
- * exact call (from the wallet branch) is:
+ * Blocked until @miden-sdk 0.15.4 ships the B2AGG API (web-sdk#211). Prefer the
+ * high-level path then — no manual note assembly:
  *
- *   const note = Note.createB2AggNote(
- *     EVM_AGGLAYER_NETWORK_ID,          // destinationNetwork
- *     destinationAddress,               // 20-byte EVM address
- *     new NoteAssets([
- *       new FungibleAsset(AccountId.fromHex(MIDEN_AGGLAYER_FAUCET_ID), amount),
- *     ]),
- *     AccountId.fromHex(MIDEN_BRIDGE_ID),
- *     accountIdStringToSdk(senderAddress),
- *   );
- *   return new TransactionRequestBuilder()
- *     .withOwnOutputNotes(new NoteArray([note]))
- *     .build();
+ *   // react:  const { bridge } = useBridge();
+ *   await bridge({
+ *     from: senderAddress,
+ *     bridgeAccount: MIDEN_BRIDGE_ID,
+ *     assetId: MIDEN_AGGLAYER_FAUCET_ID,
+ *     amount,
+ *     destinationNetwork: EVM_AGGLAYER_NETWORK_ID,
+ *     destinationAddress: EthAddress.fromHex(destinationAddress),
+ *   });
+ *
+ * Low-level equivalent (final signature — note the arg order):
+ *   Note.createB2AggNote(sender, bridgeAccount, assets, destinationNetwork,
+ *     EthAddress.fromHex(destinationAddress)) → newB2AggTransactionRequest(...).
  */
 export function buildB2AggTransactionRequest(args: {
   amount: bigint;
