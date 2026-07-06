@@ -49,6 +49,13 @@ import { type EvmProvider, ensureSepolia } from "../lib/evm-wallet";
 // Type-only import — erased at build, so the eager-WASM adapter never reaches SSR.
 import type { MidenFiWalletContextState } from "@miden-sdk/miden-wallet-adapter-react";
 
+// Sepolia USDC for the Epoch route (Epoch's SIO route is USDC<->USDC). This test
+// token reports 18 decimals (not the usual 6). Mint it on the Epoch dashboard.
+const EPOCH_SEPOLIA_USDC = {
+  address: "0x2BB4FfD7E2c6D432b697554Efd77fA13bdbefd69",
+  decimals: 18,
+} as const;
+
 type MidenWalletSnapshot = {
   address: string;
   connected: boolean;
@@ -333,17 +340,27 @@ export function BridgeExperience() {
     if (!walletAccount) return;
 
     let cancelled = false;
-    fetch(`/api/sepolia/balance?address=${walletAccount}`)
+    // Show the balance of the token this route actually moves on Sepolia:
+    // Epoch bridges USDC, AggLayer bridges native ETH.
+    const isEpoch = provider === "epoch";
+    const url = isEpoch
+      ? `/api/sepolia/balance?address=${walletAccount}&token=${EPOCH_SEPOLIA_USDC.address}&decimals=${EPOCH_SEPOLIA_USDC.decimals}`
+      : `/api/sepolia/balance?address=${walletAccount}`;
+    fetch(url)
       .then((response) =>
         response.ok
           ? response.json()
           : Promise.reject(new Error("Unable to fetch balance")),
       )
-      .then((payload: { balanceWei: string }) => {
+      .then((payload: { balanceWei?: string; balance?: string }) => {
         if (cancelled) return;
-        setEvmBalance(
-          `${compactTokenAmount(formatEther(BigInt(payload.balanceWei)))} ETH`,
-        );
+        if (isEpoch) {
+          setEvmBalance(`${compactTokenAmount(payload.balance ?? "0")} USDC`);
+        } else {
+          setEvmBalance(
+            `${compactTokenAmount(formatEther(BigInt(payload.balanceWei ?? "0")))} ETH`,
+          );
+        }
       })
       .catch(() => {
         if (!cancelled) setEvmBalance("");
@@ -352,7 +369,7 @@ export function BridgeExperience() {
     return () => {
       cancelled = true;
     };
-  }, [walletAccount]);
+  }, [walletAccount, provider]);
 
   function selectMode(nextMode: FlowMode) {
     setMode(nextMode);

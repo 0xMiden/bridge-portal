@@ -166,14 +166,18 @@ export function quoteFor(mode: FlowMode, provider: BridgeProvider, amount: strin
   const networkFee = provider === "agglayer" ? "Sepolia gas" : provider === "near-intents" ? "0.14 USD" : "0.18 USD";
   const bridgeFee = provider === "agglayer" ? "No provider fee" : "0.05%";
   const relayerFee = provider === "agglayer" ? "None" : "0.03 USD";
+  // Token depends on the route: AggLayer bridges ETH, Epoch bridges USDC.
+  // The mode-based assetOut ("Miden ETH") is only correct for AggLayer.
+  const outSymbol =
+    provider === "epoch" ? "USDC" : modes[mode].assetOut.replace("Miden ", "");
 
   return {
     eta: provider === "agglayer" ? (mode === "receive" ? "About 15 min" : "30-90 min") : "3-6 min",
     networkFee,
     bridgeFee,
     relayerFee,
-    expectedReceived: `${expected.toLocaleString(undefined, { maximumFractionDigits: 6 })} ${modes[mode].assetOut.replace("Miden ", "")}`,
-    minReceived: `${(expected * 0.995).toLocaleString(undefined, { maximumFractionDigits: 6 })} ${modes[mode].assetOut.replace("Miden ", "")}`,
+    expectedReceived: `${expected.toLocaleString(undefined, { maximumFractionDigits: 6 })} ${outSymbol}`,
+    minReceived: `${(expected * 0.995).toLocaleString(undefined, { maximumFractionDigits: 6 })} ${outSymbol}`,
     sourceGas: mode === "receive" ? "Sepolia ETH" : "Miden fee credit",
     destinationGas: mode === "receive" ? "Miden fee credit" : "Sepolia ETH",
     warning:
