@@ -17,12 +17,16 @@ export function EpochQuotePreview({
   midenAccount,
   evmAddress,
   fallback,
+  hideSymbol = false,
 }: {
   mode: "receive" | "send";
   amount: string;
   midenAccount: string;
   evmAddress: string;
   fallback: string;
+  // When the caller renders the token symbol separately (as a unit pill), omit
+  // it from the amount so it isn't doubled.
+  hideSymbol?: boolean;
 }) {
   const quote = useEpochQuote({ enabled: true, mode, amount, midenAccount, evmAddress });
 
@@ -38,7 +42,8 @@ export function EpochQuotePreview({
   if (quote.amount) {
     return (
       <>
-        {quote.amount} {quote.symbol}
+        {quote.amount}
+        {hideSymbol ? "" : ` ${quote.symbol}`}
       </>
     );
   }

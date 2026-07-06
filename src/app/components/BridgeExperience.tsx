@@ -152,6 +152,9 @@ export function BridgeExperience() {
   const [walletError, setWalletError] = useState("");
   const [bridgeError, setBridgeError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  // Prefill the destination input with the connected wallet once per direction;
+  // cleared in selectMode so switching modes re-prefills for the new side.
+  const destinationPrefilledRef = useRef(false);
   const [activities, setActivities] = useState<Activity[]>([]);
   const [hydrated, setHydrated] = useState(false);
   const [evmMenuOpen, setEvmMenuOpen] = useState(false);
@@ -165,6 +168,14 @@ export function BridgeExperience() {
   const quote = useMemo(
     () => quoteFor(mode, provider, amount),
     [amount, mode, provider],
+  );
+  // The received-token unit for the "To" box pill: Epoch bridges USDC, AggLayer ETH.
+  const destinationSymbol =
+    provider === "epoch" ? "USDC" : copy.assetOut.replace("Miden ", "");
+  // Amount without the trailing symbol (the pill renders the symbol separately).
+  const expectedReceivedAmount = quote.expectedReceived.replace(
+    /\s*[A-Za-z]+$/,
+    "",
   );
   const isLiveAgglayerReceive = provider === "agglayer" && mode === "receive";
   // AggLayer outbound (Miden→Sepolia): builds a B2AGG bridge-out note via the
@@ -371,10 +382,40 @@ export function BridgeExperience() {
     };
   }, [walletAccount, provider]);
 
+  // Default the destination input to the connected wallet on the relevant side
+  // (Miden for receive, Sepolia for send). Runs once per direction; the user can
+  // freely edit or clear it afterward.
+  useEffect(() => {
+    if (destinationPrefilledRef.current) return;
+    const connected =
+      mode === "receive"
+        ? midenWallet.connected
+          ? midenAddress
+          : ""
+        : walletConnected
+          ? walletAccount
+          : "";
+    if (connected && !destination) {
+      // Syncing the input to an external event (wallet connect), guarded to run
+      // once per direction — not a render-derived cascade.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setDestination(connected);
+      destinationPrefilledRef.current = true;
+    }
+  }, [
+    mode,
+    midenWallet.connected,
+    midenAddress,
+    walletConnected,
+    walletAccount,
+    destination,
+  ]);
+
   function selectMode(nextMode: FlowMode) {
     setMode(nextMode);
     setAmount(nextMode === "receive" ? "100" : "0.25");
     setDestination("");
+    destinationPrefilledRef.current = false;
     setBridgeError("");
   }
 
@@ -883,13 +924,14 @@ export function BridgeExperience() {
                     amount={amount}
                     midenAccount={epochMidenAccount}
                     evmAddress={epochEvmAddress}
-                    fallback={quote.expectedReceived}
+                    fallback={expectedReceivedAmount}
+                    hideSymbol
                   />
                 ) : (
-                  quote.expectedReceived
+                  expectedReceivedAmount
                 )}
               </strong>
-              <span>Expected</span>
+              <span>{destinationSymbol}</span>
             </label>
           </div>
 
