@@ -1,8 +1,8 @@
 import type { AgglayerDeposit } from "./agglayer";
 import type { Activity } from "./bridge-state";
 
-export const sourceTxPollMs = 12_000;
-export const agglayerPollMs = 30_000;
+export const sourceTxPollMs = 6_000;
+export const agglayerPollMs = 10_000;
 
 export type ChainTxObservation = {
   hash: string;

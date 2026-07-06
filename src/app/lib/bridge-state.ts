@@ -197,7 +197,7 @@ export function quoteFor(mode: FlowMode, provider: BridgeProvider, amount: strin
     provider === "epoch" ? "USDC" : modes[mode].assetOut.replace("Miden ", "");
 
   return {
-    eta: provider === "agglayer" ? (mode === "receive" ? "About 15 min" : "30-90 min") : "3-6 min",
+    eta: provider === "agglayer" ? (mode === "receive" ? "About 15 min" : "30-90 min") : "1-3 min",
     networkFee,
     bridgeFee,
     relayerFee,
@@ -322,4 +322,22 @@ export function loadStoredActivities(): Activity[] {
 
 export function saveActivities(activities: Activity[]) {
   window.localStorage.setItem(activityStorageKey, JSON.stringify(activities));
+}
+
+/**
+ * Merge a patch into one stored activity by id and persist. Used by the submit
+ * flow to update an already-navigated-to activity as the (backgrounded)
+ * execution progresses, so the detail page reflects it on its next re-read.
+ */
+export function patchStoredActivity(id: string, patch: Partial<Activity>) {
+  try {
+    const activities = loadStoredActivities();
+    saveActivities(
+      activities.map((item) =>
+        item.id === id ? { ...item, ...patch, updatedAt: "Just now" } : item,
+      ),
+    );
+  } catch {
+    // ignore transient storage errors
+  }
 }

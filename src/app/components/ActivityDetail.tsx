@@ -234,6 +234,31 @@ export function ActivityDetail({ id }: { id: string }) {
     }
   }, []);
 
+  // Re-read persisted activities on tab focus and on a short tick. This keeps the
+  // detail page live without a manual refresh: it picks up updates written by the
+  // submit flow that keeps running after it navigated here, and re-syncs when the
+  // user returns from a wallet popup / another tab.
+  useEffect(() => {
+    const reload = () => {
+      try {
+        setActivities(loadStoredActivities());
+      } catch {
+        // ignore transient storage read errors
+      }
+    };
+    const onVisible = () => {
+      if (document.visibilityState === "visible") reload();
+    };
+    window.addEventListener("focus", reload);
+    document.addEventListener("visibilitychange", onVisible);
+    const interval = window.setInterval(reload, 4_000);
+    return () => {
+      window.removeEventListener("focus", reload);
+      document.removeEventListener("visibilitychange", onVisible);
+      window.clearInterval(interval);
+    };
+  }, []);
+
   useEffect(() => {
     if (
       !activity?.bridgeDestinationAddress ||
