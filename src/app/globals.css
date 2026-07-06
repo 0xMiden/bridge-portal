@@ -1136,12 +1136,16 @@ a {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto auto;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
   min-height: 64px;
-  padding: 12px;
+  padding: 12px 14px;
   border: 1px solid var(--border);
   border-radius: 16px;
-  background: rgba(255, 255, 255, 0.68);
+  background: var(--surface);
+}
+
+.home-activity-item:hover {
+  border-color: var(--border-strong);
 }
 
 .activity-copy,
@@ -1952,21 +1956,6 @@ a {
   /* Overlay the route dropdown over the card instead of pushing it down. */
   .route-options-menu {
     transform-origin: top center;
-  }
-
-  .home-activity-item {
-    grid-template-columns: auto minmax(0, 1fr) auto;
-  }
-
-  .activity-meta {
-    grid-column: 2;
-    grid-row: 2;
-    text-align: left;
-  }
-
-  .home-activity-item > svg {
-    grid-column: 3;
-    grid-row: 1 / span 2;
   }
 
   .detail-simple {
