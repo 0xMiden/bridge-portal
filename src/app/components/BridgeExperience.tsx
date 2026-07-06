@@ -60,7 +60,7 @@ const EPOCH_SEPOLIA_USDC = {
 const MIDEN_ROUTE_TOKEN: Partial<
   Record<BridgeProvider, { faucetId: string; decimals: number; symbol: string }>
 > = {
-  epoch: { faucetId: "0x2458e5446128e6b150b75b8ebd9ce1", decimals: 6, symbol: "USDC" },
+  epoch: { faucetId: "0xfc90f0f4da30e51168453b60eafed7", decimals: 6, symbol: "USDC" },
   agglayer: { faucetId: "0x387149ae66116cf114eebd60bb7381", decimals: 8, symbol: "ETH" },
 };
 
@@ -136,6 +136,9 @@ function errorMessage(error: unknown) {
 }
 
 function compactTokenAmount(value: string) {
+  // A nonzero amount below the 4-dp display precision shouldn't read as "0".
+  const num = Number(value);
+  if (num > 0 && num < 0.0001) return "<0.0001";
   const [whole, fraction = ""] = value.split(".");
   const compactFraction = fraction.slice(0, 4).replace(/0+$/, "");
   return compactFraction ? `${whole}.${compactFraction}` : whole;
@@ -258,7 +261,7 @@ export function BridgeExperience() {
         : "Testnet route. Epoch integration status is tracked from activity details.";
   const primaryActionLabel = isSubmitting
     ? "Waiting for wallet"
-    : isLiveAgglayerSend && !midenWallet.connected
+    : mode === "send" && !midenWallet.connected
       ? "Connect Miden wallet"
       : isLiveAgglayerSend
         ? "Bridge out to Sepolia"
@@ -449,15 +452,18 @@ export function BridgeExperience() {
   // collapses concurrent/StrictMode calls into a single popup.
   const requestMidenAssets = midenWallet.requestAssets;
   useEffect(() => {
-    if (!midenWallet.connected || !requestMidenAssets || !midenAddress) {
+    if (!midenWallet.connected) {
       midenBalanceInflightRef.current = null;
-      // Reset when the wallet disconnects — syncing to an external event.
+      // Reset only on actual disconnect — syncing to an external event.
       /* eslint-disable react-hooks/set-state-in-effect */
       setMidenBalances(null);
       setMidenBalanceFetchedFor("");
       /* eslint-enable react-hooks/set-state-in-effect */
       return;
     }
+    // Connected but the adapter's requestAssets/address hasn't settled yet — wait
+    // rather than resetting (a transient undefined must not re-trigger the popup).
+    if (!requestMidenAssets || !midenAddress) return;
     if (midenBalanceFetchedFor === midenAddress) return;
 
     let cancelled = false;
@@ -597,6 +603,17 @@ export function BridgeExperience() {
     setBridgeError("");
     setWalletError("");
 
+    if (providers[provider].disabled) {
+      setBridgeError("This route isn't available in this build.");
+      return;
+    }
+    // Every send signs on Miden (Epoch send + AggLayer bridge-out) — require the
+    // MidenFi wallet up front so the CTA and error are clear (not a late throw).
+    if (mode === "send" && !midenWallet.connected) {
+      setBridgeError("Connect your MidenFi wallet to sign the send.");
+      return;
+    }
+
     if (provider === "agglayer" && mode === "send") {
       setIsSubmitting(true);
       try {
@@ -634,7 +651,8 @@ export function BridgeExperience() {
         });
 
         const next = createActivity(mode, provider, amount, {
-          status: "message_observed",
+          // Note just submitted on Miden; AggLayer hasn't observed the exit yet.
+          status: "source_finality",
           eta: "30-90 min",
           destination: destinationAddress,
           midenTxId: txId,
