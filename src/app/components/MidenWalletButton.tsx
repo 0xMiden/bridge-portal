@@ -103,6 +103,13 @@ function MidenWalletButtonInner({
   // multiple popups that never seem to dismiss. Collapse concurrent refreshes
   // to a single in-flight promise.
   const refreshInflightRef = useRef<Promise<void> | null>(null);
+  // Balance is fetched exactly once per connection — right after the user
+  // connects — and thereafter only when they click the refresh icon. We gate
+  // the auto-fetch on a user-initiated connect so an autoConnect session
+  // restore (page reload / navigation) doesn't silently reopen the MidenFi
+  // asset popup. `balanceFetchedRef` makes the first-connect fetch fire once.
+  const userConnectRef = useRef(false);
+  const balanceFetchedRef = useRef(false);
   const address = wallet.address ?? "";
   const readyState = wallet.wallet?.readyState;
   const walletLogo = wallet.wallet?.adapter?.icon;
@@ -146,6 +153,8 @@ function MidenWalletButtonInner({
 
   useEffect(() => {
     if (!wallet.connected) {
+      userConnectRef.current = false;
+      balanceFetchedRef.current = false;
       queueMicrotask(() => {
         setBalanceText("Not connected");
         setNoteSyncStatus("Not connected");
@@ -154,14 +163,24 @@ function MidenWalletButtonInner({
       return;
     }
 
-    // Do NOT eagerly call requestAssets()/requestConsumableNotes() on connect —
-    // each opens a MidenFi confirmation popup the bridge flow doesn't need, and
-    // they pile up. Balance/notes are fetched on demand via the menu's refresh
-    // button (onClick={refreshWalletState}). Show a neutral connected state here.
+    // Fetch the balance once, only right after a user-initiated connect. An
+    // autoConnect session restore (reload / navigation) leaves this false so we
+    // don't reopen the MidenFi asset popup unprompted — the user refreshes it
+    // via the menu's refresh icon when they want a fresh read.
+    if (userConnectRef.current && !balanceFetchedRef.current) {
+      balanceFetchedRef.current = true;
+      userConnectRef.current = false;
+      void refreshWalletState();
+      return;
+    }
+
+    // Restored session (or already fetched): show a neutral connected state and
+    // wait for an explicit refresh.
     queueMicrotask(() => {
       setBalanceText("Connected");
       setNoteSyncStatus("Refresh to sync");
     });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [wallet.connected, address]);
 
   useEffect(() => {
@@ -194,8 +213,12 @@ function MidenWalletButtonInner({
     }
 
     try {
+      // Mark this as a user-initiated connect so the connected effect fetches
+      // the balance once (autoConnect restores don't set this).
+      userConnectRef.current = true;
       await withWalletTimeout(wallet.connect());
     } catch (connectError) {
+      userConnectRef.current = false;
       setError(errorMessage(connectError));
       if (connectError instanceof WalletRequestTimeoutError) {
         window.setTimeout(onResetProvider, 250);
@@ -206,10 +229,12 @@ function MidenWalletButtonInner({
   async function reconnectMidenWallet() {
     setError("");
     try {
+      userConnectRef.current = true;
       if (wallet.connected) await wallet.disconnect();
       await withWalletTimeout(wallet.connect());
       setMenuOpen(false);
     } catch (reconnectError) {
+      userConnectRef.current = false;
       setError(errorMessage(reconnectError));
       if (reconnectError instanceof WalletRequestTimeoutError) {
         window.setTimeout(onResetProvider, 250);
