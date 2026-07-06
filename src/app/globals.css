@@ -1814,8 +1814,36 @@ a {
     font-size: clamp(20px, 7vw, 28px);
   }
 
+  /* Receipt-style rows on mobile: label left, value right, one per line. */
   .quote-summary {
     grid-template-columns: 1fr;
+    gap: 0;
+    padding: 2px 12px;
+  }
+
+  .quote-summary div {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+    min-height: 0;
+    padding: 11px 0;
+    border-radius: 0;
+    background: transparent;
+  }
+
+  .quote-summary div + div {
+    border-top: 1px solid var(--border);
+  }
+
+  .quote-summary span {
+    flex: 0 0 auto;
+  }
+
+  .quote-summary strong {
+    margin-top: 0;
+    overflow: visible;
+    text-align: right;
   }
 
   .wallet-state-strip {
