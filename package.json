@@ -14,7 +14,7 @@
     "cf:deploy": "npm run cf:build && opennextjs-cloudflare deploy"
   },
   "dependencies": {
-    "@epoch-protocol/epoch-intents-sdk": "^1.0.23",
+    "@epoch-protocol/epoch-intents-sdk": "^1.0.30",
     "@miden-sdk/miden-sdk": "^0.15.4",
     "@miden-sdk/miden-wallet-adapter-base": "^0.15.1",
     "@miden-sdk/miden-wallet-adapter-react": "^0.15.1",
