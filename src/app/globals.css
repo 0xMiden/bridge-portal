@@ -1307,35 +1307,13 @@ a {
 .detail-empty {
   padding: 18px;
   border: 1px solid rgba(255, 255, 255, 0.82);
-  border-radius: 22px;
-  background: rgba(255, 255, 255, 0.78);
+  border-radius: 24px;
+  background: rgba(255, 255, 255, 0.84);
   box-shadow: var(--shadow-card);
 }
 
 .receipt-card {
   position: relative;
-  overflow: hidden;
-  border-radius: 28px;
-  background:
-    linear-gradient(#ffffff 0 0) padding-box,
-    repeating-linear-gradient(90deg, rgba(23, 21, 17, 0.18) 0 8px, transparent 8px 16px) border-box;
-}
-
-.receipt-card::after {
-  content: "";
-  position: absolute;
-  right: 18px;
-  bottom: 18px;
-  width: 104px;
-  height: 104px;
-  border: 1px dashed rgba(255, 85, 0, 0.24);
-  border-radius: 24px;
-  background:
-    linear-gradient(90deg, rgba(23, 21, 17, 0.11) 1px, transparent 1px),
-    linear-gradient(rgba(23, 21, 17, 0.11) 1px, transparent 1px);
-  background-size: 12px 12px;
-  opacity: 0.34;
-  pointer-events: none;
 }
 
 .receipt-header {
@@ -1405,9 +1383,9 @@ a {
   gap: 5px;
   margin-top: 14px;
   padding: 12px;
-  border: 1px solid rgba(255, 85, 0, 0.16);
+  border: 1px solid var(--border);
   border-radius: 16px;
-  background: #fff7ef;
+  background: var(--surface-muted);
 }
 
 .receipt-next-action span {
@@ -1478,7 +1456,7 @@ a {
   padding: 12px;
   border: 1px solid var(--border);
   border-radius: 16px;
-  background: rgba(255, 255, 255, 0.74);
+  background: var(--surface-muted);
 }
 
 .explorer-link span,
@@ -1580,7 +1558,7 @@ a {
   padding: 12px;
   border: 1px solid var(--border);
   border-radius: 16px;
-  background: rgba(255, 255, 255, 0.72);
+  background: var(--surface-muted);
 }
 
 .metric strong {
@@ -1593,10 +1571,10 @@ a {
 .recovery-copy {
   margin-top: 14px;
   padding: 12px;
-  border: 1px solid rgba(255, 85, 0, 0.16);
+  border: 1px solid var(--border);
   border-radius: 16px;
-  background: #fff7ef;
-  color: #703000;
+  background: var(--surface-muted);
+  color: var(--muted-foreground);
   line-height: 1.45;
 }
 
@@ -1618,17 +1596,17 @@ a {
   padding: 12px;
   border: 1px solid var(--border);
   border-radius: 16px;
-  background: rgba(255, 255, 255, 0.7);
+  background: var(--surface-muted);
 }
 
 .timeline-step.current {
-  border-color: rgba(255, 85, 0, 0.22);
-  background: #fff7ef;
+  border-color: rgba(255, 85, 0, 0.28);
+  background: var(--surface-strong);
 }
 
 .timeline-step.done {
-  border-color: rgba(15, 159, 110, 0.18);
-  background: var(--success-soft);
+  border-color: var(--border);
+  background: var(--surface-muted);
 }
 
 .step-icon {
@@ -1667,9 +1645,9 @@ a {
   gap: 7px;
   margin-top: 14px;
   padding: 12px;
-  border: 1px solid rgba(15, 159, 110, 0.18);
+  border: 1px solid var(--border);
   border-radius: 16px;
-  background: var(--success-soft);
+  background: var(--surface-muted);
 }
 
 .live-monitor-panel > div {
