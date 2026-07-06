@@ -13,7 +13,7 @@ import {
 } from "@miden-sdk/miden-wallet-adapter-react";
 import { ChevronDown, Copy, LogOut, RefreshCcw, Wallet } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { shortAddress } from "../lib/bridge-state";
+import { shortAddress, walletGradient } from "../lib/bridge-state";
 
 /** MidenFi brand logo from the wallet adapter, or a neutral wallet fallback. */
 function WalletBrandIcon({ src, size }: { src?: string; size: number }) {
@@ -316,29 +316,25 @@ function MidenWalletButtonInner({
         aria-expanded={menuOpen}
         aria-haspopup="menu"
       >
-        <span className={`wallet-icon ${wallet.connected ? "connected" : ""}`}>
-          <WalletBrandIcon src={walletLogo} size={16} />
-        </span>
-        <span className="wallet-copy">
-          <small>
-            <span
-              className={`wallet-status-dot ${wallet.connected ? "connected" : wallet.connecting ? "pending" : ""}`}
-            />
-            Miden
-          </small>
-          <span>
-            {wallet.connecting
-              ? "Connecting"
-              : wallet.connected
-                ? shortAddress(address)
-                : ready
-                  ? "Connect wallet"
-                  : "Install wallet"}
+        <span
+          className="wallet-avatar"
+          style={
+            wallet.connected ? { background: walletGradient(address) } : undefined
+          }
+        >
+          <span className="wallet-avatar-badge">
+            <WalletBrandIcon src={walletLogo} size={11} />
           </span>
         </span>
-        {wallet.connected ? (
-          <span className="wallet-balance">{balanceText}</span>
-        ) : null}
+        <span className="wallet-pill-label">
+          {wallet.connecting
+            ? "Connecting"
+            : wallet.connected
+              ? shortAddress(address)
+              : ready
+                ? "Connect wallet"
+                : "Install wallet"}
+        </span>
         <ChevronDown
           className="wallet-menu-chevron"
           size={15}

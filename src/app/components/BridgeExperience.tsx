@@ -37,6 +37,7 @@ import {
   shortAddress,
   statusLabel,
   statusTone,
+  walletGradient,
 } from "../lib/bridge-state";
 import {
   useAppKit,
@@ -113,16 +114,12 @@ const MidenWalletButton = dynamic(
     ssr: false,
     loading: () => (
       <button className="wallet-button wallet-pill" type="button" disabled>
-        <span className="wallet-icon">
-          <WalletBrandIcon size={16} />
+        <span className="wallet-avatar">
+          <span className="wallet-avatar-badge">
+            <WalletBrandIcon size={11} />
+          </span>
         </span>
-        <span className="wallet-copy">
-          <small>
-            <span className="wallet-status-dot pending" />
-            Miden
-          </small>
-          <span>Loading</span>
-        </span>
+        <span className="wallet-pill-label">Loading</span>
       </button>
     ),
   },
@@ -911,29 +908,25 @@ export function BridgeExperience() {
               aria-haspopup={walletConnected ? "menu" : undefined}
             >
               <span
-                className={`wallet-icon ${walletConnected ? "connected" : ""}`}
+                className="wallet-avatar"
+                style={
+                  walletConnected
+                    ? { background: walletGradient(walletAccount) }
+                    : undefined
+                }
               >
-                <WalletBrandIcon
-                  src={walletConnected ? evmIcon : undefined}
-                  size={16}
-                />
-              </span>
-              <span className="wallet-copy">
-                <small>
-                  <span
-                    className={`wallet-status-dot ${walletConnected ? "connected" : ""}`}
+                <span className="wallet-avatar-badge">
+                  <WalletBrandIcon
+                    src={walletConnected ? evmIcon : undefined}
+                    size={11}
                   />
-                  {evmWalletLabel}
-                </small>
-                <span>
-                  {walletConnected
-                    ? shortAddress(walletAccount)
-                    : "Connect wallet"}
                 </span>
               </span>
-              {walletConnected ? (
-                <span className="wallet-balance">{evmBalanceText}</span>
-              ) : null}
+              <span className="wallet-pill-label">
+                {walletConnected
+                  ? shortAddress(walletAccount)
+                  : "Connect wallet"}
+              </span>
               {walletConnected ? (
                 <ChevronDown
                   className="wallet-menu-chevron"

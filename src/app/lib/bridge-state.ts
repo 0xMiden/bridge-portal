@@ -166,6 +166,20 @@ export function shortAddress(value: string) {
   return `${value.slice(0, 6)}...${value.slice(-6)}`;
 }
 
+/**
+ * Deterministic account-avatar gradient derived from an address (Uniswap-style):
+ * two hues seeded from the string so each account has a stable, distinct swatch.
+ */
+export function walletGradient(seed: string): string {
+  let h = 0;
+  for (let i = 0; i < seed.length; i += 1) {
+    h = (h * 31 + seed.charCodeAt(i)) >>> 0;
+  }
+  const a = h % 360;
+  const b = (a + 60 + ((h >> 8) % 120)) % 360;
+  return `linear-gradient(135deg, hsl(${a} 72% 58%), hsl(${b} 68% 46%))`;
+}
+
 export function quoteFor(mode: FlowMode, provider: BridgeProvider, amount: string): Quote {
   const parsedAmount = Number(amount) || 0;
   // AggLayer is a canonical 1:1 bridge (no provider fee), so what you send is
