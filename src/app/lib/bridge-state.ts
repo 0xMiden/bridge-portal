@@ -45,6 +45,8 @@ export type Activity = {
   epochIntentNonce?: string;
   /** Epoch sponsor / user address the intent status is keyed on (EVM 0x). */
   epochSponsor?: string;
+  /** Real quoted output amount at execution (e.g. "99.17 USDC"), when known. */
+  receivedAmount?: string;
   updatedAt: string;
 };
 
@@ -169,9 +171,26 @@ export function quoteFor(mode: FlowMode, provider: BridgeProvider, amount: strin
     : Math.max(parsedAmount * 0.999, 0);
   const minMultiplier = isOneToOne ? 1 : 0.995;
   const routeName = providers[provider].label;
-  const networkFee = provider === "agglayer" ? "Sepolia gas" : provider === "near-intents" ? "0.14 USD" : "0.18 USD";
-  const bridgeFee = provider === "agglayer" ? "No provider fee" : "0.05%";
-  const relayerFee = provider === "agglayer" ? "None" : "0.03 USD";
+  // Epoch's quote API returns only the net output amount (no fee breakdown), so
+  // don't fabricate specific fees — the cost is baked into the quoted rate.
+  const isEpoch = provider === "agglayer" ? false : provider === "epoch";
+  const networkFee = provider === "agglayer"
+    ? "Sepolia gas"
+    : isEpoch
+      ? mode === "receive"
+        ? "Sepolia gas"
+        : "Miden fee"
+      : "0.14 USD";
+  const bridgeFee = provider === "agglayer"
+    ? "No provider fee"
+    : isEpoch
+      ? "In quoted rate"
+      : "0.05%";
+  const relayerFee = provider === "agglayer"
+    ? "None"
+    : isEpoch
+      ? "In quoted rate"
+      : "0.03 USD";
   // Token depends on the route: AggLayer bridges ETH, Epoch bridges USDC.
   // The mode-based assetOut ("Miden ETH") is only correct for AggLayer.
   const outSymbol =

@@ -660,8 +660,8 @@ export function ActivityDetail({ id }: { id: string }) {
                 />
                 <ReceiptLine label="ETA" value={activity.eta} />
                 <ReceiptLine
-                  label="Minimum received"
-                  value={quote.minReceived}
+                  label={activity.receivedAmount ? "Received" : "Minimum received"}
+                  value={activity.receivedAmount ?? quote.minReceived}
                 />
                 <ReceiptLine label="Network fee" value={quote.networkFee} />
                 <ReceiptLine label="Bridge fee" value={quote.bridgeFee} />

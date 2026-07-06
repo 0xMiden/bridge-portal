@@ -767,6 +767,9 @@ export function BridgeExperience() {
           midenTxId: mode === "send" ? result.midenNoteId : undefined,
           epochIntentNonce: result.intentNonce,
           epochSponsor: result.sponsorAddress,
+          receivedAmount: result.outputAmount
+            ? `${result.outputAmount} USDC`
+            : undefined,
         });
         const updated = [next, ...activities];
         setActivities(updated);
@@ -1039,7 +1042,7 @@ export function BridgeExperience() {
               <span>To</span>
               <strong>{copy.to}</strong>
               <small className="balance-line">
-                Wallet balance {destinationBalance}
+                Available {destinationBalance}
                 {mode === "receive" && midenWallet.connected ? (
                   <button
                     type="button"
