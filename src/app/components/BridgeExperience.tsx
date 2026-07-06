@@ -172,6 +172,11 @@ export function BridgeExperience() {
     string
   > | null>(null);
   const [midenBalanceFetchedFor, setMidenBalanceFetchedFor] = useState("");
+  // Live Epoch API quote amount, lifted from EpochQuotePreview so the
+  // Min-received detail reflects the real quote (not a hardcoded estimate).
+  const [epochQuoteAmount, setEpochQuoteAmount] = useState<string | undefined>(
+    undefined,
+  );
   const midenBalanceInflightRef = useRef<Promise<
     Record<string, string>
   > | null>(null);
@@ -197,6 +202,11 @@ export function BridgeExperience() {
     /\s*[A-Za-z]+$/,
     "",
   );
+  // Min received: for Epoch use the live API quote; otherwise the route quote.
+  const displayMinReceived =
+    provider === "epoch" && epochQuoteAmount
+      ? `${epochQuoteAmount} USDC`
+      : quote.minReceived;
   const isLiveAgglayerReceive = provider === "agglayer" && mode === "receive";
   // AggLayer outbound (Miden→Sepolia): builds a B2AGG bridge-out note via the
   // SDK (Note.createB2AggNote) and submits it through the MidenFi wallet.
@@ -495,6 +505,13 @@ export function BridgeExperience() {
     setDestination("");
     destinationPrefilledRef.current = false;
     setBridgeError("");
+  }
+
+  // Re-sync the Miden balance (opens a fresh requestAssets popup by clearing the
+  // fetched marker so the balance effect re-runs).
+  function refreshMidenBalance() {
+    midenBalanceInflightRef.current = null;
+    setMidenBalanceFetchedFor("");
   }
 
   function selectProvider(nextProvider: BridgeProvider) {
@@ -967,7 +984,20 @@ export function BridgeExperience() {
             <div>
               <span>From</span>
               <strong>{copy.from}</strong>
-              <small className="balance-line">Available {sourceBalance}</small>
+              <small className="balance-line">
+                Available {sourceBalance}
+                {mode === "send" && midenWallet.connected ? (
+                  <button
+                    type="button"
+                    className="balance-refresh"
+                    onClick={refreshMidenBalance}
+                    aria-label="Refresh Miden balance"
+                    title="Refresh Miden balance"
+                  >
+                    <RefreshCcw size={12} aria-hidden="true" />
+                  </button>
+                ) : null}
+              </small>
             </div>
             <label>
               <input
@@ -992,6 +1022,17 @@ export function BridgeExperience() {
               <strong>{copy.to}</strong>
               <small className="balance-line">
                 Wallet balance {destinationBalance}
+                {mode === "receive" && midenWallet.connected ? (
+                  <button
+                    type="button"
+                    className="balance-refresh"
+                    onClick={refreshMidenBalance}
+                    aria-label="Refresh Miden balance"
+                    title="Refresh Miden balance"
+                  >
+                    <RefreshCcw size={12} aria-hidden="true" />
+                  </button>
+                ) : null}
               </small>
             </div>
             <label className="readonly-amount">
@@ -1004,6 +1045,7 @@ export function BridgeExperience() {
                     evmAddress={epochEvmAddress}
                     fallback={expectedReceivedAmount}
                     hideSymbol
+                    onAmount={setEpochQuoteAmount}
                   />
                 ) : (
                   expectedReceivedAmount
@@ -1048,7 +1090,7 @@ export function BridgeExperience() {
             </div>
             <div>
               <span>Min received</span>
-              <strong>{quote.minReceived}</strong>
+              <strong>{displayMinReceived}</strong>
             </div>
             <div>
               <span>Network fee</span>

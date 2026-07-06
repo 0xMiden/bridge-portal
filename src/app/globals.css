@@ -727,8 +727,10 @@ a {
 }
 
 .balance-line {
-  display: block;
-  max-width: 190px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 230px;
   margin-top: 8px;
   overflow: hidden;
   color: var(--muted-foreground);
@@ -736,6 +738,26 @@ a {
   font-weight: 720;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.balance-refresh {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted-foreground);
+  cursor: pointer;
+  transition:
+    color 0.15s ease,
+    background 0.15s ease;
+}
+
+.balance-refresh:hover {
+  color: var(--foreground);
+  background: var(--muted);
 }
 
 .swap-box label {

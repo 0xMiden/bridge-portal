@@ -161,7 +161,13 @@ export function shortAddress(value: string) {
 
 export function quoteFor(mode: FlowMode, provider: BridgeProvider, amount: string): Quote {
   const parsedAmount = Number(amount) || 0;
-  const expected = Math.max(parsedAmount * 0.999, 0);
+  // AggLayer is a canonical 1:1 bridge (no provider fee), so what you send is
+  // what you receive. Other routes carry a small fee spread.
+  const isOneToOne = provider === "agglayer";
+  const expected = isOneToOne
+    ? parsedAmount
+    : Math.max(parsedAmount * 0.999, 0);
+  const minMultiplier = isOneToOne ? 1 : 0.995;
   const routeName = providers[provider].label;
   const networkFee = provider === "agglayer" ? "Sepolia gas" : provider === "near-intents" ? "0.14 USD" : "0.18 USD";
   const bridgeFee = provider === "agglayer" ? "No provider fee" : "0.05%";
@@ -177,7 +183,7 @@ export function quoteFor(mode: FlowMode, provider: BridgeProvider, amount: strin
     bridgeFee,
     relayerFee,
     expectedReceived: `${expected.toLocaleString(undefined, { maximumFractionDigits: 6 })} ${outSymbol}`,
-    minReceived: `${(expected * 0.995).toLocaleString(undefined, { maximumFractionDigits: 6 })} ${outSymbol}`,
+    minReceived: `${(expected * minMultiplier).toLocaleString(undefined, { maximumFractionDigits: 6 })} ${outSymbol}`,
     sourceGas: mode === "receive" ? "Sepolia ETH" : "Miden fee credit",
     destinationGas: mode === "receive" ? "Miden fee credit" : "Sepolia ETH",
     warning:

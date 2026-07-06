@@ -1,6 +1,7 @@
 "use client";
 
 import { RefreshCcw } from "lucide-react";
+import { useEffect } from "react";
 import { useEpochQuote } from "../lib/epoch/use-epoch-quote";
 
 /**
@@ -18,6 +19,7 @@ export function EpochQuotePreview({
   evmAddress,
   fallback,
   hideSymbol = false,
+  onAmount,
 }: {
   mode: "receive" | "send";
   amount: string;
@@ -27,8 +29,16 @@ export function EpochQuotePreview({
   // When the caller renders the token symbol separately (as a unit pill), omit
   // it from the amount so it isn't doubled.
   hideSymbol?: boolean;
+  // Lifts the live quote amount to the caller (e.g. to drive the Min-received
+  // detail from the real Epoch API rather than a hardcoded estimate). Pass a
+  // stable setter (e.g. a useState setter) to avoid effect churn.
+  onAmount?: (amount: string | undefined) => void;
 }) {
   const quote = useEpochQuote({ enabled: true, mode, amount, midenAccount, evmAddress });
+
+  useEffect(() => {
+    onAmount?.(quote.loading ? undefined : quote.amount);
+  }, [onAmount, quote.loading, quote.amount]);
 
   if (quote.loading) {
     return (
