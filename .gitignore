@@ -44,4 +44,3 @@ next-env.d.ts
 # cloudflare / opennext build artifacts
 .open-next/
 .wrangler/
-vendor/
