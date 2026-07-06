@@ -25,6 +25,7 @@ import {
   statusLabel,
   statusTone,
   destinationExplorer,
+  timeline,
 } from "../lib/bridge-state";
 import {
   useAppKit,
@@ -165,6 +166,18 @@ export function ActivityDetail({ id }: { id: string }) {
     activity.mode === "send" &&
     activity.status === "claim_available" &&
     Boolean(activity.depositCount);
+  // Compact live progress: which timeline step we're on, so the detail page
+  // still monitors and shows status as the transfer advances.
+  const currentIndex = activity
+    ? timeline.findIndex((step) => step.status === activity.status)
+    : -1;
+  const isComplete = activity?.status === "complete";
+  const isFailed = activity?.status === "failed";
+  const currentStep = !activity
+    ? null
+    : isComplete
+      ? timeline[timeline.length - 1]
+      : (timeline[currentIndex] ?? timeline[0]);
   const receiptAmountLabel =
     activity?.status === "complete"
       ? activity.mode === "receive"
@@ -571,8 +584,42 @@ export function ActivityDetail({ id }: { id: string }) {
               </div>
             </div>
 
+            <div
+              className={`receipt-progress ${isFailed ? "failed" : isComplete ? "complete" : ""}`}
+              aria-live="polite"
+            >
+              <div className="progress-track">
+                {timeline.map((step, index) => (
+                  <span
+                    key={step.status}
+                    className={`progress-seg ${
+                      isComplete || index < currentIndex
+                        ? "done"
+                        : index === currentIndex
+                          ? "current"
+                          : ""
+                    }`}
+                  />
+                ))}
+              </div>
+              <div className="progress-label">
+                <strong>
+                  {isFailed ? "Transfer needs a retry" : currentStep?.label}
+                </strong>
+                <span>
+                  {isComplete
+                    ? "Settled"
+                    : isFailed
+                      ? activity.eta
+                      : lastChecked
+                        ? `Monitoring · updated ${lastChecked}`
+                        : "Monitoring…"}
+                </span>
+              </div>
+            </div>
+
             <div className="receipt-lines">
-              <ReceiptLine label="Status" value={activity.eta} />
+              <ReceiptLine label="ETA" value={activity.eta} />
               <ReceiptLine
                 label={activity.receivedAmount ? "Received" : "Min received"}
                 value={activity.receivedAmount ?? quote.minReceived}

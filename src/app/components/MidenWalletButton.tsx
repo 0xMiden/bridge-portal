@@ -1,19 +1,16 @@
 "use client";
 
 import {
-  AllowedPrivateData,
-  PrivateDataPermission,
-  WalletAdapterNetwork,
   WalletReadyState,
 } from "@miden-sdk/miden-wallet-adapter-base";
 import {
   type MidenFiWalletContextState,
-  MidenFiSignerProvider,
   useMidenFiWallet,
 } from "@miden-sdk/miden-wallet-adapter-react";
 import { ChevronDown, Copy, LogOut, RefreshCcw, Wallet } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { shortAddress, walletGradient } from "../lib/bridge-state";
+import { useResetMidenProvider } from "./MidenWalletProvider";
 
 /** MidenFi brand logo from the wallet adapter, or a neutral wallet fallback. */
 function WalletBrandIcon({ src, size }: { src?: string; size: number }) {
@@ -456,23 +453,10 @@ function MidenWalletButtonInner({
   );
 }
 
+// The MidenFi provider now lives at the app root (see MidenWalletProvider) so
+// the connection persists across navigation; the button just consumes it and
+// pulls the reset trigger from context.
 export function MidenWalletButton(props: MidenWalletButtonProps) {
-  const [providerKey, setProviderKey] = useState(0);
-
-  return (
-    <MidenFiSignerProvider
-      key={providerKey}
-      appName="Miden Bridge"
-      network={WalletAdapterNetwork.Testnet}
-      autoConnect={false}
-      privateDataPermission={PrivateDataPermission.UponRequest}
-      allowedPrivateData={AllowedPrivateData.None}
-      localStorageKey="miden-bridge-wallet"
-    >
-      <MidenWalletButtonInner
-        {...props}
-        onResetProvider={() => setProviderKey((key) => key + 1)}
-      />
-    </MidenFiSignerProvider>
-  );
+  const resetProvider = useResetMidenProvider();
+  return <MidenWalletButtonInner {...props} onResetProvider={resetProvider} />;
 }
