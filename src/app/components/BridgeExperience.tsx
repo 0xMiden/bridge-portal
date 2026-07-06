@@ -283,17 +283,19 @@ export function BridgeExperience() {
           : mode === "receive"
             ? "Start receive"
             : "Start send";
-  const destinationHelp = isLiveAgglayerReceive
-    ? midenWallet.connected
-      ? `Leave empty to use connected Miden wallet ${shortAddress(midenAddress)}, or paste a 30-hex account ID to override.`
-      : launchMidenAccount
-        ? `Preloaded from wallet launch: ${shortAddress(launchMidenAccount)}. Connect MidenFi before signing Miden-side actions.`
-        : "Connect Miden wallet, or paste a 30-hex Miden account ID from the Miden CLI."
-    : mode === "send" && walletConnected
-      ? `Leave empty to use connected Sepolia wallet ${shortAddress(walletAccount)}, or paste another address.`
-      : "Paste the destination account for this transfer.";
-  const showDestinationHelp =
-    isLiveAgglayerReceive || (mode === "send" && walletConnected);
+  // Destination help is route-agnostic: it depends only on direction (receive =
+  // Miden account, send = Sepolia address) and shows consistently on every route.
+  const destinationHelp =
+    mode === "receive"
+      ? midenWallet.connected
+        ? `Defaults to your connected Miden wallet ${shortAddress(midenAddress)}. Paste a different Miden account (mcst1…/30-hex) to override.`
+        : launchMidenAccount
+          ? `Preloaded from wallet launch: ${shortAddress(launchMidenAccount)}. Connect MidenFi before signing Miden-side actions.`
+          : "Connect your Miden wallet, or paste a Miden account (mcst1…/30-hex)."
+      : walletConnected
+        ? `Defaults to your connected Sepolia wallet ${shortAddress(walletAccount)}. Paste a different 0x address to override.`
+        : "Connect your Sepolia wallet, or paste a 0x destination address.";
+  const showDestinationHelp = true;
   const destinationPlaceholder = isLiveAgglayerReceive
     ? "Miden account ID or address"
     : copy.destinationPlaceholder;
