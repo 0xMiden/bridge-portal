@@ -200,10 +200,8 @@ a {
 }
 
 .wallet-button.connected {
-  border-color: rgba(15, 159, 110, 0.22);
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(247, 251, 248, 0.94)),
-    var(--surface);
+  border-color: var(--border-strong);
+  background: var(--surface);
   color: var(--foreground);
 }
 
@@ -250,9 +248,9 @@ a {
 
 .wallet-icon.connected,
 .wallet-menu-avatar.connected {
-  border-color: rgba(15, 159, 110, 0.22);
-  background: var(--success-soft);
-  color: #087451;
+  border-color: var(--accent-soft);
+  background: var(--accent-soft);
+  color: var(--accent);
 }
 
 .wallet-menu-avatar.pending {
@@ -299,8 +297,8 @@ a {
 }
 
 .wallet-status-dot.connected {
-  background: var(--success);
-  box-shadow: 0 0 0 2px rgba(15, 159, 110, 0.14);
+  background: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-soft);
 }
 
 .wallet-status-dot.pending {
@@ -321,7 +319,7 @@ a {
 }
 
 .wallet-pill.connected .wallet-balance {
-  color: #087451;
+  color: var(--foreground);
 }
 
 .wallet-menu-chevron {
@@ -655,11 +653,11 @@ a {
   min-height: 24px;
   align-items: center;
   justify-content: center;
-  border: 1px solid rgba(15, 159, 110, 0.18);
+  border: 1px solid var(--border);
   border-radius: 999px;
   padding: 0 9px;
-  background: var(--success-soft);
-  color: #086546;
+  background: var(--surface-strong);
+  color: var(--muted-foreground);
   font-size: 11px;
   font-weight: 840;
   white-space: nowrap;
@@ -937,10 +935,10 @@ a {
   gap: 9px;
   margin-top: 8px;
   padding: 8px 10px;
-  border: 1px solid rgba(15, 159, 110, 0.16);
+  border: 1px solid var(--border);
   border-radius: 16px;
-  background: var(--success-soft);
-  color: #086546;
+  background: var(--surface-muted);
+  color: var(--muted-foreground);
   font-size: 12px;
   font-weight: 720;
   line-height: 1.4;
