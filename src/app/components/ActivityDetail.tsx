@@ -234,10 +234,16 @@ export function ActivityDetail({ id }: { id: string }) {
     }
   }, []);
 
-  // Re-read persisted activities on tab focus and on a short tick. This keeps the
+  // Whether this activity is still mid-flight — drives how aggressively we poll.
+  const isActive =
+    !activity ||
+    (activity.status !== "complete" && activity.status !== "failed");
+
+  // Re-read persisted activities on tab focus and on a tick. This keeps the
   // detail page live without a manual refresh: it picks up updates written by the
   // submit flow that keeps running after it navigated here, and re-syncs when the
-  // user returns from a wallet popup / another tab.
+  // user returns from a wallet popup / another tab. The tick is fast while the
+  // transfer is in progress and slow once it's settled (complete/failed).
   useEffect(() => {
     const reload = () => {
       try {
@@ -251,13 +257,13 @@ export function ActivityDetail({ id }: { id: string }) {
     };
     window.addEventListener("focus", reload);
     document.addEventListener("visibilitychange", onVisible);
-    const interval = window.setInterval(reload, 4_000);
+    const interval = window.setInterval(reload, isActive ? 3_000 : 30_000);
     return () => {
       window.removeEventListener("focus", reload);
       document.removeEventListener("visibilitychange", onVisible);
       window.clearInterval(interval);
     };
-  }, []);
+  }, [isActive]);
 
   useEffect(() => {
     if (
