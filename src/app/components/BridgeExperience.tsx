@@ -1171,22 +1171,6 @@ export function BridgeExperience() {
             />
             {showDestinationHelp ? <small>{destinationHelp}</small> : null}
           </label>
-          {midenWallet.connected ? (
-            <div className="wallet-state-strip" aria-label="Miden wallet state">
-              <span>
-                <strong>Miden balance</strong>
-                {midenBalanceText}
-              </span>
-              <span>
-                <strong>Note sync</strong>
-                {midenWallet.noteSyncStatus}
-              </span>
-              <span>
-                <strong>Consumable</strong>
-                {midenWallet.consumableNoteCount ?? "Unknown"}
-              </span>
-            </div>
-          ) : null}
           {bridgeError ? <p className="form-error">{bridgeError}</p> : null}
 
           <div className="quote-summary" aria-label="Route quote">
