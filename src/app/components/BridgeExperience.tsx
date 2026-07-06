@@ -1062,12 +1062,6 @@ export function BridgeExperience() {
               ) : null}
             </div>
           </div>
-          <div className="route-status-line swap-fade" key={`rl-${provider}`}>
-            <span className={`route-pill ${routeTone}`}>
-              {providerCopy.badge}
-            </span>
-            <span>{providerCopy.route}</span>
-          </div>
           {walletError ? (
             <p className="form-error compact">{walletError}</p>
           ) : null}
