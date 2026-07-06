@@ -1870,15 +1870,9 @@ a {
     width: 100%;
   }
 
+  /* Overlay the route dropdown over the card instead of pushing it down. */
   .route-options-menu {
-    position: static;
-    display: none;
-    margin-top: 6px;
     transform-origin: top center;
-  }
-
-  .route-options-menu.open {
-    display: grid;
   }
 
   .home-activity-item {
