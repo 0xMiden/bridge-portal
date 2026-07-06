@@ -9,7 +9,6 @@ import {
   ExternalLink,
   LogOut,
   RefreshCcw,
-  ShieldCheck,
   Wallet,
 } from "lucide-react";
 import dynamic from "next/dynamic";
@@ -65,6 +64,14 @@ const MIDEN_ROUTE_TOKEN: Partial<
   agglayer: { faucetId: "0x387149ae66116cf114eebd60bb7381", decimals: 8, symbol: "ETH" },
 };
 
+/** The connected wallet's own brand logo, or a neutral wallet fallback. */
+function WalletBrandIcon({ src, size }: { src?: string; size: number }) {
+  if (!src) return <Wallet size={size} aria-hidden="true" />;
+  const s = { width: size, height: size, borderRadius: 5, display: "block" };
+  // eslint-disable-next-line @next/next/no-img-element -- data-URI wallet logo, not an optimizable asset
+  return <img src={src} alt="" style={s} />;
+}
+
 type MidenWalletSnapshot = {
   address: string;
   connected: boolean;
@@ -107,7 +114,7 @@ const MidenWalletButton = dynamic(
     loading: () => (
       <button className="wallet-button wallet-pill" type="button" disabled>
         <span className="wallet-icon">
-          <ShieldCheck size={16} aria-hidden="true" />
+          <WalletBrandIcon size={16} />
         </span>
         <span className="wallet-copy">
           <small>
@@ -160,6 +167,7 @@ export function BridgeExperience() {
   const { walletProvider } = useAppKitProvider<EvmProvider>("eip155");
   const { disconnect } = useDisconnect();
   const { walletInfo } = useWalletInfo();
+  const evmIcon = walletInfo?.icon;
   const [provider, setProvider] = useState<BridgeProvider>("epoch");
   const [mode, setMode] = useState<FlowMode>("receive");
   const [amount, setAmount] = useState("100");
@@ -905,7 +913,10 @@ export function BridgeExperience() {
               <span
                 className={`wallet-icon ${walletConnected ? "connected" : ""}`}
               >
-                <Wallet size={16} aria-hidden="true" />
+                <WalletBrandIcon
+                  src={walletConnected ? evmIcon : undefined}
+                  size={16}
+                />
               </span>
               <span className="wallet-copy">
                 <small>
@@ -963,7 +974,7 @@ export function BridgeExperience() {
                   className="wallet-menu-item"
                   onClick={switchSepoliaFromMenu}
                 >
-                  <ShieldCheck size={15} aria-hidden="true" />
+                  <RefreshCcw size={15} aria-hidden="true" />
                   <span>Switch to Sepolia</span>
                 </button>
                 <button
@@ -1058,7 +1069,7 @@ export function BridgeExperience() {
               ) : null}
             </div>
           </div>
-          <div className="route-status-line">
+          <div className="route-status-line swap-fade" key={`rl-${provider}`}>
             <span className={`route-pill ${routeTone}`}>
               {providerCopy.badge}
             </span>
@@ -1086,7 +1097,7 @@ export function BridgeExperience() {
             ))}
           </div>
 
-          <div className="swap-box">
+          <div className="swap-box swap-fade" key={`from-${mode}-${provider}`}>
             <div>
               <span>From</span>
               <strong>{copy.from}</strong>
@@ -1122,7 +1133,7 @@ export function BridgeExperience() {
             <ArrowDown size={18} />
           </div>
 
-          <div className="swap-box">
+          <div className="swap-box swap-fade" key={`to-${mode}-${provider}`}>
             <div>
               <span>To</span>
               <strong>{copy.to}</strong>
@@ -1173,7 +1184,11 @@ export function BridgeExperience() {
           </label>
           {bridgeError ? <p className="form-error">{bridgeError}</p> : null}
 
-          <div className="quote-summary" aria-label="Route quote">
+          <div
+            className="quote-summary swap-fade"
+            aria-label="Route quote"
+            key={`qs-${mode}-${provider}`}
+          >
             <div>
               <span>ETA</span>
               <strong>{quote.eta}</strong>
@@ -1199,7 +1214,6 @@ export function BridgeExperience() {
           </button>
 
           <div className={`route-disclaimer ${routeTone}`}>
-            <ShieldCheck size={16} aria-hidden="true" />
             <span>{routeNote}</span>
           </div>
         </section>

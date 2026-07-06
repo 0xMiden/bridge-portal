@@ -11,15 +11,17 @@ import {
   MidenFiSignerProvider,
   useMidenFiWallet,
 } from "@miden-sdk/miden-wallet-adapter-react";
-import {
-  ChevronDown,
-  Copy,
-  LogOut,
-  RefreshCcw,
-  ShieldCheck,
-} from "lucide-react";
+import { ChevronDown, Copy, LogOut, RefreshCcw, Wallet } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { shortAddress } from "../lib/bridge-state";
+
+/** MidenFi brand logo from the wallet adapter, or a neutral wallet fallback. */
+function WalletBrandIcon({ src, size }: { src?: string; size: number }) {
+  if (!src) return <Wallet size={size} aria-hidden="true" />;
+  const s = { width: size, height: size, borderRadius: 5, display: "block" };
+  // eslint-disable-next-line @next/next/no-img-element -- data-URI wallet logo, not an optimizable asset
+  return <img src={src} alt="" style={s} />;
+}
 
 type MidenWalletSnapshot = {
   address: string;
@@ -106,6 +108,7 @@ function MidenWalletButtonInner({
   const refreshInflightRef = useRef<Promise<void> | null>(null);
   const address = wallet.address ?? "";
   const readyState = wallet.wallet?.readyState;
+  const walletLogo = wallet.wallet?.adapter?.icon;
   const ready =
     readyState === WalletReadyState.Installed ||
     readyState === WalletReadyState.Loadable;
@@ -314,7 +317,7 @@ function MidenWalletButtonInner({
         aria-haspopup="menu"
       >
         <span className={`wallet-icon ${wallet.connected ? "connected" : ""}`}>
-          <ShieldCheck size={16} aria-hidden="true" />
+          <WalletBrandIcon src={walletLogo} size={16} />
         </span>
         <span className="wallet-copy">
           <small>
@@ -352,7 +355,7 @@ function MidenWalletButtonInner({
             <span
               className={`wallet-menu-avatar ${wallet.connected ? "connected" : wallet.connecting ? "pending" : ""}`}
             >
-              <ShieldCheck size={16} aria-hidden="true" />
+              <WalletBrandIcon src={walletLogo} size={16} />
             </span>
             <span>
               <strong>Miden wallet</strong>
@@ -432,7 +435,7 @@ function MidenWalletButtonInner({
                   className="wallet-menu-item"
                   onClick={connectMidenWallet}
                 >
-                  <ShieldCheck size={15} aria-hidden="true" />
+                  <WalletBrandIcon src={walletLogo} size={15} />
                   <span>Connect wallet</span>
                 </button>
               ) : null}

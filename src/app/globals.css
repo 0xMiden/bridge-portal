@@ -464,6 +464,43 @@ a {
   transition:
     box-shadow var(--duration-slow) var(--ease-standard),
     transform var(--duration-slow) var(--ease-standard);
+  animation: swap-card-enter var(--duration-slow) var(--ease-standard) both;
+}
+
+@keyframes swap-card-enter {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.99);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+/* Cross-fade the direction/route-dependent content when it swaps. */
+@keyframes swap-content-fade {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.swap-fade {
+  animation: swap-content-fade var(--duration-base) var(--ease-standard) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .swap-card,
+  .swap-fade,
+  .mode-switch::before {
+    animation: none;
+    transition: none;
+  }
 }
 
 .swap-card:hover {
@@ -685,6 +722,25 @@ a {
   background: var(--surface-muted);
 }
 
+/* Sliding active pill — translates between the two buttons on toggle. */
+.mode-switch::before {
+  content: "";
+  position: absolute;
+  z-index: 0;
+  top: 4px;
+  bottom: 4px;
+  left: 4px;
+  width: calc(50% - 6px);
+  border-radius: 12px;
+  background: var(--surface);
+  box-shadow: 0 8px 20px rgba(56, 45, 26, 0.08);
+  transition: transform var(--duration-base) var(--ease-standard);
+}
+
+.mode-switch[data-active="send"]::before {
+  transform: translateX(calc(100% + 4px));
+}
+
 .mode-switch button {
   position: relative;
   z-index: 1;
@@ -694,12 +750,11 @@ a {
   background: transparent;
   color: var(--muted-foreground);
   font-weight: 800;
+  transition: color var(--duration-fast) var(--ease-standard);
 }
 
 .mode-switch button[aria-pressed="true"] {
-  background: var(--surface);
   color: var(--foreground);
-  box-shadow: 0 8px 20px rgba(56, 45, 26, 0.08);
 }
 
 .mode-switch button:hover {
