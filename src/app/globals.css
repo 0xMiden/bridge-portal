@@ -523,14 +523,14 @@ a {
   }
 }
 
-/* Cross-fade the direction/route-dependent content when it swaps. */
+/* Transition the direction/route-dependent content when it swaps. Transform
+   only — animating opacity would make the box's opaque fill go translucent and
+   reveal the lighter card behind it (reads as a white blink on every refresh). */
 @keyframes swap-content-fade {
   from {
-    opacity: 0;
-    transform: translateY(4px);
+    transform: translateY(6px);
   }
   to {
-    opacity: 1;
     transform: translateY(0);
   }
 }

@@ -37,8 +37,19 @@ export function EpochQuotePreview({
   const quote = useEpochQuote({ enabled: true, mode, amount, midenAccount, evmAddress });
 
   useEffect(() => {
-    onAmount?.(quote.loading ? undefined : quote.amount);
-  }, [onAmount, quote.loading, quote.amount]);
+    onAmount?.(quote.amount);
+  }, [onAmount, quote.amount]);
+
+  // Keep the last known amount visible while a refetch is in flight so the
+  // field updates in place rather than blinking blank.
+  if (quote.amount) {
+    return (
+      <>
+        {quote.amount}
+        {hideSymbol ? "" : ` ${quote.symbol}`}
+      </>
+    );
+  }
 
   if (quote.loading) {
     return (
@@ -46,15 +57,6 @@ export function EpochQuotePreview({
         <RefreshCcw size={14} className="animate-spin" aria-hidden="true" />
         Fetching quote…
       </span>
-    );
-  }
-
-  if (quote.amount) {
-    return (
-      <>
-        {quote.amount}
-        {hideSymbol ? "" : ` ${quote.symbol}`}
-      </>
     );
   }
 
