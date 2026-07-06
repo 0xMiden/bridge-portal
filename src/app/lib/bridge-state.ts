@@ -246,7 +246,9 @@ export function createActivity(
   overrides: Partial<Activity> = {},
 ): Activity {
   const copy = modes[mode];
-  const asset = copy.assetIn.replace("Miden ", "");
+  // Token depends on the route: Epoch bridges USDC, AggLayer/others bridge ETH.
+  const asset =
+    provider === "epoch" ? "USDC" : copy.assetIn.replace("Miden ", "");
   const destination = mode === "receive" ? "Miden" : "Sepolia";
 
   const activity: Activity = {
@@ -258,19 +260,12 @@ export function createActivity(
     eta: provider === "agglayer" ? "8 min" : "4 min",
     amount: amount || "0",
     asset,
-    txHash: "0xpreview...pending",
-    sourceTxHash:
-      mode === "receive"
-        ? "0x9fb3f3d6b7c0e2a947a0d9b0327d6de063a08f46d8dc6f2ced343b9a7e1772ac"
-        : "0x0490ad69e87c19c0c2c4b7951b87f0013c98bf5d90b7e14acbe821471ad5b91e",
-    destinationTxHash:
-      mode === "send"
-        ? "0x52a18acb48115396081a3d4f1e7b58e45f0ff687a3af3ff6d83b947d85cdb91e"
-        : undefined,
-    midenTxId:
-      mode === "receive"
-        ? "0x0490ad6902c47f34e8a1dc57a85b6c019a14cf27b0130d4ba6b9134fd08f72ac"
-        : "0x0490ad69e87c19c0c2c4b7951b87f0013c98bf5d90b7e14acbe821471ad5b91e",
+    // Honest pending defaults — the real hashes are filled in by the submit flow
+    // as the transfer progresses (no fabricated tx hashes on a pending activity).
+    txHash: "0xpending",
+    sourceTxHash: undefined,
+    destinationTxHash: undefined,
+    midenTxId: undefined,
     updatedAt: "Just now",
   };
 

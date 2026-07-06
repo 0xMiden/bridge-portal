@@ -790,6 +790,25 @@ export function BridgeExperience() {
 
       const resolvedDestination =
         mode === "send" ? epochEvmAddress : epochMidenAccount;
+      // Require a valid recipient before starting, so a missing destination
+      // doesn't create a failed ("Needs recovery") activity.
+      if (mode === "receive" && !resolvedDestination) {
+        setBridgeError(
+          "Connect your Miden wallet or paste a Miden account to receive into.",
+        );
+        setIsSubmitting(false);
+        return;
+      }
+      if (
+        mode === "send" &&
+        !/^0x[0-9a-fA-F]{40}$/.test(resolvedDestination)
+      ) {
+        setBridgeError(
+          "Enter a valid Sepolia (0x…) address, or connect your Sepolia wallet.",
+        );
+        setIsSubmitting(false);
+        return;
+      }
       // Create a pending activity and navigate to it immediately so the whole
       // flow is monitored on the detail page while the transfer executes; the
       // background run patches the activity in storage as it progresses.
