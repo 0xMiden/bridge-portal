@@ -29,7 +29,6 @@ import {
   type Activity,
   createActivity,
   loadStoredActivities,
-  patchStoredActivity,
   modes,
   providers,
   quoteFor,
@@ -683,23 +682,9 @@ export function BridgeExperience() {
         return;
       }
 
-      // Navigate to the pending activity immediately; the note build + submit
-      // (slow — proving) runs in the background and patches the activity.
-      const pending = createActivity(mode, provider, amount, {
-        status: "signature",
-        eta: "30-90 min",
-        destination: destinationAddress,
-        // origin = Miden rollup 78, destination = Ethereum L1 (0)
-        sourceNetworkId: AGGLAYER_BALI.destinationNetworkId,
-        destinationNetworkId: AGGLAYER_BALI.sourceNetworkId,
-      });
-      const updated = [pending, ...activities];
-      setActivities(updated);
-      saveActivities(updated);
-      setIsSubmitting(false);
-      router.push(`/activity/${pending.id}`);
-
       try {
+        // Submit first — the wallet approval + note proving happen here. Only
+        // once the send actually goes through do we record an activity row.
         // Dynamic import: agglayer-execute pulls the eager-WASM SDK + wallet
         // adapter, so it must load client-side at click time, never in SSR.
         const { runAgglayerSend } = await import("../lib/agglayer-execute");
@@ -711,13 +696,22 @@ export function BridgeExperience() {
           waitForTransaction: midenWallet.waitForTransaction,
         });
         // Note submitted on Miden; AggLayer hasn't observed the exit yet.
-        patchStoredActivity(pending.id, {
+        const activity = createActivity(mode, provider, amount, {
           status: "source_finality",
+          eta: "30-90 min",
+          destination: destinationAddress,
+          // origin = Miden rollup 78, destination = Ethereum L1 (0)
+          sourceNetworkId: AGGLAYER_BALI.destinationNetworkId,
+          destinationNetworkId: AGGLAYER_BALI.sourceNetworkId,
           midenTxId: txId,
         });
+        const updated = [activity, ...activities];
+        setActivities(updated);
+        saveActivities(updated);
       } catch (error) {
-        patchStoredActivity(pending.id, { status: "failed", eta: "Needs retry" });
         setBridgeError(errorMessage(error));
+      } finally {
+        setIsSubmitting(false);
       }
       return;
     }
@@ -751,24 +745,9 @@ export function BridgeExperience() {
         return;
       }
 
-      // Navigate to the pending activity immediately; sign + submit in the
-      // background and patch the source tx hash in.
-      const pending = createActivity(mode, provider, amount, {
-        status: "signature",
-        eta: "About 15 min",
-        destination: destinationAccount,
-        bridgeDestinationAddress: transaction.destinationAddress,
-        midenTxId: transaction.destinationAddress,
-        sourceNetworkId: AGGLAYER_BALI.sourceNetworkId,
-        destinationNetworkId: AGGLAYER_BALI.destinationNetworkId,
-      });
-      const updated = [pending, ...activities];
-      setActivities(updated);
-      saveActivities(updated);
-      setIsSubmitting(false);
-      router.push(`/activity/${pending.id}`);
-
       try {
+        // Sign + submit the Sepolia deposit first (wallet approval here). Only
+        // record the activity row once the deposit tx is actually broadcast.
         const txHash = await walletProvider.request<string>({
           method: "eth_sendTransaction",
           params: [
@@ -781,14 +760,24 @@ export function BridgeExperience() {
             },
           ],
         });
-        patchStoredActivity(pending.id, {
+        const activity = createActivity(mode, provider, amount, {
           status: "source_finality",
+          eta: "About 15 min",
+          destination: destinationAccount,
+          bridgeDestinationAddress: transaction.destinationAddress,
+          midenTxId: transaction.destinationAddress,
+          sourceNetworkId: AGGLAYER_BALI.sourceNetworkId,
+          destinationNetworkId: AGGLAYER_BALI.destinationNetworkId,
           txHash: shortAddress(txHash),
           sourceTxHash: txHash,
         });
+        const updated = [activity, ...activities];
+        setActivities(updated);
+        saveActivities(updated);
       } catch (error) {
-        patchStoredActivity(pending.id, { status: "failed", eta: "Needs retry" });
         setBridgeError(errorMessage(error));
+      } finally {
+        setIsSubmitting(false);
       }
       return;
     }
@@ -833,21 +822,9 @@ export function BridgeExperience() {
         setIsSubmitting(false);
         return;
       }
-      // Create a pending activity and navigate to it immediately so the whole
-      // flow is monitored on the detail page while the transfer executes; the
-      // background run patches the activity in storage as it progresses.
-      const pending = createActivity(mode, "epoch", amount, {
-        status: "signature",
-        eta: "1-3 min",
-        destination: resolvedDestination,
-      });
-      const updated = [pending, ...activities];
-      setActivities(updated);
-      saveActivities(updated);
-      setIsSubmitting(false);
-      router.push(`/activity/${pending.id}`);
-
       try {
+        // Submit first (wallet approval + intent broadcast happen here), then
+        // record the activity row only once the transfer actually goes through.
         // Dynamic import: epoch-execute pulls eager-WASM miden-sdk, so it must
         // load client-side at click time, never in the server render.
         const { runEpochTransfer } = await import("../lib/epoch/epoch-execute");
@@ -859,9 +836,10 @@ export function BridgeExperience() {
           requestSend: midenWallet.requestSend,
           waitForTransaction: midenWallet.waitForTransaction,
         });
-        patchStoredActivity(pending.id, {
+        const activity = createActivity(mode, "epoch", amount, {
           status: "message_observed",
           eta: "1-3 min",
+          destination: resolvedDestination,
           txHash: result.sourceTxHash
             ? shortAddress(result.sourceTxHash)
             : "0xpending",
@@ -873,12 +851,13 @@ export function BridgeExperience() {
             ? `${result.outputAmount} USDC`
             : undefined,
         });
+        const updated = [activity, ...activities];
+        setActivities(updated);
+        saveActivities(updated);
       } catch (error) {
-        patchStoredActivity(pending.id, {
-          status: "failed",
-          eta: "Needs retry",
-        });
         setBridgeError(errorMessage(error));
+      } finally {
+        setIsSubmitting(false);
       }
       return;
     }

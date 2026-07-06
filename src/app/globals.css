@@ -1284,22 +1284,68 @@ a {
   }
 }
 
-.detail-shell {
-  width: min(1120px, 100%);
+/* Compact detail: a single narrow card, centered like the swap card. */
+.detail-simple {
+  width: min(480px, 100%);
+  margin: 22px auto 0;
 }
 
-.detail-grid {
+.detail-simple .receipt-card {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(320px, 0.45fr);
-  gap: 16px;
-  margin-top: 22px;
+  gap: 14px;
 }
 
-.detail-main,
-.detail-side {
+.receipt-topline {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.receipt-topline .kicker {
+  margin: 0;
+}
+
+.receipt-links {
   display: grid;
-  gap: 16px;
-  align-content: start;
+  gap: 8px;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+}
+
+.receipt-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-height: 42px;
+  padding: 0 12px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--surface-muted);
+  color: var(--foreground);
+  font-size: 13px;
+  font-weight: 780;
+}
+
+.receipt-link svg {
+  color: var(--accent);
+}
+
+.receipt-monitor {
+  margin: 2px 0 0;
+  color: var(--muted-foreground);
+  font-size: 12px;
+  font-weight: 640;
+  line-height: 1.45;
+}
+
+.detail-simple .receipt-amount {
+  margin-top: 0;
+  padding: 16px 0;
+}
+
+.detail-simple .receipt-amount strong {
+  font-size: clamp(34px, 9vw, 46px);
 }
 
 .detail-card,
@@ -1868,19 +1914,7 @@ a {
     grid-row: 1 / span 2;
   }
 
-  .detail-grid,
-  .metric-grid,
-  .receipt-explorer-grid,
-  .receipt-route {
-    grid-template-columns: 1fr;
-  }
-
-  .receipt-header {
-    grid-template-columns: 44px minmax(0, 1fr);
-  }
-
-  .receipt-header .status-badge {
-    grid-column: 1 / -1;
-    width: fit-content;
+  .detail-simple {
+    margin-top: 14px;
   }
 }

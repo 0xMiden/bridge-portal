@@ -1,20 +1,10 @@
 "use client";
 
-import {
-  AlertTriangle,
-  ArrowLeft,
-  ArrowRight,
-  CheckCircle2,
-  Circle,
-  Download,
-  ExternalLink,
-  ReceiptText,
-  RefreshCcw,
-} from "lucide-react";
+import { ArrowLeft, ArrowRight, ExternalLink } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { AGGLAYER_BALI, type AgglayerDepositStatus } from "../lib/agglayer";
+import { type AgglayerDepositStatus } from "../lib/agglayer";
 import { buildAgglayerClaimTransaction } from "../lib/agglayer-claim";
 import { findClaimableMidenToEvmDeposit } from "../lib/agglayer-status";
 import {
@@ -35,7 +25,6 @@ import {
   statusLabel,
   statusTone,
   destinationExplorer,
-  timeline,
 } from "../lib/bridge-state";
 import {
   useAppKit,
@@ -171,23 +160,11 @@ export function ActivityDetail({ id }: { id: string }) {
   const modeCopy = activity ? modes[activity.mode] : null;
   const sourceLink = activity ? sourceExplorer(activity) : null;
   const destinationLink = activity ? destinationExplorer(activity) : null;
-  const agglayerMonitorLink =
-    activity?.provider === "agglayer" ? AGGLAYER_BALI.monitorUrl : null;
-  const currentIndex = activity
-    ? timeline.findIndex((step) => step.status === activity.status)
-    : -1;
-  const needsRecovery =
-    activity?.status === "claim_available" || activity?.status === "failed";
   const canClaimOnSepolia =
     activity?.provider === "agglayer" &&
     activity.mode === "send" &&
     activity.status === "claim_available" &&
     Boolean(activity.depositCount);
-  const settlement = activity ? settlementRows(activity) : [];
-  const receiptTitle =
-    activity?.mode === "send"
-      ? "Cross-chain send receipt"
-      : "Cross-chain receive receipt";
   const receiptAmountLabel =
     activity?.status === "complete"
       ? activity.mode === "receive"
@@ -208,7 +185,7 @@ export function ActivityDetail({ id }: { id: string }) {
             : activity?.status === "claim_submitted"
               ? "Wait for the Sepolia claim transaction to confirm."
               : activity?.status === "failed"
-                ? "Retry claim or export diagnostics for support."
+                ? "This transfer needs a retry."
                 : "Funds are available in the destination account.";
 
   const observeActivity = useCallback(
@@ -473,26 +450,6 @@ export function ActivityDetail({ id }: { id: string }) {
     saveActivities(updated);
   }
 
-  function markFailed() {
-    if (!activity) return;
-    updateActivity({
-      ...activity,
-      status: "failed",
-      eta: "Needs retry",
-      updatedAt: "Just now",
-    });
-  }
-
-  function retryClaim() {
-    if (!activity) return;
-    updateActivity({
-      ...activity,
-      status: "message_observed",
-      eta: "2 min",
-      updatedAt: "Just now",
-    });
-  }
-
   async function claimOnSepolia() {
     if (!activity) return;
 
@@ -556,27 +513,6 @@ export function ActivityDetail({ id }: { id: string }) {
     }
   }
 
-  function exportDiagnostic() {
-    if (!activity || !quote) return;
-    const payload = JSON.stringify(
-      {
-        exportedAt: new Date().toISOString(),
-        activity,
-        provider: providers[activity.provider],
-        quote,
-        timeline,
-      },
-      null,
-      2,
-    );
-    const blob = new Blob([payload], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    const anchor = document.createElement("a");
-    anchor.href = url;
-    anchor.download = `${activity.id}-diagnostic.json`;
-    anchor.click();
-    URL.revokeObjectURL(url);
-  }
 
   return (
     <main className="detail-shell">
@@ -600,72 +536,61 @@ export function ActivityDetail({ id }: { id: string }) {
       {!activity || !quote ? (
         <section className="detail-empty">
           <h1>Activity not found</h1>
-          <p>This transfer is not in local activity history on this browser.</p>
+          <p>This transfer isn&apos;t in local activity history on this browser.</p>
           <Link className="primary-button" href="/">
             Back to bridge
           </Link>
         </section>
       ) : (
-        <section className="detail-grid">
-          <div className="detail-main">
-            <section className="receipt-card">
-              <div className="receipt-header">
-                <span className="receipt-icon">
-                  <ReceiptText size={20} aria-hidden="true" />
-                </span>
-                <div>
-                  <p className="kicker">Receipt</p>
-                  <h1>{receiptTitle}</h1>
-                  <span>{activity.id}</span>
-                </div>
-                <span className={`status-badge ${statusTone(activity.status)}`}>
-                  {statusLabel(activity.status)}
-                </span>
-              </div>
+        <section className="detail-simple">
+          <div className="receipt-card">
+            <div className="receipt-topline">
+              <p className="kicker">
+                {activity.mode === "send" ? "Send" : "Receive"} ·{" "}
+                {providers[activity.provider].label}
+              </p>
+              <span className={`status-badge ${statusTone(activity.status)}`}>
+                {statusLabel(activity.status)}
+              </span>
+            </div>
 
-              <div className="receipt-amount">
-                <span>{receiptAmountLabel}</span>
-                <strong>{quote.expectedReceived}</strong>
-              </div>
+            <div className="receipt-amount">
+              <span>{receiptAmountLabel}</span>
+              <strong>{quote.expectedReceived}</strong>
+            </div>
 
-              <div className="receipt-next-action">
-                <span>Next action</span>
-                <strong>{nextAction}</strong>
+            <div className="receipt-route">
+              <div>
+                <span>From</span>
+                <strong>{modeCopy?.from}</strong>
               </div>
-
-              <div className="receipt-route">
-                <div>
-                  <span>From</span>
-                  <strong>{modeCopy?.from}</strong>
-                  <small>
-                    {activity.mode === "receive"
-                      ? (activity.sourceTxHash ?? activity.txHash)
-                      : (activity.midenTxId ?? activity.txHash)}
-                  </small>
-                </div>
-                <ArrowRight size={18} aria-hidden="true" />
-                <div>
-                  <span>To</span>
-                  <strong>{modeCopy?.to}</strong>
-                  <small>
-                    {activity.mode === "receive"
-                      ? (activity.midenTxId ?? activity.txHash)
-                      : (activity.destinationTxHash ?? activity.txHash)}
-                  </small>
-                </div>
+              <ArrowRight size={16} aria-hidden="true" />
+              <div>
+                <span>To</span>
+                <strong>{modeCopy?.to}</strong>
               </div>
+            </div>
 
-              <div className="receipt-explorer-grid">
+            <div className="receipt-lines">
+              <ReceiptLine label="Status" value={activity.eta} />
+              <ReceiptLine
+                label={activity.receivedAmount ? "Received" : "Min received"}
+                value={activity.receivedAmount ?? quote.minReceived}
+              />
+              <ReceiptLine label="Network fee" value={networkFeeDisplay} />
+            </div>
+
+            {sourceLink || destinationLink ? (
+              <div className="receipt-links">
                 {sourceLink ? (
                   <a
                     href={sourceLink.href}
                     target="_blank"
                     rel="noreferrer"
-                    className="explorer-link"
+                    className="receipt-link"
                   >
-                    <span>Source proof</span>
-                    <strong>{sourceLink.label}</strong>
-                    <ExternalLink size={15} aria-hidden="true" />
+                    {sourceLink.label}
+                    <ExternalLink size={14} aria-hidden="true" />
                   </a>
                 ) : null}
                 {destinationLink ? (
@@ -673,340 +598,41 @@ export function ActivityDetail({ id }: { id: string }) {
                     href={destinationLink.href}
                     target="_blank"
                     rel="noreferrer"
-                    className="explorer-link"
+                    className="receipt-link"
                   >
-                    <span>Destination proof</span>
-                    <strong>{destinationLink.label}</strong>
-                    <ExternalLink size={15} aria-hidden="true" />
-                  </a>
-                ) : null}
-                {agglayerMonitorLink ? (
-                  <a
-                    href={agglayerMonitorLink}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="explorer-link"
-                  >
-                    <span>Public monitor</span>
-                    <strong>Gateway FM Bali</strong>
-                    <ExternalLink size={15} aria-hidden="true" />
+                    {destinationLink.label}
+                    <ExternalLink size={14} aria-hidden="true" />
                   </a>
                 ) : null}
               </div>
+            ) : null}
 
-              <div className="receipt-lines">
-                <ReceiptLine
-                  label="Route"
-                  value={providers[activity.provider].label}
-                />
-                <ReceiptLine label="ETA" value={activity.eta} />
-                <ReceiptLine
-                  label={activity.receivedAmount ? "Received" : "Minimum received"}
-                  value={activity.receivedAmount ?? quote.minReceived}
-                />
-                <ReceiptLine label="Network fee" value={networkFeeDisplay} />
-                <ReceiptLine label="Bridge fee" value={quote.bridgeFee} />
-                <ReceiptLine label="Relayer fee" value={quote.relayerFee} />
-                {activity.depositCount ? (
-                  <ReceiptLine
-                    label="AggLayer bridge event"
-                    value={`#${activity.depositCount}`}
-                  />
-                ) : null}
-                {activity.bridgeDestinationAddress ? (
-                  <ReceiptLine
-                    label="Bridge destination"
-                    value={activity.bridgeDestinationAddress}
-                  />
-                ) : null}
-              </div>
+            {canClaimOnSepolia ? (
+              <button
+                className="primary-button"
+                type="button"
+                onClick={claimOnSepolia}
+                disabled={claimBusy}
+              >
+                {claimBusy ? "Waiting for wallet" : "Claim on Sepolia"}
+              </button>
+            ) : null}
+            {claimError ? (
+              <p className="form-error compact">{claimError}</p>
+            ) : null}
+            {monitorError ? (
+              <p className="form-error compact">{monitorError}</p>
+            ) : null}
 
-              <div className="disclosure receipt-disclosure">
-                <AlertTriangle size={17} aria-hidden="true" />
-                <span>{providers[activity.provider].disclosure}</span>
-              </div>
-            </section>
-
-            <section className="detail-card">
-              <div className="detail-title">
-                <div>
-                  <p className="kicker">Progress</p>
-                  <h2>State machine</h2>
-                </div>
-              </div>
-
-              <div className="timeline">
-                {timeline.map((step, index) => {
-                  const isDone =
-                    currentIndex > index || activity.status === "complete";
-                  const isCurrent = step.status === activity.status;
-                  return (
-                    <div
-                      className={`timeline-step ${isDone ? "done" : ""} ${isCurrent ? "current" : ""}`}
-                      key={step.status}
-                    >
-                      <div className="step-icon">
-                        {isDone ? (
-                          <CheckCircle2 size={18} />
-                        ) : isCurrent ? (
-                          <RefreshCcw size={17} />
-                        ) : (
-                          <Circle size={16} />
-                        )}
-                      </div>
-                      <div>
-                        <strong>{step.label}</strong>
-                        <span>{step.detail}</span>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-
-              <div className="live-monitor-panel" aria-live="polite">
-                <div>
-                  <span className="status-dot active" />
-                  <strong>Live monitor</strong>
-                </div>
-                <span>
-                  {activity.provider !== "agglayer"
-                    ? "This route is not wired to a live provider monitor yet."
-                    : activity.mode === "send" && !activity.depositCount
-                      ? "Waiting for a Miden bridge event id before polling Sepolia claim proofs."
-                      : "Sepolia receipts poll every 12s. AggLayer rows and proofs poll every 30s."}
-                </span>
-                <small>
-                  {lastChecked
-                    ? `Last checked ${lastChecked}`
-                    : "Starting automatic checks"}
-                </small>
-                {monitorError ? (
-                  <p className="form-error compact">{monitorError}</p>
-                ) : null}
-              </div>
-
-              <div className="detail-actions">
-                <button
-                  className="secondary-button"
-                  type="button"
-                  onClick={markFailed}
-                >
-                  Mark as stuck
-                </button>
-              </div>
-            </section>
+            <p className="receipt-monitor">
+              {nextAction}
+              {lastChecked ? ` · Last checked ${lastChecked}` : ""}
+            </p>
           </div>
-
-          <aside className="detail-side">
-            <section className="detail-card">
-              <div className="detail-title">
-                <div>
-                  <p className="kicker">Settlement</p>
-                  <h2>
-                    {activity.mode === "receive"
-                      ? "Miden wallet state"
-                      : "Sepolia claim state"}
-                  </h2>
-                </div>
-              </div>
-
-              <div className="metric-grid one-column settlement-grid">
-                {settlement.map((row) => (
-                  <Metric label={row.label} value={row.value} key={row.label} />
-                ))}
-              </div>
-            </section>
-
-            <section
-              className={`detail-card recovery-card ${needsRecovery ? "needs-action" : ""}`}
-            >
-              <div className="detail-title">
-                <div>
-                  <p className="kicker">Claim and recovery</p>
-                  <h2>
-                    {needsRecovery ? "Action available" : "No action needed"}
-                  </h2>
-                </div>
-              </div>
-
-              <div className="metric-grid one-column">
-                <Metric label="Source tx" value={activity.txHash} />
-                <Metric
-                  label="Proof status"
-                  value={
-                    activity.readyForClaim ||
-                    activity.status === "claim_available" ||
-                    activity.status === "claim_submitted" ||
-                    activity.status === "complete"
-                      ? "Ready for claim"
-                      : activity.status === "message_observed"
-                        ? "Observed"
-                        : "Pending"
-                  }
-                />
-                <Metric
-                  label="Destination claim"
-                  value={
-                    activity.status === "complete"
-                      ? "Settled"
-                      : activity.claimTxHash
-                        ? "Submitted"
-                        : activity.status === "claim_available" &&
-                            (activity.mode === "receive" ||
-                              activity.depositCount)
-                          ? "Ready"
-                          : activity.status === "claim_available"
-                            ? "Needs bridge event id"
-                            : "Not ready"
-                  }
-                />
-              </div>
-
-              <p className="recovery-copy">
-                {activity.status === "failed"
-                  ? "This transfer is stuck. Retry claim, use manual claim, or export diagnostics for support."
-                  : activity.status === "claim_available" &&
-                      activity.mode === "send" &&
-                      !activity.depositCount
-                    ? "This send needs a specific AggLayer bridge event id before claimAsset can be submitted safely."
-                    : activity.status === "claim_available"
-                      ? "Funds are ready to claim on the destination side."
-                      : "Recovery tools appear here when the transfer needs a user action."}
-              </p>
-
-              <div className="recovery-actions">
-                {canClaimOnSepolia ? (
-                  <button
-                    className="primary-button compact-action"
-                    type="button"
-                    onClick={claimOnSepolia}
-                    disabled={claimBusy}
-                  >
-                    {claimBusy ? "Waiting for wallet" : "Claim on Sepolia"}
-                  </button>
-                ) : null}
-                <button
-                  className="secondary-button"
-                  type="button"
-                  onClick={retryClaim}
-                >
-                  Retry claim
-                </button>
-                <button
-                  className="secondary-button"
-                  type="button"
-                  onClick={canClaimOnSepolia ? claimOnSepolia : undefined}
-                  disabled={!canClaimOnSepolia || claimBusy}
-                >
-                  Manual claim
-                </button>
-                <button
-                  className="secondary-button"
-                  type="button"
-                  onClick={exportDiagnostic}
-                >
-                  <Download size={16} aria-hidden="true" />
-                  Export
-                </button>
-              </div>
-              {claimError ? (
-                <p className="form-error compact">{claimError}</p>
-              ) : null}
-            </section>
-          </aside>
         </section>
       )}
     </main>
   );
-}
-
-function Metric({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="metric">
-      <span>{label}</span>
-      <strong>{value}</strong>
-    </div>
-  );
-}
-
-function settlementRows(activity: Activity) {
-  if (activity.mode === "receive") {
-    return [
-      {
-        label: "Miden claim",
-        value:
-          activity.status === "message_observed" ||
-          activity.status === "claim_available" ||
-          activity.status === "complete"
-            ? "Bridge message available"
-            : "Waiting for bridge message",
-      },
-      {
-        label: "Note sync",
-        value:
-          activity.status === "complete"
-            ? "Synced"
-            : activity.status === "claim_available"
-              ? "Ready for wallet sync"
-              : "Pending",
-      },
-      {
-        label: "Note consume",
-        value:
-          activity.status === "complete"
-            ? "Consumed"
-            : "Awaiting wallet consume",
-      },
-      {
-        label: "Claim settlement",
-        value:
-          activity.status === "complete"
-            ? "Balance settled"
-            : "Not wallet-settled",
-      },
-    ];
-  }
-
-  return [
-    {
-      label: "Miden bridge note",
-      value:
-        activity.status === "source_finality" ||
-        activity.status === "message_observed" ||
-        activity.status === "claim_available" ||
-        activity.status === "claim_submitted" ||
-        activity.status === "complete"
-          ? "Submitted"
-          : "Needs wallet signature",
-    },
-    {
-      label: "Proof status",
-      value:
-        activity.readyForClaim ||
-        activity.status === "claim_available" ||
-        activity.status === "claim_submitted" ||
-        activity.status === "complete"
-          ? "Ready"
-          : "Pending",
-    },
-    {
-      label: "Sepolia claim",
-      value: activity.claimTxHash
-        ? "Submitted"
-        : activity.status === "claim_available"
-          ? "Ready to submit"
-          : "Not ready",
-    },
-    {
-      label: "Claim settlement",
-      value:
-        activity.status === "complete"
-          ? "Settled on Sepolia"
-          : activity.claimTxHash
-            ? "Waiting confirmation"
-            : "Not started",
-    },
-  ];
 }
 
 function ReceiptLine({ label, value }: { label: string; value: string }) {
