@@ -76,6 +76,7 @@ type MidenWalletSnapshot = {
   requestTransaction?: MidenFiWalletContextState["requestTransaction"];
   waitForTransaction?: MidenFiWalletContextState["waitForTransaction"];
   requestAssets?: MidenFiWalletContextState["requestAssets"];
+  requestConsumableNotes?: MidenFiWalletContextState["requestConsumableNotes"];
 };
 
 const emptyMidenWallet: MidenWalletSnapshot = {
@@ -192,6 +193,10 @@ export function BridgeExperience() {
     Record<string, string>
   > | null>(null);
   const [activities, setActivities] = useState<Activity[]>([]);
+  // Account-derived activity (Epoch + AggLayer auto; Miden opt-in via popup).
+  const [activitySyncing, setActivitySyncing] = useState(false);
+  const [visibleActivityCount, setVisibleActivityCount] = useState(5);
+  const activityAutoSyncedRef = useRef("");
   const [hydrated, setHydrated] = useState(false);
   const [evmMenuOpen, setEvmMenuOpen] = useState(false);
   const [evmCopied, setEvmCopied] = useState(false);
@@ -527,6 +532,62 @@ export function BridgeExperience() {
     midenBalanceInflightRef.current = null;
     setMidenBalanceFetchedFor("");
   }
+
+  // Load account-derived history and merge it into the list. Epoch + AggLayer are
+  // address-keyed (no popup); Miden is opt-in (opens a wallet approval popup).
+  const syncAccountActivity = useCallback(
+    async (includeMiden: boolean) => {
+      const evm = walletAccount || "";
+      const miden = midenAddress || "";
+      if (!evm && !miden) return;
+      setActivitySyncing(true);
+      try {
+        // Dynamic import: the Epoch source pulls the eager-WASM SDK, so keep it
+        // out of the SSR/initial bundle.
+        const { fetchAccountActivity } = await import("../lib/activity");
+        const remote = await fetchAccountActivity({
+          evmAddress: /^0x[0-9a-fA-F]{40}$/.test(evm)
+            ? (evm as `0x${string}`)
+            : undefined,
+          midenAccount: miden || undefined,
+          requestConsumableNotes: includeMiden
+            ? midenWallet.requestConsumableNotes
+            : undefined,
+        });
+        setActivities((prev) => {
+          const byId = new Map<string, Activity>();
+          const localTxs = new Set<string>();
+          // Local (in-flight) rows win — they carry live status from the submit
+          // flow. Then add remote rows not already represented (by id or tx).
+          for (const a of prev) {
+            byId.set(a.id, a);
+            if (a.sourceTxHash) localTxs.add(a.sourceTxHash.toLowerCase());
+          }
+          for (const r of remote) {
+            if (byId.has(r.id)) continue;
+            if (r.sourceTxHash && localTxs.has(r.sourceTxHash.toLowerCase()))
+              continue;
+            byId.set(r.id, r);
+          }
+          const merged = [...byId.values()];
+          saveActivities(merged);
+          return merged;
+        });
+      } finally {
+        setActivitySyncing(false);
+      }
+    },
+    [walletAccount, midenAddress, midenWallet.requestConsumableNotes],
+  );
+
+  // Auto-load the address-keyed sources once per connected account set.
+  useEffect(() => {
+    const key = `${walletAccount}|${midenAddress}`;
+    if (!walletAccount && !midenAddress) return;
+    if (activityAutoSyncedRef.current === key) return;
+    activityAutoSyncedRef.current = key;
+    void syncAccountActivity(false);
+  }, [walletAccount, midenAddress, syncAccountActivity]);
 
   function selectProvider(nextProvider: BridgeProvider) {
     if (providers[nextProvider].disabled) return;
@@ -1215,41 +1276,82 @@ export function BridgeExperience() {
           <div className="home-activity-title">
             <h2>Activity</h2>
             <span>{activities.length}</span>
+            <div className="home-activity-actions">
+              {(walletAccount || midenAddress) && (
+                <button
+                  type="button"
+                  className="activity-action"
+                  onClick={() => void syncAccountActivity(false)}
+                  disabled={activitySyncing}
+                  title="Reload Epoch + AggLayer history for your connected wallet"
+                >
+                  <RefreshCcw
+                    size={13}
+                    aria-hidden="true"
+                    className={activitySyncing ? "animate-spin" : ""}
+                  />
+                  {activitySyncing ? "Syncing" : "Refresh"}
+                </button>
+              )}
+              {midenWallet.connected && midenWallet.requestConsumableNotes && (
+                <button
+                  type="button"
+                  className="activity-action"
+                  onClick={() => void syncAccountActivity(true)}
+                  disabled={activitySyncing}
+                  title="Load Miden-side history from your wallet (opens an approval popup)"
+                >
+                  Sync Miden
+                </button>
+              )}
+            </div>
           </div>
           {activities.length > 0 ? (
-            <div className="home-activity-list">
-              {activities.slice(0, 3).map((activity) => (
-                <Link
-                  className="home-activity-item"
-                  href={`/activity/${activity.id}`}
-                  key={activity.id}
+            <>
+              <div className="home-activity-list">
+                {activities.slice(0, visibleActivityCount).map((activity) => (
+                  <Link
+                    className="home-activity-item"
+                    href={`/activity/${activity.id}`}
+                    key={activity.id}
+                  >
+                    <span
+                      className={`status-dot ${statusTone(activity.status)}`}
+                    />
+                    <span className="activity-copy">
+                      <strong>{activity.summary}</strong>
+                      <small>
+                        {providers[activity.provider].label} -{" "}
+                        {statusLabel(activity.status)}
+                      </small>
+                    </span>
+                    <span className="activity-meta">
+                      <strong>
+                        {activity.amount} {activity.asset}
+                      </strong>
+                      <small>{activity.updatedAt}</small>
+                    </span>
+                    <ChevronRight size={16} aria-hidden="true" />
+                  </Link>
+                ))}
+              </div>
+              {activities.length > visibleActivityCount && (
+                <button
+                  type="button"
+                  className="activity-show-more"
+                  onClick={() => setVisibleActivityCount((n) => n + 5)}
                 >
-                  <span
-                    className={`status-dot ${statusTone(activity.status)}`}
-                  />
-                  <span className="activity-copy">
-                    <strong>{activity.summary}</strong>
-                    <small>
-                      {providers[activity.provider].label} -{" "}
-                      {statusLabel(activity.status)}
-                    </small>
-                  </span>
-                  <span className="activity-meta">
-                    <strong>
-                      {activity.amount} {activity.asset}
-                    </strong>
-                    <small>{activity.updatedAt}</small>
-                  </span>
-                  <ChevronRight size={16} aria-hidden="true" />
-                </Link>
-              ))}
-            </div>
+                  Show more
+                </button>
+              )}
+            </>
           ) : (
             <div className="home-activity-empty">
               <strong>No transfers yet</strong>
               <span>
-                Cross-chain activity will appear here after your first receive
-                or send.
+                {walletAccount || midenAddress
+                  ? "No cross-chain activity found for your connected wallet yet."
+                  : "Connect a wallet to see your cross-chain activity."}
               </span>
             </div>
           )}

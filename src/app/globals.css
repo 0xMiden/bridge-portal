@@ -1029,6 +1029,44 @@ a {
   font-weight: 800;
 }
 
+.home-activity-actions {
+  display: inline-flex;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.activity-action,
+.activity-show-more {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 11px;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.72);
+  color: var(--foreground);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.activity-action:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.activity-action:hover:not(:disabled),
+.activity-show-more:hover {
+  background: #ffffff;
+}
+
+.activity-show-more {
+  width: 100%;
+  justify-content: center;
+  margin-top: 10px;
+}
+
 .home-activity-list {
   display: grid;
   gap: 8px;

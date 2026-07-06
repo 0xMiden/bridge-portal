@@ -40,6 +40,8 @@ type MidenWalletSnapshot = {
   waitForTransaction?: MidenFiWalletContextState["waitForTransaction"];
   // requestAssets reads the wallet's (private) token balances — opens a popup.
   requestAssets?: MidenFiWalletContextState["requestAssets"];
+  // requestConsumableNotes reads the account's notes for Miden-side history.
+  requestConsumableNotes?: MidenFiWalletContextState["requestConsumableNotes"];
 };
 
 type MidenWalletButtonProps = {
@@ -125,6 +127,7 @@ function MidenWalletButtonInner({
       requestTransaction: wallet.requestTransaction,
       waitForTransaction: wallet.waitForTransaction,
       requestAssets: wallet.requestAssets,
+      requestConsumableNotes: wallet.requestConsumableNotes,
     });
   }, [
     address,
@@ -138,6 +141,7 @@ function MidenWalletButtonInner({
     wallet.requestTransaction,
     wallet.waitForTransaction,
     wallet.requestAssets,
+    wallet.requestConsumableNotes,
   ]);
 
   useEffect(() => {

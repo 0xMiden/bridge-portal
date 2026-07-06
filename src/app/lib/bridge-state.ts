@@ -47,6 +47,11 @@ export type Activity = {
   epochSponsor?: string;
   /** Real quoted output amount at execution (e.g. "99.17 USDC"), when known. */
   receivedAmount?: string;
+  /** Owner tags for per-account filtering of account-derived history. */
+  evmAddress?: string;
+  midenAccount?: string;
+  /** Source-relative ordering hint (higher = newer) for merged remote history. */
+  sortKey?: number;
   updatedAt: string;
 };
 
