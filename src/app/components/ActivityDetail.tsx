@@ -45,6 +45,7 @@ import {
 import { type EvmProvider, ensureSepolia } from "../lib/evm-wallet";
 import { epochActivityStatus } from "../lib/epoch/epoch-status";
 import { MIDEN_DESTINATION_CHAIN_ID } from "../lib/epoch/config";
+import { sepoliaGasUnitsFor, useSepoliaGasEstimate } from "../lib/sepolia-gas";
 
 const SEPOLIA_CHAIN_ID = 11155111;
 
@@ -107,6 +108,15 @@ export function ActivityDetail({ id }: { id: string }) {
         : null,
     [activity],
   );
+  // Live Sepolia gas estimate for the network-fee line, matching the swap page.
+  const sepoliaGas = useSepoliaGasEstimate(
+    activity ? sepoliaGasUnitsFor(activity.mode, activity.provider) : null,
+  );
+  const networkFeeDisplay = sepoliaGas.fee
+    ? sepoliaGas.fee
+    : sepoliaGas.loading
+      ? "Estimating…"
+      : (quote?.networkFee ?? "");
 
   // Epoch: poll getIntentStatus and advance the activity state machine until terminal.
   useEffect(() => {
@@ -694,7 +704,7 @@ export function ActivityDetail({ id }: { id: string }) {
                   label={activity.receivedAmount ? "Received" : "Minimum received"}
                   value={activity.receivedAmount ?? quote.minReceived}
                 />
-                <ReceiptLine label="Network fee" value={quote.networkFee} />
+                <ReceiptLine label="Network fee" value={networkFeeDisplay} />
                 <ReceiptLine label="Bridge fee" value={quote.bridgeFee} />
                 <ReceiptLine label="Relayer fee" value={quote.relayerFee} />
                 {activity.depositCount ? (

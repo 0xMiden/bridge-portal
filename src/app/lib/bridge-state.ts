@@ -198,7 +198,7 @@ export function quoteFor(mode: FlowMode, provider: BridgeProvider, amount: strin
     : isEpoch
       ? mode === "receive"
         ? "Sepolia gas"
-        : "Miden fee"
+        : "In quoted rate"
       : "0.14 USD";
   const bridgeFee = provider === "agglayer"
     ? "No provider fee"

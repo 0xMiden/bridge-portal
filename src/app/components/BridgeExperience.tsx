@@ -39,6 +39,7 @@ import {
   statusTone,
   walletGradient,
 } from "../lib/bridge-state";
+import { sepoliaGasUnitsFor, useSepoliaGasEstimate } from "../lib/sepolia-gas";
 import {
   useAppKit,
   useAppKitAccount,
@@ -224,6 +225,15 @@ export function BridgeExperience() {
     provider === "epoch" && epochQuoteAmount
       ? `${epochQuoteAmount} USDC`
       : quote.minReceived;
+  // Live Sepolia gas estimate for the network-fee line (real gasPrice * gas
+  // limit) where the fee is Sepolia-side; falls back to the route label
+  // (e.g. "Miden fee") when the leg's fee isn't on Sepolia.
+  const sepoliaGas = useSepoliaGasEstimate(sepoliaGasUnitsFor(mode, provider));
+  const networkFeeDisplay = sepoliaGas.fee
+    ? sepoliaGas.fee
+    : sepoliaGas.loading
+      ? "Estimating…"
+      : quote.networkFee;
   const isLiveAgglayerReceive = provider === "agglayer" && mode === "receive";
   // AggLayer outbound (Miden→Sepolia): builds a B2AGG bridge-out note via the
   // SDK (Note.createB2AggNote) and submits it through the MidenFi wallet.
@@ -1186,7 +1196,7 @@ export function BridgeExperience() {
             </div>
             <div>
               <span>Network fee</span>
-              <strong>{quote.networkFee}</strong>
+              <strong>{networkFeeDisplay}</strong>
             </div>
           </div>
 
