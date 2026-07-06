@@ -1768,19 +1768,23 @@ a {
     font-size: 13px;
   }
 
+  /* Overlay the dropdown (don't push the page down). Anchor the left button's
+     menu to its left edge and the right button's to its right so neither runs
+     off screen; cap the width to the viewport. */
   .wallet-actions-menu {
-    position: static;
-    display: none;
-    width: 100%;
-    margin-top: 6px;
-    transform-origin: top center;
+    width: max-content;
+    min-width: 232px;
+    max-width: calc(100vw - 24px);
   }
 
-  .wallet-actions-menu.open {
-    display: grid;
+  .wallet-cluster > .wallet-menu-root:first-child .wallet-actions-menu {
+    right: auto;
+    left: 0;
+    transform-origin: top left;
   }
 
   .wallet-cluster {
+    position: relative;
     display: grid;
     grid-template-columns: 1fr 1fr;
     gap: 8px;
