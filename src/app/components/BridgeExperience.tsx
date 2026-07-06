@@ -125,7 +125,14 @@ const EpochQuotePreview = dynamic(
   () => import("./EpochQuotePreview").then((mod) => mod.EpochQuotePreview),
   {
     ssr: false,
-    loading: () => <span className="epoch-quote-loading">…</span>,
+    // Shown while the (WASM-heavy) quote chunk loads — mirror the component's own
+    // loading state so it reads as "fetching a quote", not a cryptic "…".
+    loading: () => (
+      <span className="epoch-quote-loading">
+        <RefreshCcw size={14} className="animate-spin" aria-hidden="true" />
+        Fetching quote…
+      </span>
+    ),
   },
 );
 
