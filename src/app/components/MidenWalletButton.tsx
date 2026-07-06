@@ -38,6 +38,8 @@ type MidenWalletSnapshot = {
   // AggLayer B2AGG bridge-out note goes through this, not requestSend.
   requestTransaction?: MidenFiWalletContextState["requestTransaction"];
   waitForTransaction?: MidenFiWalletContextState["waitForTransaction"];
+  // requestAssets reads the wallet's (private) token balances — opens a popup.
+  requestAssets?: MidenFiWalletContextState["requestAssets"];
 };
 
 type MidenWalletButtonProps = {
@@ -122,6 +124,7 @@ function MidenWalletButtonInner({
       requestSend: wallet.requestSend,
       requestTransaction: wallet.requestTransaction,
       waitForTransaction: wallet.waitForTransaction,
+      requestAssets: wallet.requestAssets,
     });
   }, [
     address,
@@ -134,6 +137,7 @@ function MidenWalletButtonInner({
     wallet.requestSend,
     wallet.requestTransaction,
     wallet.waitForTransaction,
+    wallet.requestAssets,
   ]);
 
   useEffect(() => {

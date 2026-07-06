@@ -56,6 +56,14 @@ const EPOCH_SEPOLIA_USDC = {
   decimals: 18,
 } as const;
 
+// The Miden-side token each route moves, for the destination balance readout.
+const MIDEN_ROUTE_TOKEN: Partial<
+  Record<BridgeProvider, { faucetId: string; decimals: number; symbol: string }>
+> = {
+  epoch: { faucetId: "0x2458e5446128e6b150b75b8ebd9ce1", decimals: 6, symbol: "USDC" },
+  agglayer: { faucetId: "0x387149ae66116cf114eebd60bb7381", decimals: 8, symbol: "ETH" },
+};
+
 type MidenWalletSnapshot = {
   address: string;
   connected: boolean;
@@ -66,6 +74,7 @@ type MidenWalletSnapshot = {
   requestSend?: MidenFiWalletContextState["requestSend"];
   requestTransaction?: MidenFiWalletContextState["requestTransaction"];
   waitForTransaction?: MidenFiWalletContextState["waitForTransaction"];
+  requestAssets?: MidenFiWalletContextState["requestAssets"];
 };
 
 const emptyMidenWallet: MidenWalletSnapshot = {
@@ -155,6 +164,17 @@ export function BridgeExperience() {
   // Prefill the destination input with the connected wallet once per direction;
   // cleared in selectMode so switching modes re-prefills for the new side.
   const destinationPrefilledRef = useRef(false);
+  // Miden per-token balances (private → fetched via a one-time requestAssets
+  // popup on connect). Keyed by provider. In-flight ref dedups the popup across
+  // StrictMode's double-mount so it only ever asks once.
+  const [midenBalances, setMidenBalances] = useState<Record<
+    string,
+    string
+  > | null>(null);
+  const [midenBalanceFetchedFor, setMidenBalanceFetchedFor] = useState("");
+  const midenBalanceInflightRef = useRef<Promise<
+    Record<string, string>
+  > | null>(null);
   const [activities, setActivities] = useState<Activity[]>([]);
   const [hydrated, setHydrated] = useState(false);
   const [evmMenuOpen, setEvmMenuOpen] = useState(false);
@@ -199,8 +219,11 @@ export function BridgeExperience() {
   const evmBalanceText = walletConnected
     ? evmBalance || "Balance unavailable"
     : "Not connected";
+  const midenRouteToken = MIDEN_ROUTE_TOKEN[provider];
   const midenBalanceText = midenWallet.connected
-    ? midenWallet.balanceText
+    ? midenBalances && midenRouteToken
+      ? `${compactTokenAmount(midenBalances[provider] ?? "0")} ${midenRouteToken.symbol}`
+      : "Syncing…"
     : launchMidenAccount
       ? "Launch account"
       : "Not connected";
@@ -409,6 +432,61 @@ export function BridgeExperience() {
     walletConnected,
     walletAccount,
     destination,
+  ]);
+
+  // Load the Miden token balances once per connected account. requestAssets
+  // opens a MidenFi permission popup (balances are private); the in-flight ref
+  // collapses concurrent/StrictMode calls into a single popup.
+  const requestMidenAssets = midenWallet.requestAssets;
+  useEffect(() => {
+    if (!midenWallet.connected || !requestMidenAssets || !midenAddress) {
+      midenBalanceInflightRef.current = null;
+      // Reset when the wallet disconnects — syncing to an external event.
+      /* eslint-disable react-hooks/set-state-in-effect */
+      setMidenBalances(null);
+      setMidenBalanceFetchedFor("");
+      /* eslint-enable react-hooks/set-state-in-effect */
+      return;
+    }
+    if (midenBalanceFetchedFor === midenAddress) return;
+
+    let cancelled = false;
+    const run =
+      midenBalanceInflightRef.current ??
+      (midenBalanceInflightRef.current = (async () => {
+        const { fetchMidenBalances } = await import("../lib/miden-balance");
+        return fetchMidenBalances(
+          requestMidenAssets,
+          Object.entries(MIDEN_ROUTE_TOKEN).map(([key, t]) => ({
+            key,
+            faucetId: t.faucetId,
+            decimals: t.decimals,
+          })),
+        );
+      })());
+
+    run
+      .then((balances) => {
+        if (cancelled) return;
+        setMidenBalances(balances);
+        setMidenBalanceFetchedFor(midenAddress);
+      })
+      .catch(() => {
+        if (!cancelled) setMidenBalances(null);
+      })
+      .finally(() => {
+        if (midenBalanceInflightRef.current === run)
+          midenBalanceInflightRef.current = null;
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    midenWallet.connected,
+    requestMidenAssets,
+    midenAddress,
+    midenBalanceFetchedFor,
   ]);
 
   function selectMode(nextMode: FlowMode) {
@@ -949,7 +1027,7 @@ export function BridgeExperience() {
             <div className="wallet-state-strip" aria-label="Miden wallet state">
               <span>
                 <strong>Miden balance</strong>
-                {midenWallet.balanceText}
+                {midenBalanceText}
               </span>
               <span>
                 <strong>Note sync</strong>
