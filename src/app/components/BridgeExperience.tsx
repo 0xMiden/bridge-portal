@@ -148,6 +148,29 @@ function errorMessage(error: unknown) {
   return "Something went wrong. Try again.";
 }
 
+// Human labels for the Epoch SDK's execution phases, so the button reflects
+// real progress (approve/deposit/batch) instead of a frozen "Waiting".
+const EPOCH_PHASE_LABEL: Record<string, string> = {
+  starting: "Preparing…",
+  "switching-chain": "Switch network in wallet…",
+  "preparing-transaction": "Preparing transaction…",
+  "waiting-for-transaction": "Confirming on-chain…",
+  batching: "Approve & deposit in wallet…",
+  sending: "Confirm in your wallet…",
+  sent: "Submitting…",
+};
+
+// Warm the heavy client-only execute chunks (each eager-loads WASM) ahead of the
+// click so the wallet prompt appears promptly instead of after a long load.
+let epochExecutePreload: Promise<unknown> | null = null;
+function preloadEpochExecute() {
+  epochExecutePreload ??= import("../lib/epoch/epoch-execute");
+}
+let agglayerExecutePreload: Promise<unknown> | null = null;
+function preloadAgglayerExecute() {
+  agglayerExecutePreload ??= import("../lib/agglayer-execute");
+}
+
 function compactTokenAmount(value: string) {
   // A nonzero amount below the 4-dp display precision shouldn't read as "0".
   const num = Number(value);
@@ -178,6 +201,7 @@ export function BridgeExperience() {
   const [walletError, setWalletError] = useState("");
   const [bridgeError, setBridgeError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitPhase, setSubmitPhase] = useState("");
   // Prefill the destination input with the connected wallet once per direction;
   // cleared in selectMode so switching modes re-prefills for the new side.
   const destinationPrefilledRef = useRef(false);
@@ -237,6 +261,14 @@ export function BridgeExperience() {
   // AggLayer outbound (Miden→Sepolia): builds a B2AGG bridge-out note via the
   // SDK (Note.createB2AggNote) and submits it through the MidenFi wallet.
   const isLiveAgglayerSend = provider === "agglayer" && mode === "send";
+
+  // Warm the execute chunk (WASM-heavy) as soon as there's a valid amount, so
+  // the click-to-wallet-prompt delay is minimal instead of "seeming stuck".
+  useEffect(() => {
+    if (!(Number(amount) > 0)) return;
+    if (provider === "epoch") preloadEpochExecute();
+    else if (provider === "agglayer") preloadAgglayerExecute();
+  }, [amount, provider]);
   const midenAddress = midenWallet.address || launchMidenAccount;
   // Map the form fields to the Epoch quote's directional roles:
   // - send (Miden→EVM): Miden wallet is the sender; the EVM recipient is the
@@ -283,7 +315,7 @@ export function BridgeExperience() {
           : "Bridge out from Miden through AggLayer. The Sepolia claim is auto-submitted once the exit settles (~30-90 min)."
         : "Testnet route. Epoch integration status is tracked from activity details.";
   const primaryActionLabel = isSubmitting
-    ? "Waiting for wallet"
+    ? submitPhase || "Preparing…"
     : mode === "send" && !midenWallet.connected
       ? "Connect Miden wallet"
       : isLiveAgglayerSend
@@ -682,12 +714,14 @@ export function BridgeExperience() {
         return;
       }
 
+      setSubmitPhase("Preparing bridge note…");
       try {
         // Submit first — the wallet approval + note proving happen here. Only
         // once the send actually goes through do we record an activity row.
         // Dynamic import: agglayer-execute pulls the eager-WASM SDK + wallet
         // adapter, so it must load client-side at click time, never in SSR.
         const { runAgglayerSend } = await import("../lib/agglayer-execute");
+        setSubmitPhase("Confirm in your wallet…");
         const { txId } = await runAgglayerSend({
           amount: unitsAmount,
           destinationAddress,
@@ -712,6 +746,7 @@ export function BridgeExperience() {
         setBridgeError(errorMessage(error));
       } finally {
         setIsSubmitting(false);
+        setSubmitPhase("");
       }
       return;
     }
@@ -745,6 +780,7 @@ export function BridgeExperience() {
         return;
       }
 
+      setSubmitPhase("Confirm in your wallet…");
       try {
         // Sign + submit the Sepolia deposit first (wallet approval here). Only
         // record the activity row once the deposit tx is actually broadcast.
@@ -760,6 +796,7 @@ export function BridgeExperience() {
             },
           ],
         });
+        setSubmitPhase("Submitting…");
         const activity = createActivity(mode, provider, amount, {
           status: "source_finality",
           eta: "About 15 min",
@@ -778,6 +815,7 @@ export function BridgeExperience() {
         setBridgeError(errorMessage(error));
       } finally {
         setIsSubmitting(false);
+        setSubmitPhase("");
       }
       return;
     }
@@ -822,6 +860,7 @@ export function BridgeExperience() {
         setIsSubmitting(false);
         return;
       }
+      setSubmitPhase("Preparing…");
       try {
         // Submit first (wallet approval + intent broadcast happen here), then
         // record the activity row only once the transfer actually goes through.
@@ -835,6 +874,9 @@ export function BridgeExperience() {
           evmAddress: epochEvmAddress,
           requestSend: midenWallet.requestSend,
           waitForTransaction: midenWallet.waitForTransaction,
+          // Surface the SDK's approve/deposit/batch phases on the button.
+          onStatus: (phase) =>
+            setSubmitPhase(EPOCH_PHASE_LABEL[phase] ?? "Working…"),
         });
         const activity = createActivity(mode, "epoch", amount, {
           status: "message_observed",
@@ -858,6 +900,7 @@ export function BridgeExperience() {
         setBridgeError(errorMessage(error));
       } finally {
         setIsSubmitting(false);
+        setSubmitPhase("");
       }
       return;
     }
@@ -1186,7 +1229,11 @@ export function BridgeExperience() {
             disabled={isSubmitting}
           >
             {primaryActionLabel}
-            <ArrowRight size={18} aria-hidden="true" />
+            {isSubmitting ? (
+              <RefreshCcw size={18} className="animate-spin" aria-hidden="true" />
+            ) : (
+              <ArrowRight size={18} aria-hidden="true" />
+            )}
           </button>
 
           <div className={`route-disclaimer ${routeTone}`}>

@@ -1,6 +1,7 @@
 import {
   CollateralType,
   type IntentTransactionStatus,
+  type TransactionExecutionPhase,
 } from "@epoch-protocol/epoch-intents-sdk";
 import { formatUnits, parseUnits } from "viem";
 
@@ -63,6 +64,8 @@ export interface RunEpochTransferArgs {
   /** Miden write primitives from the connected MidenFi adapter. REQUIRED for send. */
   requestSend?: MidenNoteDeps["requestSend"];
   waitForTransaction?: MidenNoteDeps["waitForTransaction"];
+  /** Live execution phase (approve/deposit/batch) for UI progress on receive. */
+  onStatus?: (phase: TransactionExecutionPhase) => void;
 }
 
 export interface EpochExecuteResult {
@@ -223,6 +226,9 @@ async function runEpochReceive(
   const result = await buildEVMToMidenIntent(sdk, {
     ...params,
     preFetchedQuote: quote,
+    onExecutionStatus: args.onStatus
+      ? (status) => args.onStatus?.(status.phase)
+      : undefined,
   });
 
   if (result.error) throw new Error(result.error);
