@@ -40,6 +40,22 @@ import { sepoliaGasUnitsFor, useSepoliaGasEstimate } from "../lib/sepolia-gas";
 const SEPOLIA_CHAIN_ID = 11155111;
 
 function errorMessage(error: unknown) {
+  const code =
+    typeof error === "object" && error && "code" in error
+      ? (error as { code?: unknown }).code
+      : undefined;
+  const raw = (
+    error instanceof Error ? error.message : String(error ?? "")
+  ).toLowerCase();
+  if (
+    code === 4001 ||
+    raw.includes("user rejected") ||
+    raw.includes("user denied") ||
+    raw.includes("denied transaction") ||
+    raw.includes("rejected the request")
+  ) {
+    return "You cancelled the request in your wallet.";
+  }
   if (error instanceof Error) return error.message;
   if (typeof error === "object" && error && "message" in error)
     return String(error.message);

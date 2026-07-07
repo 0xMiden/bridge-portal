@@ -16,6 +16,27 @@ import type {
   IntentResult,
 } from "./types";
 
+/** True when an error is the user declining a wallet prompt (code 4001 / text). */
+function isUserRejectionError(err: unknown): boolean {
+  if (
+    typeof err === "object" &&
+    err !== null &&
+    "code" in err &&
+    (err as { code?: unknown }).code === 4001
+  ) {
+    return true;
+  }
+  const message = (
+    err instanceof Error ? err.message : String(err ?? "")
+  ).toLowerCase();
+  return (
+    message.includes("user rejected") ||
+    message.includes("user denied") ||
+    message.includes("denied transaction") ||
+    message.includes("rejected the request")
+  );
+}
+
 export interface CrossChainQuote {
   taskTypeString: string;
   intentData: unknown;
@@ -269,7 +290,10 @@ export async function buildEVMToMidenIntent(
       solveResult,
     };
   } catch (err) {
-    console.error("[EpochBridge] EVM→Miden solveIntent failed:", err);
+    // A wallet rejection is expected user behaviour — don't log it as an error.
+    if (!isUserRejectionError(err)) {
+      console.error("[EpochBridge] EVM→Miden solveIntent failed:", err);
+    }
     return {
       taskTypeString,
       intentData: intentData as Record<string, unknown>,
@@ -352,7 +376,9 @@ export async function buildCrossChainIntent(
       solveResult, // Include the full execution result
     };
   } catch (err) {
-    console.error("[EpochBridge] solveIntent failed:", err);
+    if (!isUserRejectionError(err)) {
+      console.error("[EpochBridge] solveIntent failed:", err);
+    }
     // Still return the task data even if solve fails
     return {
       taskTypeString,

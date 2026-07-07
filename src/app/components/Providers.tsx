@@ -3,6 +3,7 @@
 import dynamic from "next/dynamic";
 import type { ReactNode } from "react";
 import { AppKitProvider } from "./AppKitProvider";
+import { RejectionGuard } from "./RejectionGuard";
 
 // The MidenFi provider eager-loads the Miden SDK WASM, so it must stay out of
 // the server render — load it client-only. Mounting it here (at the app root)
@@ -21,6 +22,7 @@ export function Providers({
 }) {
   return (
     <AppKitProvider cookies={cookies}>
+      <RejectionGuard />
       <MidenWalletProvider>{children}</MidenWalletProvider>
     </AppKitProvider>
   );
