@@ -219,6 +219,9 @@ export function BridgeExperience() {
   const walletAccount = address ?? "";
   const walletConnected = isConnected && Boolean(address);
   const [evmBalance, setEvmBalance] = useState("");
+  // Numeric Sepolia balance of the route's source token, for the
+  // insufficient-balance guard (null = unknown / not yet loaded).
+  const [evmBalanceValue, setEvmBalanceValue] = useState<number | null>(null);
   const [midenWallet, setMidenWallet] =
     useState<MidenWalletSnapshot>(emptyMidenWallet);
   const [launchMidenAccount, setLaunchMidenAccount] = useState("");
@@ -325,6 +328,17 @@ export function BridgeExperience() {
   const hasDestination = Boolean(
     destination.trim() || (mode === "receive" ? midenAddress : walletAccount),
   );
+  // Receive deposits the source token from the connected Sepolia wallet, so a
+  // request above its balance would revert on-chain (MetaMask shows "likely to
+  // fail"). Block it in-app before the wallet prompt. Send sources from the
+  // (private) Miden balance, which we can't read here, so it isn't guarded.
+  const sourceTokenSymbol = provider === "epoch" ? "USDC" : "ETH";
+  const insufficientBalance =
+    mode === "receive" &&
+    walletConnected &&
+    evmBalanceValue != null &&
+    Number(amount) > 0 &&
+    Number(amount) > evmBalanceValue;
   const routeTone = providers[provider].disabled
     ? "disabled"
     : provider === "near-intents"
@@ -340,7 +354,9 @@ export function BridgeExperience() {
         : "Testnet route. Epoch integration status is tracked from activity details.";
   const primaryActionLabel = isSubmitting
     ? submitPhase || "Preparing…"
-    : mode === "send" && !midenWallet.connected
+    : insufficientBalance
+      ? `Not enough ${sourceTokenSymbol}`
+      : mode === "send" && !midenWallet.connected
       ? "Connect Miden wallet"
       : isLiveAgglayerSend
         ? "Bridge out to Sepolia"
@@ -484,14 +500,18 @@ export function BridgeExperience() {
         if (cancelled) return;
         if (isEpoch) {
           setEvmBalance(`${compactTokenAmount(payload.balance ?? "0")} USDC`);
+          setEvmBalanceValue(Number(payload.balance ?? "0"));
         } else {
-          setEvmBalance(
-            `${compactTokenAmount(formatEther(BigInt(payload.balanceWei ?? "0")))} ETH`,
-          );
+          const eth = formatEther(BigInt(payload.balanceWei ?? "0"));
+          setEvmBalance(`${compactTokenAmount(eth)} ETH`);
+          setEvmBalanceValue(Number(eth));
         }
       })
       .catch(() => {
-        if (!cancelled) setEvmBalance("");
+        if (!cancelled) {
+          setEvmBalance("");
+          setEvmBalanceValue(null);
+        }
       });
 
     return () => {
@@ -692,6 +712,14 @@ export function BridgeExperience() {
 
     if (providers[provider].disabled) {
       setBridgeError("This route isn't available in this build.");
+      return;
+    }
+    // Guard the deposit before opening the wallet: a request above the Sepolia
+    // balance reverts on-chain (MetaMask "likely to fail").
+    if (insufficientBalance) {
+      setBridgeError(
+        `Not enough ${sourceTokenSymbol} — this wallet holds ${evmBalance}. Lower the amount.`,
+      );
       return;
     }
     // Every send signs on Miden (Epoch send + AggLayer bridge-out) — require the
@@ -1250,7 +1278,7 @@ export function BridgeExperience() {
             className="primary-button"
             type="button"
             onClick={submitTransfer}
-            disabled={isSubmitting}
+            disabled={isSubmitting || insufficientBalance}
           >
             {primaryActionLabel}
             {isSubmitting ? (
