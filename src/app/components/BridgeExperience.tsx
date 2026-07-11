@@ -109,7 +109,10 @@ function modeFromIntent(value: string | null): FlowMode | null {
 }
 
 const MidenWalletButton = dynamic(
-  () => import("./MidenWalletButton").then((mod) => mod.MidenWalletButton),
+  () =>
+    process.env.NEXT_PUBLIC_E2E_TEST === "true"
+      ? import("./E2EMidenWalletButton").then((mod) => mod.E2EMidenWalletButton)
+      : import("./MidenWalletButton").then((mod) => mod.MidenWalletButton),
   {
     ssr: false,
     loading: () => (

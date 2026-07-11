@@ -20,7 +20,7 @@ function WalletBrandIcon({ src, size }: { src?: string; size: number }) {
   return <img src={src} alt="" style={s} />;
 }
 
-type MidenWalletSnapshot = {
+export type MidenWalletSnapshot = {
   address: string;
   connected: boolean;
   error: string;
