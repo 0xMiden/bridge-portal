@@ -1,13 +1,11 @@
 import type { Transaction } from "@miden-sdk/miden-wallet-adapter-base";
 import type { E2EMidenSigner } from "./miden-signer";
 
-// ⚠️ UNVALIDATED against the live network — this is the one harness piece that
-// needs a funded Miden testnet account to verify. It reimplements the slice of
-// the MidenFi adapter the bridge uses (submit a TransactionRequest with a
-// headless key), using @miden-sdk WebClient's one-call prove+submit path
-// (`submitNewTransaction`). Structure + API calls are grounded in the shipped
-// .d.ts; the account-derivation-from-seed step (marked below) is the most
-// likely thing to adjust when validating with a real seed.
+// ⚠️ The Miden send path is the one harness piece needing a funded testnet
+// account to validate. Receive only needs the account ADDRESS (the app deposits
+// into it on Sepolia), so the signer exposes that immediately and builds the
+// heavy @miden-sdk WebClient lazily on first send — a broken client / missing
+// CLI never blocks the receive specs.
 
 const TESTNET_RPC = "https://rpc.testnet.miden.io";
 const TESTNET_TRANSPORT = "https://transport.miden.io";
@@ -24,59 +22,72 @@ function hexToBytes(hex: string): Uint8Array {
 export async function createTestnetMidenSignerImpl(
   seed: string,
 ): Promise<E2EMidenSigner> {
-  const sdk = await import("@miden-sdk/miden-sdk");
-  const { WebClient, AccountId } = sdk;
-
-  const seedBytes = hexToBytes(seed);
-  const client = await new WebClient().createClient(
-    TESTNET_RPC,
-    TESTNET_TRANSPORT,
-    seedBytes,
-    "miden-bridge-e2e",
-    false,
-  );
-
-  // ── account derivation (VALIDATE THIS) ──────────────────────────────────
-  // The funded account id must be supplied so the client can track it. Prefer
-  // an explicit id env; recreating the wallet from `seed` is the alternative
-  // but must match how the account was originally funded.
-  const accountIdHex = process.env.NEXT_PUBLIC_E2E_MIDEN_ACCOUNT_ID;
-  if (!accountIdHex) {
+  const envAccountId = process.env.NEXT_PUBLIC_E2E_MIDEN_ACCOUNT_ID;
+  if (!envAccountId) {
     throw new Error(
-      "Set NEXT_PUBLIC_E2E_MIDEN_ACCOUNT_ID to the funded Miden testnet account id (hex).",
+      "Set E2E_MIDEN_ACCOUNT_ID to your funded Miden testnet account (bech32 mtst1… or 0x hex).",
     );
   }
-  const accountId = AccountId.fromHex(accountIdHex);
-  await client.importAccountById(accountId).catch(() => undefined);
-  await client.syncState();
+  const accountIdStr: string = envAccountId;
 
-  async function submitRequest(request: unknown): Promise<string> {
-    // submitNewTransaction proves, submits, and applies in one call.
-    const txId = await client.submitNewTransaction(
-      accountId,
-      request as never,
-    );
-    return String(txId);
+  // Lazy, memoised WebClient — created only when a send is actually attempted.
+  let clientPromise: Promise<{
+    client: {
+      submitNewTransaction: (id: unknown, req: unknown) => Promise<unknown>;
+      newSendTransactionRequest: (...args: unknown[]) => Promise<unknown>;
+      getAccountVault: (id: unknown) => Promise<{
+        fungibleAssets: () => Array<{ faucetId(): unknown; amount(): unknown }>;
+      }>;
+      syncState: () => Promise<unknown>;
+    };
+    accountId: unknown;
+    sdk: typeof import("@miden-sdk/miden-sdk");
+  }> | null = null;
+
+  function getClient() {
+    if (!clientPromise) {
+      clientPromise = (async () => {
+        const sdk = await import("@miden-sdk/miden-sdk");
+        const { WebClient, AccountId } = sdk;
+        const accountId = accountIdStr.startsWith("mtst1")
+          ? AccountId.fromBech32(accountIdStr)
+          : AccountId.fromHex(accountIdStr);
+        const client = await new WebClient().createClient(
+          TESTNET_RPC,
+          TESTNET_TRANSPORT,
+          hexToBytes(seed),
+          "miden-bridge-e2e",
+          false,
+        );
+        await client.importAccountById(accountId).catch(() => undefined);
+        await client.syncState().catch(() => undefined);
+        return { client, accountId, sdk } as never;
+      })();
+    }
+    return clientPromise;
+  }
+
+  async function submit(request: unknown): Promise<string> {
+    const { client, accountId } = await getClient();
+    return String(await client.submitNewTransaction(accountId, request));
   }
 
   const requestTransaction = (async (transaction: Transaction) => {
-    // Custom tx: the pre-built TransactionRequest rides in the payload.
     const payload = transaction.payload as { transactionRequest?: unknown };
     if (!payload?.transactionRequest) {
       throw new Error("E2E Miden signer: custom transaction is missing its request.");
     }
-    return submitRequest(payload.transactionRequest);
+    return submit(payload.transactionRequest);
   }) as unknown as E2EMidenSigner["requestTransaction"];
 
   const requestSend = (async (transaction: Transaction) => {
-    // Send tx: build a P2ID request from the payload, then submit.
+    const { client, accountId, sdk } = await getClient();
     const p = transaction.payload as unknown as {
       recipient: string;
       faucetId: string;
       amount: number | bigint;
-      noteType?: string;
     };
-    const { NoteType } = sdk;
+    const { AccountId, NoteType } = sdk;
     const request = await client.newSendTransactionRequest(
       accountId,
       AccountId.fromHex(p.recipient),
@@ -84,32 +95,35 @@ export async function createTestnetMidenSignerImpl(
       NoteType.Private,
       BigInt(p.amount),
     );
-    return submitRequest(request);
+    return submit(request);
   }) as unknown as E2EMidenSigner["requestSend"];
 
   const waitForTransaction = (async () => {
-    // Poll chain sync a few times so the submitted tx commits.
+    const { client } = await getClient();
     for (let i = 0; i < 30; i += 1) {
-      await client.syncState();
+      await client.syncState().catch(() => undefined);
       await new Promise((r) => setTimeout(r, 5000));
     }
   }) as unknown as E2EMidenSigner["waitForTransaction"];
 
   const requestAssets = (async () => {
-    const vault = await client.getAccountVault(accountId);
-    return vault
-      .fungibleAssets()
-      .map((a: { faucetId(): unknown; amount(): unknown }) => ({
+    try {
+      const { client, accountId } = await getClient();
+      const vault = await client.getAccountVault(accountId);
+      return vault.fungibleAssets().map((a) => ({
         faucetId: String(a.faucetId()),
         amount: String(a.amount()),
       }));
+    } catch {
+      return [];
+    }
   }) as unknown as E2EMidenSigner["requestAssets"];
 
   const requestConsumableNotes = (async () =>
     []) as unknown as E2EMidenSigner["requestConsumableNotes"];
 
   return {
-    address: accountIdHex,
+    address: accountIdStr,
     requestSend,
     requestTransaction,
     waitForTransaction,
