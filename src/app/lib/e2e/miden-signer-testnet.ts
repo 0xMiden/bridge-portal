@@ -142,8 +142,15 @@ export async function createTestnetMidenSignerImpl(
     }
   }) as unknown as E2EMidenSigner["requestAssets"];
 
-  const requestConsumableNotes = (async () =>
-    []) as unknown as E2EMidenSigner["requestConsumableNotes"];
+  const requestConsumableNotes = (async () => {
+    try {
+      const { client, accountId } = await getClient();
+      await client.syncState().catch(() => undefined);
+      return await client.getConsumableNotes(accountId);
+    } catch {
+      return [];
+    }
+  }) as unknown as E2EMidenSigner["requestConsumableNotes"];
 
   return {
     address: accountIdStr,

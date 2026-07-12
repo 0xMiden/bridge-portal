@@ -46,7 +46,15 @@ export function E2EMidenWalletButton({
           requestAssets: signer.requestAssets,
           requestConsumableNotes: signer.requestConsumableNotes,
         });
-        publishE2E({ midenAddress: signer.address, midenReady: true });
+        publishE2E({
+          midenAddress: signer.address,
+          midenReady: true,
+          // Real bridged-note detector for the round-trip settlement gate.
+          midenConsumableCount: async () => {
+            const notes = await signer.requestConsumableNotes();
+            return Array.isArray(notes) ? notes.length : 0;
+          },
+        });
       } catch (error) {
         if (cancelled) return;
         const message =

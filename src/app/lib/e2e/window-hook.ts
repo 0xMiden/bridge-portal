@@ -14,6 +14,12 @@ export type E2EWindowHook = {
   ready?: boolean;
   /** Read the persisted activity list (for harness state assertions). */
   readActivities: () => unknown[];
+  /**
+   * Count of consumable notes on the Miden account — the real on-chain artifact
+   * of a settled bridge-in. The round-trip spec polls this to detect the actual
+   * arrival (not a balance delta) before sending back.
+   */
+  midenConsumableCount?: () => Promise<number>;
 };
 
 declare global {

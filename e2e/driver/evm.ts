@@ -99,3 +99,15 @@ export async function isSepoliaTxConfirmed(hash: `0x${string}`): Promise<boolean
     .catch(() => null);
   return receipt?.status === "success";
 }
+
+/** Wait for a real Sepolia receipt and assert it mined successfully. */
+export async function waitForSepoliaTxSuccess(
+  hash: `0x${string}`,
+  timeoutMs = 180_000,
+): Promise<boolean> {
+  const { publicClient } = clients();
+  const receipt = await publicClient
+    .waitForTransactionReceipt({ hash, timeout: timeoutMs })
+    .catch(() => null);
+  return receipt?.status === "success";
+}
