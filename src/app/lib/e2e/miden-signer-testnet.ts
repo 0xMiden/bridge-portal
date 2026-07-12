@@ -38,6 +38,10 @@ export async function createTestnetMidenSignerImpl(
       getAccountVault: (id: unknown) => Promise<{
         fungibleAssets: () => Array<{ faucetId(): unknown; amount(): unknown }>;
       }>;
+      getConsumableNotes: (
+        id: unknown,
+      ) => Promise<Array<{ inputNoteRecord(): unknown }>>;
+      newConsumeTransactionRequest: (notes: unknown) => unknown;
       syncState: () => Promise<unknown>;
     };
     accountId: unknown;
@@ -72,15 +76,34 @@ export async function createTestnetMidenSignerImpl(
     return String(await client.submitNewTransaction(accountId, request));
   }
 
+  // Consume any bridged-in notes so their assets land in the account vault and
+  // become spendable — the account only holds this seed, so nothing else will
+  // consume them. Called before a send so a settled receive self-funds the
+  // round-trip. Best-effort: no consumable notes = no-op.
+  async function consumeBridgedNotes(): Promise<void> {
+    const { client, accountId } = await getClient();
+    await client.syncState().catch(() => undefined);
+    const records = (await client
+      .getConsumableNotes(accountId)
+      .catch(() => [])) as Array<{ inputNoteRecord(): unknown }>;
+    if (!records.length) return;
+    const notes = records.map((r) => r.inputNoteRecord());
+    const request = client.newConsumeTransactionRequest(notes as never);
+    await client.submitNewTransaction(accountId, request as never);
+    await client.syncState().catch(() => undefined);
+  }
+
   const requestTransaction = (async (transaction: Transaction) => {
     const payload = transaction.payload as { transactionRequest?: unknown };
     if (!payload?.transactionRequest) {
       throw new Error("E2E Miden signer: custom transaction is missing its request.");
     }
+    await consumeBridgedNotes(); // self-fund from a settled receive
     return submit(payload.transactionRequest);
   }) as unknown as E2EMidenSigner["requestTransaction"];
 
   const requestSend = (async (transaction: Transaction) => {
+    await consumeBridgedNotes(); // self-fund from a settled receive
     const { client, accountId, sdk } = await getClient();
     const p = transaction.payload as unknown as {
       recipient: string;
