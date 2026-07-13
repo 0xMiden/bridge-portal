@@ -33,6 +33,10 @@ const walletEnv = {
   NEXT_PUBLIC_E2E_EVM_PRIVATE_KEY: evmKey,
   NEXT_PUBLIC_E2E_MIDEN_SEED: process.env.E2E_MIDEN_SEED ?? "",
   NEXT_PUBLIC_E2E_MIDEN_ACCOUNT_ID: process.env.E2E_MIDEN_ACCOUNT_ID ?? "",
+  // Hex of the exported MidenFi account file — required for the SEND specs (a
+  // private account can't be reconstructed from seed; the file carries its keys
+  // + private-note context).
+  NEXT_PUBLIC_E2E_MIDEN_ACCOUNT_FILE: process.env.E2E_MIDEN_ACCOUNT_FILE ?? "",
 };
 
 export default defineConfig({

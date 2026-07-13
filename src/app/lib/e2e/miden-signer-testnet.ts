@@ -52,19 +52,53 @@ export async function createTestnetMidenSignerImpl(
     if (!clientPromise) {
       clientPromise = (async () => {
         const sdk = await import("@miden-sdk/miden-sdk");
-        const { WebClient, AccountId } = sdk;
+        const { WebClient, AccountId, AccountFile } = sdk as unknown as {
+          WebClient: new () => { createClient: (...a: unknown[]) => Promise<never> };
+          AccountId: {
+            fromBech32: (s: string) => unknown;
+            fromHex: (s: string) => unknown;
+          };
+          AccountFile: { deserialize: (b: Uint8Array) => unknown };
+        };
         const accountId = accountIdStr.startsWith("mtst1")
           ? AccountId.fromBech32(accountIdStr)
           : AccountId.fromHex(accountIdStr);
-        const client = await new WebClient().createClient(
+        const client = (await new WebClient().createClient(
           TESTNET_RPC,
           TESTNET_TRANSPORT,
           hexToBytes(seed),
           "miden-bridge-e2e",
           false,
-        );
-        await client.importAccountById(accountId).catch(() => undefined);
-        await client.syncState().catch(() => undefined);
+        )) as never;
+
+        // A PRIVATE account (MidenFi's default) cannot be reconstructed from its
+        // seed — the SDK requires the exported ACCOUNT FILE for the client to
+        // hold the account's keys + private-note context (so getConsumableNotes
+        // sees bridged notes and it can sign). Import the file when provided;
+        // otherwise fall back to import-by-id (read-only — sends won't work).
+        const fileHex = process.env.NEXT_PUBLIC_E2E_MIDEN_ACCOUNT_FILE;
+        const c = client as unknown as {
+          importAccountFile: (f: unknown) => Promise<unknown>;
+          importAccountById: (id: unknown) => Promise<unknown>;
+          syncState: () => Promise<unknown>;
+        };
+        let imported = "id-only";
+        if (fileHex) {
+          try {
+            await c.importAccountFile(AccountFile.deserialize(hexToBytes(fileHex)));
+            imported = "account-file";
+          } catch (e) {
+            imported = "file-err:" + (e as Error).message.slice(0, 60);
+          }
+        } else {
+          await c.importAccountById(accountId).catch(() => undefined);
+        }
+        await c.syncState().catch(() => undefined);
+        if (typeof window !== "undefined") {
+          (window as unknown as { __E2E_RECON__?: unknown }).__E2E_RECON__ = {
+            imported,
+          };
+        }
         return { client, accountId, sdk } as never;
       })();
     }
