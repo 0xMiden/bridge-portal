@@ -54,6 +54,23 @@ export function E2EMidenWalletButton({
             const notes = await signer.requestConsumableNotes();
             return Array.isArray(notes) ? notes.length : 0;
           },
+          // Vault USDC balance — the signal for an auto-consumed Epoch receive.
+          midenUsdcBalance: async () => {
+            const assets = (await signer.requestAssets()) as unknown as Array<{
+              faucetId?: string;
+              amount?: string | number;
+            }>;
+            const usdc = "0xfc90f0f4da30e51168453b60eafed7"; // Miden USDC faucet
+            const total = (Array.isArray(assets) ? assets : []).reduce(
+              (sum, a) =>
+                (a.faucetId ?? "").toLowerCase().includes("fc90f0f4")
+                  ? sum + BigInt(a.amount ?? 0)
+                  : sum,
+              0n,
+            );
+            void usdc;
+            return total.toString();
+          },
         });
       } catch (error) {
         if (cancelled) return;

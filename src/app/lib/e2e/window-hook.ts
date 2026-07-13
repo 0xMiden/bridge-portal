@@ -20,6 +20,12 @@ export type E2EWindowHook = {
    * arrival (not a balance delta) before sending back.
    */
   midenConsumableCount?: () => Promise<number>;
+  /**
+   * Spendable USDC in the Miden account vault (base units, as a string). For
+   * Epoch the bridged note is auto-consumed, so a settled receive shows up here
+   * as vault balance rather than as a consumable note.
+   */
+  midenUsdcBalance?: () => Promise<string>;
 };
 
 declare global {
