@@ -20,7 +20,6 @@ import { formatEther, parseUnits } from "viem";
 import {
   AGGLAYER_BALI,
   buildSepoliaDepositTransaction,
-  isMidenAccountHex,
   normalizeMidenAccountHex,
 } from "../lib/agglayer";
 import {
@@ -634,13 +633,9 @@ export function BridgeExperience() {
     if (providers[nextProvider].disabled) return;
     setProvider(nextProvider);
     setBridgeError("");
-    if (
-      nextProvider === "agglayer" &&
-      mode === "receive" &&
-      !isMidenAccountHex(destination)
-    ) {
-      setDestination("");
-    }
+    // Destination is route-agnostic: the connected Miden wallet address (bech32)
+    // prefills for both routes and the AggLayer submit normalizes it to hex — so
+    // AggLayer behaves exactly like Epoch (no special clearing here).
   }
 
   function selectRouteOption(nextProvider: BridgeProvider) {
