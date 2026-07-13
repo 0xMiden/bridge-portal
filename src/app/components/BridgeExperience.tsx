@@ -626,7 +626,15 @@ export function BridgeExperience() {
   // Only surface transfers that are still in progress — the just-initiated one(s).
   // Completed/failed history isn't shown on the home page (view it via its link).
   const inFlightActivities = activities.filter(
-    (a) => a.status !== "complete" && a.status !== "failed",
+    (a) =>
+      a.status !== "complete" &&
+      a.status !== "failed" &&
+      // Drop orphaned "Needs signature" rows that never broadcast a source tx.
+      // Every live path records its activity only AFTER the tx is submitted (at
+      // source_finality / message_observed), so a persisted signature-stage row
+      // with no sourceTxHash is a stale leftover from a pre-refactor session,
+      // not a resumable transfer.
+      !(a.status === "signature" && !a.sourceTxHash),
   );
 
   function selectProvider(nextProvider: BridgeProvider) {
