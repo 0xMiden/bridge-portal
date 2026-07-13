@@ -1,0 +1,71 @@
+name: e2e
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  # Real-testnet tier: nightly + on-demand (label a PR "run-e2e" or dispatch).
+  schedule:
+    - cron: "0 6 * * *"
+  workflow_dispatch:
+
+jobs:
+  # Fast, deterministic, every-PR: unit tier + mock e2e tier. No secrets.
+  mock:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci
+      - run: npm test
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:e2e:mock
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: mock-results
+          path: test-results/
+          retention-days: 7
+
+  # Full E2E against real Sepolia + Miden testnet. Nightly / on the "run-e2e"
+  # label. Needs funded-account secrets; headless (no xvfb — no extension).
+  testnet:
+    if: >-
+      github.event_name == 'schedule' ||
+      github.event_name == 'workflow_dispatch' ||
+      contains(github.event.pull_request.labels.*.name, 'run-e2e')
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      E2E_NETWORK: testnet
+      E2E_EVM_PRIVATE_KEY: ${{ secrets.E2E_EVM_PRIVATE_KEY }}
+      E2E_MIDEN_SEED: ${{ secrets.E2E_MIDEN_SEED }}
+      E2E_MIDEN_ACCOUNT_ID: ${{ secrets.E2E_MIDEN_ACCOUNT_ID }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: dtolnay/rust-toolchain@stable
+      # Version-matched miden-client CLI (counterparty driver), cached.
+      - name: Cache miden-client CLI
+        id: cli-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/bin/miden-client
+          key: miden-client-${{ runner.os }}-0.15.4
+      - name: Install miden-client CLI
+        if: steps.cli-cache.outputs.cache-hit != 'true'
+        run: cargo install miden-client-cli --locked --version 0.15.4 || true
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:e2e:testnet
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: e2e-results
+          path: test-results/
+          retention-days: 7

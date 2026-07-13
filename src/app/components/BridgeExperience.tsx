@@ -9,7 +9,6 @@ import {
   ExternalLink,
   LogOut,
   RefreshCcw,
-  ShieldCheck,
   Wallet,
 } from "lucide-react";
 import dynamic from "next/dynamic";
@@ -21,7 +20,6 @@ import { formatEther, parseUnits } from "viem";
 import {
   AGGLAYER_BALI,
   buildSepoliaDepositTransaction,
-  isMidenAccountHex,
   normalizeMidenAccountHex,
 } from "../lib/agglayer";
 import {
@@ -37,7 +35,9 @@ import {
   shortAddress,
   statusLabel,
   statusTone,
+  walletGradient,
 } from "../lib/bridge-state";
+import { sepoliaGasUnitsFor, useSepoliaGasEstimate } from "../lib/sepolia-gas";
 import {
   useAppKit,
   useAppKitAccount,
@@ -49,6 +49,29 @@ import { type EvmProvider, ensureSepolia } from "../lib/evm-wallet";
 // Type-only import — erased at build, so the eager-WASM adapter never reaches SSR.
 import type { MidenFiWalletContextState } from "@miden-sdk/miden-wallet-adapter-react";
 
+// Sepolia USDC for the Epoch route (Epoch's SIO route is USDC<->USDC). This test
+// token reports 18 decimals (not the usual 6). Mint it on the Epoch dashboard.
+const EPOCH_SEPOLIA_USDC = {
+  address: "0x2BB4FfD7E2c6D432b697554Efd77fA13bdbefd69",
+  decimals: 18,
+} as const;
+
+// The Miden-side token each route moves, for the destination balance readout.
+const MIDEN_ROUTE_TOKEN: Partial<
+  Record<BridgeProvider, { faucetId: string; decimals: number; symbol: string }>
+> = {
+  epoch: { faucetId: "0xfc90f0f4da30e51168453b60eafed7", decimals: 6, symbol: "USDC" },
+  agglayer: { faucetId: "0x387149ae66116cf114eebd60bb7381", decimals: 8, symbol: "ETH" },
+};
+
+/** The connected wallet's own brand logo, or a neutral wallet fallback. */
+function WalletBrandIcon({ src, size }: { src?: string; size: number }) {
+  if (!src) return <Wallet size={size} aria-hidden="true" />;
+  const s = { width: size, height: size, borderRadius: 5, display: "block" };
+  // eslint-disable-next-line @next/next/no-img-element -- data-URI wallet logo, not an optimizable asset
+  return <img src={src} alt="" style={s} />;
+}
+
 type MidenWalletSnapshot = {
   address: string;
   connected: boolean;
@@ -59,6 +82,8 @@ type MidenWalletSnapshot = {
   requestSend?: MidenFiWalletContextState["requestSend"];
   requestTransaction?: MidenFiWalletContextState["requestTransaction"];
   waitForTransaction?: MidenFiWalletContextState["waitForTransaction"];
+  requestAssets?: MidenFiWalletContextState["requestAssets"];
+  requestConsumableNotes?: MidenFiWalletContextState["requestConsumableNotes"];
 };
 
 const emptyMidenWallet: MidenWalletSnapshot = {
@@ -83,21 +108,20 @@ function modeFromIntent(value: string | null): FlowMode | null {
 }
 
 const MidenWalletButton = dynamic(
-  () => import("./MidenWalletButton").then((mod) => mod.MidenWalletButton),
+  () =>
+    process.env.NEXT_PUBLIC_E2E_TEST === "true"
+      ? import("./E2EMidenWalletButton").then((mod) => mod.E2EMidenWalletButton)
+      : import("./MidenWalletButton").then((mod) => mod.MidenWalletButton),
   {
     ssr: false,
     loading: () => (
       <button className="wallet-button wallet-pill" type="button" disabled>
-        <span className="wallet-icon">
-          <ShieldCheck size={16} aria-hidden="true" />
+        <span className="wallet-avatar">
+          <span className="wallet-avatar-badge">
+            <WalletBrandIcon size={11} />
+          </span>
         </span>
-        <span className="wallet-copy">
-          <small>
-            <span className="wallet-status-dot pending" />
-            Miden
-          </small>
-          <span>Loading</span>
-        </span>
+        <span className="wallet-pill-label">Loading</span>
       </button>
     ),
   },
@@ -108,18 +132,75 @@ const EpochQuotePreview = dynamic(
   () => import("./EpochQuotePreview").then((mod) => mod.EpochQuotePreview),
   {
     ssr: false,
-    loading: () => <span className="epoch-quote-loading">…</span>,
+    // Shown while the (WASM-heavy) quote chunk loads — mirror the component's own
+    // loading state so it reads as "fetching a quote", not a cryptic "…".
+    loading: () => (
+      <span className="epoch-quote-loading">
+        <RefreshCcw size={14} className="animate-spin" aria-hidden="true" />
+        Fetching quote…
+      </span>
+    ),
   },
 );
 
+// A wallet rejection is a normal user action, not a failure — detect it so the
+// UI can show a short, friendly line instead of a raw multi-line SDK/viem dump.
+function isUserRejection(error: unknown): boolean {
+  if (
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    (error as { code?: unknown }).code === 4001
+  ) {
+    return true;
+  }
+  const message = (
+    error instanceof Error ? error.message : String(error ?? "")
+  ).toLowerCase();
+  return (
+    message.includes("user rejected") ||
+    message.includes("user denied") ||
+    message.includes("denied transaction") ||
+    message.includes("rejected the request") ||
+    message.includes("action_rejected")
+  );
+}
+
 function errorMessage(error: unknown) {
+  if (isUserRejection(error)) return "You cancelled the request in your wallet.";
   if (error instanceof Error) return error.message;
   if (typeof error === "object" && error && "message" in error)
     return String(error.message);
   return "Something went wrong. Try again.";
 }
 
+// Human labels for the Epoch SDK's execution phases, so the button reflects
+// real progress (approve/deposit/batch) instead of a frozen "Waiting".
+const EPOCH_PHASE_LABEL: Record<string, string> = {
+  starting: "Preparing…",
+  "switching-chain": "Switch network in wallet…",
+  "preparing-transaction": "Preparing transaction…",
+  "waiting-for-transaction": "Confirming on-chain…",
+  batching: "Approve & deposit in wallet…",
+  sending: "Confirm in your wallet…",
+  sent: "Submitting…",
+};
+
+// Warm the heavy client-only execute chunks (each eager-loads WASM) ahead of the
+// click so the wallet prompt appears promptly instead of after a long load.
+let epochExecutePreload: Promise<unknown> | null = null;
+function preloadEpochExecute() {
+  epochExecutePreload ??= import("../lib/epoch/epoch-execute");
+}
+let agglayerExecutePreload: Promise<unknown> | null = null;
+function preloadAgglayerExecute() {
+  agglayerExecutePreload ??= import("../lib/agglayer-execute");
+}
+
 function compactTokenAmount(value: string) {
+  // A nonzero amount below the 4-dp display precision shouldn't read as "0".
+  const num = Number(value);
+  if (num > 0 && num < 0.0001) return "<0.0001";
   const [whole, fraction = ""] = value.split(".");
   const compactFraction = fraction.slice(0, 4).replace(/0+$/, "");
   return compactFraction ? `${whole}.${compactFraction}` : whole;
@@ -132,6 +213,7 @@ export function BridgeExperience() {
   const { walletProvider } = useAppKitProvider<EvmProvider>("eip155");
   const { disconnect } = useDisconnect();
   const { walletInfo } = useWalletInfo();
+  const evmIcon = walletInfo?.icon;
   const [provider, setProvider] = useState<BridgeProvider>("epoch");
   const [mode, setMode] = useState<FlowMode>("receive");
   const [amount, setAmount] = useState("100");
@@ -139,12 +221,35 @@ export function BridgeExperience() {
   const walletAccount = address ?? "";
   const walletConnected = isConnected && Boolean(address);
   const [evmBalance, setEvmBalance] = useState("");
+  // Numeric Sepolia balance of the route's source token, for the
+  // insufficient-balance guard (null = unknown / not yet loaded).
+  const [evmBalanceValue, setEvmBalanceValue] = useState<number | null>(null);
   const [midenWallet, setMidenWallet] =
     useState<MidenWalletSnapshot>(emptyMidenWallet);
   const [launchMidenAccount, setLaunchMidenAccount] = useState("");
   const [walletError, setWalletError] = useState("");
   const [bridgeError, setBridgeError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitPhase, setSubmitPhase] = useState("");
+  // Prefill the destination input with the connected wallet once per direction;
+  // cleared in selectMode so switching modes re-prefills for the new side.
+  const destinationPrefilledRef = useRef(false);
+  // Miden per-token balances (private → fetched via a one-time requestAssets
+  // popup on connect). Keyed by provider. In-flight ref dedups the popup across
+  // StrictMode's double-mount so it only ever asks once.
+  const [midenBalances, setMidenBalances] = useState<Record<
+    string,
+    string
+  > | null>(null);
+  const [midenBalanceFetchedFor, setMidenBalanceFetchedFor] = useState("");
+  // Live Epoch API quote amount, lifted from EpochQuotePreview so the
+  // Min-received detail reflects the real quote (not a hardcoded estimate).
+  const [epochQuoteAmount, setEpochQuoteAmount] = useState<string | undefined>(
+    undefined,
+  );
+  const midenBalanceInflightRef = useRef<Promise<
+    Record<string, string>
+  > | null>(null);
   const [activities, setActivities] = useState<Activity[]>([]);
   const [hydrated, setHydrated] = useState(false);
   const [evmMenuOpen, setEvmMenuOpen] = useState(false);
@@ -159,10 +264,40 @@ export function BridgeExperience() {
     () => quoteFor(mode, provider, amount),
     [amount, mode, provider],
   );
+  // The received-token unit for the "To" box pill: Epoch bridges USDC, AggLayer ETH.
+  const destinationSymbol =
+    provider === "epoch" ? "USDC" : copy.assetOut.replace("Miden ", "");
+  // Amount without the trailing symbol (the pill renders the symbol separately).
+  const expectedReceivedAmount = quote.expectedReceived.replace(
+    /\s*[A-Za-z]+$/,
+    "",
+  );
+  // Min received: for Epoch use the live API quote; otherwise the route quote.
+  const displayMinReceived =
+    provider === "epoch" && epochQuoteAmount
+      ? `${epochQuoteAmount} USDC`
+      : quote.minReceived;
+  // Live Sepolia gas estimate for the network-fee line (real gasPrice * gas
+  // limit) where the fee is Sepolia-side; falls back to the route label
+  // (e.g. "Miden fee") when the leg's fee isn't on Sepolia.
+  const sepoliaGas = useSepoliaGasEstimate(sepoliaGasUnitsFor(mode, provider));
+  const networkFeeDisplay = sepoliaGas.fee
+    ? sepoliaGas.fee
+    : sepoliaGas.loading
+      ? "Estimating…"
+      : quote.networkFee;
   const isLiveAgglayerReceive = provider === "agglayer" && mode === "receive";
   // AggLayer outbound (Miden→Sepolia): builds a B2AGG bridge-out note via the
   // SDK (Note.createB2AggNote) and submits it through the MidenFi wallet.
   const isLiveAgglayerSend = provider === "agglayer" && mode === "send";
+
+  // Warm the execute chunk (WASM-heavy) as soon as there's a valid amount, so
+  // the click-to-wallet-prompt delay is minimal instead of "seeming stuck".
+  useEffect(() => {
+    if (!(Number(amount) > 0)) return;
+    if (provider === "epoch") preloadEpochExecute();
+    else if (provider === "agglayer") preloadAgglayerExecute();
+  }, [amount, provider]);
   const midenAddress = midenWallet.address || launchMidenAccount;
   // Map the form fields to the Epoch quote's directional roles:
   // - send (Miden→EVM): Miden wallet is the sender; the EVM recipient is the
@@ -181,8 +316,11 @@ export function BridgeExperience() {
   const evmBalanceText = walletConnected
     ? evmBalance || "Balance unavailable"
     : "Not connected";
+  const midenRouteToken = MIDEN_ROUTE_TOKEN[provider];
   const midenBalanceText = midenWallet.connected
-    ? midenWallet.balanceText
+    ? midenBalances && midenRouteToken
+      ? `${compactTokenAmount(midenBalances[provider] ?? "0")} ${midenRouteToken.symbol}`
+      : "Syncing…"
     : launchMidenAccount
       ? "Launch account"
       : "Not connected";
@@ -192,6 +330,17 @@ export function BridgeExperience() {
   const hasDestination = Boolean(
     destination.trim() || (mode === "receive" ? midenAddress : walletAccount),
   );
+  // Receive deposits the source token from the connected Sepolia wallet, so a
+  // request above its balance would revert on-chain (MetaMask shows "likely to
+  // fail"). Block it in-app before the wallet prompt. Send sources from the
+  // (private) Miden balance, which we can't read here, so it isn't guarded.
+  const sourceTokenSymbol = provider === "epoch" ? "USDC" : "ETH";
+  const insufficientBalance =
+    mode === "receive" &&
+    walletConnected &&
+    evmBalanceValue != null &&
+    Number(amount) > 0 &&
+    Number(amount) > evmBalanceValue;
   const routeTone = providers[provider].disabled
     ? "disabled"
     : provider === "near-intents"
@@ -206,8 +355,10 @@ export function BridgeExperience() {
           : "Bridge out from Miden through AggLayer. The Sepolia claim is auto-submitted once the exit settles (~30-90 min)."
         : "Testnet route. Epoch integration status is tracked from activity details.";
   const primaryActionLabel = isSubmitting
-    ? "Waiting for wallet"
-    : isLiveAgglayerSend && !midenWallet.connected
+    ? submitPhase || "Preparing…"
+    : insufficientBalance
+      ? `Not enough ${sourceTokenSymbol}`
+      : mode === "send" && !midenWallet.connected
       ? "Connect Miden wallet"
       : isLiveAgglayerSend
         ? "Bridge out to Sepolia"
@@ -220,17 +371,19 @@ export function BridgeExperience() {
           : mode === "receive"
             ? "Start receive"
             : "Start send";
-  const destinationHelp = isLiveAgglayerReceive
-    ? midenWallet.connected
-      ? `Leave empty to use connected Miden wallet ${shortAddress(midenAddress)}, or paste a 30-hex account ID to override.`
-      : launchMidenAccount
-        ? `Preloaded from wallet launch: ${shortAddress(launchMidenAccount)}. Connect MidenFi before signing Miden-side actions.`
-        : "Connect Miden wallet, or paste a 30-hex Miden account ID from the Miden CLI."
-    : mode === "send" && walletConnected
-      ? `Leave empty to use connected Sepolia wallet ${shortAddress(walletAccount)}, or paste another address.`
-      : "Paste the destination account for this transfer.";
-  const showDestinationHelp =
-    isLiveAgglayerReceive || (mode === "send" && walletConnected);
+  // Destination help is route-agnostic: it depends only on direction (receive =
+  // Miden account, send = Sepolia address) and shows consistently on every route.
+  const destinationHelp =
+    mode === "receive"
+      ? midenWallet.connected
+        ? `Defaults to your connected Miden wallet ${shortAddress(midenAddress)}. Paste a different Miden account (mcst1…/30-hex) to override.`
+        : launchMidenAccount
+          ? `Preloaded from wallet launch: ${shortAddress(launchMidenAccount)}. Connect MidenFi before signing Miden-side actions.`
+          : "Connect your Miden wallet, or paste a Miden account (mcst1…/30-hex)."
+      : walletConnected
+        ? `Defaults to your connected Sepolia wallet ${shortAddress(walletAccount)}. Paste a different 0x address to override.`
+        : "Connect your Sepolia wallet, or paste a 0x destination address.";
+  const showDestinationHelp = true;
   const destinationPlaceholder = isLiveAgglayerReceive
     ? "Miden account ID or address"
     : copy.destinationPlaceholder;
@@ -333,45 +486,164 @@ export function BridgeExperience() {
     if (!walletAccount) return;
 
     let cancelled = false;
-    fetch(`/api/sepolia/balance?address=${walletAccount}`)
+    // Show the balance of the token this route actually moves on Sepolia:
+    // Epoch bridges USDC, AggLayer bridges native ETH.
+    const isEpoch = provider === "epoch";
+    const url = isEpoch
+      ? `/api/sepolia/balance?address=${walletAccount}&token=${EPOCH_SEPOLIA_USDC.address}&decimals=${EPOCH_SEPOLIA_USDC.decimals}`
+      : `/api/sepolia/balance?address=${walletAccount}`;
+    fetch(url)
       .then((response) =>
         response.ok
           ? response.json()
           : Promise.reject(new Error("Unable to fetch balance")),
       )
-      .then((payload: { balanceWei: string }) => {
+      .then((payload: { balanceWei?: string; balance?: string }) => {
         if (cancelled) return;
-        setEvmBalance(
-          `${compactTokenAmount(formatEther(BigInt(payload.balanceWei)))} ETH`,
-        );
+        if (isEpoch) {
+          setEvmBalance(`${compactTokenAmount(payload.balance ?? "0")} USDC`);
+          setEvmBalanceValue(Number(payload.balance ?? "0"));
+        } else {
+          const eth = formatEther(BigInt(payload.balanceWei ?? "0"));
+          setEvmBalance(`${compactTokenAmount(eth)} ETH`);
+          setEvmBalanceValue(Number(eth));
+        }
       })
       .catch(() => {
-        if (!cancelled) setEvmBalance("");
+        if (!cancelled) {
+          setEvmBalance("");
+          setEvmBalanceValue(null);
+        }
       });
 
     return () => {
       cancelled = true;
     };
-  }, [walletAccount]);
+  }, [walletAccount, provider]);
+
+  // Default the destination input to the connected wallet on the relevant side
+  // (Miden for receive, Sepolia for send). Runs once per direction; the user can
+  // freely edit or clear it afterward.
+  useEffect(() => {
+    if (destinationPrefilledRef.current) return;
+    const connected =
+      mode === "receive"
+        ? midenWallet.connected
+          ? midenAddress
+          : ""
+        : walletConnected
+          ? walletAccount
+          : "";
+    if (connected && !destination) {
+      // Syncing the input to an external event (wallet connect), guarded to run
+      // once per direction — not a render-derived cascade.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setDestination(connected);
+      destinationPrefilledRef.current = true;
+    }
+  }, [
+    mode,
+    midenWallet.connected,
+    midenAddress,
+    walletConnected,
+    walletAccount,
+    destination,
+  ]);
+
+  // Load the Miden token balances once per connected account. requestAssets
+  // opens a MidenFi permission popup (balances are private); the in-flight ref
+  // collapses concurrent/StrictMode calls into a single popup.
+  const requestMidenAssets = midenWallet.requestAssets;
+  useEffect(() => {
+    if (!midenWallet.connected) {
+      midenBalanceInflightRef.current = null;
+      // Reset only on actual disconnect — syncing to an external event.
+      /* eslint-disable react-hooks/set-state-in-effect */
+      setMidenBalances(null);
+      setMidenBalanceFetchedFor("");
+      /* eslint-enable react-hooks/set-state-in-effect */
+      return;
+    }
+    // Connected but the adapter's requestAssets/address hasn't settled yet — wait
+    // rather than resetting (a transient undefined must not re-trigger the popup).
+    if (!requestMidenAssets || !midenAddress) return;
+    if (midenBalanceFetchedFor === midenAddress) return;
+
+    let cancelled = false;
+    const run =
+      midenBalanceInflightRef.current ??
+      (midenBalanceInflightRef.current = (async () => {
+        const { fetchMidenBalances } = await import("../lib/miden-balance");
+        return fetchMidenBalances(
+          requestMidenAssets,
+          Object.entries(MIDEN_ROUTE_TOKEN).map(([key, t]) => ({
+            key,
+            faucetId: t.faucetId,
+            decimals: t.decimals,
+          })),
+        );
+      })());
+
+    run
+      .then((balances) => {
+        if (cancelled) return;
+        setMidenBalances(balances);
+        setMidenBalanceFetchedFor(midenAddress);
+      })
+      .catch(() => {
+        if (!cancelled) setMidenBalances(null);
+      })
+      .finally(() => {
+        if (midenBalanceInflightRef.current === run)
+          midenBalanceInflightRef.current = null;
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    midenWallet.connected,
+    requestMidenAssets,
+    midenAddress,
+    midenBalanceFetchedFor,
+  ]);
 
   function selectMode(nextMode: FlowMode) {
     setMode(nextMode);
     setAmount(nextMode === "receive" ? "100" : "0.25");
     setDestination("");
+    destinationPrefilledRef.current = false;
     setBridgeError("");
   }
+
+  // Re-sync the Miden balance (opens a fresh requestAssets popup by clearing the
+  // fetched marker so the balance effect re-runs).
+  function refreshMidenBalance() {
+    midenBalanceInflightRef.current = null;
+    setMidenBalanceFetchedFor("");
+  }
+
+  // Only surface transfers that are still in progress — the just-initiated one(s).
+  // Completed/failed history isn't shown on the home page (view it via its link).
+  const inFlightActivities = activities.filter(
+    (a) =>
+      a.status !== "complete" &&
+      a.status !== "failed" &&
+      // Drop orphaned "Needs signature" rows that never broadcast a source tx.
+      // Every live path records its activity only AFTER the tx is submitted (at
+      // source_finality / message_observed), so a persisted signature-stage row
+      // with no sourceTxHash is a stale leftover from a pre-refactor session,
+      // not a resumable transfer.
+      !(a.status === "signature" && !a.sourceTxHash),
+  );
 
   function selectProvider(nextProvider: BridgeProvider) {
     if (providers[nextProvider].disabled) return;
     setProvider(nextProvider);
     setBridgeError("");
-    if (
-      nextProvider === "agglayer" &&
-      mode === "receive" &&
-      !isMidenAccountHex(destination)
-    ) {
-      setDestination("");
-    }
+    // Destination is route-agnostic: the connected Miden wallet address (bech32)
+    // prefills for both routes and the AggLayer submit normalizes it to hex — so
+    // AggLayer behaves exactly like Epoch (no special clearing here).
   }
 
   function selectRouteOption(nextProvider: BridgeProvider) {
@@ -444,34 +716,70 @@ export function BridgeExperience() {
     setBridgeError("");
     setWalletError("");
 
+    if (providers[provider].disabled) {
+      setBridgeError("This route isn't available in this build.");
+      return;
+    }
+    // Guard the deposit before opening the wallet: a request above the Sepolia
+    // balance reverts on-chain (MetaMask "likely to fail").
+    if (insufficientBalance) {
+      setBridgeError(
+        `Not enough ${sourceTokenSymbol} — this wallet holds ${evmBalance}. Lower the amount.`,
+      );
+      return;
+    }
+    // Every send signs on Miden (Epoch send + AggLayer bridge-out) — require the
+    // MidenFi wallet up front so the CTA and error are clear (not a late throw).
+    if (mode === "send" && !midenWallet.connected) {
+      setBridgeError("Connect your MidenFi wallet to sign the send.");
+      return;
+    }
+
     if (provider === "agglayer" && mode === "send") {
       setIsSubmitting(true);
+      const senderAddress = midenAddress;
+      if (
+        !midenWallet.connected ||
+        !midenWallet.requestTransaction ||
+        !midenWallet.waitForTransaction ||
+        !senderAddress
+      ) {
+        setBridgeError(
+          "Connect your MidenFi wallet before bridging out to Sepolia.",
+        );
+        setIsSubmitting(false);
+        return;
+      }
+      const destinationAddress = destination.trim() || walletAccount;
+      if (!/^0x[0-9a-fA-F]{40}$/.test(destinationAddress)) {
+        setBridgeError(
+          "Enter a valid Sepolia (0x…) destination, or connect your Sepolia wallet.",
+        );
+        setIsSubmitting(false);
+        return;
+      }
+      let unitsAmount: bigint;
       try {
-        const senderAddress = midenAddress;
-        if (
-          !midenWallet.connected ||
-          !midenWallet.requestTransaction ||
-          !midenWallet.waitForTransaction ||
-          !senderAddress
-        ) {
-          throw new Error(
-            "Connect your MidenFi wallet before bridging out to Sepolia.",
-          );
-        }
-        const destinationAddress = destination.trim() || walletAccount;
-        if (!/^0x[0-9a-fA-F]{40}$/.test(destinationAddress)) {
-          throw new Error(
-            "Enter a valid Sepolia (0x…) destination, or connect your Sepolia wallet.",
-          );
-        }
-        const unitsAmount = parseUnits(amount, AGGLAYER_BALI.midenEthDecimals);
-        if (unitsAmount <= BigInt(0)) {
-          throw new Error("Enter an amount greater than zero.");
-        }
+        unitsAmount = parseUnits(amount, AGGLAYER_BALI.midenEthDecimals);
+      } catch {
+        setBridgeError("Enter a valid amount.");
+        setIsSubmitting(false);
+        return;
+      }
+      if (unitsAmount <= BigInt(0)) {
+        setBridgeError("Enter an amount greater than zero.");
+        setIsSubmitting(false);
+        return;
+      }
 
+      setSubmitPhase("Preparing bridge note…");
+      try {
+        // Submit first — the wallet approval + note proving happen here. Only
+        // once the send actually goes through do we record an activity row.
         // Dynamic import: agglayer-execute pulls the eager-WASM SDK + wallet
         // adapter, so it must load client-side at click time, never in SSR.
         const { runAgglayerSend } = await import("../lib/agglayer-execute");
+        setSubmitPhase("Confirm in your wallet…");
         const { txId } = await runAgglayerSend({
           amount: unitsAmount,
           destinationAddress,
@@ -479,49 +787,61 @@ export function BridgeExperience() {
           requestTransaction: midenWallet.requestTransaction,
           waitForTransaction: midenWallet.waitForTransaction,
         });
-
-        const next = createActivity(mode, provider, amount, {
-          status: "message_observed",
+        // Note submitted on Miden; AggLayer hasn't observed the exit yet.
+        const activity = createActivity(mode, provider, amount, {
+          status: "source_finality",
           eta: "30-90 min",
           destination: destinationAddress,
-          midenTxId: txId,
           // origin = Miden rollup 78, destination = Ethereum L1 (0)
           sourceNetworkId: AGGLAYER_BALI.destinationNetworkId,
           destinationNetworkId: AGGLAYER_BALI.sourceNetworkId,
+          midenTxId: txId,
         });
-        const updated = [next, ...activities];
+        const updated = [activity, ...activities];
         setActivities(updated);
         saveActivities(updated);
-        router.push(`/activity/${next.id}`);
       } catch (error) {
         setBridgeError(errorMessage(error));
       } finally {
         setIsSubmitting(false);
+        setSubmitPhase("");
       }
       return;
     }
 
     if (isLiveAgglayerReceive) {
       setIsSubmitting(true);
+      if (!walletConnected || !walletProvider || !walletAccount) {
+        await open();
+        setIsSubmitting(false);
+        return;
+      }
+      const account = walletAccount;
+      const destinationAccount = destination.trim() || midenAddress;
+      if (!destinationAccount) {
+        setBridgeError(
+          "Connect Miden wallet or paste a Miden account ID before receiving.",
+        );
+        setIsSubmitting(false);
+        return;
+      }
+      let transaction: ReturnType<typeof buildSepoliaDepositTransaction>;
       try {
-        if (!walletConnected || !walletProvider || !walletAccount) {
-          await open();
-          return;
-        }
-        const account = walletAccount;
-
         await ensureSepolia(walletProvider);
-        const destinationAccount = destination.trim() || midenAddress;
-        if (!destinationAccount) {
-          throw new Error(
-            "Connect Miden wallet or paste a Miden account ID before receiving.",
-          );
-        }
-        const midenAccountId = normalizeMidenAccountHex(destinationAccount);
-        const transaction = buildSepoliaDepositTransaction({
+        transaction = buildSepoliaDepositTransaction({
           amountEth: amount,
-          midenAccountId,
+          midenAccountId: normalizeMidenAccountHex(destinationAccount),
         });
+      } catch (error) {
+        setBridgeError(errorMessage(error));
+        setIsSubmitting(false);
+        return;
+      }
+
+      setSubmitPhase("Confirm in your wallet…");
+      try {
+        // Sign + submit the Sepolia deposit first (wallet approval here). Only
+        // record the activity row once the deposit tx is actually broadcast.
         const txHash = await walletProvider.request<string>({
           method: "eth_sendTransaction",
           params: [
@@ -534,43 +854,74 @@ export function BridgeExperience() {
             },
           ],
         });
-
-        const next = createActivity(mode, provider, amount, {
+        setSubmitPhase("Submitting…");
+        const activity = createActivity(mode, provider, amount, {
           status: "source_finality",
           eta: "About 15 min",
           destination: destinationAccount,
           bridgeDestinationAddress: transaction.destinationAddress,
-          txHash: shortAddress(txHash),
-          sourceTxHash: txHash,
           midenTxId: transaction.destinationAddress,
           sourceNetworkId: AGGLAYER_BALI.sourceNetworkId,
           destinationNetworkId: AGGLAYER_BALI.destinationNetworkId,
+          txHash: shortAddress(txHash),
+          sourceTxHash: txHash,
         });
-        const updated = [next, ...activities];
+        const updated = [activity, ...activities];
         setActivities(updated);
         saveActivities(updated);
-        router.push(`/activity/${next.id}`);
       } catch (error) {
         setBridgeError(errorMessage(error));
       } finally {
         setIsSubmitting(false);
+        setSubmitPhase("");
       }
       return;
     }
 
     if (provider === "epoch") {
       setIsSubmitting(true);
-      try {
-        // Receive (EVM→Miden) signs a Sepolia deposit, so it needs a connected
-        // EVM wallet on Sepolia. Send (Miden→EVM) signs only on Miden.
-        if (mode === "receive") {
-          if (!walletConnected || !walletProvider || !walletAccount) {
-            await open();
-            return;
-          }
-          await ensureSepolia(walletProvider);
+      // Receive (EVM→Miden) signs a Sepolia deposit, so it needs a connected
+      // EVM wallet on Sepolia. Send (Miden→EVM) signs only on Miden.
+      if (mode === "receive") {
+        if (!walletConnected || !walletProvider || !walletAccount) {
+          await open();
+          setIsSubmitting(false);
+          return;
         }
+        try {
+          await ensureSepolia(walletProvider);
+        } catch (error) {
+          setBridgeError(errorMessage(error));
+          setIsSubmitting(false);
+          return;
+        }
+      }
 
+      const resolvedDestination =
+        mode === "send" ? epochEvmAddress : epochMidenAccount;
+      // Require a valid recipient before starting, so a missing destination
+      // doesn't create a failed ("Needs recovery") activity.
+      if (mode === "receive" && !resolvedDestination) {
+        setBridgeError(
+          "Connect your Miden wallet or paste a Miden account to receive into.",
+        );
+        setIsSubmitting(false);
+        return;
+      }
+      if (
+        mode === "send" &&
+        !/^0x[0-9a-fA-F]{40}$/.test(resolvedDestination)
+      ) {
+        setBridgeError(
+          "Enter a valid Sepolia (0x…) address, or connect your Sepolia wallet.",
+        );
+        setIsSubmitting(false);
+        return;
+      }
+      setSubmitPhase("Preparing…");
+      try {
+        // Submit first (wallet approval + intent broadcast happen here), then
+        // record the activity row only once the transfer actually goes through.
         // Dynamic import: epoch-execute pulls eager-WASM miden-sdk, so it must
         // load client-side at click time, never in the server render.
         const { runEpochTransfer } = await import("../lib/epoch/epoch-execute");
@@ -581,13 +932,13 @@ export function BridgeExperience() {
           evmAddress: epochEvmAddress,
           requestSend: midenWallet.requestSend,
           waitForTransaction: midenWallet.waitForTransaction,
+          // Surface the SDK's approve/deposit/batch phases on the button.
+          onStatus: (phase) =>
+            setSubmitPhase(EPOCH_PHASE_LABEL[phase] ?? "Working…"),
         });
-
-        const resolvedDestination =
-          mode === "send" ? epochEvmAddress : epochMidenAccount;
-        const next = createActivity(mode, "epoch", amount, {
+        const activity = createActivity(mode, "epoch", amount, {
           status: "message_observed",
-          eta: "3-6 min",
+          eta: "1-3 min",
           destination: resolvedDestination,
           txHash: result.sourceTxHash
             ? shortAddress(result.sourceTxHash)
@@ -596,15 +947,18 @@ export function BridgeExperience() {
           midenTxId: mode === "send" ? result.midenNoteId : undefined,
           epochIntentNonce: result.intentNonce,
           epochSponsor: result.sponsorAddress,
+          receivedAmount: result.outputAmount
+            ? `${result.outputAmount} USDC`
+            : undefined,
         });
-        const updated = [next, ...activities];
+        const updated = [activity, ...activities];
         setActivities(updated);
         saveActivities(updated);
-        router.push(`/activity/${next.id}`);
       } catch (error) {
         setBridgeError(errorMessage(error));
       } finally {
         setIsSubmitting(false);
+        setSubmitPhase("");
       }
       return;
     }
@@ -644,26 +998,25 @@ export function BridgeExperience() {
               aria-haspopup={walletConnected ? "menu" : undefined}
             >
               <span
-                className={`wallet-icon ${walletConnected ? "connected" : ""}`}
+                className="wallet-avatar"
+                style={
+                  walletConnected
+                    ? { background: walletGradient(walletAccount) }
+                    : undefined
+                }
               >
-                <Wallet size={16} aria-hidden="true" />
-              </span>
-              <span className="wallet-copy">
-                <small>
-                  <span
-                    className={`wallet-status-dot ${walletConnected ? "connected" : ""}`}
+                <span className="wallet-avatar-badge">
+                  <WalletBrandIcon
+                    src={walletConnected ? evmIcon : undefined}
+                    size={11}
                   />
-                  {evmWalletLabel}
-                </small>
-                <span>
-                  {walletConnected
-                    ? shortAddress(walletAccount)
-                    : "Connect wallet"}
                 </span>
               </span>
-              {walletConnected ? (
-                <span className="wallet-balance">{evmBalanceText}</span>
-              ) : null}
+              <span className="wallet-pill-label">
+                {walletConnected
+                  ? shortAddress(walletAccount)
+                  : "Connect wallet"}
+              </span>
               {walletConnected ? (
                 <ChevronDown
                   className="wallet-menu-chevron"
@@ -704,7 +1057,7 @@ export function BridgeExperience() {
                   className="wallet-menu-item"
                   onClick={switchSepoliaFromMenu}
                 >
-                  <ShieldCheck size={15} aria-hidden="true" />
+                  <RefreshCcw size={15} aria-hidden="true" />
                   <span>Switch to Sepolia</span>
                 </button>
                 <button
@@ -799,12 +1152,6 @@ export function BridgeExperience() {
               ) : null}
             </div>
           </div>
-          <div className="route-status-line">
-            <span className={`route-pill ${routeTone}`}>
-              {providerCopy.badge}
-            </span>
-            <span>{providerCopy.route}</span>
-          </div>
           {walletError ? (
             <p className="form-error compact">{walletError}</p>
           ) : null}
@@ -827,11 +1174,24 @@ export function BridgeExperience() {
             ))}
           </div>
 
-          <div className="swap-box">
+          <div className="swap-box swap-fade" key={`from-${mode}-${provider}`}>
             <div>
               <span>From</span>
               <strong>{copy.from}</strong>
-              <small className="balance-line">Available {sourceBalance}</small>
+              <small className="balance-line">
+                Available {sourceBalance}
+                {mode === "send" && midenWallet.connected ? (
+                  <button
+                    type="button"
+                    className="balance-refresh"
+                    onClick={refreshMidenBalance}
+                    aria-label="Refresh Miden balance"
+                    title="Refresh Miden balance"
+                  >
+                    <RefreshCcw size={12} aria-hidden="true" />
+                  </button>
+                ) : null}
+              </small>
             </div>
             <label>
               <input
@@ -850,12 +1210,23 @@ export function BridgeExperience() {
             <ArrowDown size={18} />
           </div>
 
-          <div className="swap-box">
+          <div className="swap-box swap-fade" key={`to-${mode}-${provider}`}>
             <div>
               <span>To</span>
               <strong>{copy.to}</strong>
               <small className="balance-line">
-                Wallet balance {destinationBalance}
+                Available {destinationBalance}
+                {mode === "receive" && midenWallet.connected ? (
+                  <button
+                    type="button"
+                    className="balance-refresh"
+                    onClick={refreshMidenBalance}
+                    aria-label="Refresh Miden balance"
+                    title="Refresh Miden balance"
+                  >
+                    <RefreshCcw size={12} aria-hidden="true" />
+                  </button>
+                ) : null}
               </small>
             </div>
             <label className="readonly-amount">
@@ -866,13 +1237,15 @@ export function BridgeExperience() {
                     amount={amount}
                     midenAccount={epochMidenAccount}
                     evmAddress={epochEvmAddress}
-                    fallback={quote.expectedReceived}
+                    fallback={expectedReceivedAmount}
+                    hideSymbol
+                    onAmount={setEpochQuoteAmount}
                   />
                 ) : (
-                  quote.expectedReceived
+                  expectedReceivedAmount
                 )}
               </strong>
-              <span>Expected</span>
+              <span>{destinationSymbol}</span>
             </label>
           </div>
 
@@ -886,36 +1259,24 @@ export function BridgeExperience() {
             />
             {showDestinationHelp ? <small>{destinationHelp}</small> : null}
           </label>
-          {midenWallet.connected ? (
-            <div className="wallet-state-strip" aria-label="Miden wallet state">
-              <span>
-                <strong>Miden balance</strong>
-                {midenWallet.balanceText}
-              </span>
-              <span>
-                <strong>Note sync</strong>
-                {midenWallet.noteSyncStatus}
-              </span>
-              <span>
-                <strong>Consumable</strong>
-                {midenWallet.consumableNoteCount ?? "Unknown"}
-              </span>
-            </div>
-          ) : null}
           {bridgeError ? <p className="form-error">{bridgeError}</p> : null}
 
-          <div className="quote-summary" aria-label="Route quote">
+          <div
+            className="quote-summary swap-fade"
+            aria-label="Route quote"
+            key={`qs-${mode}-${provider}`}
+          >
             <div>
               <span>ETA</span>
               <strong>{quote.eta}</strong>
             </div>
             <div>
               <span>Min received</span>
-              <strong>{quote.minReceived}</strong>
+              <strong>{displayMinReceived}</strong>
             </div>
             <div>
               <span>Network fee</span>
-              <strong>{quote.networkFee}</strong>
+              <strong>{networkFeeDisplay}</strong>
             </div>
           </div>
 
@@ -923,26 +1284,28 @@ export function BridgeExperience() {
             className="primary-button"
             type="button"
             onClick={submitTransfer}
-            disabled={isSubmitting}
+            disabled={isSubmitting || insufficientBalance}
           >
             {primaryActionLabel}
-            <ArrowRight size={18} aria-hidden="true" />
+            {isSubmitting ? (
+              <RefreshCcw size={18} className="animate-spin" aria-hidden="true" />
+            ) : (
+              <ArrowRight size={18} aria-hidden="true" />
+            )}
           </button>
 
           <div className={`route-disclaimer ${routeTone}`}>
-            <ShieldCheck size={16} aria-hidden="true" />
             <span>{routeNote}</span>
           </div>
         </section>
 
-        <section className="home-activity" aria-label="Recent activity">
-          <div className="home-activity-title">
-            <h2>Activity</h2>
-            <span>{activities.length}</span>
-          </div>
-          {activities.length > 0 ? (
+        {inFlightActivities.length > 0 && (
+          <section className="home-activity" aria-label="Current transfer">
+            <div className="home-activity-title">
+              <h2>Current transfer</h2>
+            </div>
             <div className="home-activity-list">
-              {activities.slice(0, 3).map((activity) => (
+              {inFlightActivities.map((activity) => (
                 <Link
                   className="home-activity-item"
                   href={`/activity/${activity.id}`}
@@ -968,16 +1331,8 @@ export function BridgeExperience() {
                 </Link>
               ))}
             </div>
-          ) : (
-            <div className="home-activity-empty">
-              <strong>No transfers yet</strong>
-              <span>
-                Cross-chain activity will appear here after your first receive
-                or send.
-              </span>
-            </div>
-          )}
-        </section>
+          </section>
+        )}
       </section>
     </main>
   );

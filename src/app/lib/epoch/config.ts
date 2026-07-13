@@ -31,19 +31,16 @@ export const MIDEN_DESTINATION_CHAIN_ID = 999999999;
 export const MIDEN_MIN_RECLAIM_BLOCKS = 1000;
 
 /**
- * The Miden-side token for the Epoch route is fixed to the chain's NATIVE asset
- * (MIDEN), never the bridged Miden-ETH faucet. Symbol/decimals are chain-truth
- * constants (the native faucet always reports `MIDEN` / 6 dp).
+ * Miden-side token for the Epoch route = USDC (Epoch's SIO route is USDC<->USDC).
  *
- * `MIDEN_NATIVE_FAUCET_ID` is pinned to a literal here. `getNativeMidenFaucetId()`
- * returns it directly when set; leave it blank to fall back to reading it from
- * the chain head (`BlockHeader.nativeAssetId()`) instead.
+ * Faucet id is the Miden USDC faucet per Epoch's docs
+ * (https://docs.epochprotocol.xyz/supported-chains-and-tokens): USDC =
+ * 0xfc90f0f4da30e51168453b60eafed7. (0x2458e5446128e6b150b75b8ebd9ce1 is the
+ * MIDEN token — NOT USDC — so it was wrong here.) 6 decimals.
+ *
+ * NOTE: the `MIDEN_NATIVE_*` names are legacy; this is the USDC faucet, not the
+ * chain-native asset.
  */
-// Miden-side bridge token = USDC on Miden testnet (Epoch's SIO route is USDC<->USDC).
-// Faucet id refreshed for the v0.15 testnet genesis — the old 0.14-era id
-// (0x0a7d175ed63ec5200fb2ced86f6aa5) no longer resolves and the allocator returns
-// "A quote isn't available". Current value from epochprotocol/miden-integration-example
-// (constants/miden-tokens.ts). 6 decimals.
 export const MIDEN_NATIVE_TOKEN_SYMBOL = "USDC";
 export const MIDEN_NATIVE_TOKEN_DECIMALS = 6;
-export const MIDEN_NATIVE_FAUCET_ID = "0x2458e5446128e6b150b75b8ebd9ce1";
+export const MIDEN_NATIVE_FAUCET_ID = "0xfc90f0f4da30e51168453b60eafed7";

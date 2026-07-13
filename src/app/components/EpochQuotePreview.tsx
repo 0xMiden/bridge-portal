@@ -1,6 +1,7 @@
 "use client";
 
 import { RefreshCcw } from "lucide-react";
+import { useEffect } from "react";
 import { useEpochQuote } from "../lib/epoch/use-epoch-quote";
 
 /**
@@ -17,14 +18,38 @@ export function EpochQuotePreview({
   midenAccount,
   evmAddress,
   fallback,
+  hideSymbol = false,
+  onAmount,
 }: {
   mode: "receive" | "send";
   amount: string;
   midenAccount: string;
   evmAddress: string;
   fallback: string;
+  // When the caller renders the token symbol separately (as a unit pill), omit
+  // it from the amount so it isn't doubled.
+  hideSymbol?: boolean;
+  // Lifts the live quote amount to the caller (e.g. to drive the Min-received
+  // detail from the real Epoch API rather than a hardcoded estimate). Pass a
+  // stable setter (e.g. a useState setter) to avoid effect churn.
+  onAmount?: (amount: string | undefined) => void;
 }) {
   const quote = useEpochQuote({ enabled: true, mode, amount, midenAccount, evmAddress });
+
+  useEffect(() => {
+    onAmount?.(quote.amount);
+  }, [onAmount, quote.amount]);
+
+  // Keep the last known amount visible while a refetch is in flight so the
+  // field updates in place rather than blinking blank.
+  if (quote.amount) {
+    return (
+      <>
+        {quote.amount}
+        {hideSymbol ? "" : ` ${quote.symbol}`}
+      </>
+    );
+  }
 
   if (quote.loading) {
     return (
@@ -32,14 +57,6 @@ export function EpochQuotePreview({
         <RefreshCcw size={14} className="animate-spin" aria-hidden="true" />
         Fetching quote…
       </span>
-    );
-  }
-
-  if (quote.amount) {
-    return (
-      <>
-        {quote.amount} {quote.symbol}
-      </>
     );
   }
 

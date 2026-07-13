@@ -200,10 +200,8 @@ a {
 }
 
 .wallet-button.connected {
-  border-color: rgba(15, 159, 110, 0.22);
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(247, 251, 248, 0.94)),
-    var(--surface);
+  border-color: var(--border-strong);
+  background: var(--surface);
   color: var(--foreground);
 }
 
@@ -222,18 +220,63 @@ a {
 }
 
 .wallet-pill {
-  display: grid;
-  grid-template-columns: 30px minmax(0, 1fr) auto auto;
-  justify-content: stretch;
-  min-width: 194px;
-  max-width: 248px;
-  min-height: 46px;
-  padding: 7px 9px;
-  border-radius: 16px;
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  min-height: 44px;
+  max-width: 240px;
+  padding: 6px 13px 6px 6px;
+  border-radius: 999px;
 }
 
 .wallet-menu-root .wallet-pill {
   width: 100%;
+}
+
+/* Account avatar — address-derived gradient with the wallet's logo as a badge. */
+.wallet-avatar {
+  position: relative;
+  flex: 0 0 auto;
+  width: 30px;
+  height: 30px;
+  border-radius: 999px;
+  background: var(--surface-strong);
+  box-shadow: inset 0 0 0 1px rgba(23, 21, 17, 0.06);
+}
+
+.wallet-avatar-badge {
+  position: absolute;
+  right: -3px;
+  bottom: -3px;
+  display: grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  overflow: hidden;
+  border: 2px solid var(--surface);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--muted-foreground);
+}
+
+.wallet-avatar-badge img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.wallet-avatar-badge svg {
+  width: 10px;
+  height: 10px;
+}
+
+.wallet-pill-label {
+  overflow: hidden;
+  font-size: 14px;
+  font-weight: 760;
+  letter-spacing: -0.01em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .wallet-icon,
@@ -250,9 +293,9 @@ a {
 
 .wallet-icon.connected,
 .wallet-menu-avatar.connected {
-  border-color: rgba(15, 159, 110, 0.22);
-  background: var(--success-soft);
-  color: #087451;
+  border-color: var(--accent-soft);
+  background: var(--accent-soft);
+  color: var(--accent);
 }
 
 .wallet-menu-avatar.pending {
@@ -299,8 +342,8 @@ a {
 }
 
 .wallet-status-dot.connected {
-  background: var(--success);
-  box-shadow: 0 0 0 2px rgba(15, 159, 110, 0.14);
+  background: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-soft);
 }
 
 .wallet-status-dot.pending {
@@ -321,7 +364,7 @@ a {
 }
 
 .wallet-pill.connected .wallet-balance {
-  color: #087451;
+  color: var(--foreground);
 }
 
 .wallet-menu-chevron {
@@ -466,6 +509,43 @@ a {
   transition:
     box-shadow var(--duration-slow) var(--ease-standard),
     transform var(--duration-slow) var(--ease-standard);
+  animation: swap-card-enter var(--duration-slow) var(--ease-standard) both;
+}
+
+@keyframes swap-card-enter {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.99);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+/* Transition the direction/route-dependent content when it swaps. Transform
+   only — animating opacity would make the box's opaque fill go translucent and
+   reveal the lighter card behind it (reads as a white blink on every refresh). */
+@keyframes swap-content-fade {
+  from {
+    transform: translateY(6px);
+  }
+  to {
+    transform: translateY(0);
+  }
+}
+
+.swap-fade {
+  animation: swap-content-fade var(--duration-base) var(--ease-standard) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .swap-card,
+  .swap-fade,
+  .mode-switch::before {
+    animation: none;
+    transition: none;
+  }
 }
 
 .swap-card:hover {
@@ -655,11 +735,11 @@ a {
   min-height: 24px;
   align-items: center;
   justify-content: center;
-  border: 1px solid rgba(15, 159, 110, 0.18);
+  border: 1px solid var(--border);
   border-radius: 999px;
   padding: 0 9px;
-  background: var(--success-soft);
-  color: #086546;
+  background: var(--surface-strong);
+  color: var(--muted-foreground);
   font-size: 11px;
   font-weight: 840;
   white-space: nowrap;
@@ -687,6 +767,25 @@ a {
   background: var(--surface-muted);
 }
 
+/* Sliding active pill — translates between the two buttons on toggle. */
+.mode-switch::before {
+  content: "";
+  position: absolute;
+  z-index: 0;
+  top: 4px;
+  bottom: 4px;
+  left: 4px;
+  width: calc(50% - 6px);
+  border-radius: 12px;
+  background: var(--surface);
+  box-shadow: 0 8px 20px rgba(56, 45, 26, 0.08);
+  transition: transform var(--duration-base) var(--ease-standard);
+}
+
+.mode-switch[data-active="send"]::before {
+  transform: translateX(calc(100% + 4px));
+}
+
 .mode-switch button {
   position: relative;
   z-index: 1;
@@ -696,12 +795,11 @@ a {
   background: transparent;
   color: var(--muted-foreground);
   font-weight: 800;
+  transition: color var(--duration-fast) var(--ease-standard);
 }
 
 .mode-switch button[aria-pressed="true"] {
-  background: var(--surface);
   color: var(--foreground);
-  box-shadow: 0 8px 20px rgba(56, 45, 26, 0.08);
 }
 
 .mode-switch button:hover {
@@ -727,8 +825,10 @@ a {
 }
 
 .balance-line {
-  display: block;
-  max-width: 190px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 230px;
   margin-top: 8px;
   overflow: hidden;
   color: var(--muted-foreground);
@@ -736,6 +836,26 @@ a {
   font-weight: 720;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.balance-refresh {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted-foreground);
+  cursor: pointer;
+  transition:
+    color 0.15s ease,
+    background 0.15s ease;
+}
+
+.balance-refresh:hover {
+  color: var(--foreground);
+  background: var(--muted);
 }
 
 .swap-box label {
@@ -915,10 +1035,10 @@ a {
   gap: 9px;
   margin-top: 8px;
   padding: 8px 10px;
-  border: 1px solid rgba(15, 159, 110, 0.16);
+  border: 1px solid var(--border);
   border-radius: 16px;
-  background: var(--success-soft);
-  color: #086546;
+  background: var(--surface-muted);
+  color: var(--muted-foreground);
   font-size: 12px;
   font-weight: 720;
   line-height: 1.4;
@@ -1016,12 +1136,16 @@ a {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto auto;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
   min-height: 64px;
-  padding: 12px;
+  padding: 12px 14px;
   border: 1px solid var(--border);
   border-radius: 16px;
-  background: rgba(255, 255, 255, 0.68);
+  background: var(--surface);
+}
+
+.home-activity-item:hover {
+  border-color: var(--border-strong);
 }
 
 .activity-copy,
@@ -1164,22 +1288,123 @@ a {
   }
 }
 
-.detail-shell {
-  width: min(1120px, 100%);
+/* Compact detail: a single narrow card, centered like the swap card. */
+.detail-simple {
+  width: min(480px, 100%);
+  margin: 22px auto 0;
 }
 
-.detail-grid {
+.detail-simple .receipt-card {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(320px, 0.45fr);
-  gap: 16px;
-  margin-top: 22px;
+  gap: 14px;
 }
 
-.detail-main,
-.detail-side {
+.receipt-topline {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.receipt-topline .kicker {
+  margin: 0;
+}
+
+.receipt-links {
   display: grid;
-  gap: 16px;
-  align-content: start;
+  gap: 8px;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+}
+
+.receipt-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-height: 42px;
+  padding: 0 12px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--surface-muted);
+  color: var(--foreground);
+  font-size: 13px;
+  font-weight: 780;
+}
+
+.receipt-link svg {
+  color: var(--accent);
+}
+
+.receipt-monitor {
+  margin: 2px 0 0;
+  color: var(--muted-foreground);
+  font-size: 12px;
+  font-weight: 640;
+  line-height: 1.45;
+}
+
+/* Compact live progress strip on the detail page. */
+.receipt-progress {
+  display: grid;
+  gap: 9px;
+}
+
+.progress-track {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
+  gap: 5px;
+}
+
+.progress-seg {
+  height: 5px;
+  border-radius: 999px;
+  background: var(--surface-strong);
+}
+
+.progress-seg.done {
+  background: var(--foreground);
+}
+
+.progress-seg.current {
+  background: var(--accent);
+  animation: status-pulse 1.6s var(--ease-standard) infinite;
+}
+
+.receipt-progress.complete .progress-seg {
+  background: var(--success);
+}
+
+.receipt-progress.failed .progress-seg {
+  background: var(--danger, #c1462f);
+  animation: none;
+}
+
+.progress-label {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.progress-label strong {
+  font-size: 14px;
+}
+
+.progress-label span {
+  color: var(--muted-foreground);
+  font-size: 11px;
+  font-weight: 680;
+  white-space: nowrap;
+}
+
+.detail-simple .receipt-amount {
+  margin-top: 0;
+  padding: 16px 0;
+}
+
+.detail-simple .receipt-amount strong {
+  font-size: clamp(34px, 9vw, 46px);
 }
 
 .detail-card,
@@ -1187,35 +1412,13 @@ a {
 .detail-empty {
   padding: 18px;
   border: 1px solid rgba(255, 255, 255, 0.82);
-  border-radius: 22px;
-  background: rgba(255, 255, 255, 0.78);
+  border-radius: 24px;
+  background: rgba(255, 255, 255, 0.84);
   box-shadow: var(--shadow-card);
 }
 
 .receipt-card {
   position: relative;
-  overflow: hidden;
-  border-radius: 28px;
-  background:
-    linear-gradient(#ffffff 0 0) padding-box,
-    repeating-linear-gradient(90deg, rgba(23, 21, 17, 0.18) 0 8px, transparent 8px 16px) border-box;
-}
-
-.receipt-card::after {
-  content: "";
-  position: absolute;
-  right: 18px;
-  bottom: 18px;
-  width: 104px;
-  height: 104px;
-  border: 1px dashed rgba(255, 85, 0, 0.24);
-  border-radius: 24px;
-  background:
-    linear-gradient(90deg, rgba(23, 21, 17, 0.11) 1px, transparent 1px),
-    linear-gradient(rgba(23, 21, 17, 0.11) 1px, transparent 1px);
-  background-size: 12px 12px;
-  opacity: 0.34;
-  pointer-events: none;
 }
 
 .receipt-header {
@@ -1285,9 +1488,9 @@ a {
   gap: 5px;
   margin-top: 14px;
   padding: 12px;
-  border: 1px solid rgba(255, 85, 0, 0.16);
+  border: 1px solid var(--border);
   border-radius: 16px;
-  background: #fff7ef;
+  background: var(--surface-muted);
 }
 
 .receipt-next-action span {
@@ -1358,7 +1561,7 @@ a {
   padding: 12px;
   border: 1px solid var(--border);
   border-radius: 16px;
-  background: rgba(255, 255, 255, 0.74);
+  background: var(--surface-muted);
 }
 
 .explorer-link span,
@@ -1460,7 +1663,7 @@ a {
   padding: 12px;
   border: 1px solid var(--border);
   border-radius: 16px;
-  background: rgba(255, 255, 255, 0.72);
+  background: var(--surface-muted);
 }
 
 .metric strong {
@@ -1473,10 +1676,10 @@ a {
 .recovery-copy {
   margin-top: 14px;
   padding: 12px;
-  border: 1px solid rgba(255, 85, 0, 0.16);
+  border: 1px solid var(--border);
   border-radius: 16px;
-  background: #fff7ef;
-  color: #703000;
+  background: var(--surface-muted);
+  color: var(--muted-foreground);
   line-height: 1.45;
 }
 
@@ -1498,17 +1701,17 @@ a {
   padding: 12px;
   border: 1px solid var(--border);
   border-radius: 16px;
-  background: rgba(255, 255, 255, 0.7);
+  background: var(--surface-muted);
 }
 
 .timeline-step.current {
-  border-color: rgba(255, 85, 0, 0.22);
-  background: #fff7ef;
+  border-color: rgba(255, 85, 0, 0.28);
+  background: var(--surface-strong);
 }
 
 .timeline-step.done {
-  border-color: rgba(15, 159, 110, 0.18);
-  background: var(--success-soft);
+  border-color: var(--border);
+  background: var(--surface-muted);
 }
 
 .step-icon {
@@ -1547,9 +1750,9 @@ a {
   gap: 7px;
   margin-top: 14px;
   padding: 12px;
-  border: 1px solid rgba(15, 159, 110, 0.18);
+  border: 1px solid var(--border);
   border-radius: 16px;
-  background: var(--success-soft);
+  background: var(--surface-muted);
 }
 
 .live-monitor-panel > div {
@@ -1634,24 +1837,40 @@ a {
 
   .wallet-menu-root {
     display: grid;
+    min-width: 0;
     width: 100%;
   }
 
+  /* Keep the pill label from forcing the two side-by-side buttons too wide. */
+  .wallet-pill {
+    gap: 7px;
+    padding: 5px 11px 5px 5px;
+  }
+
+  .wallet-pill-label {
+    font-size: 13px;
+  }
+
+  /* Overlay the dropdown (don't push the page down). Anchor the left button's
+     menu to its left edge and the right button's to its right so neither runs
+     off screen; cap the width to the viewport. */
   .wallet-actions-menu {
-    position: static;
-    display: none;
-    width: 100%;
-    margin-top: 6px;
-    transform-origin: top center;
+    width: max-content;
+    min-width: 232px;
+    max-width: calc(100vw - 24px);
   }
 
-  .wallet-actions-menu.open {
-    display: grid;
+  .wallet-cluster > .wallet-menu-root:first-child .wallet-actions-menu {
+    right: auto;
+    left: 0;
+    transform-origin: top left;
   }
 
   .wallet-cluster {
+    position: relative;
     display: grid;
-    grid-template-columns: 1fr;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
     width: 100%;
   }
 
@@ -1661,24 +1880,57 @@ a {
 
   .swap-stage {
     min-height: auto;
-    padding: 18px 0 42px;
+    padding: 12px 0 36px;
   }
 
+  /* Keep the label/amount on one row (Uniswap-style) instead of stacking the
+     amount into a tall column — the boxes stay compact on narrow screens. */
   .swap-box {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr) auto;
+    min-height: auto;
+    gap: 8px;
+    padding: 12px 14px;
   }
 
-  .swap-box label {
-    justify-items: start;
+  .swap-box input {
+    width: min(160px, 100%);
+    font-size: clamp(26px, 9vw, 34px);
   }
 
-  .swap-box input,
   .readonly-amount strong {
-    text-align: left;
+    font-size: clamp(20px, 7vw, 28px);
   }
 
+  /* Receipt-style rows on mobile: label left, value right, one per line. */
   .quote-summary {
     grid-template-columns: 1fr;
+    gap: 0;
+    padding: 2px 12px;
+  }
+
+  .quote-summary div {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+    min-height: 0;
+    padding: 11px 0;
+    border-radius: 0;
+    background: transparent;
+  }
+
+  .quote-summary div + div {
+    border-top: 1px solid var(--border);
+  }
+
+  .quote-summary span {
+    flex: 0 0 auto;
+  }
+
+  .quote-summary strong {
+    margin-top: 0;
+    overflow: visible;
+    text-align: right;
   }
 
   .wallet-state-strip {
@@ -1701,49 +1953,12 @@ a {
     width: 100%;
   }
 
+  /* Overlay the route dropdown over the card instead of pushing it down. */
   .route-options-menu {
-    position: static;
-    display: none;
-    margin-top: 6px;
     transform-origin: top center;
   }
 
-  .route-options-menu.open {
-    display: grid;
-  }
-
-  .route-status-line {
-    flex-wrap: wrap;
-  }
-
-  .home-activity-item {
-    grid-template-columns: auto minmax(0, 1fr) auto;
-  }
-
-  .activity-meta {
-    grid-column: 2;
-    grid-row: 2;
-    text-align: left;
-  }
-
-  .home-activity-item > svg {
-    grid-column: 3;
-    grid-row: 1 / span 2;
-  }
-
-  .detail-grid,
-  .metric-grid,
-  .receipt-explorer-grid,
-  .receipt-route {
-    grid-template-columns: 1fr;
-  }
-
-  .receipt-header {
-    grid-template-columns: 44px minmax(0, 1fr);
-  }
-
-  .receipt-header .status-badge {
-    grid-column: 1 / -1;
-    width: fit-content;
+  .detail-simple {
+    margin-top: 14px;
   }
 }

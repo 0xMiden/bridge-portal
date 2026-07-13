@@ -45,6 +45,13 @@ export type Activity = {
   epochIntentNonce?: string;
   /** Epoch sponsor / user address the intent status is keyed on (EVM 0x). */
   epochSponsor?: string;
+  /** Real quoted output amount at execution (e.g. "99.17 USDC"), when known. */
+  receivedAmount?: string;
+  /** Owner tags for per-account filtering of account-derived history. */
+  evmAddress?: string;
+  midenAccount?: string;
+  /** Source-relative ordering hint (higher = newer) for merged remote history. */
+  sortKey?: number;
   updatedAt: string;
 };
 
@@ -159,21 +166,62 @@ export function shortAddress(value: string) {
   return `${value.slice(0, 6)}...${value.slice(-6)}`;
 }
 
+/**
+ * Deterministic account-avatar gradient derived from an address (Uniswap-style):
+ * two hues seeded from the string so each account has a stable, distinct swatch.
+ */
+export function walletGradient(seed: string): string {
+  let h = 0;
+  for (let i = 0; i < seed.length; i += 1) {
+    h = (h * 31 + seed.charCodeAt(i)) >>> 0;
+  }
+  const a = h % 360;
+  const b = (a + 60 + ((h >> 8) % 120)) % 360;
+  return `linear-gradient(135deg, hsl(${a} 72% 58%), hsl(${b} 68% 46%))`;
+}
+
 export function quoteFor(mode: FlowMode, provider: BridgeProvider, amount: string): Quote {
   const parsedAmount = Number(amount) || 0;
-  const expected = Math.max(parsedAmount * 0.999, 0);
+  // AggLayer is a canonical 1:1 bridge (no provider fee), so what you send is
+  // what you receive. Other routes carry a small fee spread.
+  const isOneToOne = provider === "agglayer";
+  const expected = isOneToOne
+    ? parsedAmount
+    : Math.max(parsedAmount * 0.999, 0);
+  const minMultiplier = isOneToOne ? 1 : 0.995;
   const routeName = providers[provider].label;
-  const networkFee = provider === "agglayer" ? "Sepolia gas" : provider === "near-intents" ? "0.14 USD" : "0.18 USD";
-  const bridgeFee = provider === "agglayer" ? "No provider fee" : "0.05%";
-  const relayerFee = provider === "agglayer" ? "None" : "0.03 USD";
+  // Epoch's quote API returns only the net output amount (no fee breakdown), so
+  // don't fabricate specific fees — the cost is baked into the quoted rate.
+  const isEpoch = provider === "agglayer" ? false : provider === "epoch";
+  const networkFee = provider === "agglayer"
+    ? "Sepolia gas"
+    : isEpoch
+      ? mode === "receive"
+        ? "Sepolia gas"
+        : "In quoted rate"
+      : "0.14 USD";
+  const bridgeFee = provider === "agglayer"
+    ? "No provider fee"
+    : isEpoch
+      ? "In quoted rate"
+      : "0.05%";
+  const relayerFee = provider === "agglayer"
+    ? "None"
+    : isEpoch
+      ? "In quoted rate"
+      : "0.03 USD";
+  // Token depends on the route: AggLayer bridges ETH, Epoch bridges USDC.
+  // The mode-based assetOut ("Miden ETH") is only correct for AggLayer.
+  const outSymbol =
+    provider === "epoch" ? "USDC" : modes[mode].assetOut.replace("Miden ", "");
 
   return {
-    eta: provider === "agglayer" ? (mode === "receive" ? "About 15 min" : "30-90 min") : "3-6 min",
+    eta: provider === "agglayer" ? (mode === "receive" ? "About 15 min" : "30-90 min") : "1-3 min",
     networkFee,
     bridgeFee,
     relayerFee,
-    expectedReceived: `${expected.toLocaleString(undefined, { maximumFractionDigits: 6 })} ${modes[mode].assetOut.replace("Miden ", "")}`,
-    minReceived: `${(expected * 0.995).toLocaleString(undefined, { maximumFractionDigits: 6 })} ${modes[mode].assetOut.replace("Miden ", "")}`,
+    expectedReceived: `${expected.toLocaleString(undefined, { maximumFractionDigits: 6 })} ${outSymbol}`,
+    minReceived: `${(expected * minMultiplier).toLocaleString(undefined, { maximumFractionDigits: 6 })} ${outSymbol}`,
     sourceGas: mode === "receive" ? "Sepolia ETH" : "Miden fee credit",
     destinationGas: mode === "receive" ? "Miden fee credit" : "Sepolia ETH",
     warning:
@@ -217,7 +265,9 @@ export function createActivity(
   overrides: Partial<Activity> = {},
 ): Activity {
   const copy = modes[mode];
-  const asset = copy.assetIn.replace("Miden ", "");
+  // Token depends on the route: Epoch bridges USDC, AggLayer/others bridge ETH.
+  const asset =
+    provider === "epoch" ? "USDC" : copy.assetIn.replace("Miden ", "");
   const destination = mode === "receive" ? "Miden" : "Sepolia";
 
   const activity: Activity = {
@@ -229,19 +279,12 @@ export function createActivity(
     eta: provider === "agglayer" ? "8 min" : "4 min",
     amount: amount || "0",
     asset,
-    txHash: "0xpreview...pending",
-    sourceTxHash:
-      mode === "receive"
-        ? "0x9fb3f3d6b7c0e2a947a0d9b0327d6de063a08f46d8dc6f2ced343b9a7e1772ac"
-        : "0x0490ad69e87c19c0c2c4b7951b87f0013c98bf5d90b7e14acbe821471ad5b91e",
-    destinationTxHash:
-      mode === "send"
-        ? "0x52a18acb48115396081a3d4f1e7b58e45f0ff687a3af3ff6d83b947d85cdb91e"
-        : undefined,
-    midenTxId:
-      mode === "receive"
-        ? "0x0490ad6902c47f34e8a1dc57a85b6c019a14cf27b0130d4ba6b9134fd08f72ac"
-        : "0x0490ad69e87c19c0c2c4b7951b87f0013c98bf5d90b7e14acbe821471ad5b91e",
+    // Honest pending defaults — the real hashes are filled in by the submit flow
+    // as the transfer progresses (no fabricated tx hashes on a pending activity).
+    txHash: "0xpending",
+    sourceTxHash: undefined,
+    destinationTxHash: undefined,
+    midenTxId: undefined,
     updatedAt: "Just now",
   };
 
@@ -263,9 +306,13 @@ export function sourceExplorer(activity: Activity) {
 
 export function destinationExplorer(activity: Activity) {
   if (activity.mode === "receive") {
+    // The destination tx = the Miden note-creation tx (AggLayer's destination
+    // claim), captured from the deposit's claim_tx_hash. Link straight to it
+    // when known; fall back to the tx list before it's observed.
+    const midenTx = activity.midenTxId ?? activity.destinationTxHash;
     return {
       label: "View on Midenscan",
-      href: `${explorerUrls.miden}/txs`,
+      href: midenTx ? `${explorerUrls.miden}/tx/${midenTx}` : `${explorerUrls.miden}/txs`,
     };
   }
   return {
@@ -293,4 +340,22 @@ export function loadStoredActivities(): Activity[] {
 
 export function saveActivities(activities: Activity[]) {
   window.localStorage.setItem(activityStorageKey, JSON.stringify(activities));
+}
+
+/**
+ * Merge a patch into one stored activity by id and persist. Used by the submit
+ * flow to update an already-navigated-to activity as the (backgrounded)
+ * execution progresses, so the detail page reflects it on its next re-read.
+ */
+export function patchStoredActivity(id: string, patch: Partial<Activity>) {
+  try {
+    const activities = loadStoredActivities();
+    saveActivities(
+      activities.map((item) =>
+        item.id === id ? { ...item, ...patch, updatedAt: "Just now" } : item,
+      ),
+    );
+  } catch {
+    // ignore transient storage errors
+  }
 }

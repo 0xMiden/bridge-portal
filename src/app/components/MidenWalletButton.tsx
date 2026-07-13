@@ -1,27 +1,26 @@
 "use client";
 
 import {
-  AllowedPrivateData,
-  PrivateDataPermission,
-  WalletAdapterNetwork,
   WalletReadyState,
 } from "@miden-sdk/miden-wallet-adapter-base";
 import {
   type MidenFiWalletContextState,
-  MidenFiSignerProvider,
   useMidenFiWallet,
 } from "@miden-sdk/miden-wallet-adapter-react";
-import {
-  ChevronDown,
-  Copy,
-  LogOut,
-  RefreshCcw,
-  ShieldCheck,
-} from "lucide-react";
+import { ChevronDown, Copy, LogOut, RefreshCcw, Wallet } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { shortAddress } from "../lib/bridge-state";
+import { shortAddress, walletGradient } from "../lib/bridge-state";
+import { useResetMidenProvider } from "./MidenWalletProvider";
 
-type MidenWalletSnapshot = {
+/** MidenFi brand logo from the wallet adapter, or a neutral wallet fallback. */
+function WalletBrandIcon({ src, size }: { src?: string; size: number }) {
+  if (!src) return <Wallet size={size} aria-hidden="true" />;
+  const s = { width: size, height: size, borderRadius: 5, display: "block" };
+  // eslint-disable-next-line @next/next/no-img-element -- data-URI wallet logo, not an optimizable asset
+  return <img src={src} alt="" style={s} />;
+}
+
+export type MidenWalletSnapshot = {
   address: string;
   connected: boolean;
   error: string;
@@ -38,6 +37,10 @@ type MidenWalletSnapshot = {
   // AggLayer B2AGG bridge-out note goes through this, not requestSend.
   requestTransaction?: MidenFiWalletContextState["requestTransaction"];
   waitForTransaction?: MidenFiWalletContextState["waitForTransaction"];
+  // requestAssets reads the wallet's (private) token balances — opens a popup.
+  requestAssets?: MidenFiWalletContextState["requestAssets"];
+  // requestConsumableNotes reads the account's notes for Miden-side history.
+  requestConsumableNotes?: MidenFiWalletContextState["requestConsumableNotes"];
 };
 
 type MidenWalletButtonProps = {
@@ -100,8 +103,16 @@ function MidenWalletButtonInner({
   // multiple popups that never seem to dismiss. Collapse concurrent refreshes
   // to a single in-flight promise.
   const refreshInflightRef = useRef<Promise<void> | null>(null);
+  // Balance is fetched exactly once per connection — right after the user
+  // connects — and thereafter only when they click the refresh icon. We gate
+  // the auto-fetch on a user-initiated connect so an autoConnect session
+  // restore (page reload / navigation) doesn't silently reopen the MidenFi
+  // asset popup. `balanceFetchedRef` makes the first-connect fetch fire once.
+  const userConnectRef = useRef(false);
+  const balanceFetchedRef = useRef(false);
   const address = wallet.address ?? "";
   const readyState = wallet.wallet?.readyState;
+  const walletLogo = wallet.wallet?.adapter?.icon;
   const ready =
     readyState === WalletReadyState.Installed ||
     readyState === WalletReadyState.Loadable;
@@ -122,6 +133,8 @@ function MidenWalletButtonInner({
       requestSend: wallet.requestSend,
       requestTransaction: wallet.requestTransaction,
       waitForTransaction: wallet.waitForTransaction,
+      requestAssets: wallet.requestAssets,
+      requestConsumableNotes: wallet.requestConsumableNotes,
     });
   }, [
     address,
@@ -134,10 +147,14 @@ function MidenWalletButtonInner({
     wallet.requestSend,
     wallet.requestTransaction,
     wallet.waitForTransaction,
+    wallet.requestAssets,
+    wallet.requestConsumableNotes,
   ]);
 
   useEffect(() => {
     if (!wallet.connected) {
+      userConnectRef.current = false;
+      balanceFetchedRef.current = false;
       queueMicrotask(() => {
         setBalanceText("Not connected");
         setNoteSyncStatus("Not connected");
@@ -146,14 +163,24 @@ function MidenWalletButtonInner({
       return;
     }
 
-    // Do NOT eagerly call requestAssets()/requestConsumableNotes() on connect —
-    // each opens a MidenFi confirmation popup the bridge flow doesn't need, and
-    // they pile up. Balance/notes are fetched on demand via the menu's refresh
-    // button (onClick={refreshWalletState}). Show a neutral connected state here.
+    // Fetch the balance once, only right after a user-initiated connect. An
+    // autoConnect session restore (reload / navigation) leaves this false so we
+    // don't reopen the MidenFi asset popup unprompted — the user refreshes it
+    // via the menu's refresh icon when they want a fresh read.
+    if (userConnectRef.current && !balanceFetchedRef.current) {
+      balanceFetchedRef.current = true;
+      userConnectRef.current = false;
+      void refreshWalletState();
+      return;
+    }
+
+    // Restored session (or already fetched): show a neutral connected state and
+    // wait for an explicit refresh.
     queueMicrotask(() => {
       setBalanceText("Connected");
       setNoteSyncStatus("Refresh to sync");
     });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [wallet.connected, address]);
 
   useEffect(() => {
@@ -186,8 +213,12 @@ function MidenWalletButtonInner({
     }
 
     try {
+      // Mark this as a user-initiated connect so the connected effect fetches
+      // the balance once (autoConnect restores don't set this).
+      userConnectRef.current = true;
       await withWalletTimeout(wallet.connect());
     } catch (connectError) {
+      userConnectRef.current = false;
       setError(errorMessage(connectError));
       if (connectError instanceof WalletRequestTimeoutError) {
         window.setTimeout(onResetProvider, 250);
@@ -198,10 +229,12 @@ function MidenWalletButtonInner({
   async function reconnectMidenWallet() {
     setError("");
     try {
+      userConnectRef.current = true;
       if (wallet.connected) await wallet.disconnect();
       await withWalletTimeout(wallet.connect());
       setMenuOpen(false);
     } catch (reconnectError) {
+      userConnectRef.current = false;
       setError(errorMessage(reconnectError));
       if (reconnectError instanceof WalletRequestTimeoutError) {
         window.setTimeout(onResetProvider, 250);
@@ -305,29 +338,25 @@ function MidenWalletButtonInner({
         aria-expanded={menuOpen}
         aria-haspopup="menu"
       >
-        <span className={`wallet-icon ${wallet.connected ? "connected" : ""}`}>
-          <ShieldCheck size={16} aria-hidden="true" />
-        </span>
-        <span className="wallet-copy">
-          <small>
-            <span
-              className={`wallet-status-dot ${wallet.connected ? "connected" : wallet.connecting ? "pending" : ""}`}
-            />
-            Miden
-          </small>
-          <span>
-            {wallet.connecting
-              ? "Connecting"
-              : wallet.connected
-                ? shortAddress(address)
-                : ready
-                  ? "Connect wallet"
-                  : "Install wallet"}
+        <span
+          className="wallet-avatar"
+          style={
+            wallet.connected ? { background: walletGradient(address) } : undefined
+          }
+        >
+          <span className="wallet-avatar-badge">
+            <WalletBrandIcon src={walletLogo} size={11} />
           </span>
         </span>
-        {wallet.connected ? (
-          <span className="wallet-balance">{balanceText}</span>
-        ) : null}
+        <span className="wallet-pill-label">
+          {wallet.connecting
+            ? "Connecting"
+            : wallet.connected
+              ? shortAddress(address)
+              : ready
+                ? "Connect wallet"
+                : "Install wallet"}
+        </span>
         <ChevronDown
           className="wallet-menu-chevron"
           size={15}
@@ -344,7 +373,7 @@ function MidenWalletButtonInner({
             <span
               className={`wallet-menu-avatar ${wallet.connected ? "connected" : wallet.connecting ? "pending" : ""}`}
             >
-              <ShieldCheck size={16} aria-hidden="true" />
+              <WalletBrandIcon src={walletLogo} size={16} />
             </span>
             <span>
               <strong>Miden wallet</strong>
@@ -424,7 +453,7 @@ function MidenWalletButtonInner({
                   className="wallet-menu-item"
                   onClick={connectMidenWallet}
                 >
-                  <ShieldCheck size={15} aria-hidden="true" />
+                  <WalletBrandIcon src={walletLogo} size={15} />
                   <span>Connect wallet</span>
                 </button>
               ) : null}
@@ -449,23 +478,10 @@ function MidenWalletButtonInner({
   );
 }
 
+// The MidenFi provider now lives at the app root (see MidenWalletProvider) so
+// the connection persists across navigation; the button just consumes it and
+// pulls the reset trigger from context.
 export function MidenWalletButton(props: MidenWalletButtonProps) {
-  const [providerKey, setProviderKey] = useState(0);
-
-  return (
-    <MidenFiSignerProvider
-      key={providerKey}
-      appName="Miden Bridge"
-      network={WalletAdapterNetwork.Testnet}
-      autoConnect={false}
-      privateDataPermission={PrivateDataPermission.UponRequest}
-      allowedPrivateData={AllowedPrivateData.None}
-      localStorageKey="miden-bridge-wallet"
-    >
-      <MidenWalletButtonInner
-        {...props}
-        onResetProvider={() => setProviderKey((key) => key + 1)}
-      />
-    </MidenFiSignerProvider>
-  );
+  const resetProvider = useResetMidenProvider();
+  return <MidenWalletButtonInner {...props} onResetProvider={resetProvider} />;
 }
