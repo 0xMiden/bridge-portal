@@ -306,9 +306,13 @@ export function sourceExplorer(activity: Activity) {
 
 export function destinationExplorer(activity: Activity) {
   if (activity.mode === "receive") {
+    // The destination tx = the Miden note-creation tx (AggLayer's destination
+    // claim), captured from the deposit's claim_tx_hash. Link straight to it
+    // when known; fall back to the tx list before it's observed.
+    const midenTx = activity.midenTxId ?? activity.destinationTxHash;
     return {
       label: "View on Midenscan",
-      href: `${explorerUrls.miden}/txs`,
+      href: midenTx ? `${explorerUrls.miden}/tx/${midenTx}` : `${explorerUrls.miden}/txs`,
     };
   }
   return {

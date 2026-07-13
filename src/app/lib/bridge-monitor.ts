@@ -102,15 +102,38 @@ export function deriveMonitoredActivity(activity: Activity, observation: BridgeM
     }
 
     if (observation.agglayerDeposit) {
-      const readyForClaim = observation.agglayerDeposit.ready_for_claim === true;
-      return {
+      const deposit = observation.agglayerDeposit;
+      // Two distinct "claims" for a Sepolia→Miden receive:
+      //   1. AggLayer destination claim — the bridge auto-creates the note on
+      //      Miden. Signalled by `claim_tx_hash` (the note-creation tx) +
+      //      `ready_for_claim`. After this the note EXISTS in the wallet.
+      //   2. Miden note claim — the user consumes that note in MidenFi to
+      //      reflect the balance. Happens in-wallet; the deposit indexer can't
+      //      observe it, so `claim_available` is the app's terminal state.
+      const noteCreated =
+        deposit.ready_for_claim === true || Boolean(deposit.claim_tx_hash);
+      const shared = {
         ...next,
-        status: readyForClaim ? "claim_available" : "message_observed",
-        eta: readyForClaim ? "Ready in Miden wallet" : "AggLayer message observed",
-        readyForClaim,
-        depositCount: depositCount(observation.agglayerDeposit) ?? next.depositCount,
-        sourceTxHash: observation.agglayerDeposit.tx_hash ?? next.sourceTxHash,
-        txHash: observation.agglayerDeposit.tx_hash ?? next.txHash,
+        readyForClaim: noteCreated,
+        depositCount: depositCount(deposit) ?? next.depositCount,
+        sourceTxHash: deposit.tx_hash ?? next.sourceTxHash,
+        txHash: deposit.tx_hash ?? next.txHash,
+      };
+      if (noteCreated) {
+        return {
+          ...shared,
+          status: "claim_available",
+          eta: "Delivered — claim in your Miden wallet",
+          // The AggLayer destination claim tx = the Miden note-creation tx.
+          midenTxId: deposit.claim_tx_hash ?? next.midenTxId,
+          destinationTxHash: deposit.claim_tx_hash ?? next.destinationTxHash,
+          claimTxHash: deposit.claim_tx_hash ?? next.claimTxHash,
+        };
+      }
+      return {
+        ...shared,
+        status: "message_observed",
+        eta: "AggLayer message observed",
       };
     }
 
