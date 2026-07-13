@@ -72,7 +72,7 @@ describe("deriveMonitoredActivity", () => {
     expect(next.readyForClaim).toBe(false);
   });
 
-  test("does not mark AggLayer receive complete when the Miden note is only claimable", () => {
+  test("marks AggLayer receive complete on delivery — the note is created on Miden and the user claims it in-wallet", () => {
     const next = deriveMonitoredActivity(baseReceive, {
       checkedAt: "Just now",
       sourceTx: {
@@ -88,9 +88,9 @@ describe("deriveMonitoredActivity", () => {
       },
     });
 
-    expect(next.status).toBe("claim_available");
+    expect(next.status).toBe("complete");
     expect(next.readyForClaim).toBe(true);
-    expect(next.status).not.toBe("complete");
+    expect(next.eta).toBe("Delivered — claim in your Miden wallet");
   });
 
   test("captures the Miden note-creation tx (claim_tx_hash) as the destination claim, not the balance-reflecting consume", () => {
@@ -112,9 +112,8 @@ describe("deriveMonitoredActivity", () => {
     });
 
     // AggLayer destination claim happened (note created on Miden) — the app's
-    // terminal observable state. The Miden note is now claimable in-wallet.
-    expect(next.status).toBe("claim_available");
-    expect(next.status).not.toBe("complete");
+    // terminal success state. The Miden note is now the user's to claim in-wallet.
+    expect(next.status).toBe("complete");
     expect(next.eta).toBe("Delivered — claim in your Miden wallet");
     // The claim_tx_hash is the Miden note-creation tx, surfaced for Midenscan.
     expect(next.midenTxId).toBe(claimTx);
@@ -142,7 +141,7 @@ describe("deriveMonitoredActivity", () => {
       },
     });
 
-    expect(next.status).toBe("claim_available");
+    expect(next.status).toBe("complete");
     expect(next.midenTxId).toBe(claimTx);
   });
 

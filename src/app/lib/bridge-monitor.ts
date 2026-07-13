@@ -108,8 +108,10 @@ export function deriveMonitoredActivity(activity: Activity, observation: BridgeM
       //      Miden. Signalled by `claim_tx_hash` (the note-creation tx) +
       //      `ready_for_claim`. After this the note EXISTS in the wallet.
       //   2. Miden note claim — the user consumes that note in MidenFi to
-      //      reflect the balance. Happens in-wallet; the deposit indexer can't
-      //      observe it, so `claim_available` is the app's terminal state.
+      //      reflect the balance. Happens in-wallet and the deposit indexer
+      //      can't observe it (private note), so delivery IS the app's terminal
+      //      success state: once the note is created the bridge has done its job
+      //      and the remaining consume is the user's to perform in their wallet.
       const noteCreated =
         deposit.ready_for_claim === true || Boolean(deposit.claim_tx_hash);
       const shared = {
@@ -122,7 +124,7 @@ export function deriveMonitoredActivity(activity: Activity, observation: BridgeM
       if (noteCreated) {
         return {
           ...shared,
-          status: "claim_available",
+          status: "complete",
           eta: "Delivered — claim in your Miden wallet",
           // The AggLayer destination claim tx = the Miden note-creation tx.
           midenTxId: deposit.claim_tx_hash ?? next.midenTxId,

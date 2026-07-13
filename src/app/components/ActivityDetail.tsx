@@ -197,7 +197,7 @@ export function ActivityDetail({ id }: { id: string }) {
   const receiptAmountLabel =
     activity?.status === "complete"
       ? activity.mode === "receive"
-        ? "Received on Miden"
+        ? "Delivered on Miden"
         : "Released on Sepolia"
       : activity?.mode === "receive"
         ? "Expected on Miden"
@@ -219,7 +219,9 @@ export function ActivityDetail({ id }: { id: string }) {
               ? "Wait for the Sepolia claim transaction to confirm."
               : activity?.status === "failed"
                 ? "This transfer needs a retry."
-                : "Funds are available in the destination account.";
+                : activity?.status === "complete" && activity.mode === "receive"
+                  ? "Delivered to your Miden wallet — claim the note there to move it into your balance."
+                  : "Funds are available in the destination account.";
 
   const observeActivity = useCallback(
     (activityId: string, observation: BridgeMonitorObservation) => {
