@@ -19,9 +19,7 @@ export const metadata: Metadata = {
   description:
     "Move value across Sepolia and Miden with wallet-native cross-chain receive and send flows.",
   applicationName: "Miden Bridge",
-  icons: {
-    icon: "/favicon.ico",
-  },
+  // Favicon is the Miden mark from src/app/icon.svg (Next file-based metadata).
 };
 
 export const viewport: Viewport = {
