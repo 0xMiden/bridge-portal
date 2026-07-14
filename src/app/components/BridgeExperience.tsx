@@ -216,7 +216,7 @@ export function BridgeExperience() {
   const evmIcon = walletInfo?.icon;
   const [provider, setProvider] = useState<BridgeProvider>("epoch");
   const [mode, setMode] = useState<FlowMode>("receive");
-  const [amount, setAmount] = useState("100");
+  const [amount, setAmount] = useState("");
   const [destination, setDestination] = useState("");
   const walletAccount = address ?? "";
   const walletConnected = isConnected && Boolean(address);
@@ -610,7 +610,7 @@ export function BridgeExperience() {
 
   function selectMode(nextMode: FlowMode) {
     setMode(nextMode);
-    setAmount(nextMode === "receive" ? "100" : "0.25");
+    setAmount("");
     setDestination("");
     destinationPrefilledRef.current = false;
     setBridgeError("");
@@ -1197,6 +1197,7 @@ export function BridgeExperience() {
               <input
                 aria-label="Amount"
                 inputMode="decimal"
+                placeholder="0"
                 value={amount}
                 onChange={(event) => setAmount(event.target.value)}
               />
