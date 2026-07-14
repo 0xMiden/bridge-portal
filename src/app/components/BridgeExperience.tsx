@@ -640,6 +640,13 @@ export function BridgeExperience() {
       !(a.status === "signature" && !a.sourceTxHash),
   );
 
+  // Settled transfers (complete/failed), newest first — a persisted history that
+  // survives refresh from localStorage so users keep a record of past bridging.
+  // Capped so the list stays glanceable; the full set remains in storage.
+  const pastActivities = activities
+    .filter((a) => a.status === "complete" || a.status === "failed")
+    .slice(0, 12);
+
   function selectProvider(nextProvider: BridgeProvider) {
     if (providers[nextProvider].disabled) return;
     setProvider(nextProvider);
@@ -1314,6 +1321,41 @@ export function BridgeExperience() {
             </div>
             <div className="home-activity-list">
               {inFlightActivities.map((activity) => (
+                <Link
+                  className="home-activity-item"
+                  href={`/activity/${activity.id}`}
+                  key={activity.id}
+                >
+                  <span
+                    className={`status-dot ${statusTone(activity.status)}`}
+                  />
+                  <span className="activity-copy">
+                    <strong>{activity.summary}</strong>
+                    <small>
+                      {providers[activity.provider].label} -{" "}
+                      {statusLabel(activity.status)}
+                    </small>
+                  </span>
+                  <span className="activity-meta">
+                    <strong>
+                      {activity.amount} {activity.asset}
+                    </strong>
+                    <small>{activity.updatedAt}</small>
+                  </span>
+                  <ChevronRight size={16} aria-hidden="true" />
+                </Link>
+              ))}
+            </div>
+          </section>
+        )}
+
+        {pastActivities.length > 0 && (
+          <section className="home-activity" aria-label="Recent transfers">
+            <div className="home-activity-title">
+              <h2>Recent transfers</h2>
+            </div>
+            <div className="home-activity-list">
+              {pastActivities.map((activity) => (
                 <Link
                   className="home-activity-item"
                   href={`/activity/${activity.id}`}
