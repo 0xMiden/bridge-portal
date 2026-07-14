@@ -40,23 +40,24 @@ export function EpochQuotePreview({
     onAmount?.(quote.amount);
   }, [onAmount, quote.amount]);
 
-  // Keep the last known amount visible while a refetch is in flight so the
-  // field updates in place rather than blinking blank.
-  if (quote.amount) {
-    return (
-      <>
-        {quote.amount}
-        {hideSymbol ? "" : ` ${quote.symbol}`}
-      </>
-    );
-  }
-
+  // While a new quote is in flight (input changed → recomputing), show a
+  // loading indicator rather than the previous amount, so the field visibly
+  // "updates" instead of holding a stale value and then snapping to the new one.
   if (quote.loading) {
     return (
       <span className="epoch-quote-loading">
         <RefreshCcw size={14} className="animate-spin" aria-hidden="true" />
         Fetching quote…
       </span>
+    );
+  }
+
+  if (quote.amount) {
+    return (
+      <>
+        {quote.amount}
+        {hideSymbol ? "" : ` ${quote.symbol}`}
+      </>
     );
   }
 
