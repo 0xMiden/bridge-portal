@@ -98,6 +98,14 @@ async function fetchSepoliaTx(hash: string): Promise<ChainTxObservation> {
   return payload as ChainTxObservation;
 }
 
+/** Live "updated Ns ago" from an epoch-ms timestamp, so monitoring reads fresh. */
+function formatAgo(ms: number): string {
+  if (ms < 3_000) return "just now";
+  if (ms < 60_000) return `${Math.round(ms / 1_000)}s ago`;
+  if (ms < 3_600_000) return `${Math.round(ms / 60_000)}m ago`;
+  return `${Math.round(ms / 3_600_000)}h ago`;
+}
+
 /**
  * Explorer link that only becomes clickable once its transaction exists. Before
  * that (e.g. a Send's Sepolia payout, a Receive's Miden delivery) it renders as
@@ -134,7 +142,10 @@ export function ActivityDetail({ id }: { id: string }) {
   const [claimBusy, setClaimBusy] = useState(false);
   const [claimError, setClaimError] = useState("");
   const [monitorError, setMonitorError] = useState("");
-  const [lastChecked, setLastChecked] = useState("");
+  // Epoch-ms of the last monitor read; rendered as a live "updated Ns ago" that
+  // ticks each second so the page visibly reflects the ≤10s polling cadence.
+  const [lastCheckedAt, setLastCheckedAt] = useState(0);
+  const [now, setNow] = useState(0);
   const { open } = useAppKit();
   const { address, isConnected } = useAppKitAccount();
   const { walletProvider } = useAppKitProvider<EvmProvider>("eip155");
@@ -206,7 +217,7 @@ export function ActivityDetail({ id }: { id: string }) {
             saveActivities(updated);
             return updated;
           });
-          setLastChecked("Just now");
+          setLastCheckedAt(Date.now());
         },
       });
     })().catch(() => undefined);
@@ -285,7 +296,7 @@ export function ActivityDetail({ id }: { id: string }) {
             )
           : [nextActivity, ...current];
         saveActivities(updated);
-        setLastChecked(observation.checkedAt);
+        setLastCheckedAt(Date.now());
         setMonitorError("");
         return updated;
       });
@@ -306,6 +317,18 @@ export function ActivityDetail({ id }: { id: string }) {
   const isActive =
     !activity ||
     (activity.status !== "complete" && activity.status !== "failed");
+
+  // Tick a 1s clock while the transfer is live so the "updated Ns ago" label
+  // advances in real time — a visible signal that monitoring is current.
+  useEffect(() => {
+    setNow(Date.now());
+    if (!isActive) return;
+    const id = window.setInterval(() => setNow(Date.now()), 1_000);
+    return () => window.clearInterval(id);
+  }, [isActive]);
+
+  const lastCheckedLabel =
+    lastCheckedAt && now ? formatAgo(Math.max(0, now - lastCheckedAt)) : "";
 
   // Re-read persisted activities on tab focus and on a tick. This keeps the
   // detail page live without a manual refresh: it picks up updates written by the
@@ -367,7 +390,7 @@ export function ActivityDetail({ id }: { id: string }) {
           return updatedActivity;
         });
         saveActivities(updated);
-        setLastChecked("Just now");
+        setLastCheckedAt(Date.now());
         setMonitorError("");
         return updated;
       });
@@ -679,8 +702,8 @@ export function ActivityDetail({ id }: { id: string }) {
                     ? "Settled"
                     : isFailed
                       ? activity.eta
-                      : lastChecked
-                        ? `Monitoring · updated ${lastChecked}`
+                      : lastCheckedLabel
+                        ? `Monitoring · updated ${lastCheckedLabel}`
                         : "Monitoring…"}
                 </span>
               </div>
@@ -723,7 +746,7 @@ export function ActivityDetail({ id }: { id: string }) {
 
             <p className="receipt-monitor">
               {nextAction}
-              {lastChecked ? ` · Last checked ${lastChecked}` : ""}
+              {lastCheckedLabel ? ` · Last checked ${lastCheckedLabel}` : ""}
             </p>
           </div>
         </section>
