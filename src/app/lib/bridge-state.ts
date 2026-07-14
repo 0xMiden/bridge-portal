@@ -291,33 +291,58 @@ export function createActivity(
   return { ...activity, ...overrides };
 }
 
+// Only a full, real hash makes a valid `/tx/` deep link. The `txHash` field is
+// stored abbreviated (shortAddress) for display and "0xpending" before a tx
+// exists — both produce broken explorer URLs, so they must never feed a link.
+function fullHash(hash?: string): string | undefined {
+  if (!hash) return undefined;
+  if (hash === "0xpending") return undefined;
+  if (hash.includes("…") || hash.includes("...")) return undefined;
+  return hash;
+}
+
 export function sourceExplorer(activity: Activity) {
   if (activity.mode === "receive") {
+    // Source = the Sepolia deposit the user signed.
+    const tx = fullHash(activity.sourceTxHash);
     return {
       label: "View on Etherscan",
-      href: `${explorerUrls.sepolia}/tx/${activity.sourceTxHash ?? activity.txHash}`,
+      href: tx ? `${explorerUrls.sepolia}/tx/${tx}` : explorerUrls.sepolia,
     };
   }
+  // Send source = the Miden note tx (Epoch's P2IDE collateral note / AggLayer's
+  // B2AGG note). Deep-link it like the Sepolia side does, not the tx list.
+  const midenTx = fullHash(activity.sourceTxHash) ?? fullHash(activity.midenTxId);
   return {
     label: "View on Midenscan",
-    href: `${explorerUrls.miden}/txs`,
+    href: midenTx ? `${explorerUrls.miden}/tx/${midenTx}` : `${explorerUrls.miden}/txs`,
   };
 }
 
 export function destinationExplorer(activity: Activity) {
   if (activity.mode === "receive") {
-    // The destination tx = the Miden note-creation tx (AggLayer's destination
-    // claim), captured from the deposit's claim_tx_hash. Link straight to it
-    // when known; fall back to the tx list before it's observed.
-    const midenTx = activity.midenTxId ?? activity.destinationTxHash;
+    // Destination tx = the Miden note-creation tx (AggLayer's destination claim
+    // / Epoch's delivery), captured once observed. Link straight to it when
+    // known; fall back to the tx list before it's observed.
+    const midenTx = fullHash(activity.midenTxId) ?? fullHash(activity.destinationTxHash);
     return {
       label: "View on Midenscan",
       href: midenTx ? `${explorerUrls.miden}/tx/${midenTx}` : `${explorerUrls.miden}/txs`,
     };
   }
+  // Send destination = the Sepolia fulfillment tx. Until it's captured, link to
+  // the recipient's Sepolia address (their incoming txs) rather than a broken
+  // /tx/ built from an abbreviated hash.
+  const sepoliaTx =
+    fullHash(activity.claimTxHash) ?? fullHash(activity.destinationTxHash);
+  const recipient = activity.destination;
+  const fallback =
+    recipient && /^0x[0-9a-fA-F]{40}$/.test(recipient)
+      ? `${explorerUrls.sepolia}/address/${recipient}`
+      : explorerUrls.sepolia;
   return {
     label: "View on Etherscan",
-    href: `${explorerUrls.sepolia}/tx/${activity.claimTxHash ?? activity.destinationTxHash ?? activity.txHash}`,
+    href: sepoliaTx ? `${explorerUrls.sepolia}/tx/${sepoliaTx}` : fallback,
   };
 }
 

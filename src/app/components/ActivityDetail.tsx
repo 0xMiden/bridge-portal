@@ -33,7 +33,7 @@ import {
   useAppKitProvider,
 } from "@reown/appkit/react";
 import { type EvmProvider, ensureSepolia } from "../lib/evm-wallet";
-import { epochActivityStatus } from "../lib/epoch/epoch-status";
+import { epochActivityStatus, epochDestinationTx } from "../lib/epoch/epoch-status";
 import { MIDEN_DESTINATION_CHAIN_ID } from "../lib/epoch/config";
 import { sepoliaGasUnitsFor, useSepoliaGasEstimate } from "../lib/sepolia-gas";
 
@@ -138,8 +138,10 @@ export function ActivityDetail({ id }: { id: string }) {
     const activityId = activity.id;
     const sponsor = activity.epochSponsor;
     const nonce = activity.epochIntentNonce;
-    const destinationChainId =
-      activity.mode === "receive" ? MIDEN_DESTINATION_CHAIN_ID : SEPOLIA_CHAIN_ID;
+    const isReceive = activity.mode === "receive";
+    const destinationChainId = isReceive
+      ? MIDEN_DESTINATION_CHAIN_ID
+      : SEPOLIA_CHAIN_ID;
 
     (async () => {
       // epoch-execute pulls the eager-WASM Miden SDK; import lazily so it stays
@@ -151,12 +153,24 @@ export function ActivityDetail({ id }: { id: string }) {
         signal: controller.signal,
         onUpdate: (statuses) => {
           const nextStatus = epochActivityStatus(statuses, destinationChainId);
+          // Capture the settled fulfillment tx so the explorer link deep-links
+          // the real bridging tx: Miden delivery (receive) / Sepolia payout
+          // (send). Receive's Miden tx also drives the Midenscan link off the
+          // tx list.
+          const destTx = epochDestinationTx(statuses, destinationChainId);
           setActivities((current) => {
-            const updated = current.map((item) =>
-              item.id === activityId
-                ? { ...item, status: nextStatus, updatedAt: "Just now" }
-                : item,
-            );
+            const updated = current.map((item) => {
+              if (item.id !== activityId) return item;
+              const withTx = destTx
+                ? isReceive
+                  ? {
+                      midenTxId: item.midenTxId ?? destTx,
+                      destinationTxHash: item.destinationTxHash ?? destTx,
+                    }
+                  : { destinationTxHash: item.destinationTxHash ?? destTx }
+                : {};
+              return { ...item, ...withTx, status: nextStatus, updatedAt: "Just now" };
+            });
             saveActivities(updated);
             return updated;
           });
