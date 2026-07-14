@@ -16,6 +16,7 @@ import {
 } from "../lib/bridge-monitor";
 import {
   type Activity,
+  type ExplorerLink,
   loadStoredActivities,
   modes,
   providers,
@@ -95,6 +96,37 @@ async function fetchSepoliaTx(hash: string): Promise<ChainTxObservation> {
     );
   }
   return payload as ChainTxObservation;
+}
+
+/**
+ * Explorer link that only becomes clickable once its transaction exists. Before
+ * that (e.g. a Send's Sepolia payout, a Receive's Miden delivery) it renders as
+ * a disabled control so users don't follow a link to a not-yet-created tx.
+ */
+function ExplorerLinkButton({ link }: { link: ExplorerLink }) {
+  if (link.available && link.href) {
+    return (
+      <a
+        href={link.href}
+        target="_blank"
+        rel="noreferrer"
+        className="receipt-link"
+      >
+        {link.label}
+        <ExternalLink size={14} aria-hidden="true" />
+      </a>
+    );
+  }
+  return (
+    <span
+      className="receipt-link disabled"
+      aria-disabled="true"
+      title="Available once the transaction is created"
+    >
+      {link.label}
+      <ExternalLink size={14} aria-hidden="true" />
+    </span>
+  );
 }
 
 export function ActivityDetail({ id }: { id: string }) {
@@ -665,27 +697,9 @@ export function ActivityDetail({ id }: { id: string }) {
 
             {sourceLink || destinationLink ? (
               <div className="receipt-links">
-                {sourceLink ? (
-                  <a
-                    href={sourceLink.href}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="receipt-link"
-                  >
-                    {sourceLink.label}
-                    <ExternalLink size={14} aria-hidden="true" />
-                  </a>
-                ) : null}
+                {sourceLink ? <ExplorerLinkButton link={sourceLink} /> : null}
                 {destinationLink ? (
-                  <a
-                    href={destinationLink.href}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="receipt-link"
-                  >
-                    {destinationLink.label}
-                    <ExternalLink size={14} aria-hidden="true" />
-                  </a>
+                  <ExplorerLinkButton link={destinationLink} />
                 ) : null}
               </div>
             ) : null}

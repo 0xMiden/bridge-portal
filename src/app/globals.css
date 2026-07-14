@@ -1335,6 +1335,16 @@ a {
   color: var(--accent);
 }
 
+.receipt-link.disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+.receipt-link.disabled svg {
+  color: var(--muted-foreground);
+}
+
 .receipt-monitor {
   margin: 2px 0 0;
   color: var(--muted-foreground);
