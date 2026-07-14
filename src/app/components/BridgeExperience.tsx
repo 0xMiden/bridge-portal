@@ -177,13 +177,16 @@ function errorMessage(error: unknown) {
 // Human labels for the Epoch SDK's execution phases, so the button reflects
 // real progress (approve/deposit/batch) instead of a frozen "Waiting".
 const EPOCH_PHASE_LABEL: Record<string, string> = {
-  starting: "Preparing…",
-  "switching-chain": "Switch network in wallet…",
-  "preparing-transaction": "Preparing transaction…",
-  "waiting-for-transaction": "Confirming on-chain…",
-  batching: "Approve & deposit in wallet…",
-  sending: "Confirm in your wallet…",
-  sent: "Submitting…",
+  starting: "Preparing your Epoch deposit…",
+  "switching-chain": "Switch to Sepolia in your wallet…",
+  "preparing-transaction": "Preparing your Epoch deposit…",
+  "waiting-for-transaction": "Confirming your deposit on Sepolia…",
+  batching: "Approve &amp; deposit in your wallet…",
+  sending: "Confirm the deposit in your wallet…",
+  // After the deposit is broadcast, solveIntent keeps running while Epoch's
+  // solver delivers on Miden — no further phases fire, so this label persists
+  // and must explain the wait rather than read as a generic "submitting".
+  sent: "Deposit sent — Epoch is delivering to Miden (1–3 min)…",
 };
 
 // Warm the heavy client-only execute chunks (each eager-loads WASM) ahead of the
@@ -918,7 +921,11 @@ export function BridgeExperience() {
         setIsSubmitting(false);
         return;
       }
-      setSubmitPhase("Preparing…");
+      setSubmitPhase(
+        mode === "receive"
+          ? "Preparing your Epoch deposit…"
+          : "Preparing your Epoch send…",
+      );
       try {
         // Submit first (wallet approval + intent broadcast happen here), then
         // record the activity row only once the transfer actually goes through.

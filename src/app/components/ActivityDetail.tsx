@@ -220,7 +220,7 @@ export function ActivityDetail({ id }: { id: string }) {
               : activity?.status === "failed"
                 ? "This transfer needs a retry."
                 : activity?.status === "complete" && activity.mode === "receive"
-                  ? "Delivered to your Miden wallet — claim the note there to move it into your balance."
+                  ? "Delivered to Miden. The bridge created the note on Miden; it won't show in your balance until you claim it. Open your Miden wallet → Receive → Claim to consume the note and move the funds into your balance."
                   : "Funds are available in the destination account.";
 
   const observeActivity = useCallback(
