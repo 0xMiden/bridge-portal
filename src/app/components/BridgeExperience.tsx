@@ -245,6 +245,12 @@ export function BridgeExperience() {
     string
   > | null>(null);
   const [midenBalanceFetchedFor, setMidenBalanceFetchedFor] = useState("");
+  // Reading the (private) Miden balance opens a MidenFi confirmation popup, so we
+  // never do it automatically. The fetch runs only for the account the user has
+  // explicitly asked to see — via "Show balance" or the refresh button — which
+  // is recorded here. Cleared on disconnect / account change so a new account
+  // shows the button again rather than popping unprompted.
+  const [balanceRequestedFor, setBalanceRequestedFor] = useState("");
   // Live Epoch API quote amount, lifted from EpochQuotePreview so the
   // Min-received detail reflects the real quote (not a hardcoded estimate).
   const [epochQuoteAmount, setEpochQuoteAmount] = useState<string | undefined>(
@@ -564,12 +570,16 @@ export function BridgeExperience() {
       /* eslint-disable react-hooks/set-state-in-effect */
       setMidenBalances(null);
       setMidenBalanceFetchedFor("");
+      setBalanceRequestedFor("");
       /* eslint-enable react-hooks/set-state-in-effect */
       return;
     }
     // Connected but the adapter's requestAssets/address hasn't settled yet — wait
     // rather than resetting (a transient undefined must not re-trigger the popup).
     if (!requestMidenAssets || !midenAddress) return;
+    // Never fetch (and never open the popup) unless the user explicitly asked to
+    // see this account's balance.
+    if (balanceRequestedFor !== midenAddress) return;
     if (midenBalanceFetchedFor === midenAddress) return;
 
     let cancelled = false;
@@ -609,6 +619,7 @@ export function BridgeExperience() {
     requestMidenAssets,
     midenAddress,
     midenBalanceFetchedFor,
+    balanceRequestedFor,
   ]);
 
   function selectMode(nextMode: FlowMode) {
@@ -619,11 +630,50 @@ export function BridgeExperience() {
     setBridgeError("");
   }
 
+  // First reveal: user opts in to the balance popup for the connected account.
+  function showMidenBalance() {
+    setBalanceRequestedFor(midenAddress);
+  }
+
   // Re-sync the Miden balance (opens a fresh requestAssets popup by clearing the
-  // fetched marker so the balance effect re-runs).
+  // fetched marker so the balance effect re-runs). Only ever called from the
+  // refresh button — never automatically.
   function refreshMidenBalance() {
     midenBalanceInflightRef.current = null;
     setMidenBalanceFetchedFor("");
+    setBalanceRequestedFor(midenAddress);
+  }
+
+  // The Miden balance cell. Reactive + opt-in: it stays a "Show balance" button
+  // (no popup) until the user asks, then shows the amount with a refresh control.
+  function renderMidenBalance() {
+    if (!midenWallet.connected) return <>Available {midenBalanceText}</>;
+    if (midenBalances && midenRouteToken) {
+      return (
+        <>
+          Available {midenBalanceText}
+          <button
+            type="button"
+            className="balance-refresh"
+            onClick={refreshMidenBalance}
+            aria-label="Refresh Miden balance"
+            title="Refresh Miden balance"
+          >
+            <RefreshCcw size={12} aria-hidden="true" />
+          </button>
+        </>
+      );
+    }
+    if (balanceRequestedFor === midenAddress) return <>Available Syncing…</>;
+    return (
+      <button
+        type="button"
+        className="balance-show"
+        onClick={showMidenBalance}
+      >
+        Show balance
+      </button>
+    );
   }
 
   // Only surface transfers that are still in progress — the just-initiated one(s).
@@ -1193,18 +1243,11 @@ export function BridgeExperience() {
               <span>From</span>
               <strong>{copy.from}</strong>
               <small className="balance-line">
-                Available {sourceBalance}
-                {mode === "send" && midenWallet.connected ? (
-                  <button
-                    type="button"
-                    className="balance-refresh"
-                    onClick={refreshMidenBalance}
-                    aria-label="Refresh Miden balance"
-                    title="Refresh Miden balance"
-                  >
-                    <RefreshCcw size={12} aria-hidden="true" />
-                  </button>
-                ) : null}
+                {mode === "send" ? (
+                  renderMidenBalance()
+                ) : (
+                  <>Available {sourceBalance}</>
+                )}
               </small>
             </div>
             <label>
@@ -1230,18 +1273,11 @@ export function BridgeExperience() {
               <span>To</span>
               <strong>{copy.to}</strong>
               <small className="balance-line">
-                Available {destinationBalance}
-                {mode === "receive" && midenWallet.connected ? (
-                  <button
-                    type="button"
-                    className="balance-refresh"
-                    onClick={refreshMidenBalance}
-                    aria-label="Refresh Miden balance"
-                    title="Refresh Miden balance"
-                  >
-                    <RefreshCcw size={12} aria-hidden="true" />
-                  </button>
-                ) : null}
+                {mode === "receive" ? (
+                  renderMidenBalance()
+                ) : (
+                  <>Available {destinationBalance}</>
+                )}
               </small>
             </div>
             <label className="readonly-amount">

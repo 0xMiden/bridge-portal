@@ -163,19 +163,10 @@ function MidenWalletButtonInner({
       return;
     }
 
-    // Fetch the balance once, only right after a user-initiated connect. An
-    // autoConnect session restore (reload / navigation) leaves this false so we
-    // don't reopen the MidenFi asset popup unprompted — the user refreshes it
-    // via the menu's refresh icon when they want a fresh read.
-    if (userConnectRef.current && !balanceFetchedRef.current) {
-      balanceFetchedRef.current = true;
-      userConnectRef.current = false;
-      void refreshWalletState();
-      return;
-    }
-
-    // Restored session (or already fetched): show a neutral connected state and
-    // wait for an explicit refresh.
+    // Connecting never reads the balance — that would open the MidenFi asset
+    // popup unprompted. Show a neutral connected state; the user pulls a fresh
+    // read explicitly via the menu's "Sync wallet state" action.
+    userConnectRef.current = false;
     queueMicrotask(() => {
       setBalanceText("Connected");
       setNoteSyncStatus("Refresh to sync");
