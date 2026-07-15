@@ -1,20 +1,10 @@
 "use client";
 
-import {
-  AlertTriangle,
-  ArrowLeft,
-  ArrowRight,
-  CheckCircle2,
-  Circle,
-  Download,
-  ExternalLink,
-  ReceiptText,
-  RefreshCcw,
-} from "lucide-react";
+import { ArrowLeft, ArrowRight, ExternalLink } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { AGGLAYER_BALI, type AgglayerDepositStatus } from "../lib/agglayer";
+import { type AgglayerDepositStatus } from "../lib/agglayer";
 import { buildAgglayerClaimTransaction } from "../lib/agglayer-claim";
 import { findClaimableMidenToEvmDeposit } from "../lib/agglayer-status";
 import {
@@ -26,6 +16,7 @@ import {
 } from "../lib/bridge-monitor";
 import {
   type Activity,
+  type ExplorerLink,
   loadStoredActivities,
   modes,
   providers,
@@ -43,12 +34,29 @@ import {
   useAppKitProvider,
 } from "@reown/appkit/react";
 import { type EvmProvider, ensureSepolia } from "../lib/evm-wallet";
-import { epochActivityStatus } from "../lib/epoch/epoch-status";
+import { epochActivityStatus, epochDestinationTx } from "../lib/epoch/epoch-status";
 import { MIDEN_DESTINATION_CHAIN_ID } from "../lib/epoch/config";
+import { sepoliaGasUnitsFor, useSepoliaGasEstimate } from "../lib/sepolia-gas";
 
 const SEPOLIA_CHAIN_ID = 11155111;
 
 function errorMessage(error: unknown) {
+  const code =
+    typeof error === "object" && error && "code" in error
+      ? (error as { code?: unknown }).code
+      : undefined;
+  const raw = (
+    error instanceof Error ? error.message : String(error ?? "")
+  ).toLowerCase();
+  if (
+    code === 4001 ||
+    raw.includes("user rejected") ||
+    raw.includes("user denied") ||
+    raw.includes("denied transaction") ||
+    raw.includes("rejected the request")
+  ) {
+    return "You cancelled the request in your wallet.";
+  }
   if (error instanceof Error) return error.message;
   if (typeof error === "object" && error && "message" in error)
     return String(error.message);
@@ -90,12 +98,54 @@ async function fetchSepoliaTx(hash: string): Promise<ChainTxObservation> {
   return payload as ChainTxObservation;
 }
 
+/** Live "updated Ns ago" from an epoch-ms timestamp, so monitoring reads fresh. */
+function formatAgo(ms: number): string {
+  if (ms < 3_000) return "just now";
+  if (ms < 60_000) return `${Math.round(ms / 1_000)}s ago`;
+  if (ms < 3_600_000) return `${Math.round(ms / 60_000)}m ago`;
+  return `${Math.round(ms / 3_600_000)}h ago`;
+}
+
+/**
+ * Explorer link that only becomes clickable once its transaction exists. Before
+ * that (e.g. a Send's Sepolia payout, a Receive's Miden delivery) it renders as
+ * a disabled control so users don't follow a link to a not-yet-created tx.
+ */
+function ExplorerLinkButton({ link }: { link: ExplorerLink }) {
+  if (link.available && link.href) {
+    return (
+      <a
+        href={link.href}
+        target="_blank"
+        rel="noreferrer"
+        className="receipt-link"
+      >
+        {link.label}
+        <ExternalLink size={14} aria-hidden="true" />
+      </a>
+    );
+  }
+  return (
+    <span
+      className="receipt-link disabled"
+      aria-disabled="true"
+      title="Available once the transaction is created"
+    >
+      {link.label}
+      <ExternalLink size={14} aria-hidden="true" />
+    </span>
+  );
+}
+
 export function ActivityDetail({ id }: { id: string }) {
   const [activities, setActivities] = useState<Activity[]>([]);
   const [claimBusy, setClaimBusy] = useState(false);
   const [claimError, setClaimError] = useState("");
   const [monitorError, setMonitorError] = useState("");
-  const [lastChecked, setLastChecked] = useState("");
+  // Epoch-ms of the last monitor read; rendered as a live "updated Ns ago" that
+  // ticks each second so the page visibly reflects the ≤10s polling cadence.
+  const [lastCheckedAt, setLastCheckedAt] = useState(0);
+  const [now, setNow] = useState(0);
   const { open } = useAppKit();
   const { address, isConnected } = useAppKitAccount();
   const { walletProvider } = useAppKitProvider<EvmProvider>("eip155");
@@ -107,6 +157,15 @@ export function ActivityDetail({ id }: { id: string }) {
         : null,
     [activity],
   );
+  // Live Sepolia gas estimate for the network-fee line, matching the swap page.
+  const sepoliaGas = useSepoliaGasEstimate(
+    activity ? sepoliaGasUnitsFor(activity.mode, activity.provider) : null,
+  );
+  const networkFeeDisplay = sepoliaGas.fee
+    ? sepoliaGas.fee
+    : sepoliaGas.loading
+      ? "Estimating…"
+      : (quote?.networkFee ?? "");
 
   // Epoch: poll getIntentStatus and advance the activity state machine until terminal.
   useEffect(() => {
@@ -122,8 +181,10 @@ export function ActivityDetail({ id }: { id: string }) {
     const activityId = activity.id;
     const sponsor = activity.epochSponsor;
     const nonce = activity.epochIntentNonce;
-    const destinationChainId =
-      activity.mode === "receive" ? MIDEN_DESTINATION_CHAIN_ID : SEPOLIA_CHAIN_ID;
+    const isReceive = activity.mode === "receive";
+    const destinationChainId = isReceive
+      ? MIDEN_DESTINATION_CHAIN_ID
+      : SEPOLIA_CHAIN_ID;
 
     (async () => {
       // epoch-execute pulls the eager-WASM Miden SDK; import lazily so it stays
@@ -135,16 +196,28 @@ export function ActivityDetail({ id }: { id: string }) {
         signal: controller.signal,
         onUpdate: (statuses) => {
           const nextStatus = epochActivityStatus(statuses, destinationChainId);
+          // Capture the settled fulfillment tx so the explorer link deep-links
+          // the real bridging tx: Miden delivery (receive) / Sepolia payout
+          // (send). Receive's Miden tx also drives the Midenscan link off the
+          // tx list.
+          const destTx = epochDestinationTx(statuses, destinationChainId);
           setActivities((current) => {
-            const updated = current.map((item) =>
-              item.id === activityId
-                ? { ...item, status: nextStatus, updatedAt: "Just now" }
-                : item,
-            );
+            const updated = current.map((item) => {
+              if (item.id !== activityId) return item;
+              const withTx = destTx
+                ? isReceive
+                  ? {
+                      midenTxId: item.midenTxId ?? destTx,
+                      destinationTxHash: item.destinationTxHash ?? destTx,
+                    }
+                  : { destinationTxHash: item.destinationTxHash ?? destTx }
+                : {};
+              return { ...item, ...withTx, status: nextStatus, updatedAt: "Just now" };
+            });
             saveActivities(updated);
             return updated;
           });
-          setLastChecked("Just now");
+          setLastCheckedAt(Date.now());
         },
       });
     })().catch(() => undefined);
@@ -161,27 +234,27 @@ export function ActivityDetail({ id }: { id: string }) {
   const modeCopy = activity ? modes[activity.mode] : null;
   const sourceLink = activity ? sourceExplorer(activity) : null;
   const destinationLink = activity ? destinationExplorer(activity) : null;
-  const agglayerMonitorLink =
-    activity?.provider === "agglayer" ? AGGLAYER_BALI.monitorUrl : null;
-  const currentIndex = activity
-    ? timeline.findIndex((step) => step.status === activity.status)
-    : -1;
-  const needsRecovery =
-    activity?.status === "claim_available" || activity?.status === "failed";
   const canClaimOnSepolia =
     activity?.provider === "agglayer" &&
     activity.mode === "send" &&
     activity.status === "claim_available" &&
     Boolean(activity.depositCount);
-  const settlement = activity ? settlementRows(activity) : [];
-  const receiptTitle =
-    activity?.mode === "send"
-      ? "Cross-chain send receipt"
-      : "Cross-chain receive receipt";
+  // Compact live progress: which timeline step we're on, so the detail page
+  // still monitors and shows status as the transfer advances.
+  const currentIndex = activity
+    ? timeline.findIndex((step) => step.status === activity.status)
+    : -1;
+  const isComplete = activity?.status === "complete";
+  const isFailed = activity?.status === "failed";
+  const currentStep = !activity
+    ? null
+    : isComplete
+      ? timeline[timeline.length - 1]
+      : (timeline[currentIndex] ?? timeline[0]);
   const receiptAmountLabel =
     activity?.status === "complete"
       ? activity.mode === "receive"
-        ? "Received on Miden"
+        ? "Delivered on Miden"
         : "Released on Sepolia"
       : activity?.mode === "receive"
         ? "Expected on Miden"
@@ -192,14 +265,20 @@ export function ActivityDetail({ id }: { id: string }) {
       : activity?.status === "source_finality"
         ? "Wait for source-chain confirmation and bridge finality."
         : activity?.status === "message_observed"
-          ? "Wait for the destination claim to become available."
+          ? activity.mode === "receive"
+            ? "Wait for AggLayer to create the note on Miden."
+            : "Wait for the destination claim to become available."
           : activity?.status === "claim_available"
-            ? "Claim funds on the destination side."
+            ? activity.mode === "receive"
+              ? "Delivered to Miden — open your Miden wallet and claim the note to reflect the balance."
+              : "Claim funds on the destination side."
             : activity?.status === "claim_submitted"
               ? "Wait for the Sepolia claim transaction to confirm."
               : activity?.status === "failed"
-                ? "Retry claim or export diagnostics for support."
-                : "Funds are available in the destination account.";
+                ? "This transfer needs a retry."
+                : activity?.status === "complete" && activity.mode === "receive"
+                  ? "Delivered to Miden. The bridge created the note on Miden; it won't show in your balance until you claim it. Open your Miden wallet → Receive → Claim to consume the note and move the funds into your balance."
+                  : "Funds are available in the destination account.";
 
   const observeActivity = useCallback(
     (activityId: string, observation: BridgeMonitorObservation) => {
@@ -217,7 +296,7 @@ export function ActivityDetail({ id }: { id: string }) {
             )
           : [nextActivity, ...current];
         saveActivities(updated);
-        setLastChecked(observation.checkedAt);
+        setLastCheckedAt(Date.now());
         setMonitorError("");
         return updated;
       });
@@ -233,6 +312,49 @@ export function ActivityDetail({ id }: { id: string }) {
       queueMicrotask(() => setActivities([]));
     }
   }, []);
+
+  // Whether this activity is still mid-flight — drives how aggressively we poll.
+  const isActive =
+    !activity ||
+    (activity.status !== "complete" && activity.status !== "failed");
+
+  // Tick a 1s clock while the transfer is live so the "updated Ns ago" label
+  // advances in real time — a visible signal that monitoring is current.
+  useEffect(() => {
+    setNow(Date.now());
+    if (!isActive) return;
+    const id = window.setInterval(() => setNow(Date.now()), 1_000);
+    return () => window.clearInterval(id);
+  }, [isActive]);
+
+  const lastCheckedLabel =
+    lastCheckedAt && now ? formatAgo(Math.max(0, now - lastCheckedAt)) : "";
+
+  // Re-read persisted activities on tab focus and on a tick. This keeps the
+  // detail page live without a manual refresh: it picks up updates written by the
+  // submit flow that keeps running after it navigated here, and re-syncs when the
+  // user returns from a wallet popup / another tab. The tick is fast while the
+  // transfer is in progress and slow once it's settled (complete/failed).
+  useEffect(() => {
+    const reload = () => {
+      try {
+        setActivities(loadStoredActivities());
+      } catch {
+        // ignore transient storage read errors
+      }
+    };
+    const onVisible = () => {
+      if (document.visibilityState === "visible") reload();
+    };
+    window.addEventListener("focus", reload);
+    document.addEventListener("visibilitychange", onVisible);
+    const interval = window.setInterval(reload, isActive ? 3_000 : 30_000);
+    return () => {
+      window.removeEventListener("focus", reload);
+      document.removeEventListener("visibilitychange", onVisible);
+      window.clearInterval(interval);
+    };
+  }, [isActive]);
 
   useEffect(() => {
     if (
@@ -268,7 +390,7 @@ export function ActivityDetail({ id }: { id: string }) {
           return updatedActivity;
         });
         saveActivities(updated);
-        setLastChecked("Just now");
+        setLastCheckedAt(Date.now());
         setMonitorError("");
         return updated;
       });
@@ -432,26 +554,6 @@ export function ActivityDetail({ id }: { id: string }) {
     saveActivities(updated);
   }
 
-  function markFailed() {
-    if (!activity) return;
-    updateActivity({
-      ...activity,
-      status: "failed",
-      eta: "Needs retry",
-      updatedAt: "Just now",
-    });
-  }
-
-  function retryClaim() {
-    if (!activity) return;
-    updateActivity({
-      ...activity,
-      status: "message_observed",
-      eta: "2 min",
-      updatedAt: "Just now",
-    });
-  }
-
   async function claimOnSepolia() {
     if (!activity) return;
 
@@ -515,27 +617,6 @@ export function ActivityDetail({ id }: { id: string }) {
     }
   }
 
-  function exportDiagnostic() {
-    if (!activity || !quote) return;
-    const payload = JSON.stringify(
-      {
-        exportedAt: new Date().toISOString(),
-        activity,
-        provider: providers[activity.provider],
-        quote,
-        timeline,
-      },
-      null,
-      2,
-    );
-    const blob = new Blob([payload], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    const anchor = document.createElement("a");
-    anchor.href = url;
-    anchor.download = `${activity.id}-diagnostic.json`;
-    anchor.click();
-    URL.revokeObjectURL(url);
-  }
 
   return (
     <main className="detail-shell">
@@ -559,413 +640,119 @@ export function ActivityDetail({ id }: { id: string }) {
       {!activity || !quote ? (
         <section className="detail-empty">
           <h1>Activity not found</h1>
-          <p>This transfer is not in local activity history on this browser.</p>
+          <p>This transfer isn&apos;t in local activity history on this browser.</p>
           <Link className="primary-button" href="/">
             Back to bridge
           </Link>
         </section>
       ) : (
-        <section className="detail-grid">
-          <div className="detail-main">
-            <section className="receipt-card">
-              <div className="receipt-header">
-                <span className="receipt-icon">
-                  <ReceiptText size={20} aria-hidden="true" />
-                </span>
-                <div>
-                  <p className="kicker">Receipt</p>
-                  <h1>{receiptTitle}</h1>
-                  <span>{activity.id}</span>
-                </div>
-                <span className={`status-badge ${statusTone(activity.status)}`}>
-                  {statusLabel(activity.status)}
-                </span>
-              </div>
+        <section className="detail-simple">
+          <div className="receipt-card">
+            <div className="receipt-topline">
+              <p className="kicker">
+                {activity.mode === "send" ? "Send" : "Receive"} ·{" "}
+                {providers[activity.provider].label}
+              </p>
+              <span className={`status-badge ${statusTone(activity.status)}`}>
+                {statusLabel(activity.status)}
+              </span>
+            </div>
 
-              <div className="receipt-amount">
-                <span>{receiptAmountLabel}</span>
-                <strong>{quote.expectedReceived}</strong>
-              </div>
+            <div className="receipt-amount">
+              <span>{receiptAmountLabel}</span>
+              <strong>{quote.expectedReceived}</strong>
+            </div>
 
-              <div className="receipt-next-action">
-                <span>Next action</span>
-                <strong>{nextAction}</strong>
+            <div className="receipt-route">
+              <div>
+                <span>From</span>
+                <strong>{modeCopy?.from}</strong>
               </div>
-
-              <div className="receipt-route">
-                <div>
-                  <span>From</span>
-                  <strong>{modeCopy?.from}</strong>
-                  <small>
-                    {activity.mode === "receive"
-                      ? (activity.sourceTxHash ?? activity.txHash)
-                      : (activity.midenTxId ?? activity.txHash)}
-                  </small>
-                </div>
-                <ArrowRight size={18} aria-hidden="true" />
-                <div>
-                  <span>To</span>
-                  <strong>{modeCopy?.to}</strong>
-                  <small>
-                    {activity.mode === "receive"
-                      ? (activity.midenTxId ?? activity.txHash)
-                      : (activity.destinationTxHash ?? activity.txHash)}
-                  </small>
-                </div>
+              <ArrowRight size={16} aria-hidden="true" />
+              <div>
+                <span>To</span>
+                <strong>{modeCopy?.to}</strong>
               </div>
+            </div>
 
-              <div className="receipt-explorer-grid">
-                {sourceLink ? (
-                  <a
-                    href={sourceLink.href}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="explorer-link"
-                  >
-                    <span>Source proof</span>
-                    <strong>{sourceLink.label}</strong>
-                    <ExternalLink size={15} aria-hidden="true" />
-                  </a>
-                ) : null}
-                {destinationLink ? (
-                  <a
-                    href={destinationLink.href}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="explorer-link"
-                  >
-                    <span>Destination proof</span>
-                    <strong>{destinationLink.label}</strong>
-                    <ExternalLink size={15} aria-hidden="true" />
-                  </a>
-                ) : null}
-                {agglayerMonitorLink ? (
-                  <a
-                    href={agglayerMonitorLink}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="explorer-link"
-                  >
-                    <span>Public monitor</span>
-                    <strong>Gateway FM Bali</strong>
-                    <ExternalLink size={15} aria-hidden="true" />
-                  </a>
-                ) : null}
-              </div>
-
-              <div className="receipt-lines">
-                <ReceiptLine
-                  label="Route"
-                  value={providers[activity.provider].label}
-                />
-                <ReceiptLine label="ETA" value={activity.eta} />
-                <ReceiptLine
-                  label="Minimum received"
-                  value={quote.minReceived}
-                />
-                <ReceiptLine label="Network fee" value={quote.networkFee} />
-                <ReceiptLine label="Bridge fee" value={quote.bridgeFee} />
-                <ReceiptLine label="Relayer fee" value={quote.relayerFee} />
-                {activity.depositCount ? (
-                  <ReceiptLine
-                    label="AggLayer bridge event"
-                    value={`#${activity.depositCount}`}
+            <div
+              className={`receipt-progress ${isFailed ? "failed" : isComplete ? "complete" : ""}`}
+              aria-live="polite"
+            >
+              <div className="progress-track">
+                {timeline.map((step, index) => (
+                  <span
+                    key={step.status}
+                    className={`progress-seg ${
+                      isComplete || index < currentIndex
+                        ? "done"
+                        : index === currentIndex
+                          ? "current"
+                          : ""
+                    }`}
                   />
-                ) : null}
-                {activity.bridgeDestinationAddress ? (
-                  <ReceiptLine
-                    label="Bridge destination"
-                    value={activity.bridgeDestinationAddress}
-                  />
-                ) : null}
-              </div>
-
-              <div className="disclosure receipt-disclosure">
-                <AlertTriangle size={17} aria-hidden="true" />
-                <span>{providers[activity.provider].disclosure}</span>
-              </div>
-            </section>
-
-            <section className="detail-card">
-              <div className="detail-title">
-                <div>
-                  <p className="kicker">Progress</p>
-                  <h2>State machine</h2>
-                </div>
-              </div>
-
-              <div className="timeline">
-                {timeline.map((step, index) => {
-                  const isDone =
-                    currentIndex > index || activity.status === "complete";
-                  const isCurrent = step.status === activity.status;
-                  return (
-                    <div
-                      className={`timeline-step ${isDone ? "done" : ""} ${isCurrent ? "current" : ""}`}
-                      key={step.status}
-                    >
-                      <div className="step-icon">
-                        {isDone ? (
-                          <CheckCircle2 size={18} />
-                        ) : isCurrent ? (
-                          <RefreshCcw size={17} />
-                        ) : (
-                          <Circle size={16} />
-                        )}
-                      </div>
-                      <div>
-                        <strong>{step.label}</strong>
-                        <span>{step.detail}</span>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-
-              <div className="live-monitor-panel" aria-live="polite">
-                <div>
-                  <span className="status-dot active" />
-                  <strong>Live monitor</strong>
-                </div>
-                <span>
-                  {activity.provider !== "agglayer"
-                    ? "This route is not wired to a live provider monitor yet."
-                    : activity.mode === "send" && !activity.depositCount
-                      ? "Waiting for a Miden bridge event id before polling Sepolia claim proofs."
-                      : "Sepolia receipts poll every 12s. AggLayer rows and proofs poll every 30s."}
-                </span>
-                <small>
-                  {lastChecked
-                    ? `Last checked ${lastChecked}`
-                    : "Starting automatic checks"}
-                </small>
-                {monitorError ? (
-                  <p className="form-error compact">{monitorError}</p>
-                ) : null}
-              </div>
-
-              <div className="detail-actions">
-                <button
-                  className="secondary-button"
-                  type="button"
-                  onClick={markFailed}
-                >
-                  Mark as stuck
-                </button>
-              </div>
-            </section>
-          </div>
-
-          <aside className="detail-side">
-            <section className="detail-card">
-              <div className="detail-title">
-                <div>
-                  <p className="kicker">Settlement</p>
-                  <h2>
-                    {activity.mode === "receive"
-                      ? "Miden wallet state"
-                      : "Sepolia claim state"}
-                  </h2>
-                </div>
-              </div>
-
-              <div className="metric-grid one-column settlement-grid">
-                {settlement.map((row) => (
-                  <Metric label={row.label} value={row.value} key={row.label} />
                 ))}
               </div>
-            </section>
-
-            <section
-              className={`detail-card recovery-card ${needsRecovery ? "needs-action" : ""}`}
-            >
-              <div className="detail-title">
-                <div>
-                  <p className="kicker">Claim and recovery</p>
-                  <h2>
-                    {needsRecovery ? "Action available" : "No action needed"}
-                  </h2>
-                </div>
+              <div className="progress-label">
+                <strong>
+                  {isFailed ? "Transfer needs a retry" : currentStep?.label}
+                </strong>
+                <span>
+                  {isComplete
+                    ? "Settled"
+                    : isFailed
+                      ? activity.eta
+                      : lastCheckedLabel
+                        ? `Monitoring · updated ${lastCheckedLabel}`
+                        : "Monitoring…"}
+                </span>
               </div>
+            </div>
 
-              <div className="metric-grid one-column">
-                <Metric label="Source tx" value={activity.txHash} />
-                <Metric
-                  label="Proof status"
-                  value={
-                    activity.readyForClaim ||
-                    activity.status === "claim_available" ||
-                    activity.status === "claim_submitted" ||
-                    activity.status === "complete"
-                      ? "Ready for claim"
-                      : activity.status === "message_observed"
-                        ? "Observed"
-                        : "Pending"
-                  }
-                />
-                <Metric
-                  label="Destination claim"
-                  value={
-                    activity.status === "complete"
-                      ? "Settled"
-                      : activity.claimTxHash
-                        ? "Submitted"
-                        : activity.status === "claim_available" &&
-                            (activity.mode === "receive" ||
-                              activity.depositCount)
-                          ? "Ready"
-                          : activity.status === "claim_available"
-                            ? "Needs bridge event id"
-                            : "Not ready"
-                  }
-                />
-              </div>
+            <div className="receipt-lines">
+              <ReceiptLine label="ETA" value={activity.eta} />
+              <ReceiptLine
+                label={activity.receivedAmount ? "Received" : "Min received"}
+                value={activity.receivedAmount ?? quote.minReceived}
+              />
+              <ReceiptLine label="Network fee" value={networkFeeDisplay} />
+            </div>
 
-              <p className="recovery-copy">
-                {activity.status === "failed"
-                  ? "This transfer is stuck. Retry claim, use manual claim, or export diagnostics for support."
-                  : activity.status === "claim_available" &&
-                      activity.mode === "send" &&
-                      !activity.depositCount
-                    ? "This send needs a specific AggLayer bridge event id before claimAsset can be submitted safely."
-                    : activity.status === "claim_available"
-                      ? "Funds are ready to claim on the destination side."
-                      : "Recovery tools appear here when the transfer needs a user action."}
-              </p>
-
-              <div className="recovery-actions">
-                {canClaimOnSepolia ? (
-                  <button
-                    className="primary-button compact-action"
-                    type="button"
-                    onClick={claimOnSepolia}
-                    disabled={claimBusy}
-                  >
-                    {claimBusy ? "Waiting for wallet" : "Claim on Sepolia"}
-                  </button>
+            {sourceLink || destinationLink ? (
+              <div className="receipt-links">
+                {sourceLink ? <ExplorerLinkButton link={sourceLink} /> : null}
+                {destinationLink ? (
+                  <ExplorerLinkButton link={destinationLink} />
                 ) : null}
-                <button
-                  className="secondary-button"
-                  type="button"
-                  onClick={retryClaim}
-                >
-                  Retry claim
-                </button>
-                <button
-                  className="secondary-button"
-                  type="button"
-                  onClick={canClaimOnSepolia ? claimOnSepolia : undefined}
-                  disabled={!canClaimOnSepolia || claimBusy}
-                >
-                  Manual claim
-                </button>
-                <button
-                  className="secondary-button"
-                  type="button"
-                  onClick={exportDiagnostic}
-                >
-                  <Download size={16} aria-hidden="true" />
-                  Export
-                </button>
               </div>
-              {claimError ? (
-                <p className="form-error compact">{claimError}</p>
-              ) : null}
-            </section>
-          </aside>
+            ) : null}
+
+            {canClaimOnSepolia ? (
+              <button
+                className="primary-button"
+                type="button"
+                onClick={claimOnSepolia}
+                disabled={claimBusy}
+              >
+                {claimBusy ? "Waiting for wallet" : "Claim on Sepolia"}
+              </button>
+            ) : null}
+            {claimError ? (
+              <p className="form-error compact">{claimError}</p>
+            ) : null}
+            {monitorError ? (
+              <p className="form-error compact">{monitorError}</p>
+            ) : null}
+
+            <p className="receipt-monitor">
+              {nextAction}
+              {lastCheckedLabel ? ` · Last checked ${lastCheckedLabel}` : ""}
+            </p>
+          </div>
         </section>
       )}
     </main>
   );
-}
-
-function Metric({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="metric">
-      <span>{label}</span>
-      <strong>{value}</strong>
-    </div>
-  );
-}
-
-function settlementRows(activity: Activity) {
-  if (activity.mode === "receive") {
-    return [
-      {
-        label: "Miden claim",
-        value:
-          activity.status === "message_observed" ||
-          activity.status === "claim_available" ||
-          activity.status === "complete"
-            ? "Bridge message available"
-            : "Waiting for bridge message",
-      },
-      {
-        label: "Note sync",
-        value:
-          activity.status === "complete"
-            ? "Synced"
-            : activity.status === "claim_available"
-              ? "Ready for wallet sync"
-              : "Pending",
-      },
-      {
-        label: "Note consume",
-        value:
-          activity.status === "complete"
-            ? "Consumed"
-            : "Awaiting wallet consume",
-      },
-      {
-        label: "Claim settlement",
-        value:
-          activity.status === "complete"
-            ? "Balance settled"
-            : "Not wallet-settled",
-      },
-    ];
-  }
-
-  return [
-    {
-      label: "Miden bridge note",
-      value:
-        activity.status === "source_finality" ||
-        activity.status === "message_observed" ||
-        activity.status === "claim_available" ||
-        activity.status === "claim_submitted" ||
-        activity.status === "complete"
-          ? "Submitted"
-          : "Needs wallet signature",
-    },
-    {
-      label: "Proof status",
-      value:
-        activity.readyForClaim ||
-        activity.status === "claim_available" ||
-        activity.status === "claim_submitted" ||
-        activity.status === "complete"
-          ? "Ready"
-          : "Pending",
-    },
-    {
-      label: "Sepolia claim",
-      value: activity.claimTxHash
-        ? "Submitted"
-        : activity.status === "claim_available"
-          ? "Ready to submit"
-          : "Not ready",
-    },
-    {
-      label: "Claim settlement",
-      value:
-        activity.status === "complete"
-          ? "Settled on Sepolia"
-          : activity.claimTxHash
-            ? "Waiting confirmation"
-            : "Not started",
-    },
-  ];
 }
 
 function ReceiptLine({ label, value }: { label: string; value: string }) {

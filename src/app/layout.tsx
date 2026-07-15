@@ -1,7 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { headers } from "next/headers";
-import { AppKitProvider } from "./components/AppKitProvider";
+import { Providers } from "./components/Providers";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -19,9 +19,7 @@ export const metadata: Metadata = {
   description:
     "Move value across Sepolia and Miden with wallet-native cross-chain receive and send flows.",
   applicationName: "Miden Bridge",
-  icons: {
-    icon: "/favicon.ico",
-  },
+  // Favicon is the Miden mark from src/app/icon.svg (Next file-based metadata).
 };
 
 export const viewport: Viewport = {
@@ -41,7 +39,7 @@ export default async function RootLayout({
       className={`${geistSans.variable} ${geistMono.variable} h-full`}
     >
       <body className="min-h-full bg-background text-foreground antialiased">
-        <AppKitProvider cookies={cookies}>{children}</AppKitProvider>
+        <Providers cookies={cookies}>{children}</Providers>
       </body>
     </html>
   );

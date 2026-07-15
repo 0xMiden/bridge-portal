@@ -1,8 +1,9 @@
 import {
   CollateralType,
   type IntentTransactionStatus,
+  type TransactionExecutionStatus,
 } from "@epoch-protocol/epoch-intents-sdk";
-import { parseUnits } from "viem";
+import { formatUnits, parseUnits } from "viem";
 
 import {
   buildCrossChainIntent,
@@ -63,6 +64,12 @@ export interface RunEpochTransferArgs {
   /** Miden write primitives from the connected MidenFi adapter. REQUIRED for send. */
   requestSend?: MidenNoteDeps["requestSend"];
   waitForTransaction?: MidenNoteDeps["waitForTransaction"];
+  /**
+   * Live execution status (phase + the deposit tx hash once broadcast) for UI
+   * progress on receive. The caller uses the hash to jump to the detail page as
+   * soon as the wallet tx lands, without waiting for the whole intent to settle.
+   */
+  onStatus?: (status: TransactionExecutionStatus) => void;
 }
 
 export interface EpochExecuteResult {
@@ -75,8 +82,24 @@ export interface EpochExecuteResult {
   sourceTxHash?: string;
   /** Committed Miden P2IDE collateral note id (send only). */
   midenNoteId?: string;
+  /** Real quoted output amount (human USDC) from the Epoch API, if available. */
+  outputAmount?: string;
   /** Raw intent result for debugging / detail surfaces. */
   raw: IntentResult;
+}
+
+/** Human-format the Epoch quote's output amount (tokenOut, base units). */
+function epochOutputAmount(
+  quote: { quoteResult?: { tokenOut?: unknown } },
+  decimals: number,
+): string | undefined {
+  const raw = quote.quoteResult?.tokenOut;
+  if (raw == null) return undefined;
+  try {
+    return formatUnits(BigInt(String(raw)), decimals);
+  } catch {
+    return undefined;
+  }
 }
 
 /** Best-effort nonce extraction — the SDK's solveIntent return is untyped (`any`). */
@@ -175,6 +198,8 @@ async function runEpochSend(
     sponsorAddress: evmRecipient,
     sourceTxHash: noteOutcome?.txHash,
     midenNoteId: noteOutcome?.noteId,
+    // Send (Miden→EVM) outputs USDC on Sepolia (18-dp mock test token).
+    outputAmount: epochOutputAmount(quote, BRIDGEABLE_EVM_OUTPUT_TOKEN_DECIMALS),
     raw: result,
   };
 }
@@ -205,6 +230,9 @@ async function runEpochReceive(
   const result = await buildEVMToMidenIntent(sdk, {
     ...params,
     preFetchedQuote: quote,
+    onExecutionStatus: args.onStatus
+      ? (status) => args.onStatus?.(status)
+      : undefined,
   });
 
   if (result.error) throw new Error(result.error);
@@ -214,6 +242,8 @@ async function runEpochReceive(
     intentNonce: extractNonce(result.solveResult),
     sponsorAddress: evmSource,
     sourceTxHash: result.solveResult?.depositResult?.transactionHash,
+    // Receive (EVM→Miden) outputs USDC on Miden (6-dp).
+    outputAmount: epochOutputAmount(quote, MIDEN_NATIVE_TOKEN_DECIMALS),
     raw: result,
   };
 }

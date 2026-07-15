@@ -78,9 +78,16 @@ export function useEpochQuote({
       return;
     }
 
-    // Show loading right away; run the network quote after the debounce window.
+    // Show loading right away, but keep the last known amount on screen so the
+    // field updates in place instead of blinking blank on every refetch.
     queueMicrotask(() => {
-      if (id === reqId.current) setState({ enabled, loading: true });
+      if (id === reqId.current)
+        setState((prev) => ({
+          enabled,
+          loading: true,
+          amount: prev.amount,
+          symbol: prev.symbol,
+        }));
     });
 
     const handle = window.setTimeout(() => {

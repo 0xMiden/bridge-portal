@@ -39,3 +39,23 @@ export function epochActivityStatus(
   // In flight with observed rows.
   return "message_observed";
 }
+
+/**
+ * The settled destination-chain transaction hash, once Epoch's solver has
+ * fulfilled that leg — the real bridging tx (Sepolia for Send, Miden for
+ * Receive). Lets the detail page deep-link the explorer to the actual tx
+ * instead of a tx list / a broken abbreviated hash.
+ */
+export function epochDestinationTx(
+  statuses: readonly IntentTransactionStatus[] | undefined,
+  destinationChainId: number,
+): string | undefined {
+  const row = statuses?.find(
+    (s) =>
+      Number(s.chainId) === destinationChainId &&
+      TERMINAL_OK.has(String(s.status).toLowerCase()) &&
+      typeof s.transactionHash === "string" &&
+      s.transactionHash.length > 0,
+  );
+  return row?.transactionHash;
+}
