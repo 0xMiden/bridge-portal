@@ -40,6 +40,10 @@ import {
 } from "../lib/bridge-state";
 import { sepoliaGasUnitsFor, useSepoliaGasEstimate } from "../lib/sepolia-gas";
 import { RelativeTime } from "./RelativeTime";
+import type {
+  MidenRouteBalances,
+  ResolvedEthAsset,
+} from "../lib/agglayer-eth-faucet";
 import {
   useAppKit,
   useAppKitAccount,
@@ -252,6 +256,10 @@ export function BridgeExperience() {
     string,
     string
   > | null>(null);
+  // The AggLayer wrapped-ETH the wallet actually holds, resolved at runtime (its
+  // faucet id is minted fresh on every Gateway redeploy, so it can't be
+  // hardcoded). Drives the AggLayer balance now; the send will reuse its faucet.
+  const [agglayerEth, setAgglayerEth] = useState<ResolvedEthAsset | null>(null);
   const [midenBalanceFetchedFor, setMidenBalanceFetchedFor] = useState("");
   // Reading the (private) Miden balance opens a MidenFi confirmation popup, so we
   // never do it automatically. The fetch runs only for the account the user has
@@ -264,9 +272,9 @@ export function BridgeExperience() {
   const [epochQuoteAmount, setEpochQuoteAmount] = useState<string | undefined>(
     undefined,
   );
-  const midenBalanceInflightRef = useRef<Promise<
-    Record<string, string>
-  > | null>(null);
+  const midenBalanceInflightRef = useRef<Promise<MidenRouteBalances> | null>(
+    null,
+  );
   const [activities, setActivities] = useState<Activity[]>([]);
   const [hydrated, setHydrated] = useState(false);
   const [evmMenuOpen, setEvmMenuOpen] = useState(false);
@@ -577,6 +585,7 @@ export function BridgeExperience() {
       // Reset only on actual disconnect — syncing to an external event.
       /* eslint-disable react-hooks/set-state-in-effect */
       setMidenBalances(null);
+      setAgglayerEth(null);
       setMidenBalanceFetchedFor("");
       setBalanceRequestedFor("");
       /* eslint-enable react-hooks/set-state-in-effect */
@@ -594,25 +603,24 @@ export function BridgeExperience() {
     const run =
       midenBalanceInflightRef.current ??
       (midenBalanceInflightRef.current = (async () => {
-        const { fetchMidenBalances } = await import("../lib/miden-balance");
-        return fetchMidenBalances(
-          requestMidenAssets,
-          Object.entries(MIDEN_ROUTE_TOKEN).map(([key, t]) => ({
-            key,
-            faucetId: t.faucetId,
-            decimals: t.decimals,
-          })),
+        const { fetchMidenRouteBalances } = await import(
+          "../lib/agglayer-eth-faucet"
         );
+        return fetchMidenRouteBalances(requestMidenAssets);
       })());
 
     run
-      .then((balances) => {
+      .then((result) => {
         if (cancelled) return;
-        setMidenBalances(balances);
+        setMidenBalances({ epoch: result.epoch, agglayer: result.agglayer });
+        setAgglayerEth(result.agglayerEth);
         setMidenBalanceFetchedFor(midenAddress);
       })
       .catch(() => {
-        if (!cancelled) setMidenBalances(null);
+        if (!cancelled) {
+          setMidenBalances(null);
+          setAgglayerEth(null);
+        }
       })
       .finally(() => {
         if (midenBalanceInflightRef.current === run)
@@ -826,9 +834,19 @@ export function BridgeExperience() {
         setIsSubmitting(false);
         return;
       }
+      // The wrapped-ETH faucet + its decimals are resolved from the wallet's
+      // held asset (Show balance) — there's no hardcodeable id. Require it so we
+      // burn the exact token the user holds, at its real precision.
+      if (!agglayerEth) {
+        setBridgeError(
+          'Tap "Show balance" first so we can detect the Miden ETH you\'re sending.',
+        );
+        setIsSubmitting(false);
+        return;
+      }
       let unitsAmount: bigint;
       try {
-        unitsAmount = parseUnits(amount, AGGLAYER_BALI.midenEthDecimals);
+        unitsAmount = parseUnits(amount, agglayerEth.decimals);
       } catch {
         setBridgeError("Enter a valid amount.");
         setIsSubmitting(false);
@@ -850,6 +868,7 @@ export function BridgeExperience() {
         setSubmitPhase("Confirm in your wallet…");
         const { txId } = await runAgglayerSend({
           amount: unitsAmount,
+          faucetId: agglayerEth.faucetId,
           destinationAddress,
           senderAddress,
           requestTransaction: midenWallet.requestTransaction,
