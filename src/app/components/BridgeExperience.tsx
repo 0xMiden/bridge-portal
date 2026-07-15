@@ -39,6 +39,7 @@ import {
   walletGradient,
 } from "../lib/bridge-state";
 import { sepoliaGasUnitsFor, useSepoliaGasEstimate } from "../lib/sepolia-gas";
+import { RelativeTime } from "./RelativeTime";
 import {
   useAppKit,
   useAppKitAccount,
@@ -1419,7 +1420,7 @@ export function BridgeExperience() {
                     <strong>
                       {activity.amount} {activity.asset}
                     </strong>
-                    <small>{activity.updatedAt}</small>
+                    <small><RelativeTime at={activity.updatedAt} /></small>
                   </span>
                   <ChevronRight size={16} aria-hidden="true" />
                 </Link>
@@ -1454,7 +1455,7 @@ export function BridgeExperience() {
                     <strong>
                       {activity.amount} {activity.asset}
                     </strong>
-                    <small>{activity.updatedAt}</small>
+                    <small><RelativeTime at={activity.updatedAt} /></small>
                   </span>
                   <ChevronRight size={16} aria-hidden="true" />
                 </Link>

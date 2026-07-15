@@ -37,6 +37,7 @@ import { type EvmProvider, ensureSepolia } from "../lib/evm-wallet";
 import { epochActivityStatus, epochDestinationTx } from "../lib/epoch/epoch-status";
 import { MIDEN_DESTINATION_CHAIN_ID } from "../lib/epoch/config";
 import { sepoliaGasUnitsFor, useSepoliaGasEstimate } from "../lib/sepolia-gas";
+import { formatAgo } from "../lib/relative-time";
 
 const SEPOLIA_CHAIN_ID = 11155111;
 
@@ -96,14 +97,6 @@ async function fetchSepoliaTx(hash: string): Promise<ChainTxObservation> {
     );
   }
   return payload as ChainTxObservation;
-}
-
-/** Live "updated Ns ago" from an epoch-ms timestamp, so monitoring reads fresh. */
-function formatAgo(ms: number): string {
-  if (ms < 3_000) return "just now";
-  if (ms < 60_000) return `${Math.round(ms / 1_000)}s ago`;
-  if (ms < 3_600_000) return `${Math.round(ms / 60_000)}m ago`;
-  return `${Math.round(ms / 3_600_000)}h ago`;
 }
 
 /**
@@ -212,7 +205,7 @@ export function ActivityDetail({ id }: { id: string }) {
                     }
                   : { destinationTxHash: item.destinationTxHash ?? destTx }
                 : {};
-              return { ...item, ...withTx, status: nextStatus, updatedAt: "Just now" };
+              return { ...item, ...withTx, status: nextStatus, updatedAt: Date.now() };
             });
             saveActivities(updated);
             return updated;
@@ -608,7 +601,7 @@ export function ActivityDetail({ id }: { id: string }) {
         claimTxHash: txHash,
         destinationTxHash: txHash,
         readyForClaim: true,
-        updatedAt: "Just now",
+        updatedAt: Date.now(),
       });
     } catch (error) {
       setClaimError(errorMessage(error));
