@@ -360,9 +360,17 @@ function normalizeActivity(activity: Activity): Activity {
     .replace(/^Withdraw\b/, "Send")
     .replace(/^Receive (.+) to Miden$/, "Receive $1 on Miden");
   // Migrate pre-timestamp rows: `updatedAt` used to be a display string ("Just
-  // now"). Coerce any non-number to 0 so the UI shows "—" rather than NaN.
-  const updatedAt =
+  // now"). Coerce any non-number to 0, then backfill from the id — createActivity
+  // stamps `act-<base36 creation-ms>`, so old rows can still show a real time
+  // instead of "—".
+  let updatedAt =
     typeof activity.updatedAt === "number" ? activity.updatedAt : 0;
+  if (!updatedAt) {
+    const match = /^act-([0-9a-z]+)$/.exec(activity.id);
+    const fromId = match ? parseInt(match[1], 36) : NaN;
+    // Guard against non-timestamp ids: only accept a plausible epoch-ms value.
+    if (Number.isFinite(fromId) && fromId > 1_600_000_000_000) updatedAt = fromId;
+  }
   return { ...activity, mode, summary, updatedAt };
 }
 
