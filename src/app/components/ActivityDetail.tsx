@@ -259,7 +259,7 @@ export function ActivityDetail({ id }: { id: string }) {
         ? "Wait for source-chain confirmation and bridge finality."
         : activity?.status === "message_observed"
           ? activity.mode === "receive"
-            ? "Wait for AggLayer to create the note on Miden."
+            ? "Wait for Agglayer to create the note on Miden."
             : "Wait for the destination claim to become available."
           : activity?.status === "claim_available"
             ? activity.mode === "receive"
@@ -583,7 +583,7 @@ export function ActivityDetail({ id }: { id: string }) {
       const deposit = await findClaimableMidenToEvmDeposit(destinationAddress);
       if (!deposit) {
         throw new Error(
-          "AggLayer proof is not ready yet. Keep this transfer in activity and try again later.",
+          "Agglayer proof is not ready yet. Keep this transfer in activity and try again later.",
         );
       }
 

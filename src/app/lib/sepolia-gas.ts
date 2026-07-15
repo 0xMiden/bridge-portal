@@ -13,7 +13,7 @@ const GAS_UNITS: Record<string, number> = {
   "receive:agglayer": 140_000,
   // Sepolia -> Miden: Epoch deposit/solve on the source chain.
   "receive:epoch": 150_000,
-  // Miden -> Sepolia AggLayer claim (`claimAsset`) the user submits on Sepolia.
+  // Miden -> Sepolia Agglayer claim (`claimAsset`) the user submits on Sepolia.
   "send:agglayer": 260_000,
 };
 

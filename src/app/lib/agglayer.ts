@@ -41,7 +41,7 @@ const bridgeAssetAbi = [
 export type AgglayerDeposit = {
   ready_for_claim?: boolean;
   tx_hash?: string;
-  // The AggLayer destination-side claim tx. For a Sepolia→Miden receive this is
+  // The Agglayer destination-side claim tx. For a Sepolia→Miden receive this is
   // the Miden tx that CREATED the note in the destination account — it is NOT
   // the note being consumed into the balance. Once present (and ready_for_claim
   // is true), the note is sitting in the Miden wallet awaiting the user's

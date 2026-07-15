@@ -7,6 +7,6 @@
 export const MIDEN_BRIDGE_ID = "0xa22ec154f9a36d911953fd5c9260a7";
 export const MIDEN_AGGLAYER_FAUCET_ID = "0x387149ae66116cf114eebd60bb7381";
 
-// AggLayer network id of the EVM destination (Ethereum L1 / Sepolia) — used as
+// Agglayer network id of the EVM destination (Ethereum L1 / Sepolia) — used as
 // the B2AGG note's destinationNetwork when bridging Miden → EVM.
 export const EVM_AGGLAYER_NETWORK_ID = 0;

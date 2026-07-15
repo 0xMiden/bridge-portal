@@ -5,7 +5,7 @@ import {
   MIDEN_BRIDGE_ID,
 } from "./agglayer-b2agg";
 
-// AggLayer outbound (Miden → Sepolia / L2→L1). Builds the B2AGG bridge-out note
+// Agglayer outbound (Miden → Sepolia / L2→L1). Builds the B2AGG bridge-out note
 // with the SDK's `Note.createB2AggNote` (shipped in @miden-sdk 0.15.4 / web-sdk
 // #211) and submits it through the MidenFi wallet's `requestTransaction`, which
 // accepts a pre-built custom TransactionRequest (unlike `requestSend`, which

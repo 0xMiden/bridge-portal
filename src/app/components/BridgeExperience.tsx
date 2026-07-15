@@ -256,9 +256,9 @@ export function BridgeExperience() {
     string,
     string
   > | null>(null);
-  // The AggLayer wrapped-ETH the wallet actually holds, resolved at runtime (its
+  // The Agglayer wrapped-ETH the wallet actually holds, resolved at runtime (its
   // faucet id is minted fresh on every Gateway redeploy, so it can't be
-  // hardcoded). Drives the AggLayer balance now; the send will reuse its faucet.
+  // hardcoded). Drives the Agglayer balance now; the send will reuse its faucet.
   const [agglayerEth, setAgglayerEth] = useState<ResolvedEthAsset | null>(null);
   const [midenBalanceFetchedFor, setMidenBalanceFetchedFor] = useState("");
   // Reading the (private) Miden balance opens a MidenFi confirmation popup, so we
@@ -289,7 +289,7 @@ export function BridgeExperience() {
     () => quoteFor(mode, provider, amount),
     [amount, mode, provider],
   );
-  // The received-token unit for the "To" box pill: Epoch bridges USDC, AggLayer ETH.
+  // The received-token unit for the "To" box pill: Epoch bridges USDC, Agglayer ETH.
   const destinationSymbol =
     provider === "epoch" ? "USDC" : copy.assetOut.replace("Miden ", "");
   // Amount without the trailing symbol (the pill renders the symbol separately).
@@ -312,7 +312,7 @@ export function BridgeExperience() {
       ? "Estimating…"
       : quote.networkFee;
   const isLiveAgglayerReceive = provider === "agglayer" && mode === "receive";
-  // AggLayer outbound (Miden→Sepolia): builds a B2AGG bridge-out note via the
+  // Agglayer outbound (Miden→Sepolia): builds a B2AGG bridge-out note via the
   // SDK (Note.createB2AggNote) and submits it through the MidenFi wallet.
   const isLiveAgglayerSend = provider === "agglayer" && mode === "send";
 
@@ -373,11 +373,11 @@ export function BridgeExperience() {
       : "testnet";
   const routeNote =
     provider === "near-intents"
-      ? "NEAR Intents is paused in this build while AggLayer and Epoch are the active testnet routes."
+      ? "NEAR Intents is paused in this build while Agglayer and Epoch are the active testnet routes."
       : provider === "agglayer"
         ? mode === "receive"
-          ? "Slow testnet route. Your Sepolia wallet sends to Miden through AggLayer with no provider bridge fee."
-          : "Bridge out from Miden through AggLayer. The Sepolia claim is auto-submitted once the exit settles (~30-90 min)."
+          ? "Slow testnet route. Your Sepolia wallet sends to Miden through Agglayer with no provider bridge fee."
+          : "Bridge out from Miden through Agglayer. The Sepolia claim is auto-submitted once the exit settles (~30-90 min)."
         : "Testnet route. Epoch integration status is tracked from activity details.";
   const primaryActionLabel = isSubmitting
     ? submitPhase || "Preparing…"
@@ -512,7 +512,7 @@ export function BridgeExperience() {
 
     let cancelled = false;
     // Show the balance of the token this route actually moves on Sepolia:
-    // Epoch bridges USDC, AggLayer bridges native ETH.
+    // Epoch bridges USDC, Agglayer bridges native ETH.
     const isEpoch = provider === "epoch";
     const url = isEpoch
       ? `/api/sepolia/balance?address=${walletAccount}&token=${EPOCH_SEPOLIA_USDC.address}&decimals=${EPOCH_SEPOLIA_USDC.decimals}`
@@ -718,8 +718,8 @@ export function BridgeExperience() {
     setProvider(nextProvider);
     setBridgeError("");
     // Destination is route-agnostic: the connected Miden wallet address (bech32)
-    // prefills for both routes and the AggLayer submit normalizes it to hex — so
-    // AggLayer behaves exactly like Epoch (no special clearing here).
+    // prefills for both routes and the Agglayer submit normalizes it to hex — so
+    // Agglayer behaves exactly like Epoch (no special clearing here).
   }
 
   function selectRouteOption(nextProvider: BridgeProvider) {
@@ -804,7 +804,7 @@ export function BridgeExperience() {
       );
       return;
     }
-    // Every send signs on Miden (Epoch send + AggLayer bridge-out) — require the
+    // Every send signs on Miden (Epoch send + Agglayer bridge-out) — require the
     // MidenFi wallet up front so the CTA and error are clear (not a late throw).
     if (mode === "send" && !midenWallet.connected) {
       setBridgeError("Connect your MidenFi wallet to sign the send.");
@@ -874,7 +874,7 @@ export function BridgeExperience() {
           requestTransaction: midenWallet.requestTransaction,
           waitForTransaction: midenWallet.waitForTransaction,
         });
-        // Note submitted on Miden; AggLayer hasn't observed the exit yet.
+        // Note submitted on Miden; Agglayer hasn't observed the exit yet.
         const activity = createActivity(mode, provider, amount, {
           status: "source_finality",
           eta: "30-90 min",
@@ -1322,7 +1322,7 @@ export function BridgeExperience() {
                 onChange={(event) => setAmount(event.target.value)}
               />
               {/* Epoch's SIO route bridges USDC<->USDC; the shared `assetIn`
-                  label ("ETH") is only correct for AggLayer. */}
+                  label ("ETH") is only correct for Agglayer. */}
               <span>{provider === "epoch" ? "USDC" : copy.assetIn}</span>
             </label>
           </div>

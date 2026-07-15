@@ -34,7 +34,7 @@ const baseSend: Activity = {
 };
 
 describe("deriveMonitoredActivity", () => {
-  test("keeps AggLayer receive waiting for bridge observation after Sepolia source confirmation", () => {
+  test("keeps Agglayer receive waiting for bridge observation after Sepolia source confirmation", () => {
     const next = deriveMonitoredActivity(baseReceive, {
       checkedAt: "Just now",
       sourceTx: {
@@ -47,13 +47,13 @@ describe("deriveMonitoredActivity", () => {
     });
 
     expect(next.status).toBe("source_finality");
-    expect(next.eta).toBe("Sepolia confirmed, waiting for AggLayer");
+    expect(next.eta).toBe("Sepolia confirmed, waiting for Agglayer");
     // updatedAt is stamped with the current time (epoch ms), not the input 0.
     expect(typeof next.updatedAt).toBe("number");
     expect(next.updatedAt).toBeGreaterThan(0);
   });
 
-  test("moves AggLayer receive to message observed when Gateway FM has a non-ready bridge row", () => {
+  test("moves Agglayer receive to message observed when Gateway FM has a non-ready bridge row", () => {
     const next = deriveMonitoredActivity(baseReceive, {
       checkedAt: "Just now",
       sourceTx: {
@@ -74,7 +74,7 @@ describe("deriveMonitoredActivity", () => {
     expect(next.readyForClaim).toBe(false);
   });
 
-  test("marks AggLayer receive complete on delivery — the note is created on Miden and the user claims it in-wallet", () => {
+  test("marks Agglayer receive complete on delivery — the note is created on Miden and the user claims it in-wallet", () => {
     const next = deriveMonitoredActivity(baseReceive, {
       checkedAt: "Just now",
       sourceTx: {
@@ -113,7 +113,7 @@ describe("deriveMonitoredActivity", () => {
       },
     });
 
-    // AggLayer destination claim happened (note created on Miden) — the app's
+    // Agglayer destination claim happened (note created on Miden) — the app's
     // terminal success state. The Miden note is now the user's to claim in-wallet.
     expect(next.status).toBe("complete");
     expect(next.eta).toBe("Delivered — claim in your Miden wallet");
@@ -147,7 +147,7 @@ describe("deriveMonitoredActivity", () => {
     expect(next.midenTxId).toBe(claimTx);
   });
 
-  test("moves AggLayer send to claim available when a filtered claim plan is ready", () => {
+  test("moves Agglayer send to claim available when a filtered claim plan is ready", () => {
     const next = deriveMonitoredActivity(baseSend, {
       checkedAt: "Just now",
       claimPlan: {

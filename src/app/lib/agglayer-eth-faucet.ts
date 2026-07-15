@@ -1,13 +1,13 @@
 import type { MidenFiWalletContextState } from "@miden-sdk/miden-wallet-adapter-react";
 
-// The AggLayer wrapped-ETH on Miden has a deployment-specific faucet id: Gateway
+// The Agglayer wrapped-ETH on Miden has a deployment-specific faucet id: Gateway
 // mints a fresh faucet account on every rollup redeploy, so a hardcoded id (the
 // portal's old `0x387149ae…`, which isn't even a faucet on the current chain)
 // is guaranteed to rot. Resolve it at runtime from the connected wallet's own
 // assets instead — it survives every redeploy.
 //
 // Classification: Epoch's USDC faucet is a stable known token; the chain's
-// native fee asset is gas. On the AggLayer route, whatever else the wallet holds
+// native fee asset is gas. On the Agglayer route, whatever else the wallet holds
 // is the bridged ETH.
 
 const EPOCH_USDC_FAUCET = "0xfc90f0f4da30e51168453b60eafed7";
@@ -28,13 +28,13 @@ export interface MidenRouteBalances {
   /** Human-formatted balances keyed by route. */
   epoch: string;
   agglayer: string;
-  /** The resolved AggLayer ETH faucet + decimals, for the send path. */
+  /** The resolved Agglayer ETH faucet + decimals, for the send path. */
   agglayerEth: ResolvedEthAsset | null;
 }
 
 /**
  * One `requestAssets()` popup, both route balances. USDC totals against Epoch's
- * known faucet; the AggLayer ETH is resolved as the non-USDC, non-gas fungible
+ * known faucet; the Agglayer ETH is resolved as the non-USDC, non-gas fungible
  * the wallet holds, with its decimals/symbol read from the faucet on-chain.
  */
 export async function fetchMidenRouteBalances(
