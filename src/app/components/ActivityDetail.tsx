@@ -356,7 +356,13 @@ export function ActivityDetail({ id }: { id: string }) {
       activity.mode !== "receive"
     )
       return;
-    if (activity.status === "complete" || activity.status === "failed") return;
+    if (activity.status === "failed") return;
+    // Keep polling after "complete" until the Miden note-creation tx is captured
+    // (claim_tx_hash → midenTxId). The indexer flips ready_for_claim to true a
+    // little before it publishes claim_tx_hash, so stopping at "complete" would
+    // permanently leave the Midenscan link disabled. Once midenTxId is set, the
+    // deep link is live and there's nothing left to fetch.
+    if (activity.status === "complete" && activity.midenTxId) return;
 
     let cancelled = false;
     const activityId = activity.id;
@@ -406,6 +412,7 @@ export function ActivityDetail({ id }: { id: string }) {
     activity?.provider,
     activity?.sourceTxHash,
     activity?.status,
+    activity?.midenTxId,
   ]);
 
   useEffect(() => {
