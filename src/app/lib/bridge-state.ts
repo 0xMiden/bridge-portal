@@ -52,7 +52,7 @@ export type Activity = {
   midenAccount?: string;
   /** Source-relative ordering hint (higher = newer) for merged remote history. */
   sortKey?: number;
-  updatedAt: string;
+  updatedAt: number;
 };
 
 export const activityStorageKey = "miden.bridge.ui.activities";
@@ -285,7 +285,7 @@ export function createActivity(
     sourceTxHash: undefined,
     destinationTxHash: undefined,
     midenTxId: undefined,
-    updatedAt: "Just now",
+    updatedAt: Date.now(),
   };
 
   return { ...activity, ...overrides };
@@ -359,7 +359,11 @@ function normalizeActivity(activity: Activity): Activity {
     .replace(/^Deposit\b/, "Receive")
     .replace(/^Withdraw\b/, "Send")
     .replace(/^Receive (.+) to Miden$/, "Receive $1 on Miden");
-  return { ...activity, mode, summary };
+  // Migrate pre-timestamp rows: `updatedAt` used to be a display string ("Just
+  // now"). Coerce any non-number to 0 so the UI shows "—" rather than NaN.
+  const updatedAt =
+    typeof activity.updatedAt === "number" ? activity.updatedAt : 0;
+  return { ...activity, mode, summary, updatedAt };
 }
 
 export function loadStoredActivities(): Activity[] {
@@ -383,7 +387,7 @@ export function patchStoredActivity(id: string, patch: Partial<Activity>) {
     const activities = loadStoredActivities();
     saveActivities(
       activities.map((item) =>
-        item.id === id ? { ...item, ...patch, updatedAt: "Just now" } : item,
+        item.id === id ? { ...item, ...patch, updatedAt: Date.now() } : item,
       ),
     );
   } catch {
