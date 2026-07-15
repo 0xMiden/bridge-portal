@@ -29,6 +29,7 @@ import {
   createActivity,
   loadStoredActivities,
   modes,
+  patchStoredActivity,
   providers,
   quoteFor,
   saveActivities,
@@ -188,6 +189,12 @@ const EPOCH_PHASE_LABEL: Record<string, string> = {
   // and must explain the wait rather than read as a generic "submitting".
   sent: "Deposit sent — Epoch is delivering to Miden (1–3 min)…",
 };
+
+// A full Sepolia (66-char) tx hash — used to gate the early jump to the detail
+// page on a real deposit tx rather than an abbreviated/absent value.
+function isSepoliaTxHash(value: string | undefined): value is string {
+  return !!value && /^0x[0-9a-fA-F]{64}$/.test(value);
+}
 
 // Warm the heavy client-only execute chunks (each eager-loads WASM) ahead of the
 // click so the wallet prompt appears promptly instead of after a long load.
@@ -860,6 +867,7 @@ export function BridgeExperience() {
         const updated = [activity, ...activities];
         setActivities(updated);
         saveActivities(updated);
+        router.push(`/activity/${activity.id}`);
       } catch (error) {
         setBridgeError(errorMessage(error));
       } finally {
@@ -920,7 +928,9 @@ export function BridgeExperience() {
           eta: "About 15 min",
           destination: destinationAccount,
           bridgeDestinationAddress: transaction.destinationAddress,
-          midenTxId: transaction.destinationAddress,
+          // midenTxId is left unset until the bridge creates the note on Miden;
+          // the monitor fills it with the real claim_tx_hash (the destination
+          // address is not a transaction and must not seed the Midenscan link).
           sourceNetworkId: AGGLAYER_BALI.sourceNetworkId,
           destinationNetworkId: AGGLAYER_BALI.destinationNetworkId,
           txHash: shortAddress(txHash),
@@ -929,6 +939,7 @@ export function BridgeExperience() {
         const updated = [activity, ...activities];
         setActivities(updated);
         saveActivities(updated);
+        router.push(`/activity/${activity.id}`);
       } catch (error) {
         setBridgeError(errorMessage(error));
       } finally {
@@ -989,6 +1000,12 @@ export function BridgeExperience() {
         // Dynamic import: epoch-execute pulls eager-WASM miden-sdk, so it must
         // load client-side at click time, never in the server render.
         const { runEpochTransfer } = await import("../lib/epoch/epoch-execute");
+        // As soon as the wallet deposit lands on-chain, hand the user the live
+        // detail page — don't make them watch a "preparing" button while the
+        // intent settles. The row is created once from the deposit tx hash, then
+        // patched with the intent nonce when runEpochTransfer resolves so the
+        // detail page can poll status.
+        let navigatedId: string | null = null;
         const result = await runEpochTransfer({
           mode,
           amount,
@@ -996,11 +1013,26 @@ export function BridgeExperience() {
           evmAddress: epochEvmAddress,
           requestSend: midenWallet.requestSend,
           waitForTransaction: midenWallet.waitForTransaction,
-          // Surface the SDK's approve/deposit/batch phases on the button.
-          onStatus: (phase) =>
-            setSubmitPhase(EPOCH_PHASE_LABEL[phase] ?? "Working…"),
+          onStatus: (status) => {
+            setSubmitPhase(EPOCH_PHASE_LABEL[status.phase] ?? "Working…");
+            if (navigatedId || !isSepoliaTxHash(status.transactionHash)) return;
+            const activity = createActivity(mode, "epoch", amount, {
+              status: "message_observed",
+              eta: "1-3 min",
+              destination: resolvedDestination,
+              txHash: shortAddress(status.transactionHash!),
+              sourceTxHash: status.transactionHash,
+              epochSponsor: epochEvmAddress,
+            });
+            navigatedId = activity.id;
+            const withNew = [activity, ...activities];
+            setActivities(withNew);
+            saveActivities(withNew);
+            router.push(`/activity/${activity.id}`);
+          },
         });
-        const activity = createActivity(mode, "epoch", amount, {
+
+        const details: Partial<Activity> = {
           status: "message_observed",
           eta: "1-3 min",
           destination: resolvedDestination,
@@ -1014,10 +1046,21 @@ export function BridgeExperience() {
           receivedAmount: result.outputAmount
             ? `${result.outputAmount} USDC`
             : undefined,
-        });
-        const updated = [activity, ...activities];
-        setActivities(updated);
-        saveActivities(updated);
+        };
+
+        if (navigatedId) {
+          // Already on the detail page — fill in the nonce so polling can start.
+          patchStoredActivity(navigatedId, details);
+          setActivities(loadStoredActivities());
+        } else {
+          // No early deposit-tx signal (e.g. Miden-side send) — create + navigate
+          // now so the transfer still opens its detail page.
+          const activity = createActivity(mode, "epoch", amount, details);
+          const withNew = [activity, ...activities];
+          setActivities(withNew);
+          saveActivities(withNew);
+          router.push(`/activity/${activity.id}`);
+        }
       } catch (error) {
         setBridgeError(errorMessage(error));
       } finally {

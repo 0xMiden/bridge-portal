@@ -1,7 +1,7 @@
 import {
   CollateralType,
   type IntentTransactionStatus,
-  type TransactionExecutionPhase,
+  type TransactionExecutionStatus,
 } from "@epoch-protocol/epoch-intents-sdk";
 import { formatUnits, parseUnits } from "viem";
 
@@ -64,8 +64,12 @@ export interface RunEpochTransferArgs {
   /** Miden write primitives from the connected MidenFi adapter. REQUIRED for send. */
   requestSend?: MidenNoteDeps["requestSend"];
   waitForTransaction?: MidenNoteDeps["waitForTransaction"];
-  /** Live execution phase (approve/deposit/batch) for UI progress on receive. */
-  onStatus?: (phase: TransactionExecutionPhase) => void;
+  /**
+   * Live execution status (phase + the deposit tx hash once broadcast) for UI
+   * progress on receive. The caller uses the hash to jump to the detail page as
+   * soon as the wallet tx lands, without waiting for the whole intent to settle.
+   */
+  onStatus?: (status: TransactionExecutionStatus) => void;
 }
 
 export interface EpochExecuteResult {
@@ -227,7 +231,7 @@ async function runEpochReceive(
     ...params,
     preFetchedQuote: quote,
     onExecutionStatus: args.onStatus
-      ? (status) => args.onStatus?.(status.phase)
+      ? (status) => args.onStatus?.(status)
       : undefined,
   });
 
