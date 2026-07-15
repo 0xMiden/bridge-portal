@@ -41,7 +41,9 @@ function depositCount(value: AgglayerDeposit | ClaimPlanObservation | null | und
 }
 
 export function deriveMonitoredActivity(activity: Activity, observation: BridgeMonitorObservation): Activity {
-  let next: Activity = { ...activity, updatedAt: observation.checkedAt };
+  // `updatedAt` records when the row last changed (epoch ms), independent of the
+  // monitor's display-only `checkedAt`.
+  let next: Activity = { ...activity, updatedAt: Date.now() };
 
   if (isFailedTx(observation.sourceTx)) {
     return {

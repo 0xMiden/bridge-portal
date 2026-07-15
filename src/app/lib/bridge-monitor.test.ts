@@ -15,7 +15,7 @@ const baseReceive: Activity = {
   bridgeDestinationAddress: "0x00000000c98bb07c188cd2500e13f68a069cdc00",
   txHash: "0xpreview...pending",
   sourceTxHash: "0x1111111111111111111111111111111111111111111111111111111111111111",
-  updatedAt: "2 min ago",
+  updatedAt: 0,
 };
 
 const baseSend: Activity = {
@@ -30,7 +30,7 @@ const baseSend: Activity = {
   destination: "0x9965507D1a55bcC2695C58ba16FB37d819B0A4dc",
   txHash: "0xpreview...pending",
   sourceTxHash: "0x0490ad69e87c19c0c2c4b7951b87f0013c98bf5d90b7e14acbe821471ad5b91e",
-  updatedAt: "2 min ago",
+  updatedAt: 0,
 };
 
 describe("deriveMonitoredActivity", () => {
@@ -48,7 +48,9 @@ describe("deriveMonitoredActivity", () => {
 
     expect(next.status).toBe("source_finality");
     expect(next.eta).toBe("Sepolia confirmed, waiting for AggLayer");
-    expect(next.updatedAt).toBe("Just now");
+    // updatedAt is stamped with the current time (epoch ms), not the input 0.
+    expect(typeof next.updatedAt).toBe("number");
+    expect(next.updatedAt).toBeGreaterThan(0);
   });
 
   test("moves AggLayer receive to message observed when Gateway FM has a non-ready bridge row", () => {
