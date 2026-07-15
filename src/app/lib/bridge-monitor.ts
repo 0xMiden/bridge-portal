@@ -98,7 +98,7 @@ export function deriveMonitoredActivity(activity: Activity, observation: BridgeM
       next = {
         ...next,
         status: "source_finality",
-        eta: "Sepolia confirmed, waiting for AggLayer",
+        eta: "Sepolia confirmed, waiting for Agglayer",
         sourceTxHash: observation.sourceTx?.hash ?? next.sourceTxHash,
       };
     }
@@ -106,7 +106,7 @@ export function deriveMonitoredActivity(activity: Activity, observation: BridgeM
     if (observation.agglayerDeposit) {
       const deposit = observation.agglayerDeposit;
       // Two distinct "claims" for a Sepolia→Miden receive:
-      //   1. AggLayer destination claim — the bridge auto-creates the note on
+      //   1. Agglayer destination claim — the bridge auto-creates the note on
       //      Miden. Signalled by `claim_tx_hash` (the note-creation tx) +
       //      `ready_for_claim`. After this the note EXISTS in the wallet.
       //   2. Miden note claim — the user consumes that note in MidenFi to
@@ -128,7 +128,7 @@ export function deriveMonitoredActivity(activity: Activity, observation: BridgeM
           ...shared,
           status: "complete",
           eta: "Delivered — claim in your Miden wallet",
-          // The AggLayer destination claim tx = the Miden note-creation tx.
+          // The Agglayer destination claim tx = the Miden note-creation tx.
           midenTxId: deposit.claim_tx_hash ?? next.midenTxId,
           destinationTxHash: deposit.claim_tx_hash ?? next.destinationTxHash,
           claimTxHash: deposit.claim_tx_hash ?? next.claimTxHash,
@@ -137,7 +137,7 @@ export function deriveMonitoredActivity(activity: Activity, observation: BridgeM
       return {
         ...shared,
         status: "message_observed",
-        eta: "AggLayer message observed",
+        eta: "Agglayer message observed",
       };
     }
 
@@ -159,7 +159,7 @@ export function deriveMonitoredActivity(activity: Activity, observation: BridgeM
       return {
         ...next,
         status: "message_observed",
-        eta: "Waiting for AggLayer proof",
+        eta: "Waiting for Agglayer proof",
         readyForClaim: false,
       };
     }

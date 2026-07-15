@@ -72,15 +72,15 @@ export const providers: Record<
     badge: "Paused",
     route: "Paused in this UI",
     disclosure:
-      "NEAR Intents is intentionally disabled in this build while AggLayer and Epoch are the active testnet routes.",
+      "NEAR Intents is intentionally disabled in this build while Agglayer and Epoch are the active testnet routes.",
     disabled: true,
   },
   agglayer: {
-    label: "AggLayer",
+    label: "Agglayer",
     badge: "Testnet",
-    route: "AggLayer testnet route",
+    route: "Agglayer testnet route",
     disclosure:
-      "AggLayer routes Sepolia→Miden through the canonical bridge with no provider fee. Miden→Sepolia send is not available yet (needs Miden SDK B2AGG note support); the Sepolia-side claimAsset is built in-app once the outbound note lands.",
+      "Agglayer routes Sepolia→Miden through the canonical bridge with no provider fee. Miden→Sepolia send is not available yet (needs Miden SDK B2AGG note support); the Sepolia-side claimAsset is built in-app once the outbound note lands.",
   },
   epoch: {
     label: "Epoch",
@@ -182,7 +182,7 @@ export function walletGradient(seed: string): string {
 
 export function quoteFor(mode: FlowMode, provider: BridgeProvider, amount: string): Quote {
   const parsedAmount = Number(amount) || 0;
-  // AggLayer is a canonical 1:1 bridge (no provider fee), so what you send is
+  // Agglayer is a canonical 1:1 bridge (no provider fee), so what you send is
   // what you receive. Other routes carry a small fee spread.
   const isOneToOne = provider === "agglayer";
   const expected = isOneToOne
@@ -210,8 +210,8 @@ export function quoteFor(mode: FlowMode, provider: BridgeProvider, amount: strin
     : isEpoch
       ? "In quoted rate"
       : "0.03 USD";
-  // Token depends on the route: AggLayer bridges ETH, Epoch bridges USDC.
-  // The mode-based assetOut ("Miden ETH") is only correct for AggLayer.
+  // Token depends on the route: Agglayer bridges ETH, Epoch bridges USDC.
+  // The mode-based assetOut ("Miden ETH") is only correct for Agglayer.
   const outSymbol =
     provider === "epoch" ? "USDC" : modes[mode].assetOut.replace("Miden ", "");
 
@@ -265,7 +265,7 @@ export function createActivity(
   overrides: Partial<Activity> = {},
 ): Activity {
   const copy = modes[mode];
-  // Token depends on the route: Epoch bridges USDC, AggLayer/others bridge ETH.
+  // Token depends on the route: Epoch bridges USDC, Agglayer/others bridge ETH.
   const asset =
     provider === "epoch" ? "USDC" : copy.assetIn.replace("Miden ", "");
   const destination = mode === "receive" ? "Miden" : "Sepolia";
@@ -319,7 +319,7 @@ export function sourceExplorer(activity: Activity): ExplorerLink {
       available: !!tx,
     };
   }
-  // Send source = the Miden note tx (Epoch's P2IDE collateral note / AggLayer's
+  // Send source = the Miden note tx (Epoch's P2IDE collateral note / Agglayer's
   // B2AGG note). Deep-link it like the Sepolia side does.
   const midenTx = fullHash(activity.sourceTxHash) ?? fullHash(activity.midenTxId);
   return {
@@ -331,7 +331,7 @@ export function sourceExplorer(activity: Activity): ExplorerLink {
 
 export function destinationExplorer(activity: Activity): ExplorerLink {
   if (activity.mode === "receive") {
-    // Destination tx = the Miden note-creation/delivery tx (AggLayer's
+    // Destination tx = the Miden note-creation/delivery tx (Agglayer's
     // destination claim / Epoch's delivery), captured once observed. The link
     // stays disabled until that tx exists, then deep-links straight to it.
     const midenTx = fullHash(activity.midenTxId) ?? fullHash(activity.destinationTxHash);
