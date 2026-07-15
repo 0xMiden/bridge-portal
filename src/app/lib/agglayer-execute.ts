@@ -2,7 +2,6 @@ import type { MidenFiWalletContextState } from "@miden-sdk/miden-wallet-adapter-
 import { normalizeMidenAccountHex } from "./agglayer";
 import {
   EVM_AGGLAYER_NETWORK_ID,
-  MIDEN_AGGLAYER_FAUCET_ID,
   MIDEN_BRIDGE_ID,
 } from "./agglayer-b2agg";
 
@@ -30,13 +29,19 @@ export interface AgglayerSendResult {
 
 export async function runAgglayerSend({
   amount,
+  faucetId,
   destinationAddress,
   senderAddress,
   requestTransaction,
   waitForTransaction,
 }: {
-  /** Bridge-out amount in Miden base units (ETH faucet is 8 decimals). */
+  /** Bridge-out amount in the wrapped-ETH faucet's base units. */
   amount: bigint;
+  /**
+   * The wrapped-ETH faucet the sender holds, resolved from the wallet at
+   * runtime (Gateway mints a new faucet per redeploy, so it can't be hardcoded).
+   */
+  faucetId: string;
   /** Sepolia recipient, 0x-prefixed 20-byte EVM address. */
   destinationAddress: string;
   /** Sender Miden account — bech32 (mcst1…) or hex. */
@@ -55,7 +60,9 @@ export async function runAgglayerSend({
 
   const sender = AccountId.fromHex(`0x${normalizeMidenAccountHex(senderAddress)}`);
   const bridge = AccountId.fromHex(MIDEN_BRIDGE_ID);
-  const faucet = AccountId.fromHex(MIDEN_AGGLAYER_FAUCET_ID);
+  const faucet = faucetId.startsWith("0x")
+    ? AccountId.fromHex(faucetId)
+    : AccountId.fromBech32(faucetId);
 
   // Note.createB2AggNote(sender, bridgeAccount, assets, destinationNetwork, destinationAddress)
   const note = Note.createB2AggNote(
