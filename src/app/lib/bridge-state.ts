@@ -329,16 +329,30 @@ export function sourceExplorer(activity: Activity): ExplorerLink {
   };
 }
 
+// The Agglayer bridge destination encodes the Miden account as
+// 0x00000000<15-byte account hex>00. Recover the account id (0x + 30 hex) for a
+// Midenscan /account/ link.
+function midenAccountFromBridgeDest(dest?: string): string | undefined {
+  if (!dest) return undefined;
+  const match = /^0x0{8}([0-9a-fA-F]{30})00$/.exec(dest);
+  return match ? `0x${match[1].toLowerCase()}` : undefined;
+}
+
 export function destinationExplorer(activity: Activity): ExplorerLink {
   if (activity.mode === "receive") {
-    // Destination tx = the Miden note-creation/delivery tx (Agglayer's
-    // destination claim / Epoch's delivery), captured once observed. The link
-    // stays disabled until that tx exists, then deep-links straight to it.
-    const midenTx = fullHash(activity.midenTxId) ?? fullHash(activity.destinationTxHash);
+    // Midenscan's /tx/ page errors on a cold load (it only renders after a
+    // manual refresh — its own message says so), so a deep link to the Miden
+    // note-creation tx reads as broken. Link to the recipient account page
+    // instead: it loads reliably first-try, and its Transactions / Notes tabs
+    // surface the delivered note. Available once the bridge has delivered (the
+    // note exists on Miden — status complete / claim tx captured).
+    const account = midenAccountFromBridgeDest(activity.bridgeDestinationAddress);
+    const delivered =
+      activity.status === "complete" || !!fullHash(activity.midenTxId);
     return {
       label: "View on Midenscan",
-      href: midenTx ? `${explorerUrls.miden}/tx/${midenTx}` : undefined,
-      available: !!midenTx,
+      href: account ? `${explorerUrls.miden}/account/${account}` : undefined,
+      available: delivered && !!account,
     };
   }
   // Send destination = the Sepolia fulfillment tx. Disabled until the solver
