@@ -1,6 +1,10 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "bridge-portal",
+  // The Miden org Cloudflare account (owns the miden.xyz zone). Pinned so
+  // deploys don't fail account-selection when the deployer's token also sees a
+  // personal account. Account ids are not secrets.
+  "account_id": "a4093f504ac6cd3006ac73ab4b330f7c",
   "main": ".open-next/worker.js",
   "compatibility_date": "2024-12-30",
   "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
