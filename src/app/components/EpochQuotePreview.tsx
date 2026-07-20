@@ -20,6 +20,7 @@ export function EpochQuotePreview({
   fallback,
   hideSymbol = false,
   onAmount,
+  onLoading,
 }: {
   mode: "receive" | "send";
   amount: string;
@@ -33,12 +34,19 @@ export function EpochQuotePreview({
   // detail from the real Epoch API rather than a hardcoded estimate). Pass a
   // stable setter (e.g. a useState setter) to avoid effect churn.
   onAmount?: (amount: string | undefined) => void;
+  // Lifts the in-flight state so the caller's CTA can show "Fetching quote…"
+  // rather than reading as ready-to-transfer while a quote recomputes.
+  onLoading?: (loading: boolean) => void;
 }) {
   const quote = useEpochQuote({ enabled: true, mode, amount, midenAccount, evmAddress });
 
   useEffect(() => {
     onAmount?.(quote.amount);
   }, [onAmount, quote.amount]);
+
+  useEffect(() => {
+    onLoading?.(quote.loading);
+  }, [onLoading, quote.loading]);
 
   // While a new quote is in flight (input changed → recomputing), show a
   // loading indicator rather than the previous amount, so the field visibly

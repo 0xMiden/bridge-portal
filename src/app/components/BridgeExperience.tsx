@@ -9,7 +9,9 @@ import {
   ExternalLink,
   LogOut,
   RefreshCcw,
+  ShieldCheck,
   Wallet,
+  X,
 } from "lucide-react";
 import dynamic from "next/dynamic";
 import Image from "next/image";
@@ -31,6 +33,7 @@ import {
   evmWalletIdentity,
   midenWalletIdentity,
   createActivity,
+  deriveCtaState,
   loadStoredActivities,
   loadStoredMode,
   loadStoredRoute,
@@ -281,6 +284,20 @@ export function BridgeExperience() {
   const [bridgeError, setBridgeError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitPhase, setSubmitPhase] = useState("");
+  // Preflight review gate: a valid transfer opens this confirmation surface
+  // first; the wallet is invoked only from its "Confirm in wallet" action, never
+  // straight off the primary CTA. Cancelling just closes it (form state is
+  // untouched, so all entered data is preserved).
+  const [showPreflight, setShowPreflight] = useState(false);
+  // Reveals the full destination value in the preflight (a long Miden id / 0x
+  // address is shortened by default, with an affordance to inspect it in full).
+  const [showFullDestination, setShowFullDestination] = useState(false);
+  // Whether the live Epoch quote is currently recomputing — lifted from
+  // EpochQuotePreview so the CTA can show "Fetching quote…" instead of "Review".
+  const [epochQuoteLoading, setEpochQuoteLoading] = useState(false);
+  const destinationInputRef = useRef<HTMLInputElement>(null);
+  const walletClusterRef = useRef<HTMLDivElement>(null);
+  const preflightConfirmRef = useRef<HTMLButtonElement>(null);
   // Prefill the destination input with the connected wallet once per direction;
   // cleared in selectMode so switching modes re-prefills for the new side.
   const destinationPrefilledRef = useRef(false);
@@ -347,9 +364,6 @@ export function BridgeExperience() {
       ? "Estimating…"
       : quote.networkFee;
   const isLiveAgglayerReceive = provider === "agglayer" && mode === "receive";
-  // Agglayer outbound (Miden→Sepolia): builds a B2AGG bridge-out note via the
-  // SDK (Note.createB2AggNote) and submits it through the MidenFi wallet.
-  const isLiveAgglayerSend = provider === "agglayer" && mode === "send";
 
   // Warm the execute chunk (WASM-heavy) as soon as there's a valid amount, so
   // the click-to-wallet-prompt delay is minimal instead of "seeming stuck".
@@ -428,23 +442,31 @@ export function BridgeExperience() {
           ? "Your Sepolia wallet sends to Miden through Agglayer with no provider bridge fee (~10-20 min)."
           : "Bridge out from Miden through Agglayer. The Sepolia claim is auto-submitted by the gateway once the exit settles (~10-20 min) — nothing to claim manually."
         : "Testnet route. Epoch integration status is tracked from activity details.";
-  const primaryActionLabel = isSubmitting
-    ? submitPhase || "Preparing…"
-    : insufficientBalance
-      ? `Not enough ${sourceTokenSymbol}`
-      : mode === "send" && !midenWallet.connected
-      ? "Connect Miden wallet"
-      : isLiveAgglayerSend
-        ? "Bridge out to Sepolia"
-      : isLiveAgglayerReceive && !walletConnected
-      ? "Connect Sepolia wallet"
-      : isLiveAgglayerReceive && !hasDestination
-        ? "Add Miden account"
-        : isLiveAgglayerReceive
-          ? "Receive on Miden"
-          : mode === "receive"
-            ? "Start receive"
-            : "Start send";
+  // The connected wallet on the direction's source side — the guard for whether
+  // the CTA should prompt a connection (receive sources from Sepolia, send from
+  // the Miden wallet).
+  const sourceConnected = mode === "receive" ? walletConnected : midenWallet.connected;
+  // The resolved destination shown in the preflight: the typed value, else the
+  // connected wallet on the receiving side (Miden for receive, Sepolia for send).
+  const previewDestination =
+    mode === "receive"
+      ? destination.trim() || midenAddress
+      : destination.trim() || walletAccount;
+  // Deterministic CTA: incomplete form → connect → destination → review. Only a
+  // "review" action reaches the preflight (and, from there, the wallet). Epoch's
+  // live quote loading is a source-side concern, so it only gates once the
+  // route is Epoch and everything else is ready.
+  const cta = deriveCtaState({
+    mode,
+    sourceConnected,
+    hasDestination,
+    amount,
+    sourceTokenSymbol,
+    insufficientBalance,
+    quoteLoading: provider === "epoch" && epochQuoteLoading,
+    isSubmitting,
+    submitPhase,
+  });
   // Destination help is route-agnostic: it depends only on direction (receive =
   // Miden account, send = Sepolia address) and shows consistently on every route.
   const destinationHelp =
@@ -894,6 +916,67 @@ export function BridgeExperience() {
     await openWalletModal();
   }
 
+  // Bring the header Miden wallet button into view and focus it — the send
+  // source wallet connects from there (its own menu), so "Connect Miden wallet"
+  // points the user at the right control rather than prompting from the CTA.
+  function focusMidenWalletButton() {
+    const pills =
+      walletClusterRef.current?.querySelectorAll<HTMLButtonElement>(
+        ".wallet-pill",
+      );
+    const midenPill = pills?.[pills.length - 1];
+    midenPill?.scrollIntoView({ block: "center", behavior: "smooth" });
+    midenPill?.focus();
+  }
+
+  // The CTA never submits directly: it either advances the form (connect the
+  // source wallet, focus the destination) or opens the preflight review. Only
+  // the review's confirm action reaches submitTransfer.
+  function handlePrimaryAction() {
+    switch (cta.action) {
+      case "connect-source":
+        if (mode === "receive") void openWalletModal();
+        else focusMidenWalletButton();
+        return;
+      case "add-destination":
+        destinationInputRef.current?.focus();
+        destinationInputRef.current?.scrollIntoView({ block: "center" });
+        return;
+      case "review":
+        setBridgeError("");
+        setShowFullDestination(false);
+        setShowPreflight(true);
+        return;
+      default:
+        // Disabled states (enter-amount, insufficient, quote-loading,
+        // submitting) can't advance — the button is disabled, so this is a no-op.
+        return;
+    }
+  }
+
+  function cancelPreflight() {
+    // Close the review with all entered data intact (form state is untouched).
+    setShowPreflight(false);
+  }
+
+  function confirmPreflight() {
+    setShowPreflight(false);
+    void submitTransfer();
+  }
+
+  // While the preflight is open, focus its confirm action and let Escape cancel
+  // it — keyboard parity with the rest of the flow.
+  useEffect(() => {
+    if (!showPreflight) return;
+    preflightConfirmRef.current?.focus();
+
+    function closeOnEscape(event: KeyboardEvent) {
+      if (event.key === "Escape") setShowPreflight(false);
+    }
+    document.addEventListener("keydown", closeOnEscape);
+    return () => document.removeEventListener("keydown", closeOnEscape);
+  }, [showPreflight]);
+
   async function submitTransfer() {
     setBridgeError("");
     setWalletError("");
@@ -1245,7 +1328,11 @@ export function BridgeExperience() {
           <span>Bridge</span>
         </Link>
 
-        <div className="wallet-cluster" aria-label="Connected wallets">
+        <div
+          className="wallet-cluster"
+          aria-label="Connected wallets"
+          ref={walletClusterRef}
+        >
           <div className="wallet-menu-root" ref={evmMenuRef}>
             <button
               className={`wallet-button wallet-pill ${walletConnected ? "connected" : ""} ${wrongNetwork ? "wrong-network" : ""}`}
@@ -1483,6 +1570,7 @@ export function BridgeExperience() {
                     fallback={expectedReceivedAmount}
                     hideSymbol
                     onAmount={setEpochQuoteAmount}
+                    onLoading={setEpochQuoteLoading}
                   />
                 ) : (
                   expectedReceivedAmount
@@ -1495,6 +1583,7 @@ export function BridgeExperience() {
           <label className="destination-input">
             <span>{copy.destinationLabel}</span>
             <input
+              ref={destinationInputRef}
               value={destination}
               onChange={(event) => setDestination(event.target.value)}
               placeholder={destinationPlaceholder}
@@ -1526,10 +1615,10 @@ export function BridgeExperience() {
           <button
             className="primary-button"
             type="button"
-            onClick={submitTransfer}
-            disabled={isSubmitting || insufficientBalance}
+            onClick={handlePrimaryAction}
+            disabled={cta.disabled}
           >
-            {primaryActionLabel}
+            {cta.label}
             {isSubmitting ? (
               <RefreshCcw size={18} className="animate-spin" aria-hidden="true" />
             ) : (
@@ -1540,6 +1629,123 @@ export function BridgeExperience() {
           <div className={`route-disclaimer ${routeTone}`}>
             <span>{routeNote}</span>
           </div>
+
+          {showPreflight ? (
+            <div
+              className="preflight-overlay"
+              role="dialog"
+              aria-modal="true"
+              aria-label={`Review ${mode === "receive" ? "receive" : "send"}`}
+              onClick={(event) => {
+                // A backdrop click cancels; clicks inside the panel don't bubble.
+                if (event.target === event.currentTarget) cancelPreflight();
+              }}
+            >
+              <div className="preflight-panel">
+                <div className="preflight-head">
+                  <span className="preflight-head-title">
+                    <ShieldCheck size={16} aria-hidden="true" />
+                    Review {mode === "receive" ? "receive" : "send"}
+                  </span>
+                  <button
+                    type="button"
+                    className="preflight-close"
+                    onClick={cancelPreflight}
+                    aria-label="Cancel review"
+                  >
+                    <X size={16} aria-hidden="true" />
+                  </button>
+                </div>
+
+                <div className="preflight-route">
+                  <strong>{copy.from}</strong>
+                  <ArrowRight size={15} aria-hidden="true" />
+                  <strong>{copy.to}</strong>
+                  <span className="preflight-testnet">Testnet</span>
+                </div>
+
+                <dl className="preflight-rows">
+                  <div>
+                    <dt>You send</dt>
+                    <dd>
+                      {amount} {provider === "epoch" ? "USDC" : copy.assetIn}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt>Expected received</dt>
+                    <dd>
+                      {expectedReceivedAmount} {destinationSymbol}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt>Minimum received</dt>
+                    <dd>{displayMinReceived}</dd>
+                  </div>
+                  <div>
+                    <dt>Destination</dt>
+                    <dd className="preflight-destination">
+                      <span
+                        className={showFullDestination ? "full" : undefined}
+                        title={previewDestination}
+                      >
+                        {showFullDestination
+                          ? previewDestination
+                          : shortAddress(previewDestination)}
+                      </span>
+                      {previewDestination.length > 16 ? (
+                        <button
+                          type="button"
+                          className="preflight-inspect"
+                          onClick={() =>
+                            setShowFullDestination((shown) => !shown)
+                          }
+                        >
+                          {showFullDestination ? "Hide" : "Show full"}
+                        </button>
+                      ) : null}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt>Route</dt>
+                    <dd>{providerCopy.label}</dd>
+                  </div>
+                  <div>
+                    <dt>ETA</dt>
+                    <dd>{quote.eta}</dd>
+                  </div>
+                  <div>
+                    <dt>Network fee</dt>
+                    <dd>{networkFeeDisplay}</dd>
+                  </div>
+                  <div>
+                    <dt>Provider fee</dt>
+                    <dd>{quote.bridgeFee}</dd>
+                  </div>
+                </dl>
+
+                <p className="preflight-note">{routeNote}</p>
+
+                <div className="preflight-actions">
+                  <button
+                    type="button"
+                    className="secondary-button preflight-cancel"
+                    onClick={cancelPreflight}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    className="primary-button preflight-confirm"
+                    ref={preflightConfirmRef}
+                    onClick={confirmPreflight}
+                  >
+                    Confirm in wallet
+                    <ArrowRight size={18} aria-hidden="true" />
+                  </button>
+                </div>
+              </div>
+            </div>
+          ) : null}
         </section>
 
         {inFlightActivities.length > 0 && (

@@ -400,6 +400,96 @@ export function quoteFor(mode: FlowMode, provider: BridgeProvider, amount: strin
   };
 }
 
+// A finite, strictly-positive amount is the floor for any wallet prompt: empty,
+// zero, negative, malformed ("1.2.3" → NaN), and non-finite ("1e999" → Infinity)
+// inputs all fail this and can never advance the flow.
+export function isValidAmount(amount: string): boolean {
+  const parsed = Number(amount);
+  return Number.isFinite(parsed) && parsed > 0;
+}
+
+// The single action the primary CTA offers, in strict order of the form's
+// progression. Anything disabled can't open a wallet; only "review" leads to
+// the preflight surface (and, from there, the wallet).
+export type CtaAction =
+  | "submitting"
+  | "enter-amount"
+  | "connect-source"
+  | "add-destination"
+  | "insufficient"
+  | "quote-loading"
+  | "review";
+
+export interface CtaState {
+  action: CtaAction;
+  label: string;
+  /** Informational only — the button can't advance the flow (no wallet prompt). */
+  disabled: boolean;
+  /** Clicking opens the preflight review (the only path to a wallet prompt). */
+  opensReview: boolean;
+}
+
+export interface CtaInputs {
+  mode: FlowMode;
+  /** True once the direction's source wallet is connected (receive: Sepolia; send: Miden). */
+  sourceConnected: boolean;
+  /** True once a destination is resolvable (typed value or connected wallet). */
+  hasDestination: boolean;
+  /** The raw amount input, validated here. */
+  amount: string;
+  /** Source token symbol for the insufficient-balance copy ("USDC"/"ETH"). */
+  sourceTokenSymbol: string;
+  insufficientBalance: boolean;
+  /** A live route quote (Epoch) is in flight — not yet a ready transfer. */
+  quoteLoading: boolean;
+  isSubmitting: boolean;
+  /** Phase-specific progress copy while submitting. */
+  submitPhase: string;
+}
+
+/**
+ * Derive the primary CTA from the form state as a deterministic progression:
+ * incomplete input → wallet connection → destination → ready-to-review. The CTA
+ * always names the next action it will actually perform, and only the terminal
+ * "review" action can reach a wallet. Pure so it's unit-tested directly.
+ */
+export function deriveCtaState(input: CtaInputs): CtaState {
+  const disabled = (action: CtaAction, label: string): CtaState => ({
+    action,
+    label,
+    disabled: true,
+    opensReview: false,
+  });
+  const actionable = (
+    action: CtaAction,
+    label: string,
+    opensReview = false,
+  ): CtaState => ({ action, label, disabled: false, opensReview });
+
+  if (input.isSubmitting)
+    return disabled("submitting", input.submitPhase || "Preparing…");
+  if (!isValidAmount(input.amount))
+    return disabled("enter-amount", "Enter amount");
+  if (!input.sourceConnected)
+    return actionable(
+      "connect-source",
+      input.mode === "receive" ? "Connect Sepolia wallet" : "Connect Miden wallet",
+    );
+  if (!input.hasDestination)
+    return actionable(
+      "add-destination",
+      input.mode === "receive" ? "Add Miden account" : "Add Sepolia address",
+    );
+  if (input.insufficientBalance)
+    return disabled("insufficient", `Not enough ${input.sourceTokenSymbol}`);
+  if (input.quoteLoading) return disabled("quote-loading", "Fetching quote…");
+  return actionable(
+    "review",
+    input.mode === "receive" ? "Review receive" : "Review send",
+    true,
+  );
+}
+
 export function statusLabel(status: ActivityStatus) {
   const labels: Record<ActivityStatus, string> = {
     signature: "Needs signature",
