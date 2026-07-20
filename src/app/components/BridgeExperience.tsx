@@ -26,6 +26,7 @@ import {
   useMemo,
   useRef,
   useState,
+  useSyncExternalStore,
 } from "react";
 import { formatEther, parseUnits } from "viem";
 import {
@@ -78,6 +79,22 @@ import {
 import { type EvmProvider, ensureSepolia } from "../lib/evm-wallet";
 // Type-only import — erased at build, so the eager-WASM adapter never reaches SSR.
 import type { MidenFiWalletContextState } from "@miden-sdk/miden-wallet-adapter-react";
+
+const MOBILE_ROUTE_QUERY = "(max-width: 639px)";
+
+function subscribeToMobileRouteQuery(onChange: () => void) {
+  const query = window.matchMedia(MOBILE_ROUTE_QUERY);
+  query.addEventListener("change", onChange);
+  return () => query.removeEventListener("change", onChange);
+}
+
+function getMobileRouteSnapshot() {
+  return window.matchMedia(MOBILE_ROUTE_QUERY).matches;
+}
+
+function getServerMobileRouteSnapshot() {
+  return false;
+}
 
 // Sepolia USDC for the Epoch route (Epoch's SIO route is USDC<->USDC). This test
 // token reports 18 decimals (not the usual 6). Mint it on the Epoch dashboard.
@@ -265,6 +282,11 @@ function compactTokenAmount(value: string) {
 }
 
 export function BridgeExperience() {
+  const mobileRouteSheet = useSyncExternalStore(
+    subscribeToMobileRouteQuery,
+    getMobileRouteSnapshot,
+    getServerMobileRouteSnapshot,
+  );
   const router = useRouter();
   const { open } = useAppKit();
   const { address, isConnected } = useAppKitAccount();
@@ -592,7 +614,7 @@ export function BridgeExperience() {
 
     function closeMenu(event: MouseEvent | PointerEvent) {
       if (!routeMenuRef.current?.contains(event.target as Node))
-        closeRouteMenu();
+        closeRouteMenu(false);
     }
 
     function closeOnEscape(event: KeyboardEvent) {
@@ -612,9 +634,8 @@ export function BridgeExperience() {
   // returns the host page to exactly the state in which it was opened.
   useEffect(() => {
     if (!routeMenuOpen && !showPreflight) return;
-    const mobile = window.matchMedia("(max-width: 640px)").matches;
     // The desktop route control remains an anchored popover, not an overlay.
-    if (routeMenuOpen && !showPreflight && !mobile) return;
+    if (routeMenuOpen && !showPreflight && !mobileRouteSheet) return;
     const body = document.body;
     const previous = {
       overflow: body.style.overflow,
@@ -628,7 +649,7 @@ export function BridgeExperience() {
     };
     body.dataset.overlayOpen = "true";
     body.style.overflow = "hidden";
-    if (mobile) {
+    if (mobileRouteSheet) {
       body.style.position = "fixed";
       body.style.top = `${-previous.scrollY}px`;
       body.style.left = `${-previous.scrollX}px`;
@@ -643,9 +664,9 @@ export function BridgeExperience() {
       body.style.width = previous.width;
       if (previous.overlayOpen === undefined) delete body.dataset.overlayOpen;
       else body.dataset.overlayOpen = previous.overlayOpen;
-      if (mobile) window.scrollTo(previous.scrollX, previous.scrollY);
+      if (mobileRouteSheet) window.scrollTo(previous.scrollX, previous.scrollY);
     };
-  }, [routeMenuOpen, showPreflight]);
+  }, [mobileRouteSheet, routeMenuOpen, showPreflight]);
 
   // Move focus onto the active option when the listbox opens so arrow-key
   // navigation and Enter/Space selection work without a mouse.
@@ -691,11 +712,7 @@ export function BridgeExperience() {
   }
 
   function handleRouteDialogKeyDown(event: ReactKeyboardEvent<HTMLDivElement>) {
-    if (
-      event.key !== "Tab" ||
-      !window.matchMedia("(max-width: 640px)").matches
-    )
-      return;
+    if (event.key !== "Tab" || !mobileRouteSheet) return;
     const focusable = Array.from(
       event.currentTarget.querySelectorAll<HTMLElement>(
         'button:not([disabled]), [href], input:not([disabled]), [tabindex]:not([tabindex="-1"])',
@@ -978,9 +995,10 @@ export function BridgeExperience() {
     closeRouteMenu();
   }
 
-  function closeRouteMenu() {
+  function closeRouteMenu(restoreFocus = true) {
     setRouteMenuOpen(false);
-    window.requestAnimationFrame(() => routeTriggerRef.current?.focus());
+    if (restoreFocus)
+      window.requestAnimationFrame(() => routeTriggerRef.current?.focus());
   }
 
   async function openWalletModal() {
@@ -1592,7 +1610,7 @@ export function BridgeExperience() {
                 type="button"
                 ref={routeTriggerRef}
                 aria-expanded={routeMenuOpen}
-                aria-haspopup="listbox"
+                aria-haspopup={mobileRouteSheet ? "dialog" : "listbox"}
                 aria-controls="bridge-route-listbox"
                 onClick={() => setRouteMenuOpen((open) => !open)}
               >
@@ -1607,13 +1625,13 @@ export function BridgeExperience() {
                     type="button"
                     className="route-sheet-backdrop"
                     aria-label="Close route menu"
-                    onClick={closeRouteMenu}
+                    onClick={() => closeRouteMenu()}
                   />
                   <div
                     className="route-options-layer"
-                    role="dialog"
-                    aria-modal="true"
-                    aria-label="Choose bridge route"
+                    role={mobileRouteSheet ? "dialog" : undefined}
+                    aria-modal={mobileRouteSheet ? "true" : undefined}
+                    aria-label={mobileRouteSheet ? "Choose bridge route" : undefined}
                     onKeyDown={handleRouteDialogKeyDown}
                   >
                     <div

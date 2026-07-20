@@ -11,6 +11,51 @@ function intersects(a: Rect, b: Rect) {
   );
 }
 
+test.describe("desktop route popover", () => {
+  test.beforeEach(async ({ page }) => {
+    await page.setViewportSize({ width: 1200, height: 900 });
+  });
+
+  test("uses listbox semantics without announcing a modal dialog", async ({
+    bridge,
+    page,
+  }) => {
+    await page.setViewportSize({ width: 640, height: 900 });
+    await bridge.waitForReady();
+    await bridge.routeTrigger().click();
+
+    await expect(bridge.routeListbox()).toBeVisible();
+    await expect(page.locator(".route-options-layer")).not.toHaveAttribute(
+      "role",
+      "dialog",
+    );
+    await expect(page.locator(".route-options-layer")).not.toHaveAttribute(
+      "aria-modal",
+      "true",
+    );
+  });
+
+  test("outside pointer close preserves focus on the clicked input", async ({
+    bridge,
+    page,
+  }) => {
+    await bridge.waitForReady();
+    await bridge.routeTrigger().click();
+
+    const destination = page.locator(".destination-input input");
+    await destination.click();
+    await page.evaluate(
+      () =>
+        new Promise<void>((resolve) =>
+          requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+        ),
+    );
+
+    await expect(bridge.routeListbox()).toBeHidden();
+    await expect(destination).toBeFocused();
+  });
+});
+
 test.describe("mobile bridge layout", () => {
   test.beforeEach(async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
@@ -125,13 +170,60 @@ test.describe("mobile bridge layout", () => {
       .toEqual({ overflow: "clip", position: "relative" });
   });
 
-  test("action dock never intersects quote or route warning", async ({
+  test("mobile menu and review controls expose 44px targets", async ({
     bridge,
     page,
   }) => {
+    await bridge.waitForReady();
+
+    await page.locator(".wallet-cluster .wallet-button").first().click();
+    const walletItems = page.locator(".wallet-actions-menu.open .wallet-menu-item");
+    await expect(walletItems.first()).toBeVisible();
+    for (let index = 0; index < (await walletItems.count()); index += 1) {
+      await expect
+        .poll(async () => (await walletItems.nth(index).boundingBox())?.height ?? 0)
+        .toBeGreaterThanOrEqual(44);
+    }
+    await page.keyboard.press("Escape");
+
+    await bridge.routeTrigger().click();
+    const routeOptions = bridge.routeListbox().getByRole("option");
+    for (let index = 0; index < (await routeOptions.count()); index += 1) {
+      const box = await routeOptions.nth(index).boundingBox();
+      expect(box?.height).toBeGreaterThanOrEqual(44);
+    }
+    await page.keyboard.press("Escape");
+
     await bridge.fillAmount("0.05");
+    await bridge.openPreflight();
+    for (const control of [
+      page.locator(".preflight-close"),
+      page.locator(".preflight-cancel"),
+      page.locator(".preflight-confirm"),
+    ]) {
+      const box = await control.boundingBox();
+      expect(box?.height).toBeGreaterThanOrEqual(44);
+      expect(box?.width).toBeGreaterThanOrEqual(44);
+    }
+  });
+
+  test("sticky action dock stays collision-free with a visible form error", async ({
+    bridge,
+    page,
+  }) => {
+    await bridge.waitForReady();
+    await bridge.setRoute("AggLayer");
+    await bridge.setMode("Send");
+    await bridge.fillAmount("0.05");
+    await bridge.fillDestination("not-a-sepolia-address");
+    await bridge.openPreflight();
+    await bridge.confirmPreflight();
+    const formError = page.locator(".swap-card > .form-error");
+    await expect(formError).toContainText(/valid Sepolia/i);
+
     const dock = bridge.actionDock();
     await expect(dock).toBeVisible();
+    await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
 
     const boxes = await page.evaluate(() => {
       const rect = (selector: string) => {
@@ -147,20 +239,33 @@ test.describe("mobile bridge layout", () => {
         dock: rect(".primary-action-dock"),
         quote: rect(".quote-summary"),
         disclaimer: rect(".route-disclaimer"),
+        error: rect(".swap-card > .form-error"),
+        dockPosition: getComputedStyle(
+          document.querySelector(".primary-action-dock")!,
+        ).position,
         buttonPosition: getComputedStyle(
           document.querySelector(".primary-action-dock .primary-button")!,
         ).position,
+        viewportHeight: window.innerHeight,
       };
     });
 
     expect(intersects(boxes.dock, boxes.quote)).toBe(false);
     expect(intersects(boxes.dock, boxes.disclaimer)).toBe(false);
+    expect(intersects(boxes.dock, boxes.error)).toBe(false);
+    expect(boxes.dockPosition).toBe("sticky");
+    expect(boxes.dock.top).toBeGreaterThanOrEqual(0);
+    expect(boxes.dock.bottom).toBeLessThanOrEqual(boxes.viewportHeight + 1);
     expect(boxes.buttonPosition).toBe("static");
   });
 
   for (const width of [360, 390]) {
-    test(`${width}px viewport has no horizontal overflow`, async ({ page }) => {
+    test(`${width}px viewport has no horizontal overflow`, async ({
+      bridge,
+      page,
+    }) => {
       await page.setViewportSize({ width, height: 844 });
+      await bridge.waitForReady();
       await expect
         .poll(() =>
           page.evaluate(
