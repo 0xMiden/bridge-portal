@@ -735,59 +735,17 @@ a {
   color: #a6440a;
 }
 
-.route-tag.availability.on {
-  background: var(--surface-strong);
-  color: var(--muted-foreground);
-}
-
-.route-tag.availability.off {
-  background: #f0efea;
-  color: var(--muted-foreground);
-}
-
 .route-check {
   margin-left: auto;
   color: var(--accent);
   flex: 0 0 auto;
 }
 
-.route-diff {
-  justify-self: start;
-  padding: 2px 8px;
-  border-radius: 999px;
-  background: var(--surface-strong);
-  color: var(--foreground);
-  font-size: 11px;
-  font-style: normal;
-  font-weight: 780;
-}
-
-.route-facts {
-  display: grid;
-  gap: 5px;
-}
-
-.route-fact {
-  display: grid;
-  grid-template-columns: 44px minmax(0, 1fr);
-  align-items: baseline;
-  gap: 8px;
-}
-
-.route-fact-k {
+/* One concise line per route — the token it moves and how long it takes. */
+.route-option-sub {
   color: var(--muted-foreground);
-  font-size: 10px;
-  font-weight: 800;
-  letter-spacing: 0.02em;
-  text-transform: uppercase;
-}
-
-.route-fact-v {
-  min-width: 0;
-  color: var(--foreground);
   font-size: 12px;
   font-weight: 640;
-  line-height: 1.35;
 }
 
 .route-unavailable {
