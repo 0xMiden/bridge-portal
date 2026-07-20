@@ -62,6 +62,7 @@ import {
 import { sepoliaGasUnitsFor, useSepoliaGasEstimate } from "../lib/sepolia-gas";
 import { RelativeTime } from "./RelativeTime";
 import { TokenSelect } from "./TokenSelect";
+import { ThemeToggle } from "./ThemeToggle";
 import type {
   MidenRouteBalances,
   ResolvedEthAsset,
@@ -1390,11 +1391,13 @@ export function BridgeExperience() {
           <span>Bridge</span>
         </Link>
 
-        <div
-          className="wallet-cluster"
-          aria-label="Connected wallets"
-          ref={walletClusterRef}
-        >
+        <div className="topbar-actions">
+          <ThemeToggle />
+          <div
+            className="wallet-cluster"
+            aria-label="Connected wallets"
+            ref={walletClusterRef}
+          >
           <div className="wallet-menu-root" ref={evmMenuRef}>
             <button
               className={`wallet-button wallet-pill ${walletConnected ? "connected" : ""} ${wrongNetwork ? "wrong-network" : ""}`}
@@ -1496,7 +1499,8 @@ export function BridgeExperience() {
             ) : null}
           </div>
 
-          <MidenWalletButton onStateChange={handleMidenWalletState} />
+            <MidenWalletButton onStateChange={handleMidenWalletState} />
+          </div>
         </div>
       </header>
       {midenWallet.error ? (

@@ -1,23 +1,35 @@
 @import "tailwindcss";
 
 :root {
-  --background: #f7f4ee;
-  --foreground: #171511;
+  color-scheme: light;
+  --background: #f7f7f5;
   --surface: #ffffff;
-  --surface-muted: #f1eee7;
-  --surface-strong: #ebe6dc;
-  --border: rgba(23, 21, 17, 0.1);
-  --border-strong: rgba(23, 21, 17, 0.18);
-  --muted-foreground: #706b61;
-  --faint-foreground: #9a9286;
+  --surface-elevated: #ffffff;
+  --surface-muted: #efefec;
+  --surface-strong: #e7e7e2;
+  --foreground: #20201e;
+  --muted-foreground: #6f6e68;
+  --faint-foreground: #94938c;
+  --border: rgba(32, 32, 30, 0.11);
+  --border-strong: rgba(32, 32, 30, 0.19);
+  --primary: #20201e;
+  --primary-foreground: #ffffff;
   --accent: #ff5500;
   --accent-soft: rgba(255, 85, 0, 0.1);
+  --accent-border: rgba(255, 85, 0, 0.32);
+  --accent-ring: rgba(255, 85, 0, 0.24);
   --success: #0f9f6e;
   --success-soft: #e7f7ef;
+  --success-border: rgba(15, 159, 110, 0.32);
   --warning: #a66b00;
   --warning-soft: #fff3d8;
+  --warning-border: rgba(166, 107, 0, 0.32);
   --danger: #c24141;
   --danger-soft: #ffe8e8;
+  --danger-border: rgba(194, 65, 65, 0.3);
+  --overlay: rgba(23, 23, 22, 0.38);
+  --scrim: rgba(23, 23, 22, 0.48);
+  --inset-highlight: rgba(255, 255, 255, 0.72);
   --radius-sm: 8px;
   --radius-md: 12px;
   --radius-lg: 18px;
@@ -26,8 +38,44 @@
   --duration-slow: 520ms;
   --ease-standard: cubic-bezier(0.16, 1, 0.3, 1);
   --ease-press: cubic-bezier(0.2, 0, 0, 1);
-  --shadow-card: 0 18px 44px rgba(68, 54, 33, 0.1);
-  --shadow-raised: 0 4px 12px rgba(68, 54, 33, 0.08);
+  --shadow-card: 0 18px 44px rgba(32, 32, 30, 0.08);
+  --shadow-raised: 0 4px 12px rgba(32, 32, 30, 0.08);
+  --shadow-control: inset 0 1px 0 var(--inset-highlight);
+}
+
+.dark {
+  color-scheme: dark;
+  --background: #171716;
+  --surface: #212120;
+  --surface-elevated: #292927;
+  --surface-muted: #2a2a28;
+  --surface-strong: #333330;
+  --foreground: #f1f1ee;
+  --muted-foreground: #a3a29c;
+  --faint-foreground: #7f7e78;
+  --border: rgba(241, 241, 238, 0.12);
+  --border-strong: rgba(241, 241, 238, 0.21);
+  --primary: #f1f1ee;
+  --primary-foreground: #171716;
+  --accent: #ff6a2a;
+  --accent-soft: rgba(255, 106, 42, 0.15);
+  --accent-border: rgba(255, 106, 42, 0.42);
+  --accent-ring: rgba(255, 106, 42, 0.3);
+  --success: #54d6a5;
+  --success-soft: rgba(84, 214, 165, 0.14);
+  --success-border: rgba(84, 214, 165, 0.38);
+  --warning: #f4b942;
+  --warning-soft: rgba(244, 185, 66, 0.15);
+  --warning-border: rgba(244, 185, 66, 0.4);
+  --danger: #ff7a7a;
+  --danger-soft: rgba(255, 122, 122, 0.14);
+  --danger-border: rgba(255, 122, 122, 0.38);
+  --overlay: rgba(0, 0, 0, 0.58);
+  --scrim: rgba(0, 0, 0, 0.68);
+  --inset-highlight: rgba(255, 255, 255, 0.06);
+  --shadow-card: 0 18px 44px rgba(0, 0, 0, 0.24);
+  --shadow-raised: 0 6px 18px rgba(0, 0, 0, 0.3);
+  --shadow-control: inset 0 1px 0 var(--inset-highlight);
 }
 
 @theme inline {
@@ -44,9 +92,7 @@
 html,
 body {
   min-height: 100%;
-  background:
-    radial-gradient(circle at top, rgba(255, 85, 0, 0.08), transparent 34rem),
-    var(--background);
+  background: var(--background);
   color: var(--foreground);
 }
 
@@ -89,6 +135,7 @@ a {
 
 ::selection {
   background: var(--accent-soft);
+  color: var(--foreground);
 }
 
 .app-shell,
@@ -106,6 +153,97 @@ a {
   justify-content: space-between;
   gap: 16px;
   min-height: 64px;
+}
+
+.topbar-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  min-width: 0;
+}
+
+.theme-menu-root {
+  position: relative;
+  display: inline-flex;
+  flex: 0 0 auto;
+}
+
+.theme-trigger {
+  display: inline-grid;
+  place-items: center;
+  width: 44px;
+  min-width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  color: var(--muted-foreground);
+  box-shadow: var(--shadow-control);
+  transition:
+    border-color var(--duration-base) var(--ease-standard),
+    background-color var(--duration-base) var(--ease-standard),
+    color var(--duration-base) var(--ease-standard);
+}
+
+.theme-trigger:hover,
+.theme-trigger[aria-expanded="true"] {
+  border-color: var(--border-strong);
+  background: var(--surface-muted);
+  color: var(--foreground);
+}
+
+.theme-trigger-placeholder {
+  width: 18px;
+  height: 18px;
+}
+
+.theme-menu {
+  position: absolute;
+  z-index: 80;
+  top: calc(100% + 8px);
+  right: 0;
+  display: grid;
+  min-width: 168px;
+  padding: 5px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface-elevated);
+  box-shadow: var(--shadow-raised);
+}
+
+.theme-menu-item {
+  display: grid;
+  grid-template-columns: 20px 1fr 18px;
+  align-items: center;
+  gap: 9px;
+  min-height: 44px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--foreground);
+  text-align: left;
+}
+
+.theme-menu-item:hover,
+.theme-menu-item:focus-visible {
+  background: var(--surface-muted);
+}
+
+.theme-menu-item:focus-visible {
+  outline-offset: -2px;
+}
+
+.theme-menu-check {
+  justify-self: end;
+  color: var(--accent);
+  opacity: 0;
+}
+
+.theme-menu-check[data-visible="true"] {
+  opacity: 1;
 }
 
 .brand {
