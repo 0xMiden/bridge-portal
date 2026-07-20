@@ -22,7 +22,10 @@ const TESTNET_TRANSPORT = "https://transport.miden.io";
 // A read-only WebClient used only to build the B2AGG request (the MidenFi wallet
 // signs + submits). Memoised so repeated sends reuse one client/store.
 type B2AggClient = {
-  syncState: () => Promise<unknown>;
+  // The raw client from `new WebClient().createClient()` exposes syncStateImpl;
+  // the higher-level index.js wrapper exposes syncState(). Support either.
+  syncState?: () => Promise<unknown>;
+  syncStateImpl?: () => Promise<unknown>;
   newB2AggTransactionRequest: (
     sender: unknown,
     bridge: unknown,
@@ -52,8 +55,13 @@ async function getB2AggClient(
         false,
       );
       // Sync so the client knows the current chain / faucet state before it
-      // builds the callback asset.
-      await client.syncState().catch(() => undefined);
+      // builds the callback asset. The raw client exposes syncStateImpl; the
+      // wrapper exposes syncState — call whichever is present, best-effort.
+      if (typeof client.syncState === "function") {
+        await client.syncState().catch(() => undefined);
+      } else if (typeof client.syncStateImpl === "function") {
+        await client.syncStateImpl().catch(() => undefined);
+      }
       return client;
     })().catch((error) => {
       // Reset so a transient failure (offline / node hiccup) can retry next send.
