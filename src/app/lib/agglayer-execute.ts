@@ -42,21 +42,28 @@ async function getB2AggClient(
 ): Promise<B2AggClient> {
   if (!b2aggClientPromise) {
     b2aggClientPromise = (async () => {
+      // The WASM `WebClient` class: `createClient()` is an INSTANCE method that
+      // initializes the client in place and resolves to the WASM init result —
+      // NOT the client. So we keep the instance (which carries
+      // newB2AggTransactionRequest + syncStateImpl on its prototype) and call
+      // createClient on it to init; using its return value gave
+      // "newB2AggTransactionRequest is not a function".
       const { WebClient } = sdk as unknown as {
-        WebClient: new () => {
-          createClient: (...a: unknown[]) => Promise<B2AggClient>;
+        WebClient: new () => B2AggClient & {
+          createClient: (...a: unknown[]) => Promise<unknown>;
         };
       };
-      const client = await new WebClient().createClient(
+      const client = new WebClient();
+      await client.createClient(
         TESTNET_RPC,
         TESTNET_TRANSPORT,
         null,
         "miden-bridge-agglayer",
         false,
       );
-      // Sync so the client knows the current chain / faucet state before it
-      // builds the callback asset. The raw client exposes syncStateImpl; the
-      // wrapper exposes syncState — call whichever is present, best-effort.
+      // Sync so the client sees current chain / faucet state before it builds
+      // the callback asset. The raw client exposes syncStateImpl; support the
+      // wrapper's syncState too, best-effort.
       if (typeof client.syncState === "function") {
         await client.syncState().catch(() => undefined);
       } else if (typeof client.syncStateImpl === "function") {
