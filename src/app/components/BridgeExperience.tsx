@@ -28,11 +28,13 @@ import {
   type Activity,
   createActivity,
   loadStoredActivities,
+  loadStoredRoute,
   modes,
   patchStoredActivity,
   providers,
   quoteFor,
   saveActivities,
+  saveStoredRoute,
   shortAddress,
   statusLabel,
   statusTone,
@@ -457,8 +459,15 @@ export function BridgeExperience() {
     const resolvedMode = nextMode ?? "receive";
 
     queueMicrotask(() => {
-      if (nextProvider && !providers[nextProvider].disabled)
+      if (nextProvider && !providers[nextProvider].disabled) {
+        // An explicit ?route= / ?provider= wins and becomes the new sticky choice.
         setProvider(nextProvider);
+        saveStoredRoute(nextProvider);
+      } else {
+        // No URL override: return to the last route the user picked.
+        const storedProvider = loadStoredRoute();
+        if (storedProvider) setProvider(storedProvider);
+      }
       if (nextMode) setMode(nextMode);
 
       if (nextMidenAccount) {
@@ -728,6 +737,8 @@ export function BridgeExperience() {
   function selectProvider(nextProvider: BridgeProvider) {
     if (providers[nextProvider].disabled) return;
     setProvider(nextProvider);
+    // Remember the choice so a refresh comes back to this route.
+    saveStoredRoute(nextProvider);
     setBridgeError("");
     // Destination is route-agnostic: the connected Miden wallet address (bech32)
     // prefills for both routes and the Agglayer submit normalizes it to hex — so

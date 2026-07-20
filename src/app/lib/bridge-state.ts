@@ -94,6 +94,29 @@ export const providers: Record<
   },
 };
 
+// Persist the last-selected route so a refresh returns to it (e.g. Agglayer)
+// instead of snapping back to the Epoch default every time.
+const routeStorageKey = "miden.bridge.ui.route";
+
+export function loadStoredRoute(): BridgeProvider | null {
+  try {
+    const value = window.localStorage.getItem(routeStorageKey);
+    if (value && value in providers && !providers[value as BridgeProvider].disabled)
+      return value as BridgeProvider;
+  } catch {
+    // ignore storage access failures (SSR / privacy mode)
+  }
+  return null;
+}
+
+export function saveStoredRoute(provider: BridgeProvider) {
+  try {
+    window.localStorage.setItem(routeStorageKey, provider);
+  } catch {
+    // ignore storage write failures
+  }
+}
+
 export const modes: Record<
   FlowMode,
   {
