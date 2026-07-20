@@ -161,6 +161,22 @@ describe("deriveMonitoredActivity", () => {
     expect(next.readyForClaim).toBe(true);
   });
 
+  test("auto-completes an Agglayer send when the exit is claimed on Sepolia (claim tx present, ready flipped false)", () => {
+    const claimTx =
+      "0x3333333333333333333333333333333333333333333333333333333333333333";
+    const next = deriveMonitoredActivity(
+      { ...baseSend, status: "claim_available", depositCount: "7" },
+      {
+        checkedAt: "Just now",
+        claimPlan: { readyForClaim: false, depositCount: 7, claimTxHash: claimTx },
+      },
+    );
+
+    expect(next.status).toBe("complete");
+    expect(next.claimTxHash).toBe(claimTx);
+    expect(next.destinationTxHash).toBe(claimTx);
+  });
+
   test("marks submitted Sepolia claim complete only after the claim transaction confirms successfully", () => {
     const next = deriveMonitoredActivity(
       {

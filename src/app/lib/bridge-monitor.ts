@@ -15,6 +15,9 @@ export type ChainTxObservation = {
 export type ClaimPlanObservation = {
   readyForClaim: boolean;
   depositCount?: string | number;
+  /** L1 (Sepolia) claim tx once the exit has been claimed — auto (gateway
+   * bridge-autoclaim) or manual. Present = the send is settled on Sepolia. */
+  claimTxHash?: string;
 };
 
 export type BridgeMonitorObservation = {
@@ -145,6 +148,20 @@ export function deriveMonitoredActivity(activity: Activity, observation: BridgeM
   }
 
   if (observation.claimPlan) {
+    // Auto-claim (or a prior manual claim) already settled the exit on Sepolia:
+    // the indexer reports a claim tx even after `ready_for_claim` flips false.
+    // Settle directly — this is what makes an Agglayer send finish on its own.
+    if (observation.claimPlan.claimTxHash) {
+      return {
+        ...next,
+        status: "complete",
+        eta: "Settled on Sepolia",
+        claimTxHash: observation.claimPlan.claimTxHash,
+        destinationTxHash: observation.claimPlan.claimTxHash,
+        depositCount: depositCount(observation.claimPlan) ?? next.depositCount,
+      };
+    }
+
     if (observation.claimPlan.readyForClaim) {
       return {
         ...next,

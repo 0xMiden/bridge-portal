@@ -79,6 +79,30 @@ export async function findClaimableMidenToEvmDeposit(
   return claimable[0] ?? null;
 }
 
+// The Miden→EVM (L2→L1) deposit to `l1Dest` REGARDLESS of claim readiness. Once
+// gateway's bridge-autoclaim claims a ready exit on Sepolia, `ready_for_claim`
+// flips back to false but `claim_tx_hash` is populated — so the claimable-only
+// lookup above goes blind to it. This one finds the exit through its whole
+// lifecycle (pending → ready → claimed) so the monitor can detect the
+// auto-claim and settle. Matches a known `deposit_cnt` when provided (the exact
+// exit we're tracking), else the latest L2→L1 exit to this address.
+export async function findMidenToEvmDeposit(
+  l1Dest: string,
+  depositCnt?: string | number,
+): Promise<AgglayerDeposit | null> {
+  const deposits = await fetchDeposits(l1Dest);
+  const matching = deposits.filter(
+    (d) => d.network_id === 78 && d.dest_net === 0,
+  );
+  if (depositCnt !== undefined) {
+    const exact = matching.find(
+      (d) => String(d.deposit_cnt) === String(depositCnt),
+    );
+    if (exact) return exact;
+  }
+  return matching.sort((a, b) => b.deposit_cnt - a.deposit_cnt)[0] ?? null;
+}
+
 // Fetch the merkle proof for a deposit (net_id is the deposit's `network_id`).
 export async function fetchMerkleProof(
   depositCnt: number,
