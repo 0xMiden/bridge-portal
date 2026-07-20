@@ -14,6 +14,10 @@ See [docs/product-requirements.md](docs/product-requirements.md). Miden wallet
 integration notes live in
 [docs/miden-frontend-integration.md](docs/miden-frontend-integration.md).
 
+Architecture decisions are recorded under [docs/decisions/](docs/decisions/) —
+e.g. [why we ship single-thread WASM without cross-origin isolation
+(no COOP/COEP)](docs/decisions/wasm-threading-coop-coep.md).
+
 ## Local development
 
 ```bash
