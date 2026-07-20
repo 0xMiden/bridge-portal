@@ -48,44 +48,15 @@ export async function fetchDeposits(
   return data.deposits ?? [];
 }
 
-// The bridge-service merkle proof for a deposit, used to claim it on L1.
-export interface AgglayerMerkleProof {
-  main_exit_root: string;
-  rollup_exit_root: string;
-  merkle_proof: string[];
-  rollup_merkle_proof: string[];
-}
-
-interface MerkleProofResponse {
-  proof: AgglayerMerkleProof;
-}
-
-// Base URL of the bridge service (the `/bridges` indexer path stripped off).
-const BRIDGE_SERVICE_URL = BRIDGES_API.replace(/\/bridges$/, "");
-
-// The most recent Miden→EVM (L2→L1) deposit to `l1Dest` that's ready to claim
-// on L1, or null. Per gateway.fm PARAMETERS.md, a bridge-out exit is indexed
-// with the Miden rollup as origin (`network_id === 78`, post rollup-78
-// relaunch) and Ethereum L1 as destination (`dest_net === 0`). Note: with
-// `bridge-autoclaim` enabled, ready exits are usually claimed automatically —
-// this manual lookup is the fallback path.
-export async function findClaimableMidenToEvmDeposit(
-  l1Dest: string,
-): Promise<AgglayerDeposit | null> {
-  const deposits = await fetchDeposits(l1Dest);
-  const claimable = deposits
-    .filter((d) => d.ready_for_claim && d.network_id === 78 && d.dest_net === 0)
-    .sort((a, b) => b.deposit_cnt - a.deposit_cnt);
-  return claimable[0] ?? null;
-}
-
-// The Miden→EVM (L2→L1) deposit to `l1Dest` REGARDLESS of claim readiness. Once
-// gateway's bridge-autoclaim claims a ready exit on Sepolia, `ready_for_claim`
-// flips back to false but `claim_tx_hash` is populated — so the claimable-only
-// lookup above goes blind to it. This one finds the exit through its whole
-// lifecycle (pending → ready → claimed) so the monitor can detect the
-// auto-claim and settle. Matches a known `deposit_cnt` when provided (the exact
-// exit we're tracking), else the latest L2→L1 exit to this address.
+// The Miden→EVM (L2→L1) exit to `l1Dest` through its whole lifecycle. Gateway's
+// `bridge-autoclaim` claims ready exits on Sepolia automatically (no manual
+// claim in this UI); when it does, `ready_for_claim` flips back to false but
+// `claim_tx_hash` is populated — so we track the exit regardless of readiness
+// to detect that auto-claim and settle. Per gateway.fm PARAMETERS.md a
+// bridge-out is indexed with the Miden rollup as origin (`network_id === 78`,
+// post rollup-78 relaunch) and Ethereum L1 as destination (`dest_net === 0`).
+// Matches a known `deposit_cnt` when provided (the exact exit we're tracking),
+// else the latest L2→L1 exit to this address.
 export async function findMidenToEvmDeposit(
   l1Dest: string,
   depositCnt?: string | number,
@@ -101,20 +72,4 @@ export async function findMidenToEvmDeposit(
     if (exact) return exact;
   }
   return matching.sort((a, b) => b.deposit_cnt - a.deposit_cnt)[0] ?? null;
-}
-
-// Fetch the merkle proof for a deposit (net_id is the deposit's `network_id`).
-export async function fetchMerkleProof(
-  depositCnt: number,
-  netId: number,
-): Promise<AgglayerMerkleProof> {
-  const res = await fetch(
-    `${BRIDGE_SERVICE_URL}/merkle-proof?deposit_cnt=${depositCnt}&net_id=${netId}`,
-    { cache: "no-store" },
-  );
-  if (!res.ok) {
-    throw new Error(`Agglayer merkle-proof status ${res.status}`);
-  }
-  const data: MerkleProofResponse = await res.json();
-  return data.proof;
 }

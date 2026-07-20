@@ -5,11 +5,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { type AgglayerDepositStatus } from "../lib/agglayer";
-import { buildAgglayerClaimTransaction } from "../lib/agglayer-claim";
-import {
-  findClaimableMidenToEvmDeposit,
-  findMidenToEvmDeposit,
-} from "../lib/agglayer-status";
+import { findMidenToEvmDeposit } from "../lib/agglayer-status";
 import {
   agglayerPollMs,
   type BridgeMonitorObservation,
@@ -31,12 +27,6 @@ import {
   destinationExplorer,
   timeline,
 } from "../lib/bridge-state";
-import {
-  useAppKit,
-  useAppKitAccount,
-  useAppKitProvider,
-} from "@reown/appkit/react";
-import { type EvmProvider, ensureSepolia } from "../lib/evm-wallet";
 import { epochActivityStatus, epochDestinationTx } from "../lib/epoch/epoch-status";
 import { MIDEN_DESTINATION_CHAIN_ID } from "../lib/epoch/config";
 import { sepoliaGasUnitsFor, useSepoliaGasEstimate } from "../lib/sepolia-gas";
@@ -135,16 +125,11 @@ function ExplorerLinkButton({ link }: { link: ExplorerLink }) {
 
 export function ActivityDetail({ id }: { id: string }) {
   const [activities, setActivities] = useState<Activity[]>([]);
-  const [claimBusy, setClaimBusy] = useState(false);
-  const [claimError, setClaimError] = useState("");
   const [monitorError, setMonitorError] = useState("");
   // Epoch-ms of the last monitor read; rendered as a live "updated Ns ago" that
   // ticks each second so the page visibly reflects the ≤10s polling cadence.
   const [lastCheckedAt, setLastCheckedAt] = useState(0);
   const [now, setNow] = useState(0);
-  const { open } = useAppKit();
-  const { address, isConnected } = useAppKitAccount();
-  const { walletProvider } = useAppKitProvider<EvmProvider>("eip155");
   const activity = activities.find((item) => item.id === id);
   const quote = useMemo(
     () =>
@@ -234,11 +219,6 @@ export function ActivityDetail({ id }: { id: string }) {
   const modeCopy = activity ? modes[activity.mode] : null;
   const sourceLink = activity ? sourceExplorer(activity) : null;
   const destinationLink = activity ? destinationExplorer(activity) : null;
-  const canClaimOnSepolia =
-    activity?.provider === "agglayer" &&
-    activity.mode === "send" &&
-    activity.status === "claim_available" &&
-    Boolean(activity.depositCount);
   // Compact live progress: which timeline step we're on, so the detail page
   // still monitors and shows status as the transfer advances.
   const currentIndex = activity
@@ -515,120 +495,6 @@ export function ActivityDetail({ id }: { id: string }) {
     activity?.status,
   ]);
 
-  useEffect(() => {
-    if (
-      !activity ||
-      activity.provider !== "agglayer" ||
-      activity.mode !== "send"
-    )
-      return;
-    if (activity.status !== "claim_submitted") return;
-    const claimHash = activity.claimTxHash ?? activity.destinationTxHash;
-    if (!isSepoliaTxHash(claimHash)) return;
-
-    let cancelled = false;
-    const activityId = activity.id;
-
-    async function pollClaimTransaction() {
-      try {
-        const destinationTx = await fetchSepoliaTx(claimHash!);
-        if (cancelled) return;
-        observeActivity(activityId, { checkedAt: "Just now", destinationTx });
-      } catch (error) {
-        if (!cancelled) setMonitorError(errorMessage(error));
-      }
-    }
-
-    pollClaimTransaction();
-    const interval = window.setInterval(pollClaimTransaction, sourceTxPollMs);
-    return () => {
-      cancelled = true;
-      window.clearInterval(interval);
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [
-    activity?.claimTxHash,
-    activity?.destinationTxHash,
-    activity?.id,
-    activity?.mode,
-    activity?.provider,
-    activity?.status,
-  ]);
-
-  function updateActivity(nextActivity: Activity) {
-    const updated = activities.some((item) => item.id === nextActivity.id)
-      ? activities.map((item) =>
-          item.id === nextActivity.id ? nextActivity : item,
-        )
-      : [nextActivity, ...activities];
-    setActivities(updated);
-    saveActivities(updated);
-  }
-
-  async function claimOnSepolia() {
-    if (!activity) return;
-
-    setClaimBusy(true);
-    setClaimError("");
-    try {
-      const destinationAddress = activity.destination;
-      if (
-        !destinationAddress ||
-        !/^0x[0-9a-fA-F]{40}$/.test(destinationAddress)
-      ) {
-        throw new Error(
-          "This activity is missing the Sepolia destination address needed to look up the claim proof.",
-        );
-      }
-
-      if (!isConnected || !walletProvider || !address) {
-        await open();
-        return;
-      }
-      const account = address;
-      await ensureSepolia(walletProvider);
-
-      // Build the claim client-side against the public bridge indexer: find the
-      // deposit ready to claim on Sepolia for this destination, pull its merkle
-      // proof, and encode `claimAsset`. No local backend proxy involved.
-      const deposit = await findClaimableMidenToEvmDeposit(destinationAddress);
-      if (!deposit) {
-        throw new Error(
-          "Agglayer proof is not ready yet. Keep this transfer in activity and try again later.",
-        );
-      }
-
-      const claimTx = await buildAgglayerClaimTransaction(deposit);
-
-      const txHash = await walletProvider.request<string>({
-        method: "eth_sendTransaction",
-        params: [
-          {
-            from: account,
-            to: claimTx.to,
-            data: claimTx.data,
-            value: claimTx.value,
-          },
-        ],
-      });
-
-      updateActivity({
-        ...activity,
-        status: "claim_submitted",
-        eta: "Waiting for Sepolia",
-        claimTxHash: txHash,
-        destinationTxHash: txHash,
-        readyForClaim: true,
-        updatedAt: Date.now(),
-      });
-    } catch (error) {
-      setClaimError(errorMessage(error));
-    } finally {
-      setClaimBusy(false);
-    }
-  }
-
-
   return (
     <main className="detail-shell">
       <header className="detail-topbar">
@@ -738,19 +604,6 @@ export function ActivityDetail({ id }: { id: string }) {
               </div>
             ) : null}
 
-            {canClaimOnSepolia ? (
-              <button
-                className="primary-button"
-                type="button"
-                onClick={claimOnSepolia}
-                disabled={claimBusy}
-              >
-                {claimBusy ? "Waiting for wallet" : "Claim on Sepolia"}
-              </button>
-            ) : null}
-            {claimError ? (
-              <p className="form-error compact">{claimError}</p>
-            ) : null}
             {monitorError ? (
               <p className="form-error compact">{monitorError}</p>
             ) : null}

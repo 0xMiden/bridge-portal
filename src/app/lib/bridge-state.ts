@@ -264,7 +264,7 @@ export function quoteFor(mode: FlowMode, provider: BridgeProvider, amount: strin
     provider === "epoch" ? "USDC" : modes[mode].assetOut.replace("Miden ", "");
 
   return {
-    eta: provider === "agglayer" ? (mode === "receive" ? "About 15 min" : "30-90 min") : "1-3 min",
+    eta: provider === "agglayer" ? "10-20 min" : "1-3 min",
     networkFee,
     bridgeFee,
     relayerFee,
