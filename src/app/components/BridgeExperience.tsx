@@ -201,6 +201,18 @@ function isSepoliaTxHash(value: string | undefined): value is string {
   return !!value && /^0x[0-9a-fA-F]{64}$/.test(value);
 }
 
+// Derive the 0x-prefixed Miden account id for a receive so the activity can link
+// to the Midenscan account page. Epoch receives carry no AggLayer bridge
+// destination, so the recipient account is the only handle we can persist.
+function midenAccountLink(value: string | undefined): string | undefined {
+  if (!value) return undefined;
+  try {
+    return `0x${normalizeMidenAccountHex(value)}`;
+  } catch {
+    return undefined;
+  }
+}
+
 // Warm the heavy client-only execute chunks (each eager-loads WASM) ahead of the
 // click so the wallet prompt appears promptly instead of after a long load.
 let epochExecutePreload: Promise<unknown> | null = null;
@@ -948,6 +960,7 @@ export function BridgeExperience() {
           eta: "About 15 min",
           destination: destinationAccount,
           bridgeDestinationAddress: transaction.destinationAddress,
+          midenAccountHex: midenAccountLink(destinationAccount),
           // midenTxId is left unset until the bridge creates the note on Miden;
           // the monitor fills it with the real claim_tx_hash (the destination
           // address is not a transaction and must not seed the Midenscan link).
@@ -1034,6 +1047,8 @@ export function BridgeExperience() {
               ? "Confirm the deposit in your wallet…"
               : "Confirm the send in your wallet…",
           destination: resolvedDestination,
+          midenAccountHex:
+            mode === "receive" ? midenAccountLink(resolvedDestination) : undefined,
           epochSponsor: epochEvmAddress,
         });
         activityId = optimistic.id;

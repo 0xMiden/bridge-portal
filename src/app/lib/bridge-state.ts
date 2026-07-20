@@ -32,6 +32,9 @@ export type Activity = {
   asset: string;
   destination?: string;
   bridgeDestinationAddress?: string;
+  /** Recipient Miden account id (0x + 30 hex) for a receive — drives the
+   * Midenscan account link when there's no AggLayer bridge destination (Epoch). */
+  midenAccountHex?: string;
   txHash: string;
   sourceTxHash?: string;
   destinationTxHash?: string;
@@ -346,7 +349,12 @@ export function destinationExplorer(activity: Activity): ExplorerLink {
     // instead: it loads reliably first-try, and its Transactions / Notes tabs
     // surface the delivered note. Available once the bridge has delivered (the
     // note exists on Miden — status complete / claim tx captured).
-    const account = midenAccountFromBridgeDest(activity.bridgeDestinationAddress);
+    // Prefer the recipient account stored at creation (the only handle an Epoch
+    // receive has — it carries no AggLayer bridge destination); fall back to
+    // deriving it from the AggLayer bridge destination for older activities.
+    const account =
+      activity.midenAccountHex ??
+      midenAccountFromBridgeDest(activity.bridgeDestinationAddress);
     const delivered =
       activity.status === "complete" || !!fullHash(activity.midenTxId);
     return {
