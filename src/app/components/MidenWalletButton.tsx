@@ -53,6 +53,28 @@ type MidenWalletButtonInnerProps = MidenWalletButtonProps & {
 
 const walletRequestTimeoutMs = 45_000;
 
+// Set once the user has connected; drives a silent session restore on the next
+// page load so the Miden wallet behaves like WalletConnect (stays connected
+// across refreshes) instead of dropping every reload. Separate from the
+// adapter's own selection key ("miden-bridge-wallet") so a reset clears both.
+const walletConnectedFlagKey = "miden-bridge-wallet-connected";
+
+function markWalletConnected() {
+  try {
+    window.localStorage.setItem(walletConnectedFlagKey, "1");
+  } catch {
+    // ignore storage failures — reconnect-on-refresh just won't fire
+  }
+}
+
+function clearWalletConnected() {
+  try {
+    window.localStorage.removeItem(walletConnectedFlagKey);
+  } catch {
+    // ignore storage failures
+  }
+}
+
 class WalletRequestTimeoutError extends Error {
   constructor() {
     super(
@@ -121,6 +143,37 @@ function MidenWalletButtonInner({
     if (wallet.wallet || wallet.wallets.length === 0) return;
     wallet.select(wallet.wallets[0].adapter.name);
   }, [wallet]);
+
+  // Silent session restore on load: if the user was connected before, reconnect
+  // to the same wallet once the adapter is selected + the extension is ready —
+  // so the Miden wallet survives a refresh like WalletConnect does, instead of
+  // needing a manual reconnect every time. Kept out of the adapter's built-in
+  // autoConnect (which could sit in "Connecting" forever): userConnectRef stays
+  // false so no balance popup opens, and the same 45s timeout as a manual
+  // connect resets a hung restore rather than leaving the button stuck.
+  const autoReconnectTriedRef = useRef(false);
+  useEffect(() => {
+    if (autoReconnectTriedRef.current) return;
+    if (!ready || !wallet.wallet) return;
+    if (wallet.connected || wallet.connecting) return;
+    let wasConnected = false;
+    try {
+      wasConnected =
+        window.localStorage.getItem(walletConnectedFlagKey) === "1";
+    } catch {
+      // storage unavailable → no restore
+    }
+    if (!wasConnected) return;
+    autoReconnectTriedRef.current = true;
+    void withWalletTimeout(wallet.connect()).catch((restoreError) => {
+      if (restoreError instanceof WalletRequestTimeoutError) {
+        window.setTimeout(onResetProvider, 250);
+      } else {
+        // Stale/rejected session — drop the flag so we don't retry it every load.
+        clearWalletConnected();
+      }
+    });
+  }, [ready, wallet, wallet.wallet, wallet.connected, wallet.connecting, onResetProvider]);
 
   useEffect(() => {
     onStateChange({
@@ -208,6 +261,7 @@ function MidenWalletButtonInner({
       // the balance once (autoConnect restores don't set this).
       userConnectRef.current = true;
       await withWalletTimeout(wallet.connect());
+      markWalletConnected();
     } catch (connectError) {
       userConnectRef.current = false;
       setError(errorMessage(connectError));
@@ -223,6 +277,7 @@ function MidenWalletButtonInner({
       userConnectRef.current = true;
       if (wallet.connected) await wallet.disconnect();
       await withWalletTimeout(wallet.connect());
+      markWalletConnected();
       setMenuOpen(false);
     } catch (reconnectError) {
       userConnectRef.current = false;
@@ -236,6 +291,8 @@ function MidenWalletButtonInner({
   async function disconnectMidenWallet() {
     setError("");
     try {
+      // Explicit disconnect = don't silently reconnect on the next load.
+      clearWalletConnected();
       await wallet.disconnect();
       setMenuOpen(false);
     } catch (disconnectError) {
@@ -315,6 +372,7 @@ function MidenWalletButtonInner({
     } catch {
       // Ignore storage failures; remounting the provider still clears local UI state.
     }
+    clearWalletConnected();
     void wallet.disconnect().catch(() => undefined);
     setMenuOpen(false);
     onResetProvider();
