@@ -50,7 +50,6 @@ import {
   patchStoredActivity,
   providers,
   quoteFor,
-  routeAsset,
   routeSwitchChangesAsset,
   saveActivities,
   saveStoredMode,
@@ -1578,7 +1577,6 @@ export function BridgeExperience() {
             <span className={`route-pill ${routeTone}`}>
               {providerCopy.badge}
             </span>
-            <span className="route-pill">{routeAsset(provider)}</span>
             <span className="route-pill">{quote.eta}</span>
           </div>
 
