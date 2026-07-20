@@ -1,5 +1,208 @@
 import { expect, test } from "../../fixtures/bridge";
 
+type Rgba = { red: number; green: number; blue: number; alpha: number };
+
+function parseColor(value: string): Rgba {
+  const channels = value.match(/[\d.]+/g)?.map(Number);
+  if (!channels || channels.length < 3) {
+    throw new Error(`Unsupported computed color: ${value}`);
+  }
+  return {
+    red: channels[0],
+    green: channels[1],
+    blue: channels[2],
+    alpha: channels[3] ?? 1,
+  };
+}
+
+function composite(foreground: Rgba, background: Rgba): Rgba {
+  const alpha = foreground.alpha + background.alpha * (1 - foreground.alpha);
+  const channel = (front: number, back: number) =>
+    (front * foreground.alpha + back * background.alpha * (1 - foreground.alpha)) /
+    alpha;
+  return {
+    red: channel(foreground.red, background.red),
+    green: channel(foreground.green, background.green),
+    blue: channel(foreground.blue, background.blue),
+    alpha,
+  };
+}
+
+function contrastRatio(
+  foreground: string,
+  background: string,
+  backdrop: string,
+) {
+  const backdropColor = parseColor(backdrop);
+  const backgroundColor = composite(parseColor(background), backdropColor);
+  const foregroundColor = composite(parseColor(foreground), backgroundColor);
+  const luminance = ({ red, green, blue }: Rgba) => {
+    const linear = (channel: number) => {
+      const value = channel / 255;
+      return value <= 0.04045
+        ? value / 12.92
+        : Math.pow((value + 0.055) / 1.055, 2.4);
+    };
+    return (
+      0.2126 * linear(red) +
+      0.7152 * linear(green) +
+      0.0722 * linear(blue)
+    );
+  };
+  const foregroundLuminance = luminance(foregroundColor);
+  const backgroundLuminance = luminance(backgroundColor);
+  return (
+    (Math.max(foregroundLuminance, backgroundLuminance) + 0.05) /
+    (Math.min(foregroundLuminance, backgroundLuminance) + 0.05)
+  );
+}
+
+test("dark route and status states use semantic contrast", async ({
+  bridge,
+  page,
+}) => {
+  await bridge.waitForReady();
+
+  await page.getByRole("button", { name: "Theme: System" }).click();
+  await page.getByRole("menuitemradio", { name: "Dark" }).click();
+  await page.locator(".route-trigger").click();
+
+  const testnetTag = page.locator(".route-tag.testnet").first();
+  const disabledTag = page.locator(".route-tag.availability.off");
+
+  await expect(testnetTag).toBeVisible();
+  await expect(disabledTag).toBeVisible();
+
+  await page.evaluate(() => {
+    const states = document.createElement("div");
+    states.id = "e2e-status-states";
+    states.innerHTML = `
+      <div class="route-disclaimer mock">Warning route</div>
+      <span class="status-badge success">Success</span>
+      <span class="status-badge warning">Warning</span>
+      <span class="status-badge danger">Danger</span>
+      <span class="status-badge active">Active</span>
+    `;
+    document.body.append(states);
+  });
+
+  await expect(
+    page.locator("#e2e-status-states .route-disclaimer.mock"),
+  ).toBeVisible();
+  const statusStates = page.locator("#e2e-status-states .status-badge");
+  await expect(statusStates).toHaveCount(4);
+  for (const status of await statusStates.all()) {
+    await expect(status).toBeVisible();
+  }
+
+  const stateStyles = await page.evaluate(() => {
+    const rootStyles = getComputedStyle(document.documentElement);
+    const resolvedToken = (token: string) => {
+      if (!rootStyles.getPropertyValue(token).trim()) return "";
+      const probe = document.createElement("span");
+      probe.style.color = `var(${token})`;
+      document.body.append(probe);
+      const color = getComputedStyle(probe).color;
+      probe.remove();
+      return color;
+    };
+    const resolvedStyles = (selector: string) => {
+      const element = document.querySelector(selector);
+      if (!(element instanceof HTMLElement)) {
+        throw new Error(`Missing element: ${selector}`);
+      }
+      const styles = getComputedStyle(element);
+      return {
+        background: styles.backgroundColor,
+        foreground: styles.color,
+        border: styles.borderTopColor,
+      };
+    };
+
+    return {
+      tokens: {
+        surface: resolvedToken("--surface"),
+        surfaceMuted: resolvedToken("--surface-muted"),
+        accentSoft: resolvedToken("--accent-soft"),
+        accentBorder: resolvedToken("--accent-border"),
+        accentForeground: resolvedToken("--accent-foreground"),
+        successSoft: resolvedToken("--success-soft"),
+        successBorder: resolvedToken("--success-border"),
+        successForeground: resolvedToken("--success-foreground"),
+        warningSoft: resolvedToken("--warning-soft"),
+        warningBorder: resolvedToken("--warning-border"),
+        warningForeground: resolvedToken("--warning-foreground"),
+        dangerSoft: resolvedToken("--danger-soft"),
+        dangerBorder: resolvedToken("--danger-border"),
+        dangerForeground: resolvedToken("--danger-foreground"),
+      },
+      testnet: resolvedStyles(".route-tag.testnet"),
+      disabled: resolvedStyles(".route-tag.availability.off"),
+      warning: resolvedStyles(".route-disclaimer.mock"),
+      success: resolvedStyles("#e2e-status-states .status-badge.success"),
+      statusWarning: resolvedStyles(
+        "#e2e-status-states .status-badge.warning",
+      ),
+      danger: resolvedStyles("#e2e-status-states .status-badge.danger"),
+      active: resolvedStyles("#e2e-status-states .status-badge.active"),
+    };
+  });
+
+  for (const token of Object.values(stateStyles.tokens)) {
+    expect(token).not.toBe("");
+  }
+
+  expect(stateStyles.testnet.background).toBe(stateStyles.tokens.accentSoft);
+  expect(stateStyles.testnet.foreground).toBe(
+    stateStyles.tokens.accentForeground,
+  );
+  expect(stateStyles.disabled.background).toBe(stateStyles.tokens.surfaceMuted);
+  expect(stateStyles.warning).toEqual({
+    background: stateStyles.tokens.warningSoft,
+    foreground: stateStyles.tokens.warningForeground,
+    border: stateStyles.tokens.warningBorder,
+  });
+  expect(stateStyles.success).toEqual({
+    background: stateStyles.tokens.successSoft,
+    foreground: stateStyles.tokens.successForeground,
+    border: stateStyles.tokens.successBorder,
+  });
+  expect(stateStyles.statusWarning).toEqual({
+    background: stateStyles.tokens.warningSoft,
+    foreground: stateStyles.tokens.warningForeground,
+    border: stateStyles.tokens.warningBorder,
+  });
+  expect(stateStyles.danger).toEqual({
+    background: stateStyles.tokens.dangerSoft,
+    foreground: stateStyles.tokens.dangerForeground,
+    border: stateStyles.tokens.dangerBorder,
+  });
+  expect(stateStyles.active).toEqual({
+    background: stateStyles.tokens.accentSoft,
+    foreground: stateStyles.tokens.accentForeground,
+    border: stateStyles.tokens.accentBorder,
+  });
+
+  for (const state of [
+    stateStyles.testnet,
+    stateStyles.disabled,
+    stateStyles.warning,
+    stateStyles.success,
+    stateStyles.statusWarning,
+    stateStyles.danger,
+    stateStyles.active,
+  ]) {
+    expect(state.foreground).not.toBe(state.background);
+    expect(
+      contrastRatio(
+        state.foreground,
+        state.background,
+        stateStyles.tokens.surface,
+      ),
+    ).toBeGreaterThanOrEqual(4.5);
+  }
+});
+
 test("dark mode applies semantic bridge surfaces and primary contrast", async ({
   bridge,
   page,

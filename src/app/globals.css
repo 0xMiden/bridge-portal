@@ -18,15 +18,19 @@
   --accent-soft: rgba(255, 85, 0, 0.1);
   --accent-border: rgba(255, 85, 0, 0.32);
   --accent-ring: rgba(255, 85, 0, 0.24);
+  --accent-foreground: #a43c00;
   --success: #0f9f6e;
   --success-soft: #e7f7ef;
   --success-border: rgba(15, 159, 110, 0.32);
+  --success-foreground: #086546;
   --warning: #a66b00;
   --warning-soft: #fff3d8;
   --warning-border: rgba(166, 107, 0, 0.32);
+  --warning-foreground: #704600;
   --danger: #c24141;
   --danger-soft: #ffe8e8;
   --danger-border: rgba(194, 65, 65, 0.3);
+  --danger-foreground: #9f3030;
   --overlay: rgba(13, 18, 16, 0.38);
   --scrim: rgba(13, 18, 16, 0.48);
   --inset-highlight: rgba(255, 255, 255, 0.72);
@@ -64,15 +68,19 @@
   --accent-soft: rgba(255, 106, 42, 0.15);
   --accent-border: rgba(255, 106, 42, 0.42);
   --accent-ring: rgba(255, 106, 42, 0.3);
+  --accent-foreground: #ff9b73;
   --success: #54d6a5;
   --success-soft: rgba(84, 214, 165, 0.14);
   --success-border: rgba(84, 214, 165, 0.38);
+  --success-foreground: #7de2bb;
   --warning: #f4b942;
   --warning-soft: rgba(244, 185, 66, 0.15);
   --warning-border: rgba(244, 185, 66, 0.4);
+  --warning-foreground: #f6c968;
   --danger: #ff7a7a;
   --danger-soft: rgba(255, 122, 122, 0.14);
   --danger-border: rgba(255, 122, 122, 0.38);
+  --danger-foreground: #ff9999;
   --overlay: rgba(0, 0, 0, 0.58);
   --scrim: rgba(0, 0, 0, 0.68);
   --inset-highlight: rgba(255, 255, 255, 0.06);
@@ -454,9 +462,9 @@ a {
 }
 
 .wallet-menu-avatar.pending {
-  border-color: rgba(166, 107, 0, 0.2);
+  border-color: var(--warning-border);
   background: var(--warning-soft);
-  color: var(--warning);
+  color: var(--warning-foreground);
 }
 
 .wallet-copy {
@@ -493,7 +501,7 @@ a {
   height: 6px;
   border-radius: 999px;
   background: var(--faint-foreground);
-  box-shadow: 0 0 0 2px rgba(154, 146, 134, 0.12);
+  box-shadow: 0 0 0 2px var(--inset-border);
 }
 
 .wallet-status-dot.connected {
@@ -503,7 +511,7 @@ a {
 
 .wallet-status-dot.pending {
   background: var(--warning);
-  box-shadow: 0 0 0 2px rgba(166, 107, 0, 0.14);
+  box-shadow: 0 0 0 2px var(--warning-border);
 }
 
 .wallet-balance {
@@ -742,9 +750,9 @@ a {
 .route-trigger:focus-visible,
 .destination-input input:focus,
 .swap-box:focus-within {
-  border-color: rgba(255, 85, 0, 0.35);
+  border-color: var(--accent-border);
   box-shadow:
-    0 0 0 4px rgba(255, 85, 0, 0.08),
+    0 0 0 4px var(--accent-ring),
     var(--shadow-control);
 }
 
@@ -836,15 +844,15 @@ a {
 /* Selected state carries a visible ring + accent border, not a subtle bg
    change alone, so the active route reads at a glance. */
 .route-option.selected {
-  border-color: rgba(255, 85, 0, 0.4);
-  background: rgba(255, 85, 0, 0.06);
-  box-shadow: inset 0 0 0 1px rgba(255, 85, 0, 0.18);
+  border-color: var(--accent-border);
+  background: var(--accent-soft);
+  box-shadow: inset 0 0 0 1px var(--accent-ring);
 }
 
 .route-option:focus-visible {
   outline: none;
-  border-color: rgba(255, 85, 0, 0.5);
-  box-shadow: 0 0 0 3px rgba(255, 85, 0, 0.14);
+  border-color: var(--accent-border);
+  box-shadow: 0 0 0 3px var(--accent-ring);
 }
 
 .route-option.disabled {
@@ -886,8 +894,18 @@ a {
 }
 
 .route-tag.testnet {
-  background: rgba(255, 85, 0, 0.1);
-  color: #a6440a;
+  background: var(--accent-soft);
+  color: var(--accent-foreground);
+}
+
+.route-tag.availability.on {
+  background: var(--surface-strong);
+  color: var(--muted-foreground);
+}
+
+.route-tag.availability.off {
+  background: var(--surface-muted);
+  color: var(--muted-foreground);
 }
 
 .route-check {
@@ -929,7 +947,7 @@ a {
   border-radius: 999px;
   padding: 0 10px;
   /* Borderless soft chips — a faint neutral wash instead of a bordered box. */
-  background: rgba(23, 21, 17, 0.05);
+  background: var(--surface-strong);
   color: var(--muted-foreground);
   font-size: 11px;
   font-weight: 760;
@@ -939,17 +957,17 @@ a {
 
 .route-pill.testnet {
   background: var(--accent-soft);
-  color: var(--accent);
+  color: var(--accent-foreground);
 }
 
 .route-pill.mock {
   background: var(--warning-soft);
-  color: var(--warning);
+  color: var(--warning-foreground);
 }
 
 .route-pill.disabled {
-  background: rgba(23, 21, 17, 0.05);
-  color: var(--faint-foreground);
+  background: var(--surface-muted);
+  color: var(--muted-foreground);
 }
 
 .mode-switch {
@@ -1311,13 +1329,13 @@ a {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  color: var(--muted, #8a8475);
+  color: var(--muted-foreground);
   font-size: 16px;
   font-weight: 600;
 }
 
 .epoch-quote-error {
-  color: #b4541f;
+  color: var(--danger-foreground);
   font-size: 16px;
   font-weight: 600;
 }
@@ -1362,10 +1380,10 @@ a {
   min-height: 40px;
   margin: 10px 2px 0;
   padding: 10px 12px;
-  border: 1px solid rgba(194, 65, 65, 0.18);
+  border: 1px solid var(--danger-border);
   border-radius: 14px;
   background: var(--danger-soft);
-  color: var(--danger);
+  color: var(--danger-foreground);
   font-size: 13px;
   font-weight: 720;
   line-height: 1.35;
@@ -1458,14 +1476,14 @@ a {
 }
 
 .route-disclaimer.mock {
-  border-color: rgba(166, 107, 0, 0.16);
+  border-color: var(--warning-border);
   background: var(--warning-soft);
-  color: #704600;
+  color: var(--warning-foreground);
 }
 
 .route-disclaimer.disabled {
   border-color: var(--border);
-  background: #f0efea;
+  background: var(--surface-muted);
   color: var(--muted-foreground);
 }
 
@@ -1620,29 +1638,29 @@ a {
 .status-dot.success,
 .status-badge.success {
   background: var(--success-soft);
-  color: #086546;
-  border-color: rgba(15, 159, 110, 0.2);
+  color: var(--success-foreground);
+  border-color: var(--success-border);
 }
 
 .status-dot.warning,
 .status-badge.warning {
   background: var(--warning-soft);
-  color: var(--warning);
-  border-color: rgba(166, 107, 0, 0.18);
+  color: var(--warning-foreground);
+  border-color: var(--warning-border);
 }
 
 .status-dot.danger,
 .status-badge.danger {
   background: var(--danger-soft);
-  color: var(--danger);
-  border-color: rgba(194, 65, 65, 0.18);
+  color: var(--danger-foreground);
+  border-color: var(--danger-border);
 }
 
 .status-dot.active,
 .status-badge.active {
   background: var(--accent-soft);
-  color: #a43c00;
-  border-color: rgba(255, 85, 0, 0.22);
+  color: var(--accent-foreground);
+  border-color: var(--accent-border);
 }
 
 @media (prefers-reduced-motion: no-preference) {
@@ -1677,10 +1695,10 @@ a {
 @keyframes status-pulse {
   0%,
   100% {
-    box-shadow: 0 0 0 0 rgba(255, 85, 0, 0);
+    box-shadow: 0 0 0 0 transparent;
   }
   50% {
-    box-shadow: 0 0 0 6px rgba(255, 85, 0, 0.12);
+    box-shadow: 0 0 0 6px var(--accent-ring);
   }
 }
 
@@ -1836,17 +1854,17 @@ a {
 }
 
 .action-panel.danger {
-  border-color: rgba(194, 65, 65, 0.28);
+  border-color: var(--danger-border);
   background: var(--danger-soft);
 }
 
 .action-panel.success {
-  border-color: rgba(15, 159, 110, 0.24);
+  border-color: var(--success-border);
   background: var(--success-soft);
 }
 
 .action-panel.active {
-  border-color: rgba(255, 85, 0, 0.24);
+  border-color: var(--accent-border);
   background: var(--accent-soft);
 }
 
@@ -2338,7 +2356,7 @@ a {
 }
 
 .timeline-step.current {
-  border-color: rgba(255, 85, 0, 0.28);
+  border-color: var(--accent-border);
   background: var(--surface-strong);
 }
 
@@ -2420,7 +2438,7 @@ a {
 }
 
 .recovery-card.needs-action {
-  border-color: rgba(166, 107, 0, 0.2);
+  border-color: var(--warning-border);
 }
 
 .recovery-actions .secondary-button {
@@ -2728,8 +2746,8 @@ a {
   margin-left: auto;
   padding: 3px 9px;
   border-radius: 999px;
-  background: var(--warning-soft, #fdf1d6);
-  color: #704600;
+  background: var(--warning-soft);
+  color: var(--warning-foreground);
   font-size: 11px;
   font-weight: 820;
   text-transform: uppercase;
