@@ -18,6 +18,10 @@ export const AGGLAYER_BALI = {
   sepoliaExplorer: "https://sepolia.etherscan.io",
   midenExplorer: "https://testnet.midenscan.com",
   midenEthFaucetId: "mcst1aqu8zjdwvcgkeug5a67kpwmnsym6qdsd",
+  // Same account as midenEthFaucetId, hex form — this is the canonical Agglayer
+  // ETH faucet on bali (gateway.fm PARAMETERS.md; also the bridge-out-tool's
+  // --faucet-id). The Miden→Sepolia send must bridge THIS faucet's asset.
+  midenEthFaucetIdHex: "0x387149ae66116cf114eebd60bb7381",
   midenEthDecimals: 8,
 } as const;
 
