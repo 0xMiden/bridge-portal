@@ -38,11 +38,11 @@
 **Interfaces:**
 - Produces: `ThemeProvider({ children }: { children: ReactNode })`
 - Produces: `ThemeToggle({ className?: string }: { className?: string })`
-- `ThemeToggle` renders a button named `Theme: <resolved label>` and a menu with `Light`, `Dark`, and `System` buttons carrying `aria-pressed`.
+- `ThemeToggle` renders a button named `Theme: <selected label>` and a `role="menu"` containing `role="menuitemradio"` choices for `Light`, `Dark`, and `System` with exactly one `aria-checked="true"`.
 
 - [ ] **Step 1: Write the failing theme E2E test**
 
-Create `e2e/tests/mock/theme.spec.ts` with assertions that the theme trigger is visible, choosing Dark adds `.dark` to `<html>`, reload preserves it, choosing Light removes `.dark`, and choosing System exposes `aria-pressed="true"` for System. Use the existing `bridge` fixture and wait for `bridge.waitForReady()` before interaction.
+Create `e2e/tests/mock/theme.spec.ts` with assertions that the theme trigger is visible, the three radio menu items are keyboard reachable, choosing Dark adds `.dark` to `<html>`, reload preserves it, choosing Light removes `.dark`, and choosing System exposes `aria-checked="true"` while emulated system color scheme controls the effective root class. Use the existing `bridge` fixture and wait for `bridge.waitForReady()` before interaction.
 
 - [ ] **Step 2: Run the test to verify it fails**
 
@@ -80,7 +80,7 @@ Wrap the existing wallet providers inside this provider, without moving wallet s
 
 - [ ] **Step 4: Implement the theme control**
 
-Build `ThemeToggle` as an isolated client component using `useTheme`, `Sun`, `Moon`, `Monitor`, and `Check`. Avoid rendering a theme-dependent icon until mounted. The trigger toggles an accessible menu, closes on Escape and outside pointer down, and restores focus to the trigger. Menu choices call `setTheme("light" | "dark" | "system")`.
+Build `ThemeToggle` as an isolated client component using `useTheme`, `Sun`, `Moon`, `Monitor`, and `Check`. Avoid rendering a theme-dependent icon until mounted. The trigger toggles an accessible radio menu, closes on Escape and outside pointer down, and restores focus to the trigger. Arrow keys move among choices; Enter and Space call `setTheme("light" | "dark" | "system")`. The accessible trigger label reports the persisted choice, not only the resolved light/dark class.
 
 - [ ] **Step 5: Make document metadata theme-aware**
 
@@ -121,7 +121,7 @@ git commit -m "feat(theme): add semantic light and dark modes"
 
 **Interfaces:**
 - Consumes: `ThemeToggle` from Task 1.
-- Produces: `.topbar-actions`, `.route-menu-root[data-open]`, `.route-sheet-backdrop`, and `.primary-action-dock` layout hooks.
+- Produces: `.topbar-actions`, `.route-menu-root[data-open]`, `.route-sheet-backdrop`, `.route-options-layer`, `.route-options-list`, and `.primary-action-dock` layout hooks.
 - Preserves: `.route-trigger`, `.route-options-menu`, `.route-option`, `.primary-button`, and `.preflight-overlay` selectors used by existing tests.
 
 - [ ] **Step 1: Write failing mobile geometry and interaction tests**
@@ -129,7 +129,7 @@ git commit -m "feat(theme): add semantic light and dark modes"
 At a 390 x 844 viewport, assert:
 
 1. the header renders brand/theme on the first row and both wallet pills without horizontal overflow;
-2. opening Route makes `.route-options-menu` fixed at the viewport bottom and shows `.route-sheet-backdrop`;
+2. opening Route makes the labelled route dialog fixed at the viewport bottom, shows `.route-sheet-backdrop`, and contains the existing `role="listbox"`;
 3. Escape closes the route sheet and restores focus to `.route-trigger`;
 4. `.primary-action-dock` does not intersect `.quote-summary` or `.route-disclaimer` by comparing bounding boxes;
 5. document width does not exceed viewport width at 360 and 390 px.
@@ -142,7 +142,7 @@ Expected: FAIL because the theme/header hooks, fixed route sheet, backdrop, and 
 
 - [ ] **Step 3: Add minimal structural hooks**
 
-Import and render `ThemeToggle`. Group desktop header actions in `.topbar-actions`. Set `data-open={routeMenuOpen}` on `.route-menu-root`; render a button `.route-sheet-backdrop` with `aria-label="Close route menu"` while open; wrap the primary CTA in `.primary-action-dock`. Store the last route trigger focus and restore it whenever the menu closes. Set `document.body.dataset.overlayOpen` while the route or preflight sheet is open and remove it during cleanup.
+Import and render `ThemeToggle`. Group desktop header actions in `.topbar-actions`. Set `data-open={routeMenuOpen}` on `.route-menu-root`; render a button `.route-sheet-backdrop` with `aria-label="Close route menu"` while open; wrap the route list in a labelled `.route-options-layer` dialog containing `.route-options-list[role="listbox"]`; wrap the primary CTA in `.primary-action-dock`. Add `aria-controls` from trigger to listbox. Store the route trigger and restore focus whenever selection, Escape, or backdrop closes the menu. Trap focus within the mobile dialog. Set `document.body.dataset.overlayOpen` while the route or preflight sheet is open and restore prior body overflow/scroll state during cleanup.
 
 - [ ] **Step 4: Restyle the desktop bridge around quiet neutral hierarchy**
 
@@ -150,7 +150,7 @@ Use a 500 px maximum bridge card, 14 px panel radius, semantic border/surface, r
 
 - [ ] **Step 5: Implement the mobile shell at 640 px and below**
 
-Use 12 px page gutters, near-edge card treatment, equal wallet tracks, compact transfer legs, full-width inputs, no horizontal overflow, and 44 px controls. Convert `.route-options-menu` to a fixed bottom sheet with `max-height: min(72dvh, 560px)`, safe-area padding, rounded top corners, a visual handle, scrim, and translate/opacity entry. Body overflow is locked while any sheet is open.
+Use safe-area-aware 12 px page gutters, near-edge card treatment, equal wallet tracks, compact transfer legs, full-width mono destination inputs, no horizontal overflow, and 44 px targets for wallet, balance, refresh, route, menu, and secondary controls. Convert `.route-options-layer` to a fixed bottom sheet with `max-height: min(72dvh, 560px)`, safe-area padding, rounded top corners, a visual handle, scrim, and translate/opacity entry. Body overflow is locked while any sheet is open. Add mobile activity-row rules that place summary/status on line one and amount/time on line two without ellipsis-driven information loss.
 
 - [ ] **Step 6: Replace overlapping sticky CTA with a reserved action dock**
 
@@ -184,7 +184,7 @@ git commit -m "design(bridge): rebuild the responsive mobile flow"
 
 - [ ] **Step 1: Write failing responsive preflight tests**
 
-At 390 x 844, fill a valid Agglayer transfer and open review. Assert the overlay is fixed to the viewport, the panel is bottom aligned, panel height is at most the viewport, confirmation remains visible after scrolling the receipt, body scroll is locked, Escape closes the sheet, and focus returns to the bridge CTA. At 1024 px, assert the panel is centered rather than bottom aligned.
+At 390 x 844, fill a valid Agglayer transfer and open review. Assert the overlay is fixed to the viewport, the panel is bottom aligned, panel height is at most the viewport, confirmation remains visible after scrolling the receipt, body scroll is locked, every sheet action has a 44 px target, Tab and Shift+Tab remain inside the dialog, Escape closes the sheet, and focus returns to the bridge CTA. At 1024 px, assert the panel is centered rather than bottom aligned.
 
 - [ ] **Step 2: Run the test to verify it fails**
 
@@ -194,7 +194,7 @@ Expected: FAIL because the current dialog is card-scoped and does not restore fo
 
 - [ ] **Step 3: Complete dialog focus behavior**
 
-Add a ref for the bridge CTA. On open, save the previously focused element; on close from cancel, Escape, or backdrop, restore focus. Add a Tab/Shift+Tab trap covering the close, inspect, cancel, and confirm buttons. Keep initial focus on confirmation.
+Add a ref for the bridge CTA. On open, save the previously focused element; on close from cancel, Escape, close button, or backdrop, restore focus. Add a Tab/Shift+Tab trap covering the close, inspect, cancel, and confirm buttons. Keep initial focus on confirmation. Make close, inspect, cancel, and confirm targets at least 44 px.
 
 - [ ] **Step 4: Convert mobile review to a bottom sheet**
 
@@ -202,7 +202,7 @@ Below 640 px, make `.preflight-overlay` fixed with `inset: 0`, align items to en
 
 - [ ] **Step 5: Apply the theme system to activity detail**
 
-Render `ThemeToggle` beside `New transfer`. Replace translucent white receipt materials, hard-coded white icons, dashed light-only borders, and oversized radii with semantic tokens. Use neutral surfaces, 14 px panels, and orange only for current progress. On mobile, maintain 12 px gutters, wrap long values, and ensure all actions are at least 44 px.
+Render `ThemeToggle` beside `New transfer`. Replace translucent white receipt materials, hard-coded white icons, dashed light-only borders, and oversized radii with semantic tokens. Use neutral surfaces, 14 px panels, and orange only for current progress. On mobile, maintain safe-area-aware 12 px gutters, wrap long values, and ensure all actions are at least 44 px. Remove `aria-live` from the full milestone list and keep one concise polite status announcement. Where a destination or transaction hash is shown, pair its truncated presentation with explicit 44 px Show/Hide and Copy actions whose accessible names contain the value type.
 
 - [ ] **Step 6: Polish motion and reduced motion**
 
