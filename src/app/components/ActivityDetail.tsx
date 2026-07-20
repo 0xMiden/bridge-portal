@@ -186,6 +186,10 @@ export function ActivityDetail({ id }: { id: string }) {
       await pollEpochIntentStatus({
         sponsorAddress: sponsor,
         intentNonce: nonce,
+        // Keep polling until the *destination* leg settles (Sepolia for a send)
+        // — not just the Miden source leg — so the page advances to complete on
+        // its own without a manual refresh.
+        destinationChainId,
         signal: controller.signal,
         onUpdate: (statuses) => {
           const nextStatus = epochActivityStatus(statuses, destinationChainId);
