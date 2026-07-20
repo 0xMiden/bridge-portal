@@ -810,8 +810,6 @@ export function BridgeExperience() {
   function renderWalletChip(identity: WalletIdentity) {
     return (
       <span className={`wallet-chip ${identity.state}`}>
-        <span className="wallet-chip-dot" aria-hidden="true" />
-        <span className="wallet-chip-name">{identity.name}</span>
         <span className="wallet-chip-state">{identity.stateText}</span>
         {identity.state === "wrong-network" ? (
           <button

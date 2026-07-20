@@ -989,33 +989,6 @@ a {
   z-index: 1;
 }
 
-.wallet-chip-dot {
-  flex: 0 0 auto;
-  width: 6px;
-  height: 6px;
-  border-radius: 999px;
-  background: var(--faint-foreground);
-}
-
-.wallet-chip.connected .wallet-chip-dot {
-  background: var(--accent);
-}
-
-.wallet-chip.connecting .wallet-chip-dot {
-  background: var(--warning);
-}
-
-.wallet-chip.wrong-network .wallet-chip-dot,
-.wallet-chip.unavailable .wallet-chip-dot {
-  background: var(--danger);
-}
-
-.wallet-chip-name {
-  flex: 0 0 auto;
-  color: var(--foreground);
-  font-weight: 800;
-}
-
 .wallet-chip-state {
   min-width: 0;
   max-width: 100%;
