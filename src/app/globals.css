@@ -2804,8 +2804,8 @@ a {
 .preflight-close {
   display: grid;
   place-items: center;
-  width: 30px;
-  height: 30px;
+  width: 44px;
+  height: 44px;
   border: 1px solid var(--border);
   border-radius: 999px;
   background: var(--surface-muted);
@@ -2892,6 +2892,8 @@ a {
   justify-content: center;
   gap: 5px;
   flex: 0 0 auto;
+  min-width: 44px;
+  min-height: 44px;
   padding: 3px 8px;
   border: 1px solid var(--border);
   border-radius: 999px;
@@ -2921,6 +2923,7 @@ a {
 .preflight-actions .preflight-cancel {
   flex: 0 0 auto;
   min-width: 96px;
+  min-height: 44px;
 }
 
 .preflight-actions .preflight-confirm {

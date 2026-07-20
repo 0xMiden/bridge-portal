@@ -119,4 +119,16 @@ test("desktop review remains centered", async ({ bridge, page }) => {
 
   expect(Math.abs(geometry.overlayCenter - geometry.panelCenter)).toBeLessThan(2);
   expect(geometry.panelBottom).toBeLessThan(geometry.overlayBottom);
+
+  const controls = bridge.preflight().locator(".preflight-panel button");
+  for (let index = 0; index < (await controls.count()); index += 1) {
+    const box = await controls.nth(index).boundingBox();
+    expect(box, `desktop sheet action ${index} is visible`).not.toBeNull();
+    expect(box!.width, `desktop sheet action ${index} width`).toBeGreaterThanOrEqual(
+      44,
+    );
+    expect(box!.height, `desktop sheet action ${index} height`).toBeGreaterThanOrEqual(
+      44,
+    );
+  }
 });
