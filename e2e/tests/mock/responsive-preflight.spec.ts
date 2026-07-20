@@ -1,6 +1,11 @@
 import { expect, test } from "../../fixtures/bridge";
 import type { BridgePage } from "../../pages/bridge-page";
 
+// WCAG 44px minimum tap target, minus a sub-pixel tolerance: getBoundingClientRect
+// can return e.g. 43.99997 for a 44px element under the runner's device-pixel
+// rounding, which is compliant but trips a strict `>= 44`.
+const MIN_TAP_TARGET = 43.5;
+
 const destination = "0x00000000000000000000000000000000000000ab";
 
 async function openAgglayerReview(bridge: BridgePage) {
@@ -75,8 +80,8 @@ test(`mobile ${width}px review is a viewport bottom sheet with a contained keybo
   for (let index = 0; index < (await controls.count()); index += 1) {
     const box = await controls.nth(index).boundingBox();
     expect(box, `sheet action ${index} is visible`).not.toBeNull();
-    expect(box!.width, `sheet action ${index} width`).toBeGreaterThanOrEqual(44);
-    expect(box!.height, `sheet action ${index} height`).toBeGreaterThanOrEqual(44);
+    expect(box!.width, `sheet action ${index} width`).toBeGreaterThanOrEqual(MIN_TAP_TARGET);
+    expect(box!.height, `sheet action ${index} height`).toBeGreaterThanOrEqual(MIN_TAP_TARGET);
   }
 
   await expect(panel.locator(".preflight-confirm")).toBeFocused();
@@ -125,10 +130,10 @@ test("desktop review remains centered", async ({ bridge, page }) => {
     const box = await controls.nth(index).boundingBox();
     expect(box, `desktop sheet action ${index} is visible`).not.toBeNull();
     expect(box!.width, `desktop sheet action ${index} width`).toBeGreaterThanOrEqual(
-      44,
+      MIN_TAP_TARGET,
     );
     expect(box!.height, `desktop sheet action ${index} height`).toBeGreaterThanOrEqual(
-      44,
+      MIN_TAP_TARGET,
     );
   }
 });

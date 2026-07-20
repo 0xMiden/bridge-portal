@@ -1,5 +1,10 @@
 import { test, expect } from "../../fixtures/bridge";
 
+// WCAG 44px minimum tap target, minus a sub-pixel tolerance: getBoundingClientRect
+// can return e.g. 43.99997 for a 44px element under the runner's device-pixel
+// rounding, which is compliant but trips a strict `>= 44`.
+const MIN_TAP_TARGET = 43.5;
+
 type Rect = { top: number; right: number; bottom: number; left: number };
 
 function intersects(a: Rect, b: Rect) {
@@ -30,11 +35,11 @@ test.describe("route breakpoint behavior", () => {
     await expect(page.locator(".route-sheet-backdrop")).toBeVisible();
     await expect(bridge.routeListbox()).toBeVisible();
     const triggerBox = await bridge.routeTrigger().boundingBox();
-    expect(triggerBox?.height).toBeGreaterThanOrEqual(44);
+    expect(triggerBox?.height).toBeGreaterThanOrEqual(MIN_TAP_TARGET);
     const options = bridge.routeListbox().getByRole("option");
     for (let index = 0; index < (await options.count()); index += 1) {
       const box = await options.nth(index).boundingBox();
-      expect(box?.height).toBeGreaterThanOrEqual(44);
+      expect(box?.height).toBeGreaterThanOrEqual(MIN_TAP_TARGET);
     }
   });
 
@@ -185,7 +190,7 @@ test.describe("mobile bridge layout", () => {
     for (let index = 0; index < (await walletItems.count()); index += 1) {
       await expect
         .poll(async () => (await walletItems.nth(index).boundingBox())?.height ?? 0)
-        .toBeGreaterThanOrEqual(44);
+        .toBeGreaterThanOrEqual(MIN_TAP_TARGET);
     }
     await page.keyboard.press("Escape");
 
@@ -193,7 +198,7 @@ test.describe("mobile bridge layout", () => {
     const routeOptions = bridge.routeListbox().getByRole("option");
     for (let index = 0; index < (await routeOptions.count()); index += 1) {
       const box = await routeOptions.nth(index).boundingBox();
-      expect(box?.height).toBeGreaterThanOrEqual(44);
+      expect(box?.height).toBeGreaterThanOrEqual(MIN_TAP_TARGET);
     }
     await page.keyboard.press("Escape");
 
@@ -205,8 +210,8 @@ test.describe("mobile bridge layout", () => {
       page.locator(".preflight-confirm"),
     ]) {
       const box = await control.boundingBox();
-      expect(box?.height).toBeGreaterThanOrEqual(44);
-      expect(box?.width).toBeGreaterThanOrEqual(44);
+      expect(box?.height).toBeGreaterThanOrEqual(MIN_TAP_TARGET);
+      expect(box?.width).toBeGreaterThanOrEqual(MIN_TAP_TARGET);
     }
   });
 
