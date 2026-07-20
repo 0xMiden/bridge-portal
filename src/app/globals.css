@@ -2245,6 +2245,10 @@ a {
   .detail-topbar {
     align-items: stretch;
     flex-direction: column;
+    /* Tighten the stacked app bar: the brand row + wallet cluster shouldn't
+       claim a tall header before the form even begins. */
+    gap: 10px;
+    min-height: 0;
   }
 
   .brand {
@@ -2295,13 +2299,22 @@ a {
     width: 100%;
   }
 
+  /* Let each pill shrink to its grid track (1fr) at the narrowest widths so its
+     label ellipsizes instead of pushing the row past the viewport edge. */
   .wallet-pill {
     max-width: none;
+    min-width: 0;
+  }
+
+  .wallet-pill-label {
+    min-width: 0;
   }
 
   .swap-stage {
     min-height: auto;
-    padding: 12px 0 36px;
+    /* Bottom padding clears the sticky CTA and honours the home-indicator
+       safe area so the action never sits under the device chrome. */
+    padding: 10px 0 calc(24px + env(safe-area-inset-bottom));
   }
 
   /* Keep the label/amount on one row (Uniswap-style) instead of stacking the
@@ -2310,7 +2323,8 @@ a {
     grid-template-columns: minmax(0, 1fr) auto;
     min-height: auto;
     gap: 8px;
-    padding: 12px 14px;
+    margin-top: 6px;
+    padding: 11px 14px;
   }
 
   .swap-box input {
@@ -2326,7 +2340,8 @@ a {
   .quote-summary {
     grid-template-columns: 1fr;
     gap: 0;
-    padding: 2px 12px;
+    margin-top: 8px;
+    padding: 0 12px;
   }
 
   .quote-summary div {
@@ -2335,7 +2350,7 @@ a {
     justify-content: space-between;
     gap: 12px;
     min-height: 0;
-    padding: 11px 0;
+    padding: 8px 0;
     border-radius: 0;
     background: transparent;
   }
@@ -2363,20 +2378,64 @@ a {
     white-space: normal;
   }
 
+  /* Keep the title and route selector on a single row rather than giving the
+     route its own full-width row — recovers ~one control's worth of height. */
   .swap-card-top {
-    display: grid;
-    grid-template-columns: 1fr;
+    gap: 10px;
+    padding: 4px 6px 6px;
   }
 
-  .route-menu-root,
-  .route-trigger,
-  .route-options-menu {
+  .swap-card h1 {
+    flex: 0 0 auto;
+  }
+
+  .route-menu-root {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+
+  .route-trigger {
     width: 100%;
+    min-width: 0;
+    /* Preserve a comfortable touch target for the route control on mobile. */
+    min-height: 44px;
   }
 
-  /* Overlay the route dropdown over the card instead of pushing it down. */
+  /* Overlay the route dropdown over the card instead of pushing it down; keep
+     it anchored to the trigger's right edge and capped to the viewport. */
   .route-options-menu {
-    transform-origin: top center;
+    width: max-content;
+    min-width: 208px;
+    max-width: calc(100vw - 32px);
+    transform-origin: top right;
+  }
+
+  .mode-switch button {
+    /* Keep the direction toggles at a full touch target on mobile. */
+    min-height: 44px;
+  }
+
+  .destination-input {
+    margin-top: 6px;
+  }
+
+  .route-disclaimer {
+    margin-top: 8px;
+    padding: 8px 10px;
+  }
+
+  /* When the form runs below the fold, pin the primary action near the bottom
+     of the viewport so it stays reachable while the user completes the form.
+     It sticks within the card while scrolling and settles into its natural
+     slot (above the route disclaimer) at the end. Errors and the destination
+     input render above it in flow, so it never covers them; the raised shadow
+     separates it from content scrolling behind. */
+  .primary-button {
+    position: sticky;
+    bottom: calc(8px + env(safe-area-inset-bottom));
+    z-index: 2;
+    margin-top: 8px;
+    box-shadow: var(--shadow-raised);
   }
 
   .detail-simple {
