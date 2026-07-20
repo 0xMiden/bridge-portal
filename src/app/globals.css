@@ -664,7 +664,7 @@ a {
 
 .swap-card {
   position: relative;
-  width: min(480px, 100%);
+  width: min(500px, 100%);
   padding: 8px;
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
@@ -790,6 +790,14 @@ a {
 
 .route-trigger[aria-expanded="true"] svg {
   transform: rotate(180deg);
+}
+
+.route-options-layer {
+  display: contents;
+}
+
+.route-sheet-backdrop {
+  display: none;
 }
 
 .route-options-menu {
@@ -1430,11 +1438,12 @@ a {
 .quote-summary {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 6px;
+  gap: 0;
   margin-top: 10px;
   padding: 6px;
   border-radius: var(--radius-lg);
-  background: var(--surface-muted);
+  border: 1px solid var(--border);
+  background: transparent;
   color: var(--foreground);
 }
 
@@ -1442,8 +1451,12 @@ a {
   min-width: 0;
   min-height: 46px;
   padding: 7px 8px;
-  border-radius: var(--radius-md);
-  background: var(--surface);
+  border-radius: 0;
+  background: transparent;
+}
+
+.quote-summary div + div {
+  border-left: 1px solid var(--border);
 }
 
 .quote-summary strong,
@@ -1529,8 +1542,17 @@ a {
   transform: translateX(2px);
 }
 
+.primary-action-dock {
+  margin-top: 10px;
+}
+
+.primary-action-dock .primary-button {
+  position: static;
+  margin-top: 0;
+}
+
 .home-activity {
-  width: min(480px, 100%);
+  width: min(500px, 100%);
   margin-top: 0;
 }
 
@@ -2586,6 +2608,7 @@ a {
   }
 
   .quote-summary div + div {
+    border-left: 0;
     border-top: 1px solid var(--border);
   }
 
@@ -2652,20 +2675,6 @@ a {
   .route-disclaimer {
     margin-top: 8px;
     padding: 8px 10px;
-  }
-
-  /* When the form runs below the fold, pin the primary action near the bottom
-     of the viewport so it stays reachable while the user completes the form.
-     It sticks within the card while scrolling and settles into its natural
-     slot (above the route disclaimer) at the end. Errors and the destination
-     input render above it in flow, so it never covers them; the raised shadow
-     separates it from content scrolling behind. */
-  .primary-button {
-    position: sticky;
-    bottom: calc(8px + env(safe-area-inset-bottom));
-    z-index: 2;
-    margin-top: 8px;
-    box-shadow: var(--shadow-raised);
   }
 
   .detail-simple {
@@ -2840,4 +2849,232 @@ a {
 .preflight-actions .preflight-confirm {
   flex: 1 1 auto;
   margin-top: 0;
+}
+
+@media (max-width: 640px) {
+  .app-shell {
+    padding:
+      max(12px, env(safe-area-inset-top))
+      max(12px, env(safe-area-inset-right))
+      max(12px, env(safe-area-inset-bottom))
+      max(12px, env(safe-area-inset-left));
+  }
+
+  .topbar {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 10px 8px;
+  }
+
+  .topbar-actions {
+    display: contents;
+  }
+
+  .brand {
+    min-width: 0;
+    min-height: 44px;
+    justify-content: flex-start;
+  }
+
+  .theme-menu-root {
+    justify-self: end;
+  }
+
+  .wallet-cluster {
+    grid-column: 1 / -1;
+  }
+
+  .wallet-button,
+  .wallet-pill,
+  .balance-show,
+  .balance-refresh,
+  .wallet-chip-switch,
+  .route-trigger,
+  .route-option,
+  .secondary-button {
+    min-height: 44px;
+  }
+
+  .balance-refresh {
+    min-width: 44px;
+    margin: -10px;
+  }
+
+  .balance-show,
+  .wallet-chip-switch {
+    padding-block: 8px;
+  }
+
+  .swap-stage {
+    place-items: start center;
+    padding-top: 8px;
+  }
+
+  .swap-card {
+    width: 100%;
+    padding: 8px;
+    border-radius: var(--radius-lg);
+    box-shadow: none;
+    animation: none;
+    transform: none;
+  }
+
+  .swap-box {
+    gap: 6px;
+    padding: 10px;
+  }
+
+  .swap-box input {
+    min-width: 0;
+    width: min(140px, 100%);
+  }
+
+  .destination-input input {
+    min-width: 0;
+    width: 100%;
+    font-family: var(--font-geist-mono), ui-monospace, monospace;
+    font-size: 16px;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .route-sheet-backdrop {
+    position: fixed;
+    z-index: 100;
+    inset: 0;
+    display: block;
+    width: 100%;
+    height: 100dvh;
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: var(--scrim);
+    animation: route-backdrop-enter 260ms var(--ease-standard) both;
+  }
+
+  .route-options-layer {
+    position: fixed;
+    z-index: 101;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    display: flex;
+    max-height: min(72dvh, 560px);
+    flex-direction: column;
+    padding-top: 24px;
+    border: 1px solid var(--border);
+    border-bottom: 0;
+    border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+    background: var(--surface-elevated);
+    box-shadow: var(--shadow-card);
+    animation: route-sheet-enter 260ms var(--ease-standard) both;
+  }
+
+  .route-options-layer::before {
+    content: "";
+    position: absolute;
+    top: 9px;
+    left: 50%;
+    width: 42px;
+    height: 4px;
+    border-radius: 999px;
+    background: var(--border-strong);
+    transform: translateX(-50%);
+  }
+
+  .route-options-layer .route-options-list {
+    position: static;
+    width: 100%;
+    min-width: 0;
+    max-width: none;
+    max-height: none;
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding: 0 12px calc(12px + env(safe-area-inset-bottom));
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+    opacity: 1;
+    transform: none;
+  }
+
+  .primary-action-dock {
+    position: sticky;
+    z-index: 3;
+    top: calc(100dvh - 67px - env(safe-area-inset-bottom));
+    margin: 8px -8px -8px;
+    padding: 8px 8px calc(8px + env(safe-area-inset-bottom));
+    border-top: 1px solid var(--border);
+    background: var(--surface);
+  }
+
+  .primary-action-dock .primary-button {
+    position: static;
+    margin: 0;
+    box-shadow: none;
+  }
+
+  .home-activity-item {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    grid-template-rows: auto auto;
+    gap: 4px 10px;
+    min-height: 64px;
+    padding: 10px 12px;
+  }
+
+  .home-activity-item .status-dot {
+    grid-row: 1;
+    grid-column: 1;
+  }
+
+  .activity-copy {
+    display: flex;
+    grid-row: 1;
+    grid-column: 2;
+    align-items: baseline;
+    gap: 6px;
+  }
+
+  .activity-meta {
+    display: flex;
+    grid-row: 2;
+    grid-column: 2;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 8px;
+    text-align: left;
+  }
+
+  .home-activity-item > svg {
+    grid-row: 1 / 3;
+    grid-column: 3;
+    align-self: center;
+  }
+
+  .home-activity-item strong,
+  .home-activity-item small {
+    overflow: visible;
+    text-overflow: clip;
+    white-space: normal;
+  }
+
+  .activity-copy small,
+  .activity-meta small {
+    margin-top: 0;
+  }
+}
+
+@keyframes route-backdrop-enter {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes route-sheet-enter {
+  from {
+    opacity: 0;
+    transform: translateY(24px);
+  }
 }
