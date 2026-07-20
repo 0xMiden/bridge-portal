@@ -9,7 +9,6 @@
     "lint": "eslint",
     "test": "vitest run",
     "test:e2e:mock": "E2E_NETWORK=mock playwright test --config playwright.mock.config.ts",
-    "test:e2e:testnet": "E2E_NETWORK=testnet playwright test --config playwright.e2e.config.ts",
     "playwright:install": "playwright install --with-deps chromium",
     "typecheck": "tsc --noEmit",
     "cf:build": "next build --webpack && opennextjs-cloudflare build --skipNextBuild",

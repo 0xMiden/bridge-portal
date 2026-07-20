@@ -5,22 +5,21 @@ import { test, expect } from "../../fixtures/bridge";
 // blank-page-on-cancel fix.
 test("cancelled wallet prompt: friendly message, no blank page", async ({
   bridge,
-  steps,
   page,
 }) => {
-  await steps.step("wallets ready", () => bridge.waitForReady());
+  await test.step("wallets ready", () => bridge.waitForReady());
 
-  await steps.step("arm reject mode", () =>
+  await test.step("arm reject mode", () =>
     page.evaluate(() => window.localStorage.setItem("e2e-signer-mode", "reject")),
   );
 
-  await steps.step("AggLayer receive, small amount", async () => {
+  await test.step("AggLayer receive, small amount", async () => {
     await bridge.setRoute("AggLayer");
     await bridge.setMode("Receive");
     await bridge.fillAmount("0.01");
   });
 
-  await steps.step("submit rejects → friendly message, card intact", async () => {
+  await test.step("submit rejects → friendly message, card intact", async () => {
     await bridge.submit();
     await expect(page.locator(".form-error")).toContainText(/cancelled/i);
     await expect(page.locator(".swap-card")).toBeVisible();
