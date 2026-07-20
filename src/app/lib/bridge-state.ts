@@ -301,6 +301,10 @@ function fullHash(hash?: string): string | undefined {
   if (!hash) return undefined;
   if (hash === "0xpending") return undefined;
   if (hash.includes("…") || hash.includes("...")) return undefined;
+  // Only a real 32-byte tx hash (0x + 64 hex) makes a valid `/tx/` deep link.
+  // Anything else — a wallet-adapter request UUID, a note id — would render a
+  // broken explorer page, so it must never feed a link.
+  if (!/^0x[0-9a-fA-F]{64}$/.test(hash)) return undefined;
   return hash;
 }
 

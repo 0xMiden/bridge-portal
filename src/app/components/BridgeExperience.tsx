@@ -878,7 +878,7 @@ export function BridgeExperience() {
         // adapter, so it must load client-side at click time, never in SSR.
         const { runAgglayerSend } = await import("../lib/agglayer-execute");
         setSubmitPhase("Confirm in your wallet…");
-        const { txId } = await runAgglayerSend({
+        const { txHash } = await runAgglayerSend({
           amount: unitsAmount,
           faucetId: agglayerEth.faucetId,
           destinationAddress,
@@ -894,7 +894,9 @@ export function BridgeExperience() {
           // origin = Miden rollup 78, destination = Ethereum L1 (0)
           sourceNetworkId: AGGLAYER_BALI.destinationNetworkId,
           destinationNetworkId: AGGLAYER_BALI.sourceNetworkId,
-          midenTxId: txId,
+          // The real on-chain Miden tx hash (not the wallet request UUID) — this
+          // feeds the Midenscan /tx/ deep link on the send detail page.
+          midenTxId: txHash,
         });
         const updated = [activity, ...activities];
         setActivities(updated);

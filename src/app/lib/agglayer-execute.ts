@@ -24,7 +24,10 @@ export interface AgglayerSendDeps {
 }
 
 export interface AgglayerSendResult {
+  /** Wallet-adapter request id (a UUID) — internal tracking, NOT an on-chain id. */
   txId: string;
+  /** The real on-chain Miden tx hash (0x + 64 hex), for the Midenscan link. */
+  txHash: string;
 }
 
 export async function runAgglayerSend({
@@ -88,6 +91,9 @@ export async function runAgglayerSend({
   );
 
   const txId = await requestTransaction(transaction);
-  await waitForTransaction(txId);
-  return { txId };
+  // requestTransaction returns the wallet's request id (a UUID); the real
+  // on-chain tx hash only comes back on the settled TransactionOutput. Use that
+  // for the Midenscan link — the UUID produces a broken /tx/ URL.
+  const output = await waitForTransaction(txId);
+  return { txId, txHash: output.txHash };
 }
