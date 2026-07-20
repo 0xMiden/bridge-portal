@@ -44,13 +44,12 @@ surface that leans heavily on cross-origin popups, iframes, and gRPC-Web.
    iframe would need to emit a matching `Cross-Origin-Resource-Policy` header,
    which third-party wallet/RPC endpoints do not control for us.
 
-4. **The `mt` build is not actually available here.** The vendored SDK
-   (`vendor/miden-sdk-miden-sdk-0.15.6-b2agg.callback.1.tgz`) declares `./mt`
-   and `./mt/lazy` in its `exports` map, but **ships only `dist/st/`** — there
-   is no `dist/mt/` in the tarball or in `node_modules`. Switching to threaded
-   proving is therefore not a config flip; it needs a re-vendored (or upstream)
-   SDK build that includes the `mt` artifacts, plus a cross-origin-isolated
-   document to load them.
+4. **The `mt` build now ships, but is still gated on isolation.** As of the
+   published `@miden-sdk` `0.15.7`, the package includes `dist/mt/` (a ~19 MB
+   threaded wasm) alongside `dist/st/`, so the artifacts are available. Switching
+   is still not a config flip: threaded proving requires a cross-origin-isolated
+   document (COOP/COEP) to instantiate the `SharedArrayBuffer` it needs, which
+   the portal deliberately does not enable (see below).
 
 ## What threading would cost / gain
 
@@ -60,7 +59,7 @@ client cost, and threads parallelize them — a real win, but only for work this
 app does not currently do.
 
 **Cost:**
-- Re-vendor or upstream an `mt` SDK build (not shipped today).
+- Point the SDK import at the `mt` entry (shipped in `0.15.7`).
 - Cross-origin isolate the document, then repair every popup/iframe/subresource
   broken by COOP/COEP: Coinbase + WalletConnect connectors, the gRPC-Web note
   transport, and any embedded third-party frames.
@@ -75,8 +74,8 @@ Reopen this decision when **all** of the following hold:
 
 1. The portal needs to prove **in-page** (proving moved off the wallet, or a
    flow requires local proving), and measured proving time is a real UX problem.
-2. An `mt` SDK build is actually available to vendor/install (`dist/mt/`
-   present), i.e. threaded proving is more than a config flag.
+2. ~~An `mt` SDK build is actually available~~ — satisfied as of `0.15.7`
+   (`dist/mt/` present); the remaining blockers are (1) and (3).
 3. A cross-origin-isolation path exists that keeps the wallet connectors and the
    gRPC-Web transport working — e.g. `COEP: credentialless` +
    `COOP: same-origin-allow-popups`, validated end-to-end against Coinbase,
