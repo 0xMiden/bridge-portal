@@ -60,6 +60,31 @@ export type Activity = {
 
 export const activityStorageKey = "miden.bridge.ui.activities";
 
+/**
+ * The comparison metadata surfaced in the route selector so a route can be
+ * chosen on its merits (asset, speed, fee model, trust boundary, claim
+ * responsibility) without selecting it first. Kept alongside the display copy so
+ * the menu and the selected-route summary read from one source of truth.
+ */
+export type RouteComparison = {
+  /** Token the route moves — same symbol on both legs for the active routes. */
+  asset: string;
+  /** Typical end-to-end ETA. */
+  eta: string;
+  /** How the route charges (short, comparison-friendly). */
+  feeModel: string;
+  /** Trust / provider boundary the funds pass through. */
+  trust: string;
+  /** Destination claim or Miden note-consumption responsibility. */
+  claim: string;
+  /** Availability status shown as a persistent chip. */
+  availability: string;
+  /** Short factual differentiator, e.g. "Fastest for USDC". */
+  differentiator?: string;
+  /** Why a disabled route is unavailable (rendered on the disabled option). */
+  unavailableReason?: string;
+};
+
 export const providers: Record<
   BridgeProvider,
   {
@@ -67,6 +92,7 @@ export const providers: Record<
     badge: string;
     route: string;
     disclosure: string;
+    comparison: RouteComparison;
     disabled?: boolean;
   }
 > = {
@@ -77,6 +103,16 @@ export const providers: Record<
     disclosure:
       "NEAR Intents is intentionally disabled in this build while Agglayer and Epoch are the active testnet routes.",
     disabled: true,
+    comparison: {
+      asset: "—",
+      eta: "—",
+      feeModel: "—",
+      trust: "NEAR Intents solver",
+      claim: "—",
+      availability: "Unavailable",
+      unavailableReason:
+        "Paused in this build while Agglayer and Epoch are the active testnet routes.",
+    },
   },
   agglayer: {
     label: "Agglayer",
@@ -84,6 +120,15 @@ export const providers: Record<
     route: "Agglayer testnet route",
     disclosure:
       "Agglayer routes Sepolia→Miden through the canonical bridge with no provider fee. Miden→Sepolia send is not available yet (needs Miden SDK B2AGG note support); the Sepolia-side claimAsset is built in-app once the outbound note lands.",
+    comparison: {
+      asset: "ETH",
+      eta: "10-20 min",
+      feeModel: "No provider fee (canonical bridge)",
+      trust: "Agglayer canonical bridge",
+      claim: "Gateway auto-claims on Sepolia; note auto-consumed on Miden",
+      availability: "Available",
+      differentiator: "Canonical ETH route",
+    },
   },
   epoch: {
     label: "Epoch",
@@ -91,8 +136,43 @@ export const providers: Record<
     route: "Epoch testnet route",
     disclosure:
       "Epoch is represented as a testnet service path. Production assumptions should be revisited when the integration contract is fixed.",
+    comparison: {
+      asset: "USDC",
+      eta: "1-3 min",
+      feeModel: "Included in quoted rate",
+      trust: "Epoch solver network",
+      claim: "Solver delivers the Miden note automatically",
+      availability: "Available",
+      differentiator: "Fastest for USDC",
+    },
   },
 };
+
+/**
+ * The token symbol a route moves on its input side. Epoch's SIO route is
+ * USDC↔USDC; every other active route moves ETH. This is the single fact that
+ * decides whether switching routes changes the asset — and therefore whether a
+ * numeric amount entered for the old route can carry over (it must not when the
+ * asset changes, so an amount typed as USDC never becomes the same number of
+ * ETH silently). Mode-independent: the input token is the same in both
+ * directions for the active routes.
+ */
+export function routeAsset(provider: BridgeProvider): string {
+  return provider === "epoch" ? "USDC" : "ETH";
+}
+
+/**
+ * True when moving from one route to another changes the input asset — the
+ * signal the form uses to clear the amount and any stale quote on a route
+ * switch. Same-asset switches (or re-selecting the same route) return false so
+ * the amount is preserved.
+ */
+export function routeSwitchChangesAsset(
+  from: BridgeProvider,
+  to: BridgeProvider,
+): boolean {
+  return routeAsset(from) !== routeAsset(to);
+}
 
 // Persist the last-selected route so a refresh returns to it (e.g. Agglayer)
 // instead of snapping back to the Epoch default every time.
