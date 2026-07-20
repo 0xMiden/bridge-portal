@@ -2851,7 +2851,7 @@ a {
   margin-top: 0;
 }
 
-@media (max-width: 639px) {
+@media (max-width: 640px) {
   .app-shell {
     padding:
       max(12px, env(safe-area-inset-top))

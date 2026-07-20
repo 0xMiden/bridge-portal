@@ -80,7 +80,7 @@ import { type EvmProvider, ensureSepolia } from "../lib/evm-wallet";
 // Type-only import — erased at build, so the eager-WASM adapter never reaches SSR.
 import type { MidenFiWalletContextState } from "@miden-sdk/miden-wallet-adapter-react";
 
-const MOBILE_ROUTE_QUERY = "(max-width: 639px)";
+const MOBILE_ROUTE_QUERY = "(max-width: 640px)";
 
 function subscribeToMobileRouteQuery(onChange: () => void) {
   const query = window.matchMedia(MOBILE_ROUTE_QUERY);

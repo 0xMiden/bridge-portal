@@ -11,12 +11,12 @@ function intersects(a: Rect, b: Rect) {
   );
 }
 
-test.describe("desktop route popover", () => {
+test.describe("route breakpoint behavior", () => {
   test.beforeEach(async ({ page }) => {
     await page.setViewportSize({ width: 1200, height: 900 });
   });
 
-  test("uses listbox semantics without announcing a modal dialog", async ({
+  test("640px uses mobile dialog semantics and 44px route controls", async ({
     bridge,
     page,
   }) => {
@@ -24,15 +24,18 @@ test.describe("desktop route popover", () => {
     await bridge.waitForReady();
     await bridge.routeTrigger().click();
 
+    const dialog = bridge.routeDialog();
+    await expect(dialog).toBeVisible();
+    await expect(dialog).toHaveAttribute("aria-modal", "true");
+    await expect(page.locator(".route-sheet-backdrop")).toBeVisible();
     await expect(bridge.routeListbox()).toBeVisible();
-    await expect(page.locator(".route-options-layer")).not.toHaveAttribute(
-      "role",
-      "dialog",
-    );
-    await expect(page.locator(".route-options-layer")).not.toHaveAttribute(
-      "aria-modal",
-      "true",
-    );
+    const triggerBox = await bridge.routeTrigger().boundingBox();
+    expect(triggerBox?.height).toBeGreaterThanOrEqual(44);
+    const options = bridge.routeListbox().getByRole("option");
+    for (let index = 0; index < (await options.count()); index += 1) {
+      const box = await options.nth(index).boundingBox();
+      expect(box?.height).toBeGreaterThanOrEqual(44);
+    }
   });
 
   test("outside pointer close preserves focus on the clicked input", async ({
