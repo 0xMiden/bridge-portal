@@ -61,6 +61,7 @@ import {
 } from "../lib/bridge-state";
 import { sepoliaGasUnitsFor, useSepoliaGasEstimate } from "../lib/sepolia-gas";
 import { RelativeTime } from "./RelativeTime";
+import { TokenSelect } from "./TokenSelect";
 import type {
   MidenRouteBalances,
   ResolvedEthAsset,
@@ -1623,9 +1624,10 @@ export function BridgeExperience() {
                 value={amount}
                 onChange={(event) => setAmount(event.target.value)}
               />
-              {/* Epoch's SIO route bridges USDC<->USDC; the shared `assetIn`
-                  label ("ETH") is only correct for Agglayer. */}
-              <span>{provider === "epoch" ? "USDC" : copy.assetIn}</span>
+              <TokenSelect
+                provider={provider}
+                onSelectProvider={selectRouteOption}
+              />
             </label>
           </div>
 
@@ -1663,7 +1665,10 @@ export function BridgeExperience() {
                   expectedReceivedAmount
                 )}
               </strong>
-              <span>{destinationSymbol}</span>
+              <TokenSelect
+                provider={provider}
+                onSelectProvider={selectRouteOption}
+              />
             </label>
           </div>
 
