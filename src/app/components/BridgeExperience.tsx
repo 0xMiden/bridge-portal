@@ -1014,18 +1014,34 @@ export function BridgeExperience() {
           ? "Preparing your Epoch deposit…"
           : "Preparing your Epoch send…",
       );
+      // Open the transfer's detail page up front, then run the transfer. The
+      // Epoch SDK doesn't reliably surface the deposit tx hash mid-flight for the
+      // injected/live wallet path, so waiting on it left the button frozen at
+      // "Preparing…" long after the Sepolia deposit had already confirmed.
+      // Instead the row is created + navigated to immediately (a live,
+      // monitorable page), patched as the transfer progresses and resolves, and
+      // removed / marked failed if the wallet prompt is rejected.
+      let activityId: string | null = null;
       try {
-        // Submit first (wallet approval + intent broadcast happen here), then
-        // record the activity row only once the transfer actually goes through.
         // Dynamic import: epoch-execute pulls eager-WASM miden-sdk, so it must
         // load client-side at click time, never in the server render.
         const { runEpochTransfer } = await import("../lib/epoch/epoch-execute");
-        // As soon as the wallet deposit lands on-chain, hand the user the live
-        // detail page — don't make them watch a "preparing" button while the
-        // intent settles. The row is created once from the deposit tx hash, then
-        // patched with the intent nonce when runEpochTransfer resolves so the
-        // detail page can poll status.
-        let navigatedId: string | null = null;
+
+        const optimistic = createActivity(mode, "epoch", amount, {
+          status: "source_finality",
+          eta:
+            mode === "receive"
+              ? "Confirm the deposit in your wallet…"
+              : "Confirm the send in your wallet…",
+          destination: resolvedDestination,
+          epochSponsor: epochEvmAddress,
+        });
+        activityId = optimistic.id;
+        const withNew = [optimistic, ...activities];
+        setActivities(withNew);
+        saveActivities(withNew);
+        router.push(`/activity/${optimistic.id}`);
+
         const result = await runEpochTransfer({
           mode,
           amount,
@@ -1034,28 +1050,25 @@ export function BridgeExperience() {
           requestSend: midenWallet.requestSend,
           waitForTransaction: midenWallet.waitForTransaction,
           onStatus: (status) => {
-            setSubmitPhase(EPOCH_PHASE_LABEL[status.phase] ?? "Working…");
-            if (navigatedId || !isSepoliaTxHash(status.transactionHash)) return;
-            const activity = createActivity(mode, "epoch", amount, {
-              status: "message_observed",
-              eta: "1-3 min",
-              destination: resolvedDestination,
-              txHash: shortAddress(status.transactionHash!),
-              sourceTxHash: status.transactionHash,
-              epochSponsor: epochEvmAddress,
-            });
-            navigatedId = activity.id;
-            const withNew = [activity, ...activities];
-            setActivities(withNew);
-            saveActivities(withNew);
-            router.push(`/activity/${activity.id}`);
+            // Reflect live phase progress on the detail page (via the row's eta),
+            // and capture the deposit tx hash if/when the SDK provides it.
+            const patch: Partial<Activity> = {
+              eta: EPOCH_PHASE_LABEL[status.phase] ?? "Working…",
+            };
+            if (isSepoliaTxHash(status.transactionHash)) {
+              patch.status = "message_observed";
+              patch.txHash = shortAddress(status.transactionHash);
+              patch.sourceTxHash = status.transactionHash;
+            }
+            patchStoredActivity(optimistic.id, patch);
+            setActivities(loadStoredActivities());
           },
         });
 
-        const details: Partial<Activity> = {
+        // Final details — the intent nonce starts the detail-page status poll.
+        patchStoredActivity(optimistic.id, {
           status: "message_observed",
           eta: "1-3 min",
-          destination: resolvedDestination,
           txHash: result.sourceTxHash
             ? shortAddress(result.sourceTxHash)
             : "0xpending",
@@ -1066,22 +1079,28 @@ export function BridgeExperience() {
           receivedAmount: result.outputAmount
             ? `${result.outputAmount} USDC`
             : undefined,
-        };
-
-        if (navigatedId) {
-          // Already on the detail page — fill in the nonce so polling can start.
-          patchStoredActivity(navigatedId, details);
-          setActivities(loadStoredActivities());
-        } else {
-          // No early deposit-tx signal (e.g. Miden-side send) — create + navigate
-          // now so the transfer still opens its detail page.
-          const activity = createActivity(mode, "epoch", amount, details);
-          const withNew = [activity, ...activities];
-          setActivities(withNew);
-          saveActivities(withNew);
-          router.push(`/activity/${activity.id}`);
-        }
+        });
+        setActivities(loadStoredActivities());
       } catch (error) {
+        if (activityId) {
+          if (isUserRejection(error)) {
+            // Nothing was submitted — drop the optimistic row and return to the
+            // form so the cancellation doesn't leave a stuck "preparing" row.
+            const remaining = loadStoredActivities().filter(
+              (item) => item.id !== activityId,
+            );
+            saveActivities(remaining);
+            setActivities(remaining);
+            router.push("/");
+          } else {
+            // Errored mid-transfer — keep the row but mark it failed.
+            patchStoredActivity(activityId, {
+              status: "failed",
+              eta: "Transfer failed",
+            });
+            setActivities(loadStoredActivities());
+          }
+        }
         setBridgeError(errorMessage(error));
       } finally {
         setIsSubmitting(false);
