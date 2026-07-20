@@ -25,6 +25,7 @@ import {
 } from "../lib/bridge-monitor";
 import {
   type Activity,
+  type ActivityStatus,
   type ExplorerLink,
   loadStoredActivities,
   modes,
@@ -150,94 +151,125 @@ function ExplorerLinkButton({ link, side }: { link: ExplorerLink; side: string }
  * from that direction rather than shown as dead nodes.
  */
 function milestonesFor(activity: Activity) {
-  // The intermediate steps differ by route: Epoch is a solver/allocator that
-  // fills the order; Agglayer is the canonical bridge. Name the right one.
+  // Two genuinely different lifecycles. Epoch is INTENT-BASED: you sign a source
+  // action, a solver picks up the intent and delivers the output directly — no
+  // claim leg. Agglayer is the CANONICAL BRIDGE: deposit → the bridge observes
+  // it → (send only) the exit becomes claimable and is auto-claimed → settled.
   const isEpoch = activity.provider === "epoch";
-  const providerName = isEpoch ? "Epoch" : "Agglayer";
-  const copy: Record<
-    string,
-    { receive: { label: string; detail: string }; send: { label: string; detail: string } }
-  > = {
-    signature: {
-      receive: {
-        label: "Sign Sepolia deposit",
-        detail: "Approve the deposit in your Ethereum wallet.",
-      },
-      send: {
-        label: "Sign Miden note",
-        detail: "Approve the outbound note in your Miden wallet.",
-      },
-    },
-    source_finality: {
-      receive: {
-        label: "Sepolia confirmation",
-        detail: "The deposit confirms on Sepolia and reaches bridge finality.",
-      },
-      send: {
-        label: "Miden confirmation",
-        detail: `The note confirms on Miden before ${providerName} picks it up.`,
-      },
-    },
-    message_observed: {
-      receive: {
-        label: `${providerName} observed the deposit`,
-        detail: isEpoch
-          ? "The Epoch solver has your deposit and is filling it on Miden."
-          : "The bridge has seen your deposit and is preparing the Miden note.",
-      },
-      send: {
-        label: `${providerName} observed the message`,
-        detail: isEpoch
-          ? "Epoch has your outbound intent and is filling it on Sepolia."
-          : "The bridge saw your outbound message and is preparing the Sepolia exit.",
-      },
-    },
-    claim_available: {
-      receive: {
-        label: "Note created on Miden",
-        detail: `${providerName} created your note on Miden.`,
-      },
-      send: {
-        label: "Exit ready on Sepolia",
-        detail: "The gateway auto-claims your funds on Sepolia — no action needed.",
-      },
-    },
-    claim_submitted: {
-      receive: {
-        label: "Claim submitted",
-        detail: "The destination claim is confirming.",
-      },
-      send: {
-        label: "Claim submitted on Sepolia",
-        detail: "The Sepolia claim transaction is confirming.",
-      },
-    },
-    complete: {
-      receive: {
-        label: "Delivered on Miden",
-        detail: "The note exists on Miden — consume it in your wallet to update your balance.",
-      },
-      send: {
-        label: "Settled on Sepolia",
-        detail: "Funds released to your Sepolia address.",
-      },
-    },
+  const isReceive = activity.mode === "receive";
+  type Step = { status: ActivityStatus; label: string; detail: string };
+
+  const signReceive: Step = {
+    status: "signature",
+    label: "Sign Sepolia deposit",
+    detail: "Approve the deposit in your Ethereum wallet.",
   };
-  const statuses =
-    activity.mode === "receive"
-      ? ["signature", "source_finality", "message_observed", "complete"]
+  const signSend: Step = {
+    status: "signature",
+    label: "Sign Miden note",
+    detail: isEpoch
+      ? "Approve the collateral note in your Miden wallet."
+      : "Approve the outbound note in your Miden wallet.",
+  };
+
+  let steps: Step[];
+  if (isEpoch) {
+    steps = isReceive
+      ? [
+          signReceive,
+          {
+            status: "source_finality",
+            label: "Sepolia confirmation",
+            detail: "The deposit confirms on Sepolia.",
+          },
+          {
+            status: "message_observed",
+            label: "Solver filling on Miden",
+            detail:
+              "A solver picked up your intent and is delivering USDC to your Miden account.",
+          },
+          {
+            status: "complete",
+            label: "Delivered on Miden",
+            detail: "USDC is in your Miden account.",
+          },
+        ]
       : [
-          "signature",
-          "source_finality",
-          "message_observed",
-          "claim_available",
-          "claim_submitted",
-          "complete",
+          signSend,
+          {
+            status: "source_finality",
+            label: "Miden confirmation",
+            detail: "Your collateral note confirms on Miden.",
+          },
+          {
+            status: "message_observed",
+            label: "Solver filling on Sepolia",
+            detail:
+              "A solver claimed your note and is paying out USDC on Sepolia.",
+          },
+          {
+            status: "complete",
+            label: "Settled on Sepolia",
+            detail: "USDC delivered to your Sepolia address.",
+          },
         ];
-  return statuses.map((status) => ({
-    status,
-    timelineIndex: timeline.findIndex((step) => step.status === status),
-    ...copy[status][activity.mode],
+  } else {
+    steps = isReceive
+      ? [
+          signReceive,
+          {
+            status: "source_finality",
+            label: "Sepolia confirmation",
+            detail: "The deposit confirms on Sepolia and reaches finality.",
+          },
+          {
+            status: "message_observed",
+            label: "Observed by the bridge",
+            detail:
+              "The bridge registered your deposit and is preparing the Miden note.",
+          },
+          {
+            status: "complete",
+            label: "Delivered on Miden",
+            detail:
+              "The note is created on Miden — consume it in your wallet to update your balance.",
+          },
+        ]
+      : [
+          signSend,
+          {
+            status: "source_finality",
+            label: "Miden confirmation",
+            detail: "The note confirms on Miden before the bridge picks it up.",
+          },
+          {
+            status: "message_observed",
+            label: "Building the proof",
+            detail:
+              "The bridge burned your asset and is proving the exit for Sepolia.",
+          },
+          {
+            status: "claim_available",
+            label: "Ready to claim on Sepolia",
+            detail:
+              "The exit is proven and claimable — it's auto-claimed for you, no action needed.",
+          },
+          {
+            status: "claim_submitted",
+            label: "Claim confirming",
+            detail: "The Sepolia claim is confirming.",
+          },
+          {
+            status: "complete",
+            label: "Settled on Sepolia",
+            detail: "Funds released to your Sepolia address.",
+          },
+        ];
+  }
+
+  return steps.map((step) => ({
+    ...step,
+    timelineIndex: timeline.findIndex((t) => t.status === step.status),
   }));
 }
 
@@ -247,39 +279,48 @@ function milestonesFor(activity: Activity) {
  */
 function nextActionFor(activity: Activity): { headline: string; body: string } {
   const isReceive = activity.mode === "receive";
-  const providerName = activity.provider === "epoch" ? "Epoch" : "Agglayer";
+  const isEpoch = activity.provider === "epoch";
   switch (activity.status) {
     case "signature":
       return {
         headline: "Confirm in your wallet",
         body: isReceive
           ? "Approve the Sepolia deposit in your Ethereum wallet to start the transfer."
-          : "Approve the outbound note in your Miden wallet to start the transfer.",
+          : isEpoch
+            ? "Approve the collateral note in your Miden wallet to start the transfer."
+            : "Approve the outbound note in your Miden wallet to start the transfer.",
       };
     case "source_finality":
       return {
-        headline: "Waiting for finality",
+        headline: "Waiting for confirmation",
         body: isReceive
-          ? "Your Sepolia deposit is confirming and reaching bridge finality. Nothing for you to do."
-          : `Your Miden note is confirming before ${providerName} picks it up. Nothing for you to do.`,
+          ? "Your Sepolia deposit is confirming. Nothing for you to do."
+          : isEpoch
+            ? "Your collateral note is confirming on Miden before a solver fills it. Nothing for you to do."
+            : "Your note is confirming on Miden before the bridge picks it up. Nothing for you to do.",
       };
     case "message_observed":
+      // Epoch = a solver fills the intent; Agglayer = the canonical bridge.
+      if (isEpoch) {
+        return {
+          headline: "A solver is filling your intent",
+          body: isReceive
+            ? "A solver picked up your intent and is delivering USDC to your Miden account."
+            : "A solver claimed your note and is paying out USDC on your Sepolia address.",
+        };
+      }
       return {
-        headline: `${providerName} is processing`,
+        headline: "The bridge is processing",
         body: isReceive
-          ? `${providerName} has observed your deposit and is creating the note on Miden.`
-          : `${providerName} has observed your message and is preparing the Sepolia exit.`,
+          ? "The bridge observed your deposit and is creating the note on Miden."
+          : "The bridge burned your asset and is proving the exit for Sepolia.",
       };
     case "claim_available":
-      return isReceive
-        ? {
-            headline: "Delivered to Miden",
-            body: "The note now exists on Miden. Claim it in your Bread wallet to move the funds into your balance.",
-          }
-        : {
-            headline: "Auto-claim in progress",
-            body: "The exit is ready and the gateway claims your funds on Sepolia automatically — no action needed.",
-          };
+      // Agglayer send only — Epoch never reaches this state.
+      return {
+        headline: "Ready to claim on Sepolia",
+        body: "The exit is proven and claimable. It's claimed on Sepolia for you automatically — no action needed.",
+      };
     case "claim_submitted":
       return {
         headline: "Confirming on Sepolia",
@@ -292,14 +333,21 @@ function nextActionFor(activity: Activity): { headline: string; body: string } {
       };
     case "complete":
     default:
-      return isReceive
+      if (!isReceive) {
+        return {
+          headline: "Funds released on Sepolia",
+          body: "The transfer settled and the funds are available in your Sepolia account.",
+        };
+      }
+      // Epoch delivers the USDC directly; Agglayer delivers a note to consume.
+      return isEpoch
         ? {
-            headline: "Delivered on Miden — claim in your wallet",
-            body: "The bridge created the note on Miden. It won't show in your balance until you consume it in your Bread wallet.",
+            headline: "Delivered on Miden",
+            body: "The USDC is in your Miden account.",
           }
         : {
-            headline: "Funds released on Sepolia",
-            body: "The transfer settled and the funds are available in your Sepolia account.",
+            headline: "Delivered on Miden — claim in your wallet",
+            body: "The bridge created the note on Miden. It won't show in your balance until you consume it in your Bread wallet.",
           };
   }
 }
@@ -336,17 +384,17 @@ function guidanceFor(activity: Activity): Guidance | null {
     };
   }
   if (activity.mode === "receive") {
-    // Provider delivery vs. wallet settlement are different concepts — the note
-    // exists once delivered/complete, but the balance only updates after the
-    // user consumes it in their Miden (Bread) wallet.
+    // Agglayer receive delivers a Miden NOTE that only becomes a balance once
+    // consumed in the wallet — so surface that as a distinct user step. Epoch
+    // is intent-based: the solver delivers the USDC directly, nothing to claim.
     const delivered =
       activity.status === "complete" || activity.status === "claim_available";
-    if (delivered) {
+    if (delivered && activity.provider === "agglayer") {
       return {
         tone: "success",
         icon: "wallet",
         title: "Claim the note in your wallet",
-        body: "Provider settlement is done — the note is on Miden. Your wallet balance updates only after you consume the note.",
+        body: "The note is on Miden. Your wallet balance updates only after you consume it.",
         steps: [
           "Open your Bread (Miden) wallet.",
           "Go to Activities → Claim pending notes.",
@@ -356,14 +404,15 @@ function guidanceFor(activity: Activity): Guidance | null {
     }
     return null;
   }
-  // Send: the gateway auto-claims the Sepolia exit — surface it so the wait is
-  // legible, but never re-add a manual claim button (removed by design).
+  // Agglayer send: the proven exit is auto-claimed on Sepolia — surface it so
+  // the wait is legible, but never re-add a manual claim button (removed by
+  // design). Epoch send never reaches these states (the solver pays out direct).
   if (activity.status === "claim_available" || activity.status === "claim_submitted") {
     return {
       tone: "active",
       icon: "wallet",
-      title: "Auto-claim on Sepolia",
-      body: "The gateway claims your funds on Sepolia for you. Keep this page open or check back later — no manual claim is required.",
+      title: "Auto-claimed on Sepolia",
+      body: "The exit is claimed on Sepolia for you automatically. Keep this page open or check back later — no manual claim is required.",
     };
   }
   return null;
@@ -884,9 +933,10 @@ export function ActivityDetail({ id }: { id: string }) {
                   </li>
                 );
               })}
-              {/* Provider settlement vs. wallet settlement, kept distinct: a
-                  Receive's delivered note isn't a balance change until consumed. */}
-              {activity.mode === "receive" ? (
+              {/* Agglayer receive delivers a Miden note that isn't a balance
+                  change until consumed in the wallet — kept as a distinct step.
+                  Epoch's solver delivers the USDC directly, so no consume step. */}
+              {activity.mode === "receive" && activity.provider === "agglayer" ? (
                 <li
                   className={`milestone consume ${
                     isComplete || activity.status === "claim_available"

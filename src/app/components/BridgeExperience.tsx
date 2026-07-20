@@ -1548,11 +1548,6 @@ export function BridgeExperience() {
                           <small className="route-tag testnet">
                             {option.badge}
                           </small>
-                          <small
-                            className={`route-tag availability ${disabled ? "off" : "on"}`}
-                          >
-                            {c.availability}
-                          </small>
                           {selected ? (
                             <Check
                               className="route-check"
@@ -1561,30 +1556,8 @@ export function BridgeExperience() {
                             />
                           ) : null}
                         </span>
-                        {c.differentiator ? (
-                          <em className="route-diff">{c.differentiator}</em>
-                        ) : null}
-                        <span className="route-facts">
-                          <span className="route-fact">
-                            <span className="route-fact-k">Asset</span>
-                            <span className="route-fact-v">{c.asset}</span>
-                          </span>
-                          <span className="route-fact">
-                            <span className="route-fact-k">ETA</span>
-                            <span className="route-fact-v">{c.eta}</span>
-                          </span>
-                          <span className="route-fact">
-                            <span className="route-fact-k">Fee</span>
-                            <span className="route-fact-v">{c.feeModel}</span>
-                          </span>
-                          <span className="route-fact">
-                            <span className="route-fact-k">Claim</span>
-                            <span className="route-fact-v">{c.claim}</span>
-                          </span>
-                          <span className="route-fact">
-                            <span className="route-fact-k">Trust</span>
-                            <span className="route-fact-v">{c.trust}</span>
-                          </span>
+                        <span className="route-option-sub">
+                          {c.asset} · {c.eta}
                         </span>
                         {disabled && c.unavailableReason ? (
                           <small className="route-unavailable">
