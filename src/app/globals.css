@@ -860,6 +860,13 @@ a {
      separated since the card is near-white too. */
   background: var(--surface);
   border: 1px solid var(--border);
+  position: relative;
+}
+
+/* When a token menu is open, lift its box above the divider + sibling box so
+   the popover isn't painted under them. */
+.swap-box:has(.token-select-menu) {
+  z-index: 60;
 }
 
 .swap-box strong {
@@ -1008,15 +1015,131 @@ a {
   outline: 0;
 }
 
-.swap-box label span,
-.readonly-amount span {
+/* Token selector — a Uniswap-style pill that follows the active route and, when
+   opened, lets you pick the token (which switches to its route). */
+.token-select {
+  position: relative;
   margin-top: 8px;
-  padding: 6px 9px;
+  justify-self: end;
+}
+
+.token-select-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 9px 4px 4px;
+  border: 0;
   border-radius: 999px;
-  background: #ffffff;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(23, 21, 17, 0.09);
   color: var(--foreground);
-  font-size: 12px;
+  font-size: 14px;
   font-weight: 800;
+  cursor: pointer;
+  transition:
+    box-shadow 0.15s ease,
+    transform 0.12s ease;
+}
+
+.token-select-trigger:hover {
+  box-shadow: 0 2px 6px rgba(23, 21, 17, 0.14);
+}
+
+.token-select-trigger:active {
+  transform: scale(0.97);
+}
+
+.token-icon {
+  display: block;
+  flex: 0 0 auto;
+  border-radius: 999px;
+}
+
+.token-select-symbol {
+  letter-spacing: 0.01em;
+}
+
+.token-select-caret {
+  color: var(--muted-foreground);
+  transition: transform 0.18s ease;
+}
+
+.token-select-trigger.open .token-select-caret {
+  transform: rotate(180deg);
+}
+
+.token-select-menu {
+  position: absolute;
+  top: calc(100% + 7px);
+  right: 0;
+  z-index: 40;
+  min-width: 216px;
+  padding: 6px;
+  border-radius: 16px;
+  background: #fff;
+  box-shadow:
+    0 10px 30px rgba(23, 21, 17, 0.16),
+    0 0 0 1px rgba(23, 21, 17, 0.05);
+  transform-origin: top right;
+  animation: token-menu-in 0.15s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes token-menu-in {
+  from {
+    opacity: 0;
+    transform: translateY(-5px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.token-option {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 12px;
+  background: transparent;
+  color: var(--foreground);
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.12s ease;
+}
+
+.token-option:hover {
+  background: var(--surface-muted);
+}
+
+.token-option.selected {
+  background: var(--accent-soft);
+}
+
+.token-option-text {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.token-option-text strong {
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.token-option-text small {
+  color: var(--muted-foreground);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.token-option-check {
+  margin-left: auto;
+  flex: 0 0 auto;
+  color: var(--accent);
 }
 
 .readonly-amount strong {
