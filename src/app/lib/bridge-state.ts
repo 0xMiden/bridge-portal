@@ -423,6 +423,61 @@ export function destinationExplorer(activity: Activity): ExplorerLink {
   };
 }
 
+/**
+ * A support-safe snapshot of one activity for a "copy diagnostics" control:
+ * local id, route, direction, status, timestamps, the addresses and known tx
+ * hashes involved, and the last monitor error. Deliberately excludes anything
+ * secret — the Activity model never holds private keys or wallet secrets, only
+ * public addresses and on-chain hashes — so the whole object is safe to paste
+ * into a support thread.
+ */
+export function buildDiagnostics(
+  activity: Activity,
+  extra: { monitorError?: string; lastCheckedAt?: number } = {},
+): Record<string, unknown> {
+  const prune = <T extends Record<string, unknown>>(obj: T) =>
+    Object.fromEntries(
+      Object.entries(obj).filter(([, value]) => value !== undefined && value !== ""),
+    );
+  return {
+    tool: "miden-bridge-portal",
+    activityId: activity.id,
+    route: providers[activity.provider].label,
+    provider: activity.provider,
+    direction: activity.mode,
+    status: activity.status,
+    statusLabel: statusLabel(activity.status),
+    eta: activity.eta,
+    amount: `${activity.amount} ${activity.asset}`,
+    timestamps: prune({
+      updatedAt: activity.updatedAt
+        ? new Date(activity.updatedAt).toISOString()
+        : undefined,
+      lastCheckedAt: extra.lastCheckedAt
+        ? new Date(extra.lastCheckedAt).toISOString()
+        : undefined,
+      capturedAt: new Date().toISOString(),
+    }),
+    addresses: prune({
+      destination: activity.destination,
+      bridgeDestinationAddress: activity.bridgeDestinationAddress,
+      midenAccountHex: activity.midenAccountHex,
+      epochSponsor: activity.epochSponsor,
+      evmAddress: activity.evmAddress,
+      midenAccount: activity.midenAccount,
+    }),
+    transactions: prune({
+      sourceTxHash: activity.sourceTxHash,
+      destinationTxHash: activity.destinationTxHash,
+      midenTxId: activity.midenTxId,
+      claimTxHash: activity.claimTxHash,
+      depositCount: activity.depositCount,
+      epochIntentNonce: activity.epochIntentNonce,
+    }),
+    lastMonitorError: extra.monitorError || undefined,
+  };
+}
+
 function normalizeActivity(activity: Activity): Activity {
   const legacyMode = activity.mode as FlowMode | "deposit" | "withdraw";
   const mode: FlowMode = legacyMode === "deposit" ? "receive" : legacyMode === "withdraw" ? "send" : legacyMode;
