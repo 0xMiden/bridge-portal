@@ -6,7 +6,10 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { type AgglayerDepositStatus } from "../lib/agglayer";
 import { buildAgglayerClaimTransaction } from "../lib/agglayer-claim";
-import { findClaimableMidenToEvmDeposit } from "../lib/agglayer-status";
+import {
+  findClaimableMidenToEvmDeposit,
+  findMidenToEvmDeposit,
+} from "../lib/agglayer-status";
 import {
   agglayerPollMs,
   type BridgeMonitorObservation,
@@ -472,19 +475,23 @@ export function ActivityDetail({ id }: { id: string }) {
     let cancelled = false;
     const activityId = activity.id;
     const destination = activity.destination as string; // guarded by isSepoliaAddress above
+    const knownDepositCount = activity.depositCount;
 
     // Direct against the public bridge indexer (no local backend proxy): the
-    // deposit is discoverable by its Sepolia destination address, so readiness
-    // + deposit_cnt come straight from the claimable row.
+    // deposit is discoverable by its Sepolia destination address. Track the exit
+    // through its whole lifecycle (not just the claimable window) so we detect
+    // the gateway auto-claim — `ready_for_claim` flips false once claimed, but
+    // `claim_tx_hash` is populated, which settles the send automatically.
     async function pollClaimReadiness() {
       try {
-        const deposit = await findClaimableMidenToEvmDeposit(destination);
+        const deposit = await findMidenToEvmDeposit(destination, knownDepositCount);
         if (cancelled) return;
         observeActivity(activityId, {
           checkedAt: "Just now",
           claimPlan: {
-            readyForClaim: Boolean(deposit),
+            readyForClaim: Boolean(deposit?.ready_for_claim),
             depositCount: deposit?.deposit_cnt,
+            claimTxHash: deposit?.claim_tx_hash || undefined,
           },
         });
       } catch (error) {
