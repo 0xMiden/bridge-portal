@@ -22,7 +22,11 @@ export class BridgePage {
       .getByText(route, { exact: false })
       .first()
       .click();
-    await expect(this.page.locator(".route-trigger")).toContainText(route);
+    // Case-insensitive: the semantic route name ("AggLayer") differs from the
+    // UI label casing ("Agglayer", lowercase L).
+    await expect(this.page.locator(".route-trigger")).toContainText(
+      new RegExp(route, "i"),
+    );
   }
 
   async setMode(mode: Mode): Promise<void> {
