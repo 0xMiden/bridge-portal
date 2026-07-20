@@ -127,7 +127,7 @@ export function deriveMonitoredActivity(activity: Activity, observation: BridgeM
         return {
           ...shared,
           status: "complete",
-          eta: "Delivered — claim in your Miden wallet",
+          eta: "Delivered — claim in your Bread wallet",
           // The Agglayer destination claim tx = the Miden note-creation tx.
           midenTxId: deposit.claim_tx_hash ?? next.midenTxId,
           destinationTxHash: deposit.claim_tx_hash ?? next.destinationTxHash,
