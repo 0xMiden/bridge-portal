@@ -836,6 +836,12 @@ a {
   font-weight: 720;
   text-overflow: ellipsis;
   white-space: nowrap;
+  /* The amount input's wide, right-aligned <label> (next grid column) overflows
+     left and, being transparent + later in the DOM, paints over this line and
+     eats clicks on the "Show balance" button. Lift the balance line above it so
+     its controls stay clickable. */
+  position: relative;
+  z-index: 1;
 }
 
 .balance-show {
