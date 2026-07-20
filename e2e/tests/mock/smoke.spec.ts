@@ -22,9 +22,10 @@ test("bridge boots, wallets connect, routes switch", async ({ bridge, steps, pag
 
   await steps.step("route switch AggLayer <-> Epoch", async () => {
     await bridge.setRoute("Epoch");
-    await expect(page.locator(".route-trigger")).toContainText("Epoch");
+    await expect(page.locator(".route-trigger")).toContainText(/Epoch/i);
     await bridge.setRoute("AggLayer");
-    await expect(page.locator(".route-trigger")).toContainText("AggLayer");
+    // UI label is "Agglayer" (lowercase L) — match case-insensitively.
+    await expect(page.locator(".route-trigger")).toContainText(/AggLayer/i);
   });
 
   await steps.step("quote summary shows a network fee", async () => {
