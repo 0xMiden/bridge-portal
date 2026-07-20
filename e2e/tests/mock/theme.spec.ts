@@ -1,5 +1,129 @@
 import { expect, test } from "../../fixtures/bridge";
 
+test("dark mode applies semantic bridge surfaces and primary contrast", async ({
+  bridge,
+  page,
+}) => {
+  await bridge.waitForReady();
+
+  await page.getByRole("button", { name: "Theme: System" }).click();
+  await page.getByRole("menuitemradio", { name: "Dark" }).click();
+  await expect(page.locator("html")).toHaveClass(/\bdark\b/);
+
+  const colors = await page.evaluate(() => {
+    const resolvedToken = (token: string) => {
+      const probe = document.createElement("span");
+      probe.style.color = `var(${token})`;
+      document.body.append(probe);
+      const color = getComputedStyle(probe).color;
+      probe.remove();
+      return color;
+    };
+    const resolvedStyles = (selector: string) => {
+      const element = document.querySelector(selector);
+      if (!(element instanceof HTMLElement)) {
+        throw new Error(`Missing element: ${selector}`);
+      }
+      const styles = getComputedStyle(element);
+      return {
+        background: styles.backgroundColor,
+        foreground: styles.color,
+      };
+    };
+
+    return {
+      tokens: {
+        background: resolvedToken("--background"),
+        surface: resolvedToken("--surface"),
+        surfaceElevated: resolvedToken("--surface-elevated"),
+        surfaceMuted: resolvedToken("--surface-muted"),
+        surfaceStrong: resolvedToken("--surface-strong"),
+        foreground: resolvedToken("--foreground"),
+        mutedForeground: resolvedToken("--muted-foreground"),
+        faintForeground: resolvedToken("--faint-foreground"),
+        border: resolvedToken("--border"),
+        borderStrong: resolvedToken("--border-strong"),
+        primary: resolvedToken("--primary"),
+        primaryForeground: resolvedToken("--primary-foreground"),
+        accent: resolvedToken("--accent"),
+      },
+      card: resolvedStyles(".swap-card"),
+      routeControl: resolvedStyles(".route-trigger"),
+      walletMenu: resolvedStyles(".wallet-actions-menu"),
+      primaryButton: resolvedStyles(".swap-card > .primary-button"),
+    };
+  });
+
+  expect(colors.tokens).toEqual({
+    background: "rgb(13, 18, 16)",
+    surface: "rgb(20, 27, 24)",
+    surfaceElevated: "rgb(25, 33, 30)",
+    surfaceMuted: "rgb(27, 37, 33)",
+    surfaceStrong: "rgb(36, 48, 43)",
+    foreground: "rgb(241, 246, 243)",
+    mutedForeground: "rgb(161, 176, 168)",
+    faintForeground: "rgb(113, 128, 120)",
+    border: "rgba(241, 246, 243, 0.12)",
+    borderStrong: "rgba(241, 246, 243, 0.21)",
+    primary: "rgb(241, 246, 243)",
+    primaryForeground: "rgb(13, 18, 16)",
+    accent: "rgb(255, 106, 42)",
+  });
+  expect(colors.card.background).toBe(colors.tokens.surface);
+  expect(colors.routeControl.background).toBe(colors.tokens.surface);
+  expect(colors.walletMenu.background).toBe(colors.tokens.surfaceElevated);
+  expect(colors.primaryButton.background).toBe(colors.tokens.primary);
+  expect(colors.primaryButton.foreground).toBe(colors.tokens.primaryForeground);
+  expect(colors.primaryButton.foreground).not.toBe(
+    colors.primaryButton.background,
+  );
+
+  await page.getByRole("button", { name: "Theme: Dark" }).click();
+  await page.getByRole("menuitemradio", { name: "Light" }).click();
+  await expect(page.locator("html")).not.toHaveClass(/\bdark\b/);
+
+  const lightTokens = await page.evaluate(() => {
+    const names = [
+      "background",
+      "surface",
+      "surface-muted",
+      "surface-strong",
+      "foreground",
+      "muted-foreground",
+      "faint-foreground",
+      "border",
+      "border-strong",
+      "primary",
+      "primary-foreground",
+      "accent",
+    ];
+
+    return names.map((name) => {
+      const probe = document.createElement("span");
+      probe.style.color = `var(--${name})`;
+      document.body.append(probe);
+      const color = getComputedStyle(probe).color;
+      probe.remove();
+      return color;
+    });
+  });
+
+  expect(lightTokens).toEqual([
+    "rgb(244, 247, 245)",
+    "rgb(255, 255, 255)",
+    "rgb(237, 243, 240)",
+    "rgb(226, 236, 231)",
+    "rgb(23, 32, 28)",
+    "rgb(96, 112, 105)",
+    "rgb(137, 149, 143)",
+    "rgba(23, 32, 28, 0.11)",
+    "rgba(23, 32, 28, 0.19)",
+    "rgb(23, 32, 28)",
+    "rgb(255, 255, 255)",
+    "rgb(255, 85, 0)",
+  ]);
+});
+
 test("theme choice is keyboard accessible, persistent, and system-aware", async ({
   bridge,
   page,
