@@ -26,6 +26,7 @@ import {
   useMemo,
   useRef,
   useState,
+  useSyncExternalStore,
 } from "react";
 import { formatEther, parseUnits } from "viem";
 import {
@@ -62,6 +63,7 @@ import {
 import { sepoliaGasUnitsFor, useSepoliaGasEstimate } from "../lib/sepolia-gas";
 import { RelativeTime } from "./RelativeTime";
 import { TokenSelect } from "./TokenSelect";
+import { ThemeToggle } from "./ThemeToggle";
 import type {
   MidenRouteBalances,
   ResolvedEthAsset,
@@ -77,6 +79,22 @@ import {
 import { type EvmProvider, ensureSepolia } from "../lib/evm-wallet";
 // Type-only import — erased at build, so the eager-WASM adapter never reaches SSR.
 import type { MidenFiWalletContextState } from "@miden-sdk/miden-wallet-adapter-react";
+
+const MOBILE_ROUTE_QUERY = "(max-width: 640px)";
+
+function subscribeToMobileRouteQuery(onChange: () => void) {
+  const query = window.matchMedia(MOBILE_ROUTE_QUERY);
+  query.addEventListener("change", onChange);
+  return () => query.removeEventListener("change", onChange);
+}
+
+function getMobileRouteSnapshot() {
+  return window.matchMedia(MOBILE_ROUTE_QUERY).matches;
+}
+
+function getServerMobileRouteSnapshot() {
+  return false;
+}
 
 // Sepolia USDC for the Epoch route (Epoch's SIO route is USDC<->USDC). This test
 // token reports 18 decimals (not the usual 6). Mint it on the Epoch dashboard.
@@ -264,6 +282,11 @@ function compactTokenAmount(value: string) {
 }
 
 export function BridgeExperience() {
+  const mobileRouteSheet = useSyncExternalStore(
+    subscribeToMobileRouteQuery,
+    getMobileRouteSnapshot,
+    getServerMobileRouteSnapshot,
+  );
   const router = useRouter();
   const { open } = useAppKit();
   const { address, isConnected } = useAppKitAccount();
@@ -303,12 +326,16 @@ export function BridgeExperience() {
   // Reveals the full destination value in the preflight (a long Miden id / 0x
   // address is shortened by default, with an affordance to inspect it in full).
   const [showFullDestination, setShowFullDestination] = useState(false);
+  const [preflightDestinationCopied, setPreflightDestinationCopied] =
+    useState(false);
   // Whether the live Epoch quote is currently recomputing — lifted from
   // EpochQuotePreview so the CTA can show "Fetching quote…" instead of "Review".
   const [epochQuoteLoading, setEpochQuoteLoading] = useState(false);
   const destinationInputRef = useRef<HTMLInputElement>(null);
   const walletClusterRef = useRef<HTMLDivElement>(null);
   const preflightConfirmRef = useRef<HTMLButtonElement>(null);
+  const primaryActionRef = useRef<HTMLButtonElement>(null);
+  const preflightPreviousFocusRef = useRef<HTMLElement | null>(null);
   // Prefill the destination input with the connected wallet once per direction;
   // cleared in selectMode so switching modes re-prefills for the new side.
   const destinationPrefilledRef = useRef(false);
@@ -345,6 +372,7 @@ export function BridgeExperience() {
   const evmMenuRef = useRef<HTMLDivElement>(null);
   const [routeMenuOpen, setRouteMenuOpen] = useState(false);
   const routeMenuRef = useRef<HTMLDivElement>(null);
+  const routeTriggerRef = useRef<HTMLButtonElement>(null);
 
   const copy = modes[mode];
   const providerCopy = providers[provider];
@@ -589,11 +617,11 @@ export function BridgeExperience() {
 
     function closeMenu(event: MouseEvent | PointerEvent) {
       if (!routeMenuRef.current?.contains(event.target as Node))
-        setRouteMenuOpen(false);
+        closeRouteMenu(false);
     }
 
     function closeOnEscape(event: KeyboardEvent) {
-      if (event.key === "Escape") setRouteMenuOpen(false);
+      if (event.key === "Escape") closeRouteMenu();
     }
 
     document.addEventListener("pointerdown", closeMenu);
@@ -603,6 +631,45 @@ export function BridgeExperience() {
       document.removeEventListener("keydown", closeOnEscape);
     };
   }, [routeMenuOpen]);
+
+  // Mobile route and review surfaces freeze the page behind them. Preserve the
+  // complete inline body state and scroll offset so closing (or unmounting)
+  // returns the host page to exactly the state in which it was opened.
+  useEffect(() => {
+    if (!routeMenuOpen && !showPreflight) return;
+    // The desktop route control remains an anchored popover, not an overlay.
+    if (routeMenuOpen && !showPreflight && !mobileRouteSheet) return;
+    const body = document.body;
+    const previous = {
+      overflow: body.style.overflow,
+      position: body.style.position,
+      top: body.style.top,
+      left: body.style.left,
+      width: body.style.width,
+      overlayOpen: body.dataset.overlayOpen,
+      scrollX: window.scrollX,
+      scrollY: window.scrollY,
+    };
+    body.dataset.overlayOpen = "true";
+    body.style.overflow = "hidden";
+    if (mobileRouteSheet) {
+      body.style.position = "fixed";
+      body.style.top = `${-previous.scrollY}px`;
+      body.style.left = `${-previous.scrollX}px`;
+      body.style.width = "100%";
+    }
+
+    return () => {
+      body.style.overflow = previous.overflow;
+      body.style.position = previous.position;
+      body.style.top = previous.top;
+      body.style.left = previous.left;
+      body.style.width = previous.width;
+      if (previous.overlayOpen === undefined) delete body.dataset.overlayOpen;
+      else body.dataset.overlayOpen = previous.overlayOpen;
+      if (mobileRouteSheet) window.scrollTo(previous.scrollX, previous.scrollY);
+    };
+  }, [mobileRouteSheet, routeMenuOpen, showPreflight]);
 
   // Move focus onto the active option when the listbox opens so arrow-key
   // navigation and Enter/Space selection work without a mouse.
@@ -645,6 +712,25 @@ export function BridgeExperience() {
     else if (event.key === "Home") nextIndex = 0;
     else if (event.key === "End") nextIndex = options.length - 1;
     options[nextIndex]?.focus();
+  }
+
+  function handleRouteDialogKeyDown(event: ReactKeyboardEvent<HTMLDivElement>) {
+    if (event.key !== "Tab" || !mobileRouteSheet) return;
+    const focusable = Array.from(
+      event.currentTarget.querySelectorAll<HTMLElement>(
+        'button:not([disabled]), [href], input:not([disabled]), [tabindex]:not([tabindex="-1"])',
+      ),
+    );
+    if (focusable.length === 0) return;
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    if (event.shiftKey && document.activeElement === first) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault();
+      first.focus();
+    }
   }
 
   useEffect(() => {
@@ -909,7 +995,13 @@ export function BridgeExperience() {
 
   function selectRouteOption(nextProvider: BridgeProvider) {
     selectProvider(nextProvider);
+    closeRouteMenu();
+  }
+
+  function closeRouteMenu(restoreFocus = true) {
     setRouteMenuOpen(false);
+    if (restoreFocus)
+      window.requestAnimationFrame(() => routeTriggerRef.current?.focus());
   }
 
   async function openWalletModal() {
@@ -987,7 +1079,13 @@ export function BridgeExperience() {
         ".wallet-pill",
       );
     const midenPill = pills?.[pills.length - 1];
-    midenPill?.scrollIntoView({ block: "center", behavior: "smooth" });
+    const reducedMotion = window.matchMedia(
+      "(prefers-reduced-motion: reduce)",
+    ).matches;
+    midenPill?.scrollIntoView({
+      block: "center",
+      behavior: reducedMotion ? "auto" : "smooth",
+    });
     midenPill?.focus();
   }
 
@@ -1007,6 +1105,11 @@ export function BridgeExperience() {
       case "review":
         setBridgeError("");
         setShowFullDestination(false);
+        setPreflightDestinationCopied(false);
+        preflightPreviousFocusRef.current =
+          document.activeElement instanceof HTMLElement
+            ? document.activeElement
+            : primaryActionRef.current;
         setShowPreflight(true);
         return;
       default:
@@ -1019,6 +1122,9 @@ export function BridgeExperience() {
   function cancelPreflight() {
     // Close the review with all entered data intact (form state is untouched).
     setShowPreflight(false);
+    const focusTarget =
+      preflightPreviousFocusRef.current ?? primaryActionRef.current;
+    window.requestAnimationFrame(() => focusTarget?.focus());
   }
 
   function confirmPreflight() {
@@ -1026,18 +1132,52 @@ export function BridgeExperience() {
     void submitTransfer();
   }
 
+  async function copyPreflightDestination() {
+    try {
+      await navigator.clipboard.writeText(previewDestination);
+      setPreflightDestinationCopied(true);
+      window.setTimeout(() => setPreflightDestinationCopied(false), 2_000);
+    } catch {
+      // Clipboard access may be blocked. Keep the action available for retry.
+    }
+  }
+
   // While the preflight is open, focus its confirm action and let Escape cancel
   // it — keyboard parity with the rest of the flow.
   useEffect(() => {
     if (!showPreflight) return;
-    preflightConfirmRef.current?.focus();
+    const focusFrame = window.requestAnimationFrame(() =>
+      preflightConfirmRef.current?.focus(),
+    );
 
     function closeOnEscape(event: KeyboardEvent) {
-      if (event.key === "Escape") setShowPreflight(false);
+      if (event.key === "Escape") cancelPreflight();
     }
     document.addEventListener("keydown", closeOnEscape);
-    return () => document.removeEventListener("keydown", closeOnEscape);
+    return () => {
+      window.cancelAnimationFrame(focusFrame);
+      document.removeEventListener("keydown", closeOnEscape);
+    };
   }, [showPreflight]);
+
+  function handlePreflightKeyDown(event: ReactKeyboardEvent<HTMLDivElement>) {
+    if (event.key !== "Tab") return;
+    const focusable = Array.from(
+      event.currentTarget.querySelectorAll<HTMLElement>(
+        'button:not([disabled]), [href], input:not([disabled]), [tabindex]:not([tabindex="-1"])',
+      ),
+    );
+    if (focusable.length === 0) return;
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    if (event.shiftKey && document.activeElement === first) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault();
+      first.focus();
+    }
+  }
 
   async function submitTransfer() {
     setBridgeError("");
@@ -1390,11 +1530,13 @@ export function BridgeExperience() {
           <span>Bridge</span>
         </Link>
 
-        <div
-          className="wallet-cluster"
-          aria-label="Connected wallets"
-          ref={walletClusterRef}
-        >
+        <div className="topbar-actions">
+          <ThemeToggle />
+          <div
+            className="wallet-cluster"
+            aria-label="Connected wallets"
+            ref={walletClusterRef}
+          >
           <div className="wallet-menu-root" ref={evmMenuRef}>
             <button
               className={`wallet-button wallet-pill ${walletConnected ? "connected" : ""} ${wrongNetwork ? "wrong-network" : ""}`}
@@ -1496,7 +1638,8 @@ export function BridgeExperience() {
             ) : null}
           </div>
 
-          <MidenWalletButton onStateChange={handleMidenWalletState} />
+            <MidenWalletButton onStateChange={handleMidenWalletState} />
+          </div>
         </div>
       </header>
       {midenWallet.error ? (
@@ -1507,12 +1650,18 @@ export function BridgeExperience() {
         <section className="swap-card" aria-label="Miden bridge">
           <div className="swap-card-top">
             <h1>Bridge</h1>
-            <div className="route-menu-root" ref={routeMenuRef}>
+            <div
+              className="route-menu-root"
+              data-open={routeMenuOpen}
+              ref={routeMenuRef}
+            >
               <button
                 className="route-trigger"
                 type="button"
+                ref={routeTriggerRef}
                 aria-expanded={routeMenuOpen}
-                aria-haspopup="listbox"
+                aria-haspopup={mobileRouteSheet ? "dialog" : "listbox"}
+                aria-controls="bridge-route-listbox"
                 onClick={() => setRouteMenuOpen((open) => !open)}
               >
                 <span>Route</span>
@@ -1521,12 +1670,27 @@ export function BridgeExperience() {
               </button>
 
               {routeMenuOpen ? (
-                <div
-                  className="route-options-menu open"
-                  role="listbox"
-                  aria-label="Bridge route"
-                  onKeyDown={handleRouteMenuKeyDown}
-                >
+                <>
+                  <button
+                    type="button"
+                    className="route-sheet-backdrop"
+                    aria-label="Close route menu"
+                    onClick={() => closeRouteMenu()}
+                  />
+                  <div
+                    className="route-options-layer"
+                    role={mobileRouteSheet ? "dialog" : undefined}
+                    aria-modal={mobileRouteSheet ? "true" : undefined}
+                    aria-label={mobileRouteSheet ? "Choose bridge route" : undefined}
+                    onKeyDown={handleRouteDialogKeyDown}
+                  >
+                    <div
+                      id="bridge-route-listbox"
+                      className="route-options-menu route-options-list open"
+                      role="listbox"
+                      aria-label="Bridge route"
+                      onKeyDown={handleRouteMenuKeyDown}
+                    >
                   {(Object.keys(providers) as BridgeProvider[]).map((key) => {
                     const option = providers[key];
                     const c = option.comparison;
@@ -1566,8 +1730,10 @@ export function BridgeExperience() {
                         ) : null}
                       </button>
                     );
-                  })}
-                </div>
+                    })}
+                    </div>
+                  </div>
+                </>
               ) : null}
             </div>
           </div>
@@ -1626,7 +1792,7 @@ export function BridgeExperience() {
               />
               <TokenSelect
                 provider={provider}
-                onSelectProvider={selectRouteOption}
+                onSelectProvider={selectProvider}
               />
             </label>
           </div>
@@ -1667,7 +1833,7 @@ export function BridgeExperience() {
               </strong>
               <TokenSelect
                 provider={provider}
-                onSelectProvider={selectRouteOption}
+                onSelectProvider={selectProvider}
               />
             </label>
           </div>
@@ -1712,25 +1878,33 @@ export function BridgeExperience() {
             <span>{routeNote}</span>
           </div>
 
-          <button
-            className="primary-button"
-            type="button"
-            onClick={handlePrimaryAction}
-            disabled={cta.disabled}
-          >
-            {cta.label}
-            {isSubmitting ? (
-              <RefreshCcw size={18} className="animate-spin" aria-hidden="true" />
-            ) : (
-              <ArrowRight size={18} aria-hidden="true" />
-            )}
-          </button>
+          <div className="primary-action-dock">
+            <button
+              className="primary-button"
+              type="button"
+              ref={primaryActionRef}
+              onClick={handlePrimaryAction}
+              disabled={cta.disabled}
+            >
+              {cta.label}
+              {isSubmitting ? (
+                <RefreshCcw
+                  size={18}
+                  className="animate-spin"
+                  aria-hidden="true"
+                />
+              ) : (
+                <ArrowRight size={18} aria-hidden="true" />
+              )}
+            </button>
+          </div>
           {showPreflight ? (
             <div
               className="preflight-overlay"
               role="dialog"
               aria-modal="true"
               aria-label={`Review ${mode === "receive" ? "receive" : "send"}`}
+              onKeyDown={handlePreflightKeyDown}
               onClick={(event) => {
                 // A backdrop click cancels; clicks inside the panel don't bubble.
                 if (event.target === event.currentTarget) cancelPreflight();
@@ -1752,14 +1926,15 @@ export function BridgeExperience() {
                   </button>
                 </div>
 
-                <div className="preflight-route">
-                  <strong>{copy.from}</strong>
-                  <ArrowRight size={15} aria-hidden="true" />
-                  <strong>{copy.to}</strong>
-                  <span className="preflight-testnet">Testnet</span>
-                </div>
+                <div className="preflight-body">
+                  <div className="preflight-route">
+                    <strong>{copy.from}</strong>
+                    <ArrowRight size={15} aria-hidden="true" />
+                    <strong>{copy.to}</strong>
+                    <span className="preflight-testnet">Testnet</span>
+                  </div>
 
-                <dl className="preflight-rows">
+                  <dl className="preflight-rows">
                   <div>
                     <dt>You send</dt>
                     <dd>
@@ -1780,8 +1955,10 @@ export function BridgeExperience() {
                     <dt>Destination</dt>
                     <dd className="preflight-destination">
                       <span
+                        id="preflight-destination-value"
                         className={showFullDestination ? "full" : undefined}
                         title={previewDestination}
+                        aria-label={`Destination: ${previewDestination}`}
                       >
                         {showFullDestination
                           ? previewDestination
@@ -1791,6 +1968,11 @@ export function BridgeExperience() {
                         <button
                           type="button"
                           className="preflight-inspect"
+                          aria-controls="preflight-destination-value"
+                          aria-expanded={showFullDestination}
+                          aria-label={`${
+                            showFullDestination ? "Hide" : "Show full"
+                          } destination`}
                           onClick={() =>
                             setShowFullDestination((shown) => !shown)
                           }
@@ -1798,6 +1980,19 @@ export function BridgeExperience() {
                           {showFullDestination ? "Hide" : "Show full"}
                         </button>
                       ) : null}
+                      <button
+                        type="button"
+                        className="preflight-inspect"
+                        aria-label="Copy destination"
+                        onClick={copyPreflightDestination}
+                      >
+                        {preflightDestinationCopied ? (
+                          <Check size={14} aria-hidden="true" />
+                        ) : (
+                          <Copy size={14} aria-hidden="true" />
+                        )}
+                        {preflightDestinationCopied ? "Copied" : "Copy"}
+                      </button>
                     </dd>
                   </div>
                   <div>
@@ -1816,9 +2011,10 @@ export function BridgeExperience() {
                     <dt>Provider fee</dt>
                     <dd>{quote.bridgeFee}</dd>
                   </div>
-                </dl>
+                  </dl>
 
-                <p className="preflight-note">{routeNote}</p>
+                  <p className="preflight-note">{routeNote}</p>
+                </div>
 
                 <div className="preflight-actions">
                   <button

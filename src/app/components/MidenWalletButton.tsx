@@ -236,7 +236,6 @@ function MidenWalletButtonInner({
       setBalanceText("Connected");
       setNoteSyncStatus("Refresh to sync");
     });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [wallet.connected, address]);
 
   useEffect(() => {

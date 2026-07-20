@@ -1,33 +1,93 @@
 @import "tailwindcss";
 
 :root {
-  --background: #f7f4ee;
-  --foreground: #171511;
+  color-scheme: light;
+  --background: #f4f7f5;
   --surface: #ffffff;
-  --surface-muted: #f1eee7;
-  --surface-strong: #ebe6dc;
-  --border: rgba(23, 21, 17, 0.1);
-  --border-strong: rgba(23, 21, 17, 0.18);
-  --muted-foreground: #706b61;
-  --faint-foreground: #9a9286;
+  --surface-elevated: #ffffff;
+  --surface-muted: #edf3f0;
+  --surface-strong: #e2ece7;
+  --foreground: #17201c;
+  --muted-foreground: #607069;
+  --faint-foreground: #89958f;
+  --border: rgba(23, 32, 28, 0.11);
+  --border-strong: rgba(23, 32, 28, 0.19);
+  --primary: #17201c;
+  --primary-foreground: #ffffff;
   --accent: #ff5500;
   --accent-soft: rgba(255, 85, 0, 0.1);
+  --accent-border: rgba(255, 85, 0, 0.32);
+  --accent-ring: rgba(255, 85, 0, 0.24);
+  --accent-foreground: #a43c00;
   --success: #0f9f6e;
   --success-soft: #e7f7ef;
+  --success-border: rgba(15, 159, 110, 0.32);
+  --success-foreground: #086546;
   --warning: #a66b00;
   --warning-soft: #fff3d8;
+  --warning-border: rgba(166, 107, 0, 0.32);
+  --warning-foreground: #704600;
   --danger: #c24141;
   --danger-soft: #ffe8e8;
-  --radius-sm: 8px;
-  --radius-md: 12px;
-  --radius-lg: 18px;
+  --danger-border: rgba(194, 65, 65, 0.3);
+  --danger-foreground: #9f3030;
+  --overlay: rgba(13, 18, 16, 0.38);
+  --scrim: rgba(13, 18, 16, 0.48);
+  --inset-highlight: rgba(255, 255, 255, 0.72);
+  --inset-border: rgba(23, 32, 28, 0.06);
+  --on-accent: #ffffff;
+  --on-status: #ffffff;
+  --radius-sm: 10px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
   --duration-fast: 140ms;
   --duration-base: 220ms;
   --duration-slow: 520ms;
   --ease-standard: cubic-bezier(0.16, 1, 0.3, 1);
   --ease-press: cubic-bezier(0.2, 0, 0, 1);
-  --shadow-card: 0 18px 44px rgba(68, 54, 33, 0.1);
-  --shadow-raised: 0 4px 12px rgba(68, 54, 33, 0.08);
+  --shadow-card: 0 18px 44px rgba(23, 32, 28, 0.08);
+  --shadow-raised: 0 4px 12px rgba(23, 32, 28, 0.08);
+  --shadow-control: inset 0 1px 0 var(--inset-highlight);
+}
+
+.dark {
+  color-scheme: dark;
+  --background: #0d1210;
+  --surface: #141b18;
+  --surface-elevated: #19211e;
+  --surface-muted: #1b2521;
+  --surface-strong: #24302b;
+  --foreground: #f1f6f3;
+  --muted-foreground: #a1b0a8;
+  --faint-foreground: #718078;
+  --border: rgba(241, 246, 243, 0.12);
+  --border-strong: rgba(241, 246, 243, 0.21);
+  --primary: #f1f6f3;
+  --primary-foreground: #0d1210;
+  --accent: #ff6a2a;
+  --accent-soft: rgba(255, 106, 42, 0.15);
+  --accent-border: rgba(255, 106, 42, 0.42);
+  --accent-ring: rgba(255, 106, 42, 0.3);
+  --accent-foreground: #ff9b73;
+  --success: #54d6a5;
+  --success-soft: rgba(84, 214, 165, 0.14);
+  --success-border: rgba(84, 214, 165, 0.38);
+  --success-foreground: #7de2bb;
+  --warning: #f4b942;
+  --warning-soft: rgba(244, 185, 66, 0.15);
+  --warning-border: rgba(244, 185, 66, 0.4);
+  --warning-foreground: #f6c968;
+  --danger: #ff7a7a;
+  --danger-soft: rgba(255, 122, 122, 0.14);
+  --danger-border: rgba(255, 122, 122, 0.38);
+  --danger-foreground: #ff9999;
+  --overlay: rgba(0, 0, 0, 0.58);
+  --scrim: rgba(0, 0, 0, 0.68);
+  --inset-highlight: rgba(255, 255, 255, 0.06);
+  --inset-border: rgba(241, 246, 243, 0.08);
+  --shadow-card: 0 18px 44px rgba(0, 0, 0, 0.24);
+  --shadow-raised: 0 6px 18px rgba(0, 0, 0, 0.3);
+  --shadow-control: inset 0 1px 0 var(--inset-highlight);
 }
 
 @theme inline {
@@ -44,9 +104,7 @@
 html,
 body {
   min-height: 100%;
-  background:
-    radial-gradient(circle at top, rgba(255, 85, 0, 0.08), transparent 34rem),
-    var(--background);
+  background: var(--background);
   color: var(--foreground);
 }
 
@@ -89,6 +147,7 @@ a {
 
 ::selection {
   background: var(--accent-soft);
+  color: var(--foreground);
 }
 
 .app-shell,
@@ -108,6 +167,132 @@ a {
   min-height: 64px;
 }
 
+.topbar-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  min-width: 0;
+}
+
+.detail-topbar-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.theme-menu-root {
+  position: relative;
+  display: inline-flex;
+  flex: 0 0 auto;
+}
+
+.theme-trigger {
+  display: inline-grid;
+  place-items: center;
+  width: 44px;
+  min-width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  color: var(--muted-foreground);
+  box-shadow: var(--shadow-control);
+  transition:
+    opacity var(--duration-fast) var(--ease-standard),
+    transform var(--duration-fast) var(--ease-press);
+}
+
+.theme-trigger:active {
+  transform: scale(0.97);
+}
+
+.theme-trigger:hover,
+.theme-trigger[aria-expanded="true"] {
+  border-color: var(--border-strong);
+  background: var(--surface-muted);
+  color: var(--foreground);
+}
+
+.theme-trigger-placeholder {
+  width: 18px;
+  height: 18px;
+}
+
+.theme-menu {
+  position: absolute;
+  z-index: 80;
+  top: calc(100% + 8px);
+  right: 0;
+  display: grid;
+  min-width: 168px;
+  padding: 5px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface-elevated);
+  box-shadow: var(--shadow-raised);
+  transform-origin: top right;
+  animation: theme-menu-enter 200ms var(--ease-standard) both;
+}
+
+@keyframes theme-menu-enter {
+  from {
+    opacity: 0;
+    transform: translateY(-4px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.theme-menu-item {
+  display: grid;
+  grid-template-columns: 20px 1fr 18px;
+  align-items: center;
+  gap: 9px;
+  min-height: 44px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--foreground);
+  text-align: left;
+}
+
+.theme-menu-item:hover,
+.theme-menu-item:focus-visible {
+  background: var(--surface-muted);
+}
+
+.theme-menu-item:focus-visible {
+  outline-offset: -2px;
+}
+
+.theme-menu-check {
+  justify-self: end;
+  color: var(--accent);
+  opacity: 0;
+}
+
+.theme-menu-check[data-visible="true"] {
+  opacity: 1;
+}
+
 .brand {
   display: inline-flex;
   align-items: center;
@@ -119,6 +304,10 @@ a {
 .brand img {
   width: 112px;
   max-width: 34vw;
+}
+
+.dark .brand img {
+  filter: invert(1) hue-rotate(180deg);
 }
 
 .brand span {
@@ -135,9 +324,9 @@ a {
 .destination-input input {
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
-  background: rgba(255, 255, 255, 0.78);
+  background: var(--surface);
   color: var(--foreground);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.7);
+  box-shadow: var(--shadow-control);
 }
 
 .wallet-button,
@@ -166,12 +355,8 @@ a {
 .swap-box,
 .timeline-step {
   transition:
-    border-color var(--duration-base) var(--ease-standard),
-    background-color var(--duration-base) var(--ease-standard),
-    box-shadow var(--duration-base) var(--ease-standard),
-    color var(--duration-base) var(--ease-standard),
-    opacity var(--duration-base) var(--ease-standard),
-    transform var(--duration-base) var(--ease-standard);
+    opacity var(--duration-fast) var(--ease-standard),
+    transform var(--duration-fast) var(--ease-press);
 }
 
 .wallet-button:hover,
@@ -241,7 +426,7 @@ a {
   height: 30px;
   border-radius: 999px;
   background: var(--surface-strong);
-  box-shadow: inset 0 0 0 1px rgba(23, 21, 17, 0.06);
+  box-shadow: inset 0 0 0 1px var(--inset-border);
 }
 
 .wallet-avatar-badge {
@@ -299,9 +484,9 @@ a {
 }
 
 .wallet-menu-avatar.pending {
-  border-color: rgba(166, 107, 0, 0.2);
+  border-color: var(--warning-border);
   background: var(--warning-soft);
-  color: var(--warning);
+  color: var(--warning-foreground);
 }
 
 .wallet-copy {
@@ -338,7 +523,7 @@ a {
   height: 6px;
   border-radius: 999px;
   background: var(--faint-foreground);
-  box-shadow: 0 0 0 2px rgba(154, 146, 134, 0.12);
+  box-shadow: 0 0 0 2px var(--inset-border);
 }
 
 .wallet-status-dot.connected {
@@ -348,7 +533,7 @@ a {
 
 .wallet-status-dot.pending {
   background: var(--warning);
-  box-shadow: 0 0 0 2px rgba(166, 107, 0, 0.14);
+  box-shadow: 0 0 0 2px var(--warning-border);
 }
 
 .wallet-balance {
@@ -387,16 +572,16 @@ a {
   width: 268px;
   padding: 8px;
   border: 1px solid var(--border);
-  border-radius: 20px;
-  background: rgba(255, 255, 255, 0.96);
+  border-radius: var(--radius-lg);
+  background: var(--surface-elevated);
   box-shadow: var(--shadow-raised);
   opacity: 0;
   pointer-events: none;
   transform: translateY(-4px) scale(0.98);
   transform-origin: top right;
   transition:
-    opacity var(--duration-fast) var(--ease-standard),
-    transform var(--duration-fast) var(--ease-standard);
+    opacity var(--duration-base) var(--ease-standard),
+    transform var(--duration-base) var(--ease-standard);
 }
 
 .wallet-actions-menu.open {
@@ -455,7 +640,7 @@ a {
   min-height: 40px;
   width: 100%;
   border: 0;
-  border-radius: 12px;
+  border-radius: var(--radius-md);
   background: transparent;
   color: var(--foreground);
   padding: 0 10px;
@@ -501,16 +686,13 @@ a {
 
 .swap-card {
   position: relative;
-  width: min(480px, 100%);
+  width: min(500px, 100%);
   padding: 8px;
-  border: 1px solid rgba(255, 255, 255, 0.82);
-  border-radius: 28px;
-  background: rgba(255, 255, 255, 0.84);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
   box-shadow: var(--shadow-card);
-  transition:
-    box-shadow var(--duration-slow) var(--ease-standard),
-    transform var(--duration-slow) var(--ease-standard);
-  animation: swap-card-enter var(--duration-slow) var(--ease-standard) both;
+  animation: swap-card-enter var(--duration-base) var(--ease-standard) both;
 }
 
 @keyframes swap-card-enter {
@@ -549,10 +731,6 @@ a {
   }
 }
 
-.swap-card:hover {
-  box-shadow: 0 30px 80px rgba(68, 54, 33, 0.14);
-}
-
 .swap-card-top {
   display: flex;
   align-items: center;
@@ -587,10 +765,10 @@ a {
 .route-trigger:focus-visible,
 .destination-input input:focus,
 .swap-box:focus-within {
-  border-color: rgba(255, 85, 0, 0.35);
+  border-color: var(--accent-border);
   box-shadow:
-    0 0 0 4px rgba(255, 85, 0, 0.08),
-    inset 0 1px 0 rgba(255, 255, 255, 0.72);
+    0 0 0 4px var(--accent-ring),
+    var(--shadow-control);
 }
 
 .route-trigger span,
@@ -629,6 +807,14 @@ a {
   transform: rotate(180deg);
 }
 
+.route-options-layer {
+  display: contents;
+}
+
+.route-sheet-backdrop {
+  display: none;
+}
+
 .route-options-menu {
   position: absolute;
   top: calc(100% + 8px);
@@ -643,16 +829,16 @@ a {
   overflow-y: auto;
   padding: 6px;
   border: 1px solid var(--border);
-  border-radius: 18px;
-  background: rgba(255, 255, 255, 0.96);
+  border-radius: var(--radius-lg);
+  background: var(--surface-elevated);
   box-shadow: var(--shadow-raised);
   opacity: 0;
   pointer-events: none;
   transform: translateY(-4px) scale(0.98);
   transform-origin: top right;
   transition:
-    opacity var(--duration-fast) var(--ease-standard),
-    transform var(--duration-fast) var(--ease-standard);
+    opacity var(--duration-base) var(--ease-standard),
+    transform var(--duration-base) var(--ease-standard);
 }
 
 .route-options-menu.open {
@@ -666,7 +852,7 @@ a {
   gap: 7px;
   width: 100%;
   border: 1px solid transparent;
-  border-radius: 13px;
+  border-radius: var(--radius-md);
   background: transparent;
   color: var(--foreground);
   padding: 11px 12px;
@@ -681,15 +867,15 @@ a {
 /* Selected state carries a visible ring + accent border, not a subtle bg
    change alone, so the active route reads at a glance. */
 .route-option.selected {
-  border-color: rgba(255, 85, 0, 0.4);
-  background: rgba(255, 85, 0, 0.06);
-  box-shadow: inset 0 0 0 1px rgba(255, 85, 0, 0.18);
+  border-color: var(--accent-border);
+  background: var(--accent-soft);
+  box-shadow: inset 0 0 0 1px var(--accent-ring);
 }
 
 .route-option:focus-visible {
   outline: none;
-  border-color: rgba(255, 85, 0, 0.5);
-  box-shadow: 0 0 0 3px rgba(255, 85, 0, 0.14);
+  border-color: var(--accent-border);
+  box-shadow: 0 0 0 3px var(--accent-ring);
 }
 
 .route-option.disabled {
@@ -731,8 +917,18 @@ a {
 }
 
 .route-tag.testnet {
-  background: rgba(255, 85, 0, 0.1);
-  color: #a6440a;
+  background: var(--accent-soft);
+  color: var(--accent-foreground);
+}
+
+.route-tag.availability.on {
+  background: var(--surface-strong);
+  color: var(--muted-foreground);
+}
+
+.route-tag.availability.off {
+  background: var(--surface-muted);
+  color: var(--muted-foreground);
 }
 
 .route-check {
@@ -774,7 +970,7 @@ a {
   border-radius: 999px;
   padding: 0 10px;
   /* Borderless soft chips — a faint neutral wash instead of a bordered box. */
-  background: rgba(23, 21, 17, 0.05);
+  background: var(--surface-strong);
   color: var(--muted-foreground);
   font-size: 11px;
   font-weight: 760;
@@ -784,17 +980,17 @@ a {
 
 .route-pill.testnet {
   background: var(--accent-soft);
-  color: var(--accent);
+  color: var(--accent-foreground);
 }
 
 .route-pill.mock {
   background: var(--warning-soft);
-  color: var(--warning);
+  color: var(--warning-foreground);
 }
 
 .route-pill.disabled {
-  background: rgba(23, 21, 17, 0.05);
-  color: var(--faint-foreground);
+  background: var(--surface-muted);
+  color: var(--muted-foreground);
 }
 
 .mode-switch {
@@ -803,7 +999,7 @@ a {
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 4px;
   padding: 4px;
-  border-radius: 16px;
+  border-radius: var(--radius-lg);
   background: var(--surface-muted);
 }
 
@@ -816,9 +1012,9 @@ a {
   bottom: 4px;
   left: 4px;
   width: calc(50% - 6px);
-  border-radius: 12px;
+  border-radius: var(--radius-md);
   background: var(--surface);
-  box-shadow: 0 8px 20px rgba(56, 45, 26, 0.08);
+  box-shadow: var(--shadow-raised);
   transition: transform var(--duration-base) var(--ease-standard);
 }
 
@@ -831,11 +1027,10 @@ a {
   z-index: 1;
   min-height: 38px;
   border: 0;
-  border-radius: 12px;
+  border-radius: var(--radius-md);
   background: transparent;
   color: var(--muted-foreground);
   font-weight: 800;
-  transition: color var(--duration-fast) var(--ease-standard);
 }
 
 .mode-switch button[aria-pressed="true"] {
@@ -854,13 +1049,10 @@ a {
   min-height: 106px;
   margin-top: 7px;
   padding: 14px;
-  border-radius: 22px;
-  /* Crisp opaque-white surface rather than the muddy warm-grey fill — reads as
-     a bright input panel against the translucent card; the border keeps it
-     separated since the card is near-white too. */
-  background: var(--surface);
-  border: 1px solid var(--border);
   position: relative;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface-muted);
 }
 
 /* When a token menu is open, lift its box above the divider + sibling box so
@@ -907,9 +1099,7 @@ a {
   font: inherit;
   font-weight: 760;
   cursor: pointer;
-  transition:
-    background 0.15s ease,
-    border-color 0.15s ease;
+  transition: transform var(--duration-fast) var(--ease-press);
 }
 
 .balance-show:hover {
@@ -927,9 +1117,7 @@ a {
   background: transparent;
   color: var(--muted-foreground);
   cursor: pointer;
-  transition:
-    color 0.15s ease,
-    background 0.15s ease;
+  transition: transform var(--duration-fast) var(--ease-press);
 }
 
 .balance-refresh:hover {
@@ -980,7 +1168,7 @@ a {
   font-size: 11px;
   font-weight: 780;
   cursor: pointer;
-  transition: background 0.15s ease;
+  transition: transform var(--duration-fast) var(--ease-press);
 }
 
 .wallet-chip-switch:hover {
@@ -1030,8 +1218,8 @@ a {
   padding: 4px 9px 4px 4px;
   border: 0;
   border-radius: 999px;
-  background: #fff;
-  box-shadow: 0 1px 3px rgba(23, 21, 17, 0.09);
+  background: var(--surface);
+  box-shadow: var(--shadow-raised);
   color: var(--foreground);
   font-size: 14px;
   font-weight: 800;
@@ -1042,7 +1230,7 @@ a {
 }
 
 .token-select-trigger:hover {
-  box-shadow: 0 2px 6px rgba(23, 21, 17, 0.14);
+  box-shadow: var(--shadow-raised);
 }
 
 .token-select-trigger:active {
@@ -1075,11 +1263,10 @@ a {
   z-index: 40;
   min-width: 216px;
   padding: 6px;
-  border-radius: 16px;
-  background: #fff;
-  box-shadow:
-    0 10px 30px rgba(23, 21, 17, 0.16),
-    0 0 0 1px rgba(23, 21, 17, 0.05);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface-elevated);
+  box-shadow: var(--shadow-raised);
   transform-origin: top right;
   animation: token-menu-in 0.15s cubic-bezier(0.16, 1, 0.3, 1);
 }
@@ -1159,13 +1346,13 @@ a {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  color: var(--muted, #8a8475);
+  color: var(--muted-foreground);
   font-size: 16px;
   font-weight: 600;
 }
 
 .epoch-quote-error {
-  color: #b4541f;
+  color: var(--danger-foreground);
   font-size: 16px;
   font-weight: 600;
 }
@@ -1176,10 +1363,10 @@ a {
   height: 40px;
   margin: -12px auto -20px;
   place-items: center;
-  border: 4px solid rgba(255, 255, 255, 0.84);
+  border: 4px solid var(--surface);
   border-radius: 14px;
   background: var(--accent);
-  color: #ffffff;
+  color: var(--on-accent);
   position: relative;
   z-index: 1;
 }
@@ -1210,10 +1397,10 @@ a {
   min-height: 40px;
   margin: 10px 2px 0;
   padding: 10px 12px;
-  border: 1px solid rgba(194, 65, 65, 0.18);
+  border: 1px solid var(--danger-border);
   border-radius: 14px;
   background: var(--danger-soft);
-  color: var(--danger);
+  color: var(--danger-foreground);
   font-size: 13px;
   font-weight: 720;
   line-height: 1.35;
@@ -1230,8 +1417,8 @@ a {
   margin-top: 8px;
   padding: 6px;
   border: 1px solid var(--border);
-  border-radius: 16px;
-  background: rgba(255, 255, 255, 0.68);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
 }
 
 .wallet-state-strip span {
@@ -1239,7 +1426,7 @@ a {
   gap: 3px;
   min-width: 0;
   padding: 8px;
-  border-radius: 12px;
+  border-radius: var(--radius-md);
   background: var(--surface-muted);
   color: var(--muted-foreground);
   font-size: 12px;
@@ -1260,11 +1447,12 @@ a {
 .quote-summary {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 6px;
+  gap: 0;
   margin-top: 10px;
   padding: 6px;
-  border-radius: 16px;
-  background: var(--surface-muted);
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border);
+  background: transparent;
   color: var(--foreground);
 }
 
@@ -1272,8 +1460,12 @@ a {
   min-width: 0;
   min-height: 46px;
   padding: 7px 8px;
-  border-radius: 12px;
-  background: rgba(255, 255, 255, 0.76);
+  border-radius: 0;
+  background: transparent;
+}
+
+.quote-summary div + div {
+  border-left: 1px solid var(--border);
 }
 
 .quote-summary strong,
@@ -1306,14 +1498,14 @@ a {
 }
 
 .route-disclaimer.mock {
-  border-color: rgba(166, 107, 0, 0.16);
+  border-color: var(--warning-border);
   background: var(--warning-soft);
-  color: #704600;
+  color: var(--warning-foreground);
 }
 
 .route-disclaimer.disabled {
   border-color: var(--border);
-  background: #f0efea;
+  background: var(--surface-muted);
   color: var(--muted-foreground);
 }
 
@@ -1331,16 +1523,15 @@ a {
   min-height: 50px;
   margin-top: 10px;
   border: 0;
-  border-radius: 18px;
-  background: var(--foreground);
-  color: #ffffff;
+  border-radius: var(--radius-md);
+  background: var(--primary);
+  color: var(--primary-foreground);
   padding: 0 16px;
   font-weight: 840;
 }
 
 .primary-button:hover {
   transform: translateY(-0.5px);
-  box-shadow: var(--shadow-raised);
 }
 
 .primary-button:disabled {
@@ -1350,7 +1541,7 @@ a {
 .primary-button svg,
 .back-link svg,
 .explorer-link svg {
-  transition: transform var(--duration-base) var(--ease-standard);
+  transition: transform var(--duration-fast) var(--ease-standard);
 }
 
 .primary-button:hover svg,
@@ -1359,8 +1550,17 @@ a {
   transform: translateX(2px);
 }
 
+.primary-action-dock {
+  margin-top: 10px;
+}
+
+.primary-action-dock .primary-button {
+  position: static;
+  margin-top: 0;
+}
+
 .home-activity {
-  width: min(480px, 100%);
+  width: min(500px, 100%);
   margin-top: 0;
 }
 
@@ -1382,7 +1582,7 @@ a {
   height: 26px;
   place-items: center;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.72);
+  background: var(--surface);
   color: var(--muted-foreground);
   font-size: 12px;
   font-weight: 800;
@@ -1401,7 +1601,7 @@ a {
   min-height: 64px;
   padding: 12px 14px;
   border: 1px solid var(--border);
-  border-radius: 16px;
+  border-radius: var(--radius-lg);
   background: var(--surface);
 }
 
@@ -1449,8 +1649,8 @@ a {
   min-height: 72px;
   padding: 14px;
   border: 1px dashed var(--border-strong);
-  border-radius: 16px;
-  background: rgba(255, 255, 255, 0.52);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
 }
 
 .home-activity-empty span {
@@ -1468,29 +1668,29 @@ a {
 .status-dot.success,
 .status-badge.success {
   background: var(--success-soft);
-  color: #086546;
-  border-color: rgba(15, 159, 110, 0.2);
+  color: var(--success-foreground);
+  border-color: var(--success-border);
 }
 
 .status-dot.warning,
 .status-badge.warning {
   background: var(--warning-soft);
-  color: var(--warning);
-  border-color: rgba(166, 107, 0, 0.18);
+  color: var(--warning-foreground);
+  border-color: var(--warning-border);
 }
 
 .status-dot.danger,
 .status-badge.danger {
   background: var(--danger-soft);
-  color: var(--danger);
-  border-color: rgba(194, 65, 65, 0.18);
+  color: var(--danger-foreground);
+  border-color: var(--danger-border);
 }
 
 .status-dot.active,
 .status-badge.active {
   background: var(--accent-soft);
-  color: #a43c00;
-  border-color: rgba(255, 85, 0, 0.22);
+  color: var(--accent-foreground);
+  border-color: var(--accent-border);
 }
 
 @media (prefers-reduced-motion: no-preference) {
@@ -1499,16 +1699,17 @@ a {
   }
 
   .home-activity {
-    animation: rise-in 520ms 80ms var(--ease-standard) both;
+    animation: rise-in var(--duration-base) 80ms var(--ease-standard) both;
   }
 
   .status-dot.active {
     animation: status-pulse 1.8s var(--ease-standard) infinite;
   }
 
-  .timeline-step.current .step-icon svg {
-    animation: gentle-spin 1.6s linear infinite;
+  .milestone.current .milestone-marker {
+    animation: status-pulse 1.6s var(--ease-standard) infinite;
   }
+
 }
 
 @keyframes rise-in {
@@ -1525,16 +1726,10 @@ a {
 @keyframes status-pulse {
   0%,
   100% {
-    box-shadow: 0 0 0 0 rgba(255, 85, 0, 0);
+    box-shadow: 0 0 0 0 transparent;
   }
   50% {
-    box-shadow: 0 0 0 6px rgba(255, 85, 0, 0.12);
-  }
-}
-
-@keyframes gentle-spin {
-  to {
-    transform: rotate(360deg);
+    box-shadow: 0 0 0 6px var(--accent-ring);
   }
 }
 
@@ -1546,6 +1741,11 @@ a {
     animation-iteration-count: 1 !important;
     scroll-behavior: auto !important;
     transition-duration: 0.01ms !important;
+  }
+
+  .milestone.current .milestone-marker,
+  .status-dot.active {
+    animation: none !important;
   }
 }
 
@@ -1593,7 +1793,7 @@ a {
 }
 
 .receipt-link svg {
-  color: var(--accent);
+  color: var(--muted-foreground);
 }
 
 .receipt-link.disabled {
@@ -1612,29 +1812,28 @@ a {
   gap: 6px;
   padding: 16px;
   border: 1px solid var(--border);
-  border-radius: 18px;
+  border-radius: var(--radius-lg);
   background: var(--surface-muted);
-  border-left: 4px solid var(--muted-foreground);
 }
 
 .status-hero.active {
+  border-color: var(--accent-border);
   background: var(--accent-soft);
-  border-left-color: var(--accent);
 }
 
 .status-hero.warning {
+  border-color: var(--warning-border);
   background: var(--warning-soft);
-  border-left-color: var(--warning);
 }
 
 .status-hero.success {
+  border-color: var(--success-border);
   background: var(--success-soft);
-  border-left-color: var(--success);
 }
 
 .status-hero.danger {
+  border-color: var(--danger-border);
   background: var(--danger-soft);
-  border-left-color: var(--danger);
 }
 
 .status-hero-kicker {
@@ -1680,22 +1879,22 @@ a {
   gap: 8px;
   padding: 14px;
   border: 1px solid var(--border);
-  border-radius: 16px;
+  border-radius: var(--radius-lg);
   background: var(--surface-muted);
 }
 
 .action-panel.danger {
-  border-color: rgba(194, 65, 65, 0.28);
+  border-color: var(--danger-border);
   background: var(--danger-soft);
 }
 
 .action-panel.success {
-  border-color: rgba(15, 159, 110, 0.24);
+  border-color: var(--success-border);
   background: var(--success-soft);
 }
 
 .action-panel.active {
-  border-color: rgba(255, 85, 0, 0.24);
+  border-color: var(--accent-border);
   background: var(--accent-soft);
 }
 
@@ -1773,7 +1972,7 @@ a {
   border: 2px solid var(--border-strong);
   border-radius: 999px;
   background: var(--surface);
-  color: #ffffff;
+  color: var(--on-status);
 }
 
 .milestone.done .milestone-marker {
@@ -1784,7 +1983,6 @@ a {
 .milestone.current .milestone-marker {
   border-color: var(--accent);
   background: var(--accent);
-  animation: status-pulse 1.6s var(--ease-standard) infinite;
 }
 
 .milestone.failed .milestone-marker {
@@ -1822,7 +2020,7 @@ a {
 
 /* Collapsible receipt — secondary while in-flight, opened once complete. */
 .receipt-details {
-  border-top: 1px dashed var(--border-strong);
+  border-top: 1px solid var(--border-strong);
   padding-top: 6px;
 }
 
@@ -1854,7 +2052,7 @@ a {
 }
 
 .support-row .secondary-button {
-  min-height: 38px;
+  min-height: 44px;
   font-size: 13px;
 }
 
@@ -1893,14 +2091,15 @@ a {
 .receipt-card,
 .detail-empty {
   padding: 18px;
-  border: 1px solid rgba(255, 255, 255, 0.82);
-  border-radius: 24px;
-  background: rgba(255, 255, 255, 0.84);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
   box-shadow: var(--shadow-card);
 }
 
 .receipt-card {
   position: relative;
+  box-shadow: none;
 }
 
 .receipt-header {
@@ -1942,8 +2141,8 @@ a {
   z-index: 1;
   margin-top: 24px;
   padding: 22px 0;
-  border-top: 1px dashed var(--border-strong);
-  border-bottom: 1px dashed var(--border-strong);
+  border-top: 1px solid var(--border-strong);
+  border-bottom: 1px solid var(--border-strong);
 }
 
 .receipt-amount span,
@@ -1996,7 +2195,7 @@ a {
   margin-top: 18px;
   padding: 14px;
   border: 1px solid var(--border);
-  border-radius: 18px;
+  border-radius: var(--radius-lg);
   background: var(--surface-muted);
 }
 
@@ -2079,7 +2278,63 @@ a {
   justify-content: space-between;
   gap: 12px;
   min-height: 34px;
-  border-bottom: 1px dashed rgba(23, 21, 17, 0.11);
+  border-bottom: 1px solid var(--border);
+}
+
+.activity-values {
+  display: grid;
+  gap: 8px;
+}
+
+.activity-value-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px 12px;
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface-muted);
+}
+
+.activity-value-label {
+  color: var(--muted-foreground);
+  font-size: 12px;
+  font-weight: 760;
+}
+
+.activity-value-row code {
+  grid-column: 1;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--foreground);
+  font-family: var(--font-geist-mono), ui-monospace, monospace;
+  font-size: 12px;
+  font-weight: 680;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.activity-value-row code.is-expanded {
+  overflow: visible;
+  overflow-wrap: anywhere;
+  text-overflow: clip;
+  white-space: normal;
+}
+
+.activity-value-actions {
+  display: flex;
+  grid-row: 1 / 3;
+  grid-column: 2;
+  align-items: center;
+  gap: 6px;
+}
+
+.activity-value-actions .secondary-button {
+  width: auto;
+  min-width: 44px;
+  min-height: 44px;
+  padding-inline: 12px;
 }
 
 .receipt-line strong {
@@ -2187,7 +2442,7 @@ a {
 }
 
 .timeline-step.current {
-  border-color: rgba(255, 85, 0, 0.28);
+  border-color: var(--accent-border);
   background: var(--surface-strong);
 }
 
@@ -2203,7 +2458,7 @@ a {
   place-items: center;
   border: 1px solid var(--border);
   border-radius: 10px;
-  background: #ffffff;
+  background: var(--surface);
   color: var(--muted-foreground);
 }
 
@@ -2269,7 +2524,7 @@ a {
 }
 
 .recovery-card.needs-action {
-  border-color: rgba(166, 107, 0, 0.2);
+  border-color: var(--warning-border);
 }
 
 .recovery-actions .secondary-button {
@@ -2310,6 +2565,12 @@ a {
        claim a tall header before the form even begins. */
     gap: 10px;
     min-height: 0;
+  }
+
+  .detail-topbar-actions {
+    display: grid;
+    grid-template-columns: 44px minmax(0, 1fr);
+    width: 100%;
   }
 
   .brand {
@@ -2417,6 +2678,7 @@ a {
   }
 
   .quote-summary div + div {
+    border-left: 0;
     border-top: 1px solid var(--border);
   }
 
@@ -2485,29 +2747,13 @@ a {
     padding: 8px 10px;
   }
 
-  /* When the form runs below the fold, pin the primary action near the bottom
-     of the viewport so it stays reachable while the user completes the form.
-     It sticks within the card while scrolling and settles into its natural
-     slot (above the route disclaimer) at the end. Errors and the destination
-     input render above it in flow, so it never covers them; the raised shadow
-     separates it from content scrolling behind. */
-  .primary-button {
-    position: sticky;
-    bottom: calc(8px + env(safe-area-inset-bottom));
-    z-index: 2;
-    margin-top: 8px;
-    box-shadow: var(--shadow-raised);
-  }
-
   .detail-simple {
     margin-top: 14px;
   }
 }
 
-/* Preflight review — a confirmation surface over the swap card. The primary CTA
-   never submits directly; a valid transfer opens this, and only its "Confirm in
-   wallet" action reaches the wallet. Scoped to the card (absolute fill) so it
-   reads as a step in the same flow rather than a detached modal. */
+/* Preflight review — centered inside the bridge card on desktop and promoted to
+   a viewport sheet at the mobile breakpoint below. */
 .preflight-overlay {
   position: absolute;
   inset: 0;
@@ -2516,9 +2762,9 @@ a {
   align-items: center;
   justify-content: center;
   padding: 10px;
-  border-radius: 28px;
-  background: rgba(23, 21, 17, 0.34);
-  animation: swap-content-fade var(--duration-base) var(--ease-standard) both;
+  border-radius: var(--radius-lg);
+  background: var(--overlay);
+  animation: preflight-backdrop-enter 260ms var(--ease-standard) both;
 }
 
 .preflight-panel {
@@ -2530,9 +2776,16 @@ a {
   overflow-y: auto;
   padding: 16px;
   border: 1px solid var(--border);
-  border-radius: 22px;
+  border-radius: var(--radius-lg);
   background: var(--surface);
   box-shadow: var(--shadow-card);
+}
+
+.preflight-body {
+  display: flex;
+  min-height: 0;
+  flex-direction: column;
+  gap: 12px;
 }
 
 .preflight-head {
@@ -2554,8 +2807,8 @@ a {
 .preflight-close {
   display: grid;
   place-items: center;
-  width: 30px;
-  height: 30px;
+  width: 44px;
+  height: 44px;
   border: 1px solid var(--border);
   border-radius: 999px;
   background: var(--surface-muted);
@@ -2577,8 +2830,8 @@ a {
   margin-left: auto;
   padding: 3px 9px;
   border-radius: 999px;
-  background: var(--warning-soft, #fdf1d6);
-  color: #704600;
+  background: var(--warning-soft);
+  color: var(--warning-foreground);
   font-size: 11px;
   font-weight: 820;
   text-transform: uppercase;
@@ -2637,7 +2890,13 @@ a {
 }
 
 .preflight-inspect {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
   flex: 0 0 auto;
+  min-width: 44px;
+  min-height: 44px;
   padding: 3px 8px;
   border: 1px solid var(--border);
   border-radius: 999px;
@@ -2661,14 +2920,352 @@ a {
 .preflight-actions {
   display: flex;
   gap: 8px;
+  flex: 0 0 auto;
 }
 
 .preflight-actions .preflight-cancel {
   flex: 0 0 auto;
   min-width: 96px;
+  min-height: 44px;
 }
 
 .preflight-actions .preflight-confirm {
   flex: 1 1 auto;
   margin-top: 0;
+}
+
+@media (max-width: 640px) {
+  .app-shell,
+  .detail-shell {
+    padding:
+      max(12px, env(safe-area-inset-top))
+      max(12px, env(safe-area-inset-right))
+      max(12px, env(safe-area-inset-bottom))
+      max(12px, env(safe-area-inset-left));
+  }
+
+  .detail-topbar {
+    gap: 8px;
+  }
+
+  .detail-topbar .brand {
+    min-height: 44px;
+  }
+
+  .detail-simple {
+    width: 100%;
+  }
+
+  .detail-simple .receipt-card {
+    gap: 12px;
+    padding: 14px;
+    border-radius: var(--radius-lg);
+  }
+
+  .back-link,
+  .receipt-link,
+  .receipt-details > summary,
+  .support-row .secondary-button,
+  .action-panel .primary-button {
+    min-height: 44px;
+  }
+
+  .receipt-details > summary {
+    display: flex;
+    align-items: center;
+  }
+
+  .activity-value-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .activity-value-actions {
+    grid-row: auto;
+    grid-column: 1;
+    justify-content: flex-start;
+  }
+
+  .topbar {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 10px 8px;
+  }
+
+  .topbar-actions {
+    display: contents;
+  }
+
+  .brand {
+    min-width: 0;
+    min-height: 44px;
+    justify-content: flex-start;
+  }
+
+  .theme-menu-root {
+    justify-self: end;
+  }
+
+  .wallet-cluster {
+    grid-column: 1 / -1;
+  }
+
+  .wallet-button,
+  .wallet-pill,
+  .wallet-menu-item,
+  .balance-show,
+  .balance-refresh,
+  .wallet-chip-switch,
+  .route-trigger,
+  .token-select-trigger,
+  .route-option,
+  .secondary-button,
+  .preflight-close,
+  .preflight-inspect {
+    min-height: 44px;
+  }
+
+  .preflight-close,
+  .preflight-inspect {
+    min-width: 44px;
+  }
+
+  .preflight-overlay {
+    position: fixed;
+    z-index: 110;
+    inset: 0;
+    align-items: flex-end;
+    padding: 0;
+    border-radius: 0;
+    height: 100dvh;
+  }
+
+  .preflight-panel {
+    width: 100%;
+    max-height: min(88dvh, 720px);
+    overflow: hidden;
+    padding: 16px 16px 0;
+    border-right: 0;
+    border-bottom: 0;
+    border-left: 0;
+    border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+    background: var(--surface-elevated);
+    animation: preflight-sheet-enter 260ms var(--ease-standard) both;
+  }
+
+  .preflight-body {
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-gutter: stable;
+  }
+
+  .preflight-actions {
+    position: sticky;
+    z-index: 1;
+    bottom: 0;
+    margin: 0 -16px;
+    padding: 10px 16px calc(10px + env(safe-area-inset-bottom));
+    border-top: 1px solid var(--border);
+    background: var(--surface-elevated);
+  }
+
+  .preflight-rows div {
+    align-items: flex-start;
+  }
+
+  .balance-refresh {
+    min-width: 44px;
+    margin: -10px;
+  }
+
+  .balance-show,
+  .wallet-chip-switch {
+    padding-block: 8px;
+  }
+
+  .swap-stage {
+    place-items: start center;
+    padding-top: 8px;
+  }
+
+  .swap-card {
+    width: 100%;
+    padding: 8px;
+    border-radius: var(--radius-lg);
+    box-shadow: none;
+    animation: none;
+    transform: none;
+  }
+
+  .swap-box {
+    gap: 6px;
+    padding: 10px;
+  }
+
+  .swap-box input {
+    min-width: 0;
+    width: min(140px, 100%);
+  }
+
+  .destination-input input {
+    min-width: 0;
+    width: 100%;
+    font-family: var(--font-geist-mono), ui-monospace, monospace;
+    font-size: 16px;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .route-sheet-backdrop {
+    position: fixed;
+    z-index: 100;
+    inset: 0;
+    display: block;
+    width: 100%;
+    height: 100dvh;
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: var(--scrim);
+    animation: route-backdrop-enter 260ms var(--ease-standard) both;
+  }
+
+  .route-options-layer {
+    position: fixed;
+    z-index: 101;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    display: flex;
+    max-height: min(72dvh, 560px);
+    flex-direction: column;
+    padding-top: 24px;
+    border: 1px solid var(--border);
+    border-bottom: 0;
+    border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+    background: var(--surface-elevated);
+    box-shadow: var(--shadow-card);
+    animation: route-sheet-enter 260ms var(--ease-standard) both;
+  }
+
+  .route-options-layer::before {
+    content: "";
+    position: absolute;
+    top: 9px;
+    left: 50%;
+    width: 42px;
+    height: 4px;
+    border-radius: 999px;
+    background: var(--border-strong);
+    transform: translateX(-50%);
+  }
+
+  .route-options-layer .route-options-list {
+    position: static;
+    width: 100%;
+    min-width: 0;
+    max-width: none;
+    max-height: none;
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding: 0 12px calc(12px + env(safe-area-inset-bottom));
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+    opacity: 1;
+    transform: none;
+  }
+
+  .primary-action-dock {
+    position: sticky;
+    z-index: 3;
+    top: calc(100dvh - 67px - env(safe-area-inset-bottom));
+    margin: 8px -8px -8px;
+    padding: 8px 8px calc(8px + env(safe-area-inset-bottom));
+    border-top: 1px solid var(--border);
+    background: var(--surface);
+  }
+
+  .primary-action-dock .primary-button {
+    position: static;
+    margin: 0;
+    box-shadow: none;
+  }
+
+  .home-activity-item {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    grid-template-rows: auto auto;
+    gap: 4px 10px;
+    min-height: 64px;
+    padding: 10px 12px;
+  }
+
+  .home-activity-item .status-dot {
+    grid-row: 1;
+    grid-column: 1;
+  }
+
+  .activity-copy {
+    display: flex;
+    grid-row: 1;
+    grid-column: 2;
+    align-items: baseline;
+    gap: 6px;
+  }
+
+  .activity-meta {
+    display: flex;
+    grid-row: 2;
+    grid-column: 2;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 8px;
+    text-align: left;
+  }
+
+  .home-activity-item > svg {
+    grid-row: 1 / 3;
+    grid-column: 3;
+    align-self: center;
+  }
+
+  .home-activity-item strong,
+  .home-activity-item small {
+    overflow: visible;
+    text-overflow: clip;
+    white-space: normal;
+  }
+
+  .activity-copy small,
+  .activity-meta small {
+    margin-top: 0;
+  }
+}
+
+@keyframes route-backdrop-enter {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes route-sheet-enter {
+  from {
+    opacity: 0;
+    transform: translateY(24px);
+  }
+}
+
+@keyframes preflight-backdrop-enter {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes preflight-sheet-enter {
+  from {
+    opacity: 0;
+    transform: translateY(18px);
+  }
 }

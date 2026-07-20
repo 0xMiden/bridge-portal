@@ -4,6 +4,7 @@ import dynamic from "next/dynamic";
 import type { ReactNode } from "react";
 import { AppKitProvider } from "./AppKitProvider";
 import { RejectionGuard } from "./RejectionGuard";
+import { ThemeProvider } from "./ThemeProvider";
 
 // E2E-only: auto-connect the headless test wallet. ssr:false + flag-gated so it
 // never enters normal builds.
@@ -31,10 +32,12 @@ export function Providers({
   cookies: string | null;
 }) {
   return (
-    <AppKitProvider cookies={cookies}>
-      <RejectionGuard />
-      {E2EAutoConnect ? <E2EAutoConnect /> : null}
-      <MidenWalletProvider>{children}</MidenWalletProvider>
-    </AppKitProvider>
+    <ThemeProvider>
+      <AppKitProvider cookies={cookies}>
+        <RejectionGuard />
+        {E2EAutoConnect ? <E2EAutoConnect /> : null}
+        <MidenWalletProvider>{children}</MidenWalletProvider>
+      </AppKitProvider>
+    </ThemeProvider>
   );
 }

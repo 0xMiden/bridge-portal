@@ -16,11 +16,9 @@ export class BridgePage {
   }
 
   async setRoute(route: Route): Promise<void> {
-    await this.page.locator(".route-trigger").click();
-    await this.page
-      .locator(".route-options-menu")
-      .getByText(route, { exact: false })
-      .first()
+    await this.routeTrigger().click();
+    await this.routeListbox()
+      .getByRole("option", { name: new RegExp(`^${route}`, "i") })
       .click();
     // Case-insensitive: the semantic route name ("AggLayer") differs from the
     // UI label casing ("Agglayer", lowercase L).
@@ -45,9 +43,23 @@ export class BridgePage {
   }
 
   primaryButton() {
-    // The card's primary CTA — scoped to the swap card so it never matches the
-    // preflight's own "Confirm in wallet" button (also a .primary-button).
-    return this.page.locator(".swap-card > .primary-button");
+    return this.actionDock().locator(".primary-button");
+  }
+
+  routeTrigger() {
+    return this.page.locator(".route-trigger");
+  }
+
+  routeDialog() {
+    return this.page.getByRole("dialog", { name: "Choose bridge route" });
+  }
+
+  routeListbox() {
+    return this.page.getByRole("listbox", { name: "Bridge route" });
+  }
+
+  actionDock() {
+    return this.page.locator(".primary-action-dock");
   }
 
   /** The preflight review dialog, once the CTA opens it. */

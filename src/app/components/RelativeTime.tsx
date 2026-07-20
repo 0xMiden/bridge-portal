@@ -13,7 +13,7 @@ export function RelativeTime({ at }: { at: number }) {
   const [now, setNow] = useState(0);
 
   useEffect(() => {
-    setNow(Date.now());
+    queueMicrotask(() => setNow(Date.now()));
     const id = window.setInterval(() => setNow(Date.now()), 10_000);
     return () => window.clearInterval(id);
   }, []);
