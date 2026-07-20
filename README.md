@@ -109,14 +109,14 @@ exported" even though the exports exist at runtime. Downgrading the
 export-presence check lets the build proceed; the named exports resolve
 correctly at runtime via webpack's CJS interop.
 
-### Vendored `@miden-sdk` pin (temporary)
+### `@miden-sdk` pin
 
-`package.json` pins `@miden-sdk/miden-sdk` to a local tarball under
-[`vendor/`](vendor/) (`miden-sdk-miden-sdk-0.15.6-b2agg.callback.1.tgz`) via a
-`file:` dependency + `overrides`. This is a **temporary** pin carrying the
-B2AGG callback + web-sdk (#240) fixes that aren't in a published release yet.
-Drop the vendored tarball and move back to a normal semver range once a
-published `@miden-sdk` `> 0.15.6` ships those changes.
+`package.json` pins `@miden-sdk/miden-sdk` to `0.15.7` (exact, mirrored in
+`overrides` so `@miden-sdk/react` and the wallet adapters resolve to the same
+single SDK instance). `0.15.7` is the first published release carrying the
+B2AGG callback + web-sdk (#240) fixes, and its `st` wasm ships pre-stripped
+(~17 MB), so it fits Cloudflare's 25 MiB per-asset limit without a local build.
+This replaces the earlier temporary `vendor/` tarball pin.
 
 ## Validation
 

@@ -11,8 +11,8 @@ import { EVM_AGGLAYER_NETWORK_ID, MIDEN_BRIDGE_ID } from "./agglayer-b2agg";
 // carry the SAME flag or its commitment won't match the vault entry, and removal
 // fails with "amount of the asset in the vault is less than the amount to remove"
 // (for any amount). `new FungibleAsset(faucet, amount)` defaults to `Disabled`;
-// `.withCallbacks(Enabled)` is the fix (web-sdk#239 / PR#240 — the API this build
-// of @miden-sdk vendors ahead of a >0.15.6 npm release).
+// `.withCallbacks(Enabled)` is the fix (web-sdk#239 / PR#240 — shipped in the
+// published @miden-sdk 0.15.7).
 //
 // Loaded via dynamic import at click time — it pulls the eager-WASM SDK + the
 // wallet adapter, so it must never enter the SSR/server bundle.
