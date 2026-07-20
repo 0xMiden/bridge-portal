@@ -31,6 +31,7 @@
 - Create: `src/app/components/ThemeProvider.tsx`
 - Create: `src/app/components/ThemeToggle.tsx`
 - Modify: `src/app/components/Providers.tsx`
+- Modify: `src/app/components/BridgeExperience.tsx`
 - Modify: `src/app/layout.tsx`
 - Modify: `src/app/globals.css`
 - Test: `e2e/tests/mock/theme.spec.ts`
@@ -82,6 +83,8 @@ Wrap the existing wallet providers inside this provider, without moving wallet s
 
 Build `ThemeToggle` as an isolated client component using `useTheme`, `Sun`, `Moon`, `Monitor`, and `Check`. Avoid rendering a theme-dependent icon until mounted. The trigger toggles an accessible radio menu, closes on Escape and outside pointer down, and restores focus to the trigger. Arrow keys move among choices; Enter and Space call `setTheme("light" | "dark" | "system")`. The accessible trigger label reports the persisted choice, not only the resolved light/dark class.
 
+Render `ThemeToggle` once in the homepage header inside a minimal `.topbar-actions` wrapper with the existing wallet cluster. Task 2 owns the responsive header layout; Task 1 only makes the control visible and testable.
+
 - [ ] **Step 5: Make document metadata theme-aware**
 
 Add `suppressHydrationWarning` to `<html>`. Replace the single theme color with:
@@ -107,7 +110,7 @@ Expected: typecheck and lint exit 0; theme test passes.
 - [ ] **Step 8: Commit**
 
 ```bash
-git add package.json package-lock.json src/app/components/ThemeProvider.tsx src/app/components/ThemeToggle.tsx src/app/components/Providers.tsx src/app/layout.tsx src/app/globals.css e2e/tests/mock/theme.spec.ts
+git add package.json package-lock.json src/app/components/ThemeProvider.tsx src/app/components/ThemeToggle.tsx src/app/components/Providers.tsx src/app/components/BridgeExperience.tsx src/app/layout.tsx src/app/globals.css e2e/tests/mock/theme.spec.ts
 git commit -m "feat(theme): add semantic light and dark modes"
 ```
 
@@ -142,7 +145,7 @@ Expected: FAIL because the theme/header hooks, fixed route sheet, backdrop, and 
 
 - [ ] **Step 3: Add minimal structural hooks**
 
-Import and render `ThemeToggle`. Group desktop header actions in `.topbar-actions`. Set `data-open={routeMenuOpen}` on `.route-menu-root`; render a button `.route-sheet-backdrop` with `aria-label="Close route menu"` while open; wrap the route list in a labelled `.route-options-layer` dialog containing `.route-options-list[role="listbox"]`; wrap the primary CTA in `.primary-action-dock`. Add `aria-controls` from trigger to listbox. Store the route trigger and restore focus whenever selection, Escape, or backdrop closes the menu. Trap focus within the mobile dialog. Set `document.body.dataset.overlayOpen` while the route or preflight sheet is open and restore prior body overflow/scroll state during cleanup.
+Refine the existing `.topbar-actions` wrapper so the theme control occupies the brand row on mobile while the wallet cluster occupies row two. Set `data-open={routeMenuOpen}` on `.route-menu-root`; render a button `.route-sheet-backdrop` with `aria-label="Close route menu"` while open; wrap the route list in a labelled `.route-options-layer` dialog containing `.route-options-list[role="listbox"]`; wrap the primary CTA in `.primary-action-dock`. Add `aria-controls` from trigger to listbox. Store the route trigger and restore focus whenever selection, Escape, or backdrop closes the menu. Trap focus within the mobile dialog. Set `document.body.dataset.overlayOpen` while the route or preflight sheet is open and restore prior body overflow/scroll state during cleanup.
 
 - [ ] **Step 4: Restyle the desktop bridge around quiet neutral hierarchy**
 
