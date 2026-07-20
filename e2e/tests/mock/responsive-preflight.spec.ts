@@ -73,8 +73,14 @@ test(`mobile ${width}px review is a viewport bottom sheet with a contained keybo
     bottom: geometry.viewport.height,
   });
   expect(geometry.panel.bottom).toBeCloseTo(geometry.viewport.height, 0);
-  expect(geometry.panel.height).toBeLessThanOrEqual(geometry.viewport.height);
-  expect(geometry.scrollWidth).toBeLessThanOrEqual(geometry.viewport.width);
+  // Math.round collapses sub-pixel device-rounding (e.g. 844.0001) before the
+  // "fits within the viewport" bounds — otherwise a compliant layout trips.
+  expect(Math.round(geometry.panel.height)).toBeLessThanOrEqual(
+    geometry.viewport.height,
+  );
+  expect(Math.round(geometry.scrollWidth)).toBeLessThanOrEqual(
+    geometry.viewport.width,
+  );
 
   const controls = panel.locator("button");
   for (let index = 0; index < (await controls.count()); index += 1) {
@@ -97,7 +103,7 @@ test(`mobile ${width}px review is a viewport bottom sheet with a contained keybo
   const footerBottom = await actions.evaluate(
     (element) => element.getBoundingClientRect().bottom,
   );
-  expect(footerBottom).toBeLessThanOrEqual(844);
+  expect(Math.round(footerBottom)).toBeLessThanOrEqual(844);
 
   await page.keyboard.press("Escape");
   await expect(overlay).toBeHidden();
