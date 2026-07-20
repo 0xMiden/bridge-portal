@@ -1,8 +1,10 @@
 "use client";
 
 import {
+  AlertTriangle,
   ArrowDown,
   ArrowRight,
+  Check,
   ChevronDown,
   ChevronRight,
   Copy,
@@ -17,7 +19,14 @@ import dynamic from "next/dynamic";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  type KeyboardEvent as ReactKeyboardEvent,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { formatEther, parseUnits } from "viem";
 import {
   AGGLAYER_BALI,
@@ -41,6 +50,8 @@ import {
   patchStoredActivity,
   providers,
   quoteFor,
+  routeAsset,
+  routeSwitchChangesAsset,
   saveActivities,
   saveStoredMode,
   saveStoredRoute,
@@ -593,6 +604,49 @@ export function BridgeExperience() {
     };
   }, [routeMenuOpen]);
 
+  // Move focus onto the active option when the listbox opens so arrow-key
+  // navigation and Enter/Space selection work without a mouse.
+  useEffect(() => {
+    if (!routeMenuOpen) return;
+    const menu = routeMenuRef.current?.querySelector<HTMLElement>(
+      ".route-options-menu",
+    );
+    const selectedOption = menu?.querySelector<HTMLElement>(
+      '.route-option[aria-selected="true"]:not([disabled])',
+    );
+    const firstOption = menu?.querySelector<HTMLElement>(
+      ".route-option:not([disabled])",
+    );
+    (selectedOption ?? firstOption)?.focus();
+  }, [routeMenuOpen]);
+
+  // Roving focus for the route listbox: Arrow keys move between enabled options,
+  // Home/End jump to the ends. Enter/Space selection is native to the <button>
+  // options; Escape closes via the document listener above.
+  function handleRouteMenuKeyDown(event: ReactKeyboardEvent<HTMLDivElement>) {
+    const keys = ["ArrowDown", "ArrowUp", "Home", "End"];
+    if (!keys.includes(event.key)) return;
+    const options = Array.from(
+      event.currentTarget.querySelectorAll<HTMLElement>(
+        ".route-option:not([disabled])",
+      ),
+    );
+    if (options.length === 0) return;
+    event.preventDefault();
+    const currentIndex = options.indexOf(document.activeElement as HTMLElement);
+    let nextIndex = currentIndex;
+    if (event.key === "ArrowDown")
+      nextIndex = currentIndex < 0 ? 0 : (currentIndex + 1) % options.length;
+    else if (event.key === "ArrowUp")
+      nextIndex =
+        currentIndex < 0
+          ? options.length - 1
+          : (currentIndex - 1 + options.length) % options.length;
+    else if (event.key === "Home") nextIndex = 0;
+    else if (event.key === "End") nextIndex = options.length - 1;
+    options[nextIndex]?.focus();
+  }
+
   useEffect(() => {
     if (!walletAccount) return;
 
@@ -836,6 +890,16 @@ export function BridgeExperience() {
 
   function selectProvider(nextProvider: BridgeProvider) {
     if (providers[nextProvider].disabled) return;
+    if (nextProvider === provider) return;
+    // The routes move different assets (Epoch = USDC, Agglayer = ETH). When the
+    // asset changes, an amount entered for the old route must not carry over as
+    // the same number of a different token — clear it and drop any stale quote so
+    // no previous-route quote or token label survives the transition. Same-asset
+    // switches keep the amount.
+    if (routeSwitchChangesAsset(provider, nextProvider)) {
+      setAmount("");
+      setEpochQuoteAmount(undefined);
+    }
     setProvider(nextProvider);
     // Remember the choice so a refresh comes back to this route.
     saveStoredRoute(nextProvider);
@@ -1463,11 +1527,11 @@ export function BridgeExperience() {
                   className="route-options-menu open"
                   role="listbox"
                   aria-label="Bridge route"
+                  onKeyDown={handleRouteMenuKeyDown}
                 >
-                  {(Object.keys(providers) as BridgeProvider[])
-                    .filter((key) => !providers[key].disabled)
-                    .map((key) => {
+                  {(Object.keys(providers) as BridgeProvider[]).map((key) => {
                     const option = providers[key];
+                    const c = option.comparison;
                     const selected = key === provider;
                     const disabled = option.disabled === true;
                     return (
@@ -1481,11 +1545,54 @@ export function BridgeExperience() {
                         key={key}
                         onClick={() => selectRouteOption(key)}
                       >
-                        <span>
+                        <span className="route-option-head">
                           <strong>{option.label}</strong>
-                          <small>{option.badge}</small>
+                          <small className="route-tag testnet">
+                            {option.badge}
+                          </small>
+                          <small
+                            className={`route-tag availability ${disabled ? "off" : "on"}`}
+                          >
+                            {c.availability}
+                          </small>
+                          {selected ? (
+                            <Check
+                              className="route-check"
+                              size={15}
+                              aria-hidden="true"
+                            />
+                          ) : null}
                         </span>
-                        <em>{option.route}</em>
+                        {c.differentiator ? (
+                          <em className="route-diff">{c.differentiator}</em>
+                        ) : null}
+                        <span className="route-facts">
+                          <span className="route-fact">
+                            <span className="route-fact-k">Asset</span>
+                            <span className="route-fact-v">{c.asset}</span>
+                          </span>
+                          <span className="route-fact">
+                            <span className="route-fact-k">ETA</span>
+                            <span className="route-fact-v">{c.eta}</span>
+                          </span>
+                          <span className="route-fact">
+                            <span className="route-fact-k">Fee</span>
+                            <span className="route-fact-v">{c.feeModel}</span>
+                          </span>
+                          <span className="route-fact">
+                            <span className="route-fact-k">Claim</span>
+                            <span className="route-fact-v">{c.claim}</span>
+                          </span>
+                          <span className="route-fact">
+                            <span className="route-fact-k">Trust</span>
+                            <span className="route-fact-v">{c.trust}</span>
+                          </span>
+                        </span>
+                        {disabled && c.unavailableReason ? (
+                          <small className="route-unavailable">
+                            {c.unavailableReason}
+                          </small>
+                        ) : null}
                       </button>
                     );
                   })}
@@ -1493,6 +1600,17 @@ export function BridgeExperience() {
               ) : null}
             </div>
           </div>
+
+          {/* Keep the active route legible without reopening the menu: provider
+              is on the trigger; asset + ETA + persistent Testnet status here. */}
+          <div className="route-status-line" aria-label="Selected route summary">
+            <span className={`route-pill ${routeTone}`}>
+              {providerCopy.badge}
+            </span>
+            <span className="route-pill">{routeAsset(provider)}</span>
+            <span className="route-pill">{quote.eta}</span>
+          </div>
+
           {walletError ? (
             <p className="form-error compact">{walletError}</p>
           ) : null}
@@ -1612,6 +1730,14 @@ export function BridgeExperience() {
             </div>
           </div>
 
+          {/* Material route warning belongs before the CTA, not only in a
+              footnote after it — the user should read the testnet/route caveat
+              before committing funds. */}
+          <div className={`route-disclaimer ${routeTone}`} role="note">
+            <AlertTriangle size={15} aria-hidden="true" />
+            <span>{routeNote}</span>
+          </div>
+
           <button
             className="primary-button"
             type="button"
@@ -1625,11 +1751,6 @@ export function BridgeExperience() {
               <ArrowRight size={18} aria-hidden="true" />
             )}
           </button>
-
-          <div className={`route-disclaimer ${routeTone}`}>
-            <span>{routeNote}</span>
-          </div>
-
           {showPreflight ? (
             <div
               className="preflight-overlay"

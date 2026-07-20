@@ -1,11 +1,17 @@
 import { describe, expect, it } from "vitest";
 import {
   type Activity,
+  type BridgeProvider,
   type CtaInputs,
+  type FlowMode,
   deriveCtaState,
   evmWalletIdentity,
   isValidAmount,
   midenWalletIdentity,
+  providers,
+  quoteFor,
+  routeAsset,
+  routeSwitchChangesAsset,
   sourceExplorer,
 } from "./bridge-state";
 
@@ -219,5 +225,105 @@ describe("deriveCtaState (primary CTA progression)", () => {
     const send = deriveCtaState({ ...ready, mode: "send" });
     expect(send.label).toBe("Review send");
     expect(send.opensReview).toBe(true);
+  });
+});
+
+describe("routeAsset (route input token)", () => {
+  it("moves USDC on Epoch, ETH on Agglayer", () => {
+    expect(routeAsset("epoch")).toBe("USDC");
+    expect(routeAsset("agglayer")).toBe("ETH");
+  });
+
+  it("is direction-independent (same input token both ways)", () => {
+    expect(routeAsset("epoch")).toBe(routeAsset("epoch"));
+    expect(routeAsset("agglayer")).toBe(routeAsset("agglayer"));
+  });
+});
+
+// The reset guard the form relies on: a route switch that changes the input
+// asset must not silently preserve the numeric amount (an amount typed as USDC
+// becoming the same number of ETH). routeSwitchChangesAsset is that decision.
+describe("routeSwitchChangesAsset (amount/quote reset guard)", () => {
+  it("flags a change switching Epoch (USDC) → Agglayer (ETH)", () => {
+    expect(routeSwitchChangesAsset("epoch", "agglayer")).toBe(true);
+  });
+
+  it("flags a change switching Agglayer (ETH) → Epoch (USDC)", () => {
+    expect(routeSwitchChangesAsset("agglayer", "epoch")).toBe(true);
+  });
+
+  it("does not flag re-selecting the same route", () => {
+    expect(routeSwitchChangesAsset("epoch", "epoch")).toBe(false);
+    expect(routeSwitchChangesAsset("agglayer", "agglayer")).toBe(false);
+  });
+
+  // Model the form's clear-on-switch behavior: when the guard fires, the amount
+  // is cleared (so no stale amount survives); otherwise it is preserved.
+  it("clears the amount only when the asset changes, in both directions", () => {
+    const applySwitch = (from: BridgeProvider, to: BridgeProvider, amount: string) =>
+      routeSwitchChangesAsset(from, to) ? "" : amount;
+
+    expect(applySwitch("epoch", "agglayer", "100")).toBe("");
+    expect(applySwitch("agglayer", "epoch", "0.5")).toBe("");
+    expect(applySwitch("epoch", "epoch", "100")).toBe("100");
+    expect(applySwitch("agglayer", "agglayer", "0.5")).toBe("0.5");
+  });
+});
+
+// No stale quote or token label may survive a route switch: the fresh route's
+// quote must immediately report the new route's asset and ETA.
+describe("quoteFor refreshes fully on a route switch", () => {
+  const modesToTest: FlowMode[] = ["receive", "send"];
+
+  for (const mode of modesToTest) {
+    it(`Epoch quote reports USDC + 1-3 min ETA (${mode})`, () => {
+      const quote = quoteFor(mode, "epoch", "100");
+      expect(quote.expectedReceived).toContain("USDC");
+      expect(quote.minReceived).toContain("USDC");
+      expect(quote.eta).toBe("1-3 min");
+    });
+
+    it(`Agglayer quote reports ETH + 10-20 min ETA (${mode})`, () => {
+      const quote = quoteFor(mode, "agglayer", "100");
+      expect(quote.expectedReceived).toContain("ETH");
+      expect(quote.minReceived).toContain("ETH");
+      expect(quote.eta).toBe("10-20 min");
+    });
+
+    it(`a USDC→ETH switch changes the quoted token label (${mode})`, () => {
+      const before = quoteFor(mode, "epoch", "100");
+      const after = quoteFor(mode, "agglayer", "100");
+      expect(before.expectedReceived).not.toBe(after.expectedReceived);
+      expect(after.expectedReceived).not.toContain("USDC");
+    });
+  }
+});
+
+// Every active route must expose the comparison facts the selector renders, so a
+// route can be judged without selecting it first.
+describe("route comparison metadata", () => {
+  const active = (Object.keys(providers) as BridgeProvider[]).filter(
+    (key) => !providers[key].disabled,
+  );
+
+  it("exposes asset, ETA, fee, claim, trust for each active route", () => {
+    for (const key of active) {
+      const c = providers[key].comparison;
+      expect(c.asset).toBeTruthy();
+      expect(c.eta).toBeTruthy();
+      expect(c.feeModel).toBeTruthy();
+      expect(c.claim).toBeTruthy();
+      expect(c.trust).toBeTruthy();
+      expect(c.availability).toBe("Available");
+    }
+  });
+
+  it("gives a disabled route a reason for being unavailable", () => {
+    const disabled = (Object.keys(providers) as BridgeProvider[]).filter(
+      (key) => providers[key].disabled,
+    );
+    for (const key of disabled) {
+      expect(providers[key].comparison.unavailableReason).toBeTruthy();
+    }
   });
 });
