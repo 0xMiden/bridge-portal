@@ -306,6 +306,10 @@ a {
   max-width: 34vw;
 }
 
+.dark .brand img {
+  filter: invert(1) hue-rotate(180deg);
+}
+
 .brand span {
   padding-left: 10px;
   border-left: 1px solid var(--border);
@@ -1226,7 +1230,7 @@ a {
 }
 
 .token-select-trigger:hover {
-  box-shadow: 0 2px 6px rgba(23, 21, 17, 0.14);
+  box-shadow: var(--shadow-raised);
 }
 
 .token-select-trigger:active {
@@ -1259,11 +1263,10 @@ a {
   z-index: 40;
   min-width: 216px;
   padding: 6px;
-  border-radius: 16px;
-  background: #fff;
-  box-shadow:
-    0 10px 30px rgba(23, 21, 17, 0.16),
-    0 0 0 1px rgba(23, 21, 17, 0.05);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface-elevated);
+  box-shadow: var(--shadow-raised);
   transform-origin: top right;
   animation: token-menu-in 0.15s cubic-bezier(0.16, 1, 0.3, 1);
 }
@@ -3014,6 +3017,7 @@ a {
   .balance-refresh,
   .wallet-chip-switch,
   .route-trigger,
+  .token-select-trigger,
   .route-option,
   .secondary-button,
   .preflight-close,

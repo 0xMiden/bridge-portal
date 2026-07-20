@@ -1792,7 +1792,7 @@ export function BridgeExperience() {
               />
               <TokenSelect
                 provider={provider}
-                onSelectProvider={selectRouteOption}
+                onSelectProvider={selectProvider}
               />
             </label>
           </div>
@@ -1833,7 +1833,7 @@ export function BridgeExperience() {
               </strong>
               <TokenSelect
                 provider={provider}
-                onSelectProvider={selectRouteOption}
+                onSelectProvider={selectProvider}
               />
             </label>
           </div>
