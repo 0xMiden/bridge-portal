@@ -1,14 +1,12 @@
 import type { MidenFiWalletContextState } from "@miden-sdk/miden-wallet-adapter-react";
+import { AGGLAYER_BALI } from "./agglayer";
 
-// The Agglayer wrapped-ETH on Miden has a deployment-specific faucet id: Gateway
-// mints a fresh faucet account on every rollup redeploy, so a hardcoded id (the
-// portal's old `0x387149ae…`, which isn't even a faucet on the current chain)
-// is guaranteed to rot. Resolve it at runtime from the connected wallet's own
-// assets instead — it survives every redeploy.
-//
-// Classification: Epoch's USDC faucet is a stable known token; the chain's
-// native fee asset is gas. On the Agglayer route, whatever else the wallet holds
-// is the bridged ETH.
+// One `requestAssets()` popup, both route balances. Each route's Miden token is
+// a fixed, known faucet: Epoch's USDC (`EPOCH_USDC_FAUCET`) and the Agglayer ETH
+// faucet (`AGGLAYER_BALI.midenEthFaucetIdHex`, per gateway.fm PARAMETERS.md and
+// the bridge-out-tool). We total the wallet's holding of each specific faucet —
+// the Agglayer send then bridges that exact asset, the one the Agglayer bridge
+// recognises, rather than any other Miden token the wallet may also hold.
 
 const EPOCH_USDC_FAUCET = "0xfc90f0f4da30e51168453b60eafed7";
 
@@ -76,16 +74,13 @@ export async function fetchMidenRouteBalances(
 
   const rpc = new RpcClient(Endpoint.testnet());
 
-  // Exclude the native fee/gas asset so it isn't mistaken for bridged ETH.
-  let feeFaucet = "";
-  try {
-    const header = await rpc.getBlockHeaderByNumber(undefined);
-    feeFaucet = header.feeFaucetId().toString().toLowerCase();
-  } catch {
-    // best effort — if unavailable, we only exclude USDC below
-  }
-
   const usdc = canon(EPOCH_USDC_FAUCET);
+  // The Agglayer ETH faucet is a fixed, known account on bali (gateway.fm
+  // PARAMETERS.md — the same id the bridge-out-tool bridges with). Total the
+  // wallet's holding of THAT faucet, exactly as we do for USDC. The previous
+  // "whatever non-USDC, non-gas asset the wallet holds" heuristic mis-picked
+  // any other Miden token in the wallet and bridged the wrong asset.
+  const agglayerFaucet = canon(AGGLAYER_BALI.midenEthFaucetIdHex);
 
   const assets = await requestAssets();
   const byFaucet = new Map<string, bigint>();
@@ -95,26 +90,28 @@ export async function fetchMidenRouteBalances(
   }
 
   const usdcRaw = byFaucet.get(usdc) ?? 0n;
-
-  // Bridged ETH = the positive-balance fungible that's neither USDC nor gas.
-  const ethEntry = [...byFaucet.entries()].find(
-    ([f, amt]) => f !== usdc && f !== feeFaucet && amt > 0n,
-  );
+  const ethRaw = byFaucet.get(agglayerFaucet) ?? 0n;
 
   let agglayerEth: ResolvedEthAsset | null = null;
-  if (ethEntry) {
-    const [faucetId, amountRaw] = ethEntry;
-    let decimals = 8;
+  if (ethRaw > 0n) {
+    let decimals: number = AGGLAYER_BALI.midenEthDecimals;
     let symbol = "ETH";
     try {
-      const fetched = await rpc.getAccountDetails(AccountId.fromHex(faucetId) as unknown);
+      const fetched = await rpc.getAccountDetails(
+        AccountId.fromHex(AGGLAYER_BALI.midenEthFaucetIdHex) as unknown,
+      );
       const faucet = BasicFungibleFaucetComponent.fromAccount(fetched.account());
       decimals = faucet.decimals();
       symbol = faucet.symbol().toString();
     } catch {
-      // fall back to ETH/8 if the faucet metadata can't be read
+      // fall back to ETH / 8dp if the faucet metadata can't be read
     }
-    agglayerEth = { faucetId, amountRaw, decimals, symbol };
+    agglayerEth = {
+      faucetId: AGGLAYER_BALI.midenEthFaucetIdHex,
+      amountRaw: ethRaw,
+      decimals,
+      symbol,
+    };
   }
 
   return {
