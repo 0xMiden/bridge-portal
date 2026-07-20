@@ -9,6 +9,7 @@
     "lint": "eslint",
     "test": "vitest run",
     "test:e2e:mock": "E2E_NETWORK=mock playwright test --config playwright.mock.config.ts",
+    "test:e2e:testnet": "E2E_NETWORK=testnet playwright test --config playwright.e2e.config.ts",
     "playwright:install": "playwright install --with-deps chromium",
     "typecheck": "tsc --noEmit",
     "cf:build": "next build --webpack && opennextjs-cloudflare build --skipNextBuild",
@@ -17,7 +18,7 @@
   },
   "dependencies": {
     "@epoch-protocol/epoch-intents-sdk": "^1.0.30",
-    "@miden-sdk/miden-sdk": "^0.15.4",
+    "@miden-sdk/miden-sdk": "file:./vendor/miden-sdk-miden-sdk-0.15.6-b2agg.callback.1.tgz",
     "@miden-sdk/miden-wallet-adapter-base": "^0.15.1",
     "@miden-sdk/miden-wallet-adapter-react": "^0.15.1",
     "@miden-sdk/react": "^0.15.4",
@@ -33,7 +34,8 @@
   },
   "overrides": {
     "@wagmi/core": "2.22.1",
-    "@wagmi/connectors": "6.2.0"
+    "@wagmi/connectors": "6.2.0",
+    "@miden-sdk/miden-sdk": "file:./vendor/miden-sdk-miden-sdk-0.15.6-b2agg.callback.1.tgz"
   },
   "devDependencies": {
     "@opennextjs/cloudflare": "^1.20.1",
