@@ -263,14 +263,14 @@ export function ActivityDetail({ id }: { id: string }) {
             : "Wait for the destination claim to become available."
           : activity?.status === "claim_available"
             ? activity.mode === "receive"
-              ? "Delivered to Miden — open your Miden wallet and claim the note to reflect the balance."
+              ? "Delivered to Miden — open your Bread wallet → Activities → Claim pending notes to reflect the balance."
               : "Claim funds on the destination side."
             : activity?.status === "claim_submitted"
               ? "Wait for the Sepolia claim transaction to confirm."
               : activity?.status === "failed"
                 ? "This transfer needs a retry."
                 : activity?.status === "complete" && activity.mode === "receive"
-                  ? "Delivered to Miden. The bridge created the note on Miden; it won't show in your balance until you claim it. Open your Miden wallet → Receive → Claim to consume the note and move the funds into your balance."
+                  ? "Delivered to Miden. The bridge created the note on Miden; it won't show in your balance until you claim it. Open your Bread wallet → Activities → Claim pending notes to consume the note and move the funds into your balance."
                   : "Funds are available in the destination account.";
 
   const observeActivity = useCallback(
