@@ -886,6 +886,94 @@ a {
   background: var(--muted);
 }
 
+/* Chain-specific wallet identity line inside the From/To panels (issue #54):
+   names the panel's wallet and shows its live connection state, so the Sepolia
+   and Miden sides are distinguishable without helper copy or wallet badges. */
+.wallet-chip {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 6px;
+  max-width: 100%;
+  margin-top: 7px;
+  color: var(--muted-foreground);
+  font-size: 12px;
+  font-weight: 720;
+  /* Lift above the wide right-aligned amount label that overprints this column
+     (same reason as .balance-line) so the switch button stays clickable. */
+  position: relative;
+  z-index: 1;
+}
+
+.wallet-chip-dot {
+  flex: 0 0 auto;
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--faint-foreground);
+}
+
+.wallet-chip.connected .wallet-chip-dot {
+  background: var(--accent);
+}
+
+.wallet-chip.connecting .wallet-chip-dot {
+  background: var(--warning);
+}
+
+.wallet-chip.wrong-network .wallet-chip-dot,
+.wallet-chip.unavailable .wallet-chip-dot {
+  background: var(--danger);
+}
+
+.wallet-chip-name {
+  flex: 0 0 auto;
+  color: var(--foreground);
+  font-weight: 800;
+}
+
+.wallet-chip-state {
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.wallet-chip.wrong-network .wallet-chip-state,
+.wallet-chip.unavailable .wallet-chip-state {
+  color: var(--danger);
+}
+
+.wallet-chip-switch {
+  flex: 0 0 auto;
+  padding: 1px 9px;
+  border: 1px solid var(--danger);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--danger);
+  font: inherit;
+  font-size: 11px;
+  font-weight: 780;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.wallet-chip-switch:hover {
+  background: var(--danger-soft);
+}
+
+/* Wrong-network / unavailable header pills read as a correction, not a normal
+   connected pill. */
+.wallet-pill.wrong-network {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+.wallet-pill.unavailable .wallet-pill-label {
+  color: var(--danger);
+}
+
 .swap-box label {
   display: grid;
   justify-items: end;

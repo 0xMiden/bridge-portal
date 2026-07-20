@@ -9,7 +9,11 @@ import {
 } from "@miden-sdk/miden-wallet-adapter-react";
 import { ChevronDown, Copy, LogOut, RefreshCcw, Wallet } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { shortAddress, walletGradient } from "../lib/bridge-state";
+import {
+  midenWalletIdentity,
+  shortAddress,
+  walletGradient,
+} from "../lib/bridge-state";
 import { useResetMidenProvider } from "./MidenWalletProvider";
 
 /** MidenFi brand logo from the wallet adapter, or a neutral wallet fallback. */
@@ -23,6 +27,10 @@ function WalletBrandIcon({ src, size }: { src?: string; size: number }) {
 export type MidenWalletSnapshot = {
   address: string;
   connected: boolean;
+  /** Adapter is mid-connect — drives the "Connecting…" state in the panel. */
+  connecting: boolean;
+  /** MidenFi extension present + loadable; false marks the wallet unavailable. */
+  ready: boolean;
   error: string;
   balanceText: string;
   noteSyncStatus: string;
@@ -179,6 +187,8 @@ function MidenWalletButtonInner({
     onStateChange({
       address,
       connected: wallet.connected,
+      connecting: wallet.connecting,
+      ready,
       error,
       balanceText,
       noteSyncStatus,
@@ -196,7 +206,9 @@ function MidenWalletButtonInner({
     error,
     noteSyncStatus,
     onStateChange,
+    ready,
     wallet.connected,
+    wallet.connecting,
     wallet.requestSend,
     wallet.requestTransaction,
     wallet.waitForTransaction,
@@ -378,14 +390,23 @@ function MidenWalletButtonInner({
     onResetProvider();
   }
 
+  // One source of truth for the pill's chain-specific label + accessible name.
+  const identity = midenWalletIdentity({
+    connecting: wallet.connecting,
+    connected: wallet.connected,
+    ready,
+    address,
+  });
+
   return (
     <div className="wallet-menu-root" ref={menuRef}>
       <button
-        className={`wallet-button wallet-pill ${wallet.connected ? "connected" : ""}`}
+        className={`wallet-button wallet-pill ${wallet.connected ? "connected" : ""} ${identity.state === "unavailable" ? "unavailable" : ""}`}
         type="button"
         onClick={() => setMenuOpen((open) => !open)}
         aria-expanded={menuOpen}
         aria-haspopup="menu"
+        aria-label={identity.actionLabel}
       >
         <span
           className="wallet-avatar"
@@ -397,15 +418,7 @@ function MidenWalletButtonInner({
             <WalletBrandIcon src={walletLogo} size={11} />
           </span>
         </span>
-        <span className="wallet-pill-label">
-          {wallet.connecting
-            ? "Connecting"
-            : wallet.connected
-              ? shortAddress(address)
-              : ready
-                ? "Connect wallet"
-                : "Install wallet"}
-        </span>
+        <span className="wallet-pill-label">{identity.pillLabel}</span>
         <ChevronDown
           className="wallet-menu-chevron"
           size={15}
