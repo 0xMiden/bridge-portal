@@ -150,6 +150,10 @@ function ExplorerLinkButton({ link, side }: { link: ExplorerLink; side: string }
  * from that direction rather than shown as dead nodes.
  */
 function milestonesFor(activity: Activity) {
+  // The intermediate steps differ by route: Epoch is a solver/allocator that
+  // fills the order; Agglayer is the canonical bridge. Name the right one.
+  const isEpoch = activity.provider === "epoch";
+  const providerName = isEpoch ? "Epoch" : "Agglayer";
   const copy: Record<
     string,
     { receive: { label: string; detail: string }; send: { label: string; detail: string } }
@@ -171,23 +175,27 @@ function milestonesFor(activity: Activity) {
       },
       send: {
         label: "Miden confirmation",
-        detail: "The note confirms on Miden before Agglayer picks it up.",
+        detail: `The note confirms on Miden before ${providerName} picks it up.`,
       },
     },
     message_observed: {
       receive: {
-        label: "Agglayer observed the deposit",
-        detail: "The bridge has seen your deposit and is preparing the Miden note.",
+        label: `${providerName} observed the deposit`,
+        detail: isEpoch
+          ? "The Epoch solver has your deposit and is filling it on Miden."
+          : "The bridge has seen your deposit and is preparing the Miden note.",
       },
       send: {
-        label: "Agglayer observed the message",
-        detail: "The bridge saw your outbound message and is preparing the Sepolia exit.",
+        label: `${providerName} observed the message`,
+        detail: isEpoch
+          ? "Epoch has your outbound intent and is filling it on Sepolia."
+          : "The bridge saw your outbound message and is preparing the Sepolia exit.",
       },
     },
     claim_available: {
       receive: {
         label: "Note created on Miden",
-        detail: "Agglayer created your note on Miden.",
+        detail: `${providerName} created your note on Miden.`,
       },
       send: {
         label: "Exit ready on Sepolia",
@@ -239,6 +247,7 @@ function milestonesFor(activity: Activity) {
  */
 function nextActionFor(activity: Activity): { headline: string; body: string } {
   const isReceive = activity.mode === "receive";
+  const providerName = activity.provider === "epoch" ? "Epoch" : "Agglayer";
   switch (activity.status) {
     case "signature":
       return {
@@ -252,14 +261,14 @@ function nextActionFor(activity: Activity): { headline: string; body: string } {
         headline: "Waiting for finality",
         body: isReceive
           ? "Your Sepolia deposit is confirming and reaching bridge finality. Nothing for you to do."
-          : "Your Miden note is confirming before Agglayer picks it up. Nothing for you to do.",
+          : `Your Miden note is confirming before ${providerName} picks it up. Nothing for you to do.`,
       };
     case "message_observed":
       return {
-        headline: "The bridge is processing",
+        headline: `${providerName} is processing`,
         body: isReceive
-          ? "Agglayer has observed your deposit and is creating the note on Miden."
-          : "Agglayer has observed your message and is preparing the Sepolia exit.",
+          ? `${providerName} has observed your deposit and is creating the note on Miden.`
+          : `${providerName} has observed your message and is preparing the Sepolia exit.`,
       };
     case "claim_available":
       return isReceive
