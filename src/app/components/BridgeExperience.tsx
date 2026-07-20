@@ -392,8 +392,8 @@ export function BridgeExperience() {
       ? "NEAR Intents is paused in this build while Agglayer and Epoch are the active testnet routes."
       : provider === "agglayer"
         ? mode === "receive"
-          ? "Slow testnet route. Your Sepolia wallet sends to Miden through Agglayer with no provider bridge fee."
-          : "Bridge out from Miden through Agglayer. The Sepolia claim is auto-submitted once the exit settles (~30-90 min)."
+          ? "Your Sepolia wallet sends to Miden through Agglayer with no provider bridge fee (~10-20 min)."
+          : "Bridge out from Miden through Agglayer. The Sepolia claim is auto-submitted by the gateway once the exit settles (~10-20 min) — nothing to claim manually."
         : "Testnet route. Epoch integration status is tracked from activity details.";
   const primaryActionLabel = isSubmitting
     ? submitPhase || "Preparing…"
@@ -912,7 +912,7 @@ export function BridgeExperience() {
         // Note submitted on Miden; Agglayer hasn't observed the exit yet.
         const activity = createActivity(mode, provider, amount, {
           status: "source_finality",
-          eta: "30-90 min",
+          eta: "10-20 min",
           destination: destinationAddress,
           // origin = Miden rollup 78, destination = Ethereum L1 (0)
           sourceNetworkId: AGGLAYER_BALI.destinationNetworkId,
@@ -982,7 +982,7 @@ export function BridgeExperience() {
         setSubmitPhase("Submitting…");
         const activity = createActivity(mode, provider, amount, {
           status: "source_finality",
-          eta: "About 15 min",
+          eta: "10-20 min",
           destination: destinationAccount,
           bridgeDestinationAddress: transaction.destinationAddress,
           midenAccountHex: midenAccountLink(destinationAccount),
