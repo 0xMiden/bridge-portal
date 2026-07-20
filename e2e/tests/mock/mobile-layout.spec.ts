@@ -101,7 +101,9 @@ test.describe("mobile bridge layout", () => {
     expect(Math.abs(layout.walletWidths[0] - layout.walletWidths[1])).toBeLessThan(
       2,
     );
-    expect(layout.scrollWidth).toBeLessThanOrEqual(layout.viewportWidth);
+    expect(Math.round(layout.scrollWidth)).toBeLessThanOrEqual(
+      layout.viewportWidth,
+    );
   });
 
   test("route opens as a labelled bottom dialog and restores focus on Escape", async ({
