@@ -28,12 +28,14 @@ import {
   type Activity,
   createActivity,
   loadStoredActivities,
+  loadStoredMode,
   loadStoredRoute,
   modes,
   patchStoredActivity,
   providers,
   quoteFor,
   saveActivities,
+  saveStoredMode,
   saveStoredRoute,
   shortAddress,
   statusLabel,
@@ -456,7 +458,9 @@ export function BridgeExperience() {
       params.get("evmAddress") ??
       params.get("evm_address") ??
       params.get("recipient");
-    const resolvedMode = nextMode ?? "receive";
+    // No URL intent → fall back to the last tab the user was on (then Receive).
+    const storedMode = nextMode ? null : loadStoredMode();
+    const resolvedMode = nextMode ?? storedMode ?? "receive";
 
     queueMicrotask(() => {
       if (nextProvider && !providers[nextProvider].disabled) {
@@ -468,7 +472,13 @@ export function BridgeExperience() {
         const storedProvider = loadStoredRoute();
         if (storedProvider) setProvider(storedProvider);
       }
-      if (nextMode) setMode(nextMode);
+      if (nextMode) {
+        // An explicit ?intent= / ?mode= wins and becomes the new sticky tab.
+        setMode(nextMode);
+        saveStoredMode(nextMode);
+      } else if (storedMode) {
+        setMode(storedMode);
+      }
 
       if (nextMidenAccount) {
         setLaunchMidenAccount(nextMidenAccount);
@@ -661,6 +671,8 @@ export function BridgeExperience() {
 
   function selectMode(nextMode: FlowMode) {
     setMode(nextMode);
+    // Remember the tab so a refresh keeps this direction.
+    saveStoredMode(nextMode);
     setAmount("");
     setDestination("");
     destinationPrefilledRef.current = false;

@@ -117,6 +117,28 @@ export function saveStoredRoute(provider: BridgeProvider) {
   }
 }
 
+// Persist the Send/Receive tab so a refresh keeps the current direction instead
+// of snapping back to Receive every time.
+const modeStorageKey = "miden.bridge.ui.mode";
+
+export function loadStoredMode(): FlowMode | null {
+  try {
+    const value = window.localStorage.getItem(modeStorageKey);
+    if (value === "receive" || value === "send") return value;
+  } catch {
+    // ignore storage access failures (SSR / privacy mode)
+  }
+  return null;
+}
+
+export function saveStoredMode(mode: FlowMode) {
+  try {
+    window.localStorage.setItem(modeStorageKey, mode);
+  } catch {
+    // ignore storage write failures
+  }
+}
+
 export const modes: Record<
   FlowMode,
   {
