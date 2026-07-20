@@ -91,8 +91,8 @@ Add `suppressHydrationWarning` to `<html>`. Replace the single theme color with:
 
 ```tsx
 themeColor: [
-  { media: "(prefers-color-scheme: light)", color: "#f7f7f5" },
-  { media: "(prefers-color-scheme: dark)", color: "#171716" },
+  { media: "(prefers-color-scheme: light)", color: "#f4f7f5" },
+  { media: "(prefers-color-scheme: dark)", color: "#0d1210" },
 ],
 colorScheme: "light dark",
 ```

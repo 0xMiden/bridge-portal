@@ -22,20 +22,22 @@ Semantic variables replace light-only component colors. Tokens are defined in `:
 
 | Token | Light | Dark |
 | --- | --- | --- |
-| `--background` | `#f7f7f5` | `#171716` |
-| `--surface` | `#ffffff` | `#212120` |
-| `--surface-muted` | `#efefec` | `#2a2a28` |
-| `--surface-strong` | `#e7e7e2` | `#333330` |
-| `--foreground` | `#20201e` | `#f1f1ee` |
-| `--muted-foreground` | `#6f6e68` | `#a3a29c` |
-| `--faint-foreground` | `#94938c` | `#7f7e78` |
-| `--border` | `rgba(32,32,30,.11)` | `rgba(241,241,238,.12)` |
-| `--border-strong` | `rgba(32,32,30,.19)` | `rgba(241,241,238,.21)` |
-| `--primary` | `#20201e` | `#f1f1ee` |
-| `--primary-foreground` | `#ffffff` | `#171716` |
+| `--background` | `#f4f7f5` | `#0d1210` |
+| `--surface` | `#ffffff` | `#141b18` |
+| `--surface-muted` | `#edf3f0` | `#1b2521` |
+| `--surface-strong` | `#e2ece7` | `#24302b` |
+| `--foreground` | `#17201c` | `#f1f6f3` |
+| `--muted-foreground` | `#607069` | `#a1b0a8` |
+| `--faint-foreground` | `#89958f` | `#718078` |
+| `--border` | `rgba(23,32,28,.11)` | `rgba(241,246,243,.12)` |
+| `--border-strong` | `rgba(23,32,28,.19)` | `rgba(241,246,243,.21)` |
+| `--primary` | `#17201c` | `#f1f6f3` |
+| `--primary-foreground` | `#ffffff` | `#0d1210` |
 | `--accent` | `#ff5500` | `#ff6a2a` |
 
 Success, warning, and danger tokens receive dark-mode variants with sufficient separation from their soft backgrounds. Native controls use the active color scheme. The static viewport publishes light and dark `themeColor` entries using media queries.
+
+The palette is intentionally cool rather than gray: light mode uses a porcelain page with pale mint-mist secondary surfaces and crisp white transfer inputs; dark mode uses botanical green-black ink surfaces rather than charcoal gray. Miden orange remains the only saturated accent.
 
 ## Global shell and controls
 
