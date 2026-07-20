@@ -899,7 +899,11 @@ a {
   margin-top: 7px;
   padding: 14px;
   border-radius: 22px;
-  background: var(--surface-muted);
+  /* Crisp opaque-white surface rather than the muddy warm-grey fill — reads as
+     a bright input panel against the translucent card; the border keeps it
+     separated since the card is near-white too. */
+  background: var(--surface);
+  border: 1px solid var(--border);
 }
 
 .swap-box strong {
