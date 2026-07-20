@@ -68,7 +68,7 @@ test("dark route and status states use semantic contrast", async ({
   await page.locator(".route-trigger").click();
 
   const testnetTag = page.locator(".route-tag.testnet").first();
-  const disabledTag = page.locator(".route-tag.availability.off");
+  const disabledTag = page.locator(".route-option.disabled");
 
   await expect(testnetTag).toBeVisible();
   await expect(disabledTag).toBeVisible();
@@ -123,6 +123,7 @@ test("dark route and status states use semantic contrast", async ({
       tokens: {
         surface: resolvedToken("--surface"),
         surfaceMuted: resolvedToken("--surface-muted"),
+        mutedForeground: resolvedToken("--muted-foreground"),
         accentSoft: resolvedToken("--accent-soft"),
         accentBorder: resolvedToken("--accent-border"),
         accentForeground: resolvedToken("--accent-foreground"),
@@ -137,7 +138,7 @@ test("dark route and status states use semantic contrast", async ({
         dangerForeground: resolvedToken("--danger-foreground"),
       },
       testnet: resolvedStyles(".route-tag.testnet"),
-      disabled: resolvedStyles(".route-tag.availability.off"),
+      disabled: resolvedStyles(".route-unavailable"),
       warning: resolvedStyles(".route-disclaimer.mock"),
       success: resolvedStyles("#e2e-status-states .status-badge.success"),
       statusWarning: resolvedStyles(
@@ -156,7 +157,9 @@ test("dark route and status states use semantic contrast", async ({
   expect(stateStyles.testnet.foreground).toBe(
     stateStyles.tokens.accentForeground,
   );
-  expect(stateStyles.disabled.background).toBe(stateStyles.tokens.surfaceMuted);
+  expect(stateStyles.disabled.foreground).toBe(
+    stateStyles.tokens.mutedForeground,
+  );
   expect(stateStyles.warning).toEqual({
     background: stateStyles.tokens.warningSoft,
     foreground: stateStyles.tokens.warningForeground,
@@ -260,18 +263,18 @@ test("dark mode applies semantic bridge surfaces and primary contrast", async ({
   });
 
   expect(colors.tokens).toEqual({
-    background: "rgb(13, 18, 16)",
-    surface: "rgb(20, 27, 24)",
-    surfaceElevated: "rgb(25, 33, 30)",
-    surfaceMuted: "rgb(27, 37, 33)",
-    surfaceStrong: "rgb(36, 48, 43)",
-    foreground: "rgb(241, 246, 243)",
-    mutedForeground: "rgb(161, 176, 168)",
-    faintForeground: "rgb(113, 128, 120)",
-    border: "rgba(241, 246, 243, 0.12)",
-    borderStrong: "rgba(241, 246, 243, 0.21)",
-    primary: "rgb(241, 246, 243)",
-    primaryForeground: "rgb(13, 18, 16)",
+    background: "rgb(20, 17, 13)",
+    surface: "rgb(27, 23, 18)",
+    surfaceElevated: "rgb(34, 29, 22)",
+    surfaceMuted: "rgb(36, 31, 24)",
+    surfaceStrong: "rgb(48, 42, 32)",
+    foreground: "rgb(246, 243, 236)",
+    mutedForeground: "rgb(176, 168, 155)",
+    faintForeground: "rgb(128, 120, 107)",
+    border: "rgba(246, 243, 236, 0.12)",
+    borderStrong: "rgba(246, 243, 236, 0.21)",
+    primary: "rgb(246, 243, 236)",
+    primaryForeground: "rgb(20, 17, 13)",
     accent: "rgb(255, 106, 42)",
   });
   expect(colors.card.background).toBe(colors.tokens.surface);
@@ -314,16 +317,16 @@ test("dark mode applies semantic bridge surfaces and primary contrast", async ({
   });
 
   expect(lightTokens).toEqual([
-    "rgb(244, 247, 245)",
+    "rgb(247, 244, 238)",
     "rgb(255, 255, 255)",
-    "rgb(237, 243, 240)",
-    "rgb(226, 236, 231)",
-    "rgb(23, 32, 28)",
-    "rgb(96, 112, 105)",
-    "rgb(137, 149, 143)",
-    "rgba(23, 32, 28, 0.11)",
-    "rgba(23, 32, 28, 0.19)",
-    "rgb(23, 32, 28)",
+    "rgb(241, 238, 231)",
+    "rgb(235, 230, 220)",
+    "rgb(23, 21, 17)",
+    "rgb(112, 107, 97)",
+    "rgb(154, 146, 134)",
+    "rgba(23, 21, 17, 0.11)",
+    "rgba(23, 21, 17, 0.19)",
+    "rgb(23, 21, 17)",
     "rgb(255, 255, 255)",
     "rgb(255, 85, 0)",
   ]);

@@ -921,16 +921,6 @@ a {
   color: var(--accent-foreground);
 }
 
-.route-tag.availability.on {
-  background: var(--surface-strong);
-  color: var(--muted-foreground);
-}
-
-.route-tag.availability.off {
-  background: var(--surface-muted);
-  color: var(--muted-foreground);
-}
-
 .route-check {
   margin-left: auto;
   color: var(--accent);
