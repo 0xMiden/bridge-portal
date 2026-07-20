@@ -22,6 +22,8 @@ export function E2EMidenWalletButton({
     onStateChange({
       address: "",
       connected: false,
+      connecting: true,
+      ready: true,
       error: "",
       balanceText: "Connecting",
       noteSyncStatus: "Connecting",
@@ -36,6 +38,8 @@ export function E2EMidenWalletButton({
         onStateChange({
           address: signer.address,
           connected: true,
+          connecting: false,
+          ready: true,
           error: "",
           balanceText: "Connected",
           noteSyncStatus: "Ready",
@@ -79,6 +83,8 @@ export function E2EMidenWalletButton({
         onStateChange({
           address: "",
           connected: false,
+          connecting: false,
+          ready: true,
           error: message,
           balanceText: "Signer error",
           noteSyncStatus: "Error",

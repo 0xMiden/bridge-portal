@@ -26,6 +26,10 @@ import {
   type BridgeProvider,
   type FlowMode,
   type Activity,
+  type WalletIdentity,
+  SEPOLIA_CHAIN_ID,
+  evmWalletIdentity,
+  midenWalletIdentity,
   createActivity,
   loadStoredActivities,
   loadStoredMode,
@@ -51,6 +55,7 @@ import type {
 import {
   useAppKit,
   useAppKitAccount,
+  useAppKitNetwork,
   useAppKitProvider,
   useDisconnect,
   useWalletInfo,
@@ -85,6 +90,8 @@ function WalletBrandIcon({ src, size }: { src?: string; size: number }) {
 type MidenWalletSnapshot = {
   address: string;
   connected: boolean;
+  connecting: boolean;
+  ready: boolean;
   error: string;
   balanceText: string;
   noteSyncStatus: string;
@@ -99,6 +106,11 @@ type MidenWalletSnapshot = {
 const emptyMidenWallet: MidenWalletSnapshot = {
   address: "",
   connected: false,
+  connecting: false,
+  // Default ready=true so the panel reads a neutral "Not connected" before the
+  // (dynamically imported) adapter reports; it corrects to "Not installed" only
+  // once the button confirms the extension is genuinely missing.
+  ready: true,
   error: "",
   balanceText: "Not connected",
   noteSyncStatus: "Not connected",
@@ -241,6 +253,7 @@ export function BridgeExperience() {
   const router = useRouter();
   const { open } = useAppKit();
   const { address, isConnected } = useAppKitAccount();
+  const { chainId } = useAppKitNetwork();
   const { walletProvider } = useAppKitProvider<EvmProvider>("eip155");
   const { disconnect } = useDisconnect();
   const { walletInfo } = useWalletInfo();
@@ -251,6 +264,12 @@ export function BridgeExperience() {
   const [destination, setDestination] = useState("");
   const walletAccount = address ?? "";
   const walletConnected = isConnected && Boolean(address);
+  // Connected but the wallet is pointed at a chain other than Sepolia — surfaced
+  // inline (pill + panel) with a switch action. Unknown chainId isn't "wrong".
+  const wrongNetwork =
+    walletConnected &&
+    chainId != null &&
+    Number(chainId) !== SEPOLIA_CHAIN_ID;
   const [evmBalance, setEvmBalance] = useState("");
   // Numeric Sepolia balance of the route's source token, for the
   // insufficient-balance guard (null = unknown / not yet loaded).
@@ -365,9 +384,23 @@ export function BridgeExperience() {
     : launchMidenAccount
       ? "Launch account"
       : "Not connected";
-  const sourceBalance = mode === "receive" ? evmBalanceText : midenBalanceText;
-  const destinationBalance =
-    mode === "receive" ? midenBalanceText : evmBalanceText;
+  // Chain-specific wallet identity for the header pill + the From/To panels, so
+  // each side explicitly names its wallet and shows its connection state.
+  const evmIdentity = evmWalletIdentity({
+    connected: walletConnected,
+    wrongNetwork,
+    address: walletAccount,
+  });
+  const midenIdentity = midenWalletIdentity({
+    connecting: midenWallet.connecting,
+    connected: midenWallet.connected,
+    ready: midenWallet.ready,
+    address: midenAddress,
+  });
+  // Receive: Sepolia is the source, Miden the destination. Send flips it.
+  const sourceIdentity = mode === "receive" ? evmIdentity : midenIdentity;
+  const destinationIdentity =
+    mode === "receive" ? midenIdentity : evmIdentity;
   const hasDestination = Boolean(
     destination.trim() || (mode === "receive" ? midenAddress : walletAccount),
   );
@@ -693,10 +726,43 @@ export function BridgeExperience() {
     setBalanceRequestedFor(midenAddress);
   }
 
+  // The chain-specific wallet identity line for a From/To panel: names the
+  // wallet and shows its live connection state (address / not connected /
+  // connecting / wrong network / not installed). Connection itself stays with
+  // the header pills + primary CTA; the panel only exposes state, plus an inline
+  // switch when the connected Sepolia wallet is on the wrong network.
+  function renderWalletChip(identity: WalletIdentity) {
+    return (
+      <span className={`wallet-chip ${identity.state}`}>
+        <span className="wallet-chip-dot" aria-hidden="true" />
+        <span className="wallet-chip-name">{identity.name}</span>
+        <span className="wallet-chip-state">{identity.stateText}</span>
+        {identity.state === "wrong-network" ? (
+          <button
+            type="button"
+            className="wallet-chip-switch"
+            onClick={switchToSepolia}
+          >
+            Switch to Sepolia
+          </button>
+        ) : null}
+      </span>
+    );
+  }
+
+  // The Sepolia balance line — shown only once the wallet is connected (the chip
+  // above owns the disconnected/connecting/wrong-network states).
+  function renderEvmBalance() {
+    if (!walletConnected) return null;
+    return <>Available {evmBalanceText}</>;
+  }
+
   // The Miden balance cell. Reactive + opt-in: it stays a "Show balance" button
   // (no popup) until the user asks, then shows the amount with a refresh control.
   function renderMidenBalance() {
-    if (!midenWallet.connected) return <>Available {midenBalanceText}</>;
+    // Connection state (not connected / connecting / launch-account) lives in the
+    // wallet chip above; the balance line only appears once there's a balance.
+    if (!midenWallet.connected) return null;
     if (midenBalances && midenRouteToken) {
       return (
         <>
@@ -804,14 +870,19 @@ export function BridgeExperience() {
     setEvmBalance("");
   }
 
-  async function switchSepoliaFromMenu() {
+  async function switchToSepolia() {
+    setWalletError("");
     try {
-      if (!walletProvider) throw new Error("Connect your EVM wallet first.");
+      if (!walletProvider) throw new Error("Connect your Sepolia wallet first.");
       await ensureSepolia(walletProvider);
-      setEvmMenuOpen(false);
     } catch (error) {
       setWalletError(errorMessage(error));
     }
+  }
+
+  async function switchSepoliaFromMenu() {
+    setEvmMenuOpen(false);
+    await switchToSepolia();
   }
 
   async function handleEvmWalletClick() {
@@ -1177,11 +1248,12 @@ export function BridgeExperience() {
         <div className="wallet-cluster" aria-label="Connected wallets">
           <div className="wallet-menu-root" ref={evmMenuRef}>
             <button
-              className={`wallet-button wallet-pill ${walletConnected ? "connected" : ""}`}
+              className={`wallet-button wallet-pill ${walletConnected ? "connected" : ""} ${wrongNetwork ? "wrong-network" : ""}`}
               type="button"
               onClick={handleEvmWalletClick}
               aria-expanded={walletConnected ? evmMenuOpen : undefined}
               aria-haspopup={walletConnected ? "menu" : undefined}
+              aria-label={evmIdentity.actionLabel}
             >
               <span
                 className="wallet-avatar"
@@ -1198,11 +1270,7 @@ export function BridgeExperience() {
                   />
                 </span>
               </span>
-              <span className="wallet-pill-label">
-                {walletConnected
-                  ? shortAddress(walletAccount)
-                  : "Connect wallet"}
-              </span>
+              <span className="wallet-pill-label">{evmIdentity.pillLabel}</span>
               {walletConnected ? (
                 <ChevronDown
                   className="wallet-menu-chevron"
@@ -1364,13 +1432,14 @@ export function BridgeExperience() {
             <div>
               <span>From</span>
               <strong>{copy.from}</strong>
-              <small className="balance-line">
-                {mode === "send" ? (
-                  renderMidenBalance()
-                ) : (
-                  <>Available {sourceBalance}</>
-                )}
-              </small>
+              {renderWalletChip(sourceIdentity)}
+              {(() => {
+                const line =
+                  mode === "send" ? renderMidenBalance() : renderEvmBalance();
+                return line ? (
+                  <small className="balance-line">{line}</small>
+                ) : null;
+              })()}
             </div>
             <label>
               <input
@@ -1394,13 +1463,14 @@ export function BridgeExperience() {
             <div>
               <span>To</span>
               <strong>{copy.to}</strong>
-              <small className="balance-line">
-                {mode === "receive" ? (
-                  renderMidenBalance()
-                ) : (
-                  <>Available {destinationBalance}</>
-                )}
-              </small>
+              {renderWalletChip(destinationIdentity)}
+              {(() => {
+                const line =
+                  mode === "receive" ? renderMidenBalance() : renderEvmBalance();
+                return line ? (
+                  <small className="balance-line">{line}</small>
+                ) : null;
+              })()}
             </div>
             <label className="readonly-amount">
               <strong>
