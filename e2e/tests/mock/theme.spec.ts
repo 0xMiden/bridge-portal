@@ -253,7 +253,9 @@ test("dark mode applies semantic bridge surfaces and primary contrast", async ({
       card: resolvedStyles(".swap-card"),
       routeControl: resolvedStyles(".route-trigger"),
       walletMenu: resolvedStyles(".wallet-actions-menu"),
-      primaryButton: resolvedStyles(".swap-card > .primary-button"),
+      primaryButton: resolvedStyles(
+        ".swap-card > .primary-action-dock > .primary-button",
+      ),
     };
   });
 
