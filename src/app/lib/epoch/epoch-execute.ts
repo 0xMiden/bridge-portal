@@ -23,6 +23,7 @@ import {
   MIDEN_NATIVE_FAUCET_ID,
   MIDEN_NATIVE_TOKEN_DECIMALS,
 } from "./config";
+import { epochActivityStatus } from "./epoch-status";
 import type { CreateMidenP2IDNote, MidenNoteDeps } from "./miden-note";
 import { createBridgeP2IDNoteCallback } from "./miden-note";
 import { getEpochReadOnlySdk, getEpochSdk } from "./sdk";
@@ -265,6 +266,14 @@ export interface PollEpochStatusOpts {
   timeoutMs?: number;
   signal?: AbortSignal;
   onUpdate?: (statuses: IntentTransactionStatus[]) => void;
+  /**
+   * When set, the poll stops only once the *activity* is terminal for this
+   * destination chain (Sepolia for a send, Miden for a receive) — not merely
+   * when any leg reports terminal. A send's Miden source leg settles first, so
+   * the generic check would stop the poll while the Sepolia payout is still
+   * pending, freezing the page at "message observed" until a manual refresh.
+   */
+  destinationChainId?: number;
 }
 
 const TERMINAL_OK = /complete|success|fulfil|settled|claimed|done/i;
@@ -300,7 +309,16 @@ export async function pollEpochIntentStatus(
     try {
       last = await sdk.getIntentStatus(opts.sponsorAddress, opts.intentNonce);
       opts.onUpdate?.(last);
-      if (isTerminalStatus(last)) return last;
+      // Stop on the activity-level terminal state (destination-aware) when the
+      // caller provides a destination chain; otherwise fall back to the generic
+      // "any leg terminal" check.
+      if (opts.destinationChainId !== undefined) {
+        const activityStatus = epochActivityStatus(last, opts.destinationChainId);
+        if (activityStatus === "complete" || activityStatus === "failed")
+          return last;
+      } else if (isTerminalStatus(last)) {
+        return last;
+      }
     } catch (err) {
       console.warn("[epoch] getIntentStatus poll failed", err);
     }
