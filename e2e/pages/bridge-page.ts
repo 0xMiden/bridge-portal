@@ -45,11 +45,36 @@ export class BridgePage {
   }
 
   primaryButton() {
-    return this.page.locator(".primary-button");
+    // The card's primary CTA — scoped to the swap card so it never matches the
+    // preflight's own "Confirm in wallet" button (also a .primary-button).
+    return this.page.locator(".swap-card > .primary-button");
   }
 
+  /** The preflight review dialog, once the CTA opens it. */
+  preflight() {
+    return this.page.locator(".preflight-overlay");
+  }
+
+  /** Open the preflight from a ready CTA (waits out any transient quote-loading). */
+  async openPreflight(): Promise<void> {
+    const cta = this.primaryButton();
+    await expect(cta).toContainText(/Review (receive|send)/i);
+    await cta.click();
+    await this.preflight().waitFor({ state: "visible" });
+  }
+
+  async confirmPreflight(): Promise<void> {
+    await this.page.locator(".preflight-confirm").click();
+  }
+
+  async cancelPreflight(): Promise<void> {
+    await this.page.locator(".preflight-cancel").click();
+  }
+
+  /** Full submit path: open the review, then confirm (reaches the wallet). */
   async submit(): Promise<void> {
-    await this.primaryButton().click();
+    await this.openPreflight();
+    await this.confirmPreflight();
   }
 
   /** The first Current-transfer activity row, once one appears. */

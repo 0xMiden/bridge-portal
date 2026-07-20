@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
   type Activity,
+  type CtaInputs,
+  deriveCtaState,
   evmWalletIdentity,
+  isValidAmount,
   midenWalletIdentity,
   sourceExplorer,
 } from "./bridge-state";
@@ -124,5 +127,97 @@ describe("midenWalletIdentity (issue #54 chain-specific identity)", () => {
     expect(connected.pillLabel).toBe(connected.stateText);
     expect(connected.state).toBe("connected");
     expect(connected.actionLabel).toBe("Miden wallet menu");
+  });
+});
+
+describe("isValidAmount (wallet-prompt floor)", () => {
+  it("accepts a finite positive amount", () => {
+    expect(isValidAmount("1")).toBe(true);
+    expect(isValidAmount("0.0001")).toBe(true);
+  });
+
+  it("rejects empty, zero, negative, malformed, and non-finite amounts", () => {
+    for (const bad of ["", "   ", "0", "0.0", "-1", "abc", "1.2.3", "1e999", "NaN", "Infinity"]) {
+      expect(isValidAmount(bad)).toBe(false);
+    }
+  });
+});
+
+describe("deriveCtaState (primary CTA progression)", () => {
+  // A fully-ready receive; individual tests override one field to probe a state.
+  const ready: CtaInputs = {
+    mode: "receive",
+    sourceConnected: true,
+    hasDestination: true,
+    amount: "1",
+    sourceTokenSymbol: "USDC",
+    insufficientBalance: false,
+    quoteLoading: false,
+    isSubmitting: false,
+    submitPhase: "",
+  };
+
+  it("submitting wins over everything and stays disabled", () => {
+    const cta = deriveCtaState({ ...ready, isSubmitting: true, submitPhase: "Confirm in your wallet…" });
+    expect(cta.action).toBe("submitting");
+    expect(cta.label).toBe("Confirm in your wallet…");
+    expect(cta.disabled).toBe(true);
+    expect(cta.opensReview).toBe(false);
+  });
+
+  it("an invalid amount disables the CTA (no wallet prompt possible)", () => {
+    for (const bad of ["", "0", "-1", "abc", "1e999"]) {
+      const cta = deriveCtaState({ ...ready, amount: bad });
+      expect(cta.action).toBe("enter-amount");
+      expect(cta.label).toBe("Enter amount");
+      expect(cta.disabled).toBe(true);
+      expect(cta.opensReview).toBe(false);
+    }
+  });
+
+  it("uses the chain-specific connect label for a missing source wallet", () => {
+    const receive = deriveCtaState({ ...ready, sourceConnected: false });
+    expect(receive.action).toBe("connect-source");
+    expect(receive.label).toBe("Connect Sepolia wallet");
+    expect(receive.disabled).toBe(false);
+
+    const send = deriveCtaState({ ...ready, mode: "send", sourceConnected: false });
+    expect(send.label).toBe("Connect Miden wallet");
+  });
+
+  it("prompts for the correct destination when it's missing", () => {
+    const receive = deriveCtaState({ ...ready, hasDestination: false });
+    expect(receive.action).toBe("add-destination");
+    expect(receive.label).toBe("Add Miden account");
+
+    const send = deriveCtaState({ ...ready, mode: "send", hasDestination: false });
+    expect(send.label).toBe("Add Sepolia address");
+  });
+
+  it("surfaces insufficient balance as a disabled state", () => {
+    const cta = deriveCtaState({ ...ready, insufficientBalance: true });
+    expect(cta.action).toBe("insufficient");
+    expect(cta.label).toBe("Not enough USDC");
+    expect(cta.disabled).toBe(true);
+  });
+
+  it("shows a disabled quote-loading state (not mistakable for ready)", () => {
+    const cta = deriveCtaState({ ...ready, quoteLoading: true });
+    expect(cta.action).toBe("quote-loading");
+    expect(cta.label).toBe("Fetching quote…");
+    expect(cta.disabled).toBe(true);
+    expect(cta.opensReview).toBe(false);
+  });
+
+  it("opens the preflight review only when everything is ready", () => {
+    const receive = deriveCtaState(ready);
+    expect(receive.action).toBe("review");
+    expect(receive.label).toBe("Review receive");
+    expect(receive.disabled).toBe(false);
+    expect(receive.opensReview).toBe(true);
+
+    const send = deriveCtaState({ ...ready, mode: "send" });
+    expect(send.label).toBe("Review send");
+    expect(send.opensReview).toBe(true);
   });
 });
