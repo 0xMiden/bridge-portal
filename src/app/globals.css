@@ -175,6 +175,25 @@ a {
   min-width: 0;
 }
 
+.detail-topbar-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
 .theme-menu-root {
   position: relative;
   display: inline-flex;
@@ -194,9 +213,12 @@ a {
   color: var(--muted-foreground);
   box-shadow: var(--shadow-control);
   transition:
-    border-color var(--duration-base) var(--ease-standard),
-    background-color var(--duration-base) var(--ease-standard),
-    color var(--duration-base) var(--ease-standard);
+    opacity var(--duration-fast) var(--ease-standard),
+    transform var(--duration-fast) var(--ease-press);
+}
+
+.theme-trigger:active {
+  transform: scale(0.97);
 }
 
 .theme-trigger:hover,
@@ -329,12 +351,8 @@ a {
 .swap-box,
 .timeline-step {
   transition:
-    border-color var(--duration-base) var(--ease-standard),
-    background-color var(--duration-base) var(--ease-standard),
-    box-shadow var(--duration-base) var(--ease-standard),
-    color var(--duration-base) var(--ease-standard),
-    opacity var(--duration-base) var(--ease-standard),
-    transform var(--duration-base) var(--ease-standard);
+    opacity var(--duration-fast) var(--ease-standard),
+    transform var(--duration-fast) var(--ease-press);
 }
 
 .wallet-button:hover,
@@ -558,8 +576,8 @@ a {
   transform: translateY(-4px) scale(0.98);
   transform-origin: top right;
   transition:
-    opacity var(--duration-fast) var(--ease-standard),
-    transform var(--duration-fast) var(--ease-standard);
+    opacity var(--duration-base) var(--ease-standard),
+    transform var(--duration-base) var(--ease-standard);
 }
 
 .wallet-actions-menu.open {
@@ -670,10 +688,7 @@ a {
   border-radius: var(--radius-lg);
   background: var(--surface);
   box-shadow: var(--shadow-card);
-  transition:
-    box-shadow var(--duration-slow) var(--ease-standard),
-    transform var(--duration-slow) var(--ease-standard);
-  animation: swap-card-enter var(--duration-slow) var(--ease-standard) both;
+  animation: swap-card-enter var(--duration-base) var(--ease-standard) both;
 }
 
 @keyframes swap-card-enter {
@@ -710,10 +725,6 @@ a {
     animation: none;
     transition: none;
   }
-}
-
-.swap-card:hover {
-  box-shadow: var(--shadow-card);
 }
 
 .swap-card-top {
@@ -822,8 +833,8 @@ a {
   transform: translateY(-4px) scale(0.98);
   transform-origin: top right;
   transition:
-    opacity var(--duration-fast) var(--ease-standard),
-    transform var(--duration-fast) var(--ease-standard);
+    opacity var(--duration-base) var(--ease-standard),
+    transform var(--duration-base) var(--ease-standard);
 }
 
 .route-options-menu.open {
@@ -1016,7 +1027,6 @@ a {
   background: transparent;
   color: var(--muted-foreground);
   font-weight: 800;
-  transition: color var(--duration-fast) var(--ease-standard);
 }
 
 .mode-switch button[aria-pressed="true"] {
@@ -1085,9 +1095,7 @@ a {
   font: inherit;
   font-weight: 760;
   cursor: pointer;
-  transition:
-    background 0.15s ease,
-    border-color 0.15s ease;
+  transition: transform var(--duration-fast) var(--ease-press);
 }
 
 .balance-show:hover {
@@ -1105,9 +1113,7 @@ a {
   background: transparent;
   color: var(--muted-foreground);
   cursor: pointer;
-  transition:
-    color 0.15s ease,
-    background 0.15s ease;
+  transition: transform var(--duration-fast) var(--ease-press);
 }
 
 .balance-refresh:hover {
@@ -1158,7 +1164,7 @@ a {
   font-size: 11px;
   font-weight: 780;
   cursor: pointer;
-  transition: background 0.15s ease;
+  transition: transform var(--duration-fast) var(--ease-press);
 }
 
 .wallet-chip-switch:hover {
@@ -1523,7 +1529,6 @@ a {
 
 .primary-button:hover {
   transform: translateY(-0.5px);
-  box-shadow: var(--shadow-raised);
 }
 
 .primary-button:disabled {
@@ -1533,7 +1538,7 @@ a {
 .primary-button svg,
 .back-link svg,
 .explorer-link svg {
-  transition: transform var(--duration-base) var(--ease-standard);
+  transition: transform var(--duration-fast) var(--ease-standard);
 }
 
 .primary-button:hover svg,
@@ -1691,16 +1696,17 @@ a {
   }
 
   .home-activity {
-    animation: rise-in 520ms 80ms var(--ease-standard) both;
+    animation: rise-in var(--duration-base) 80ms var(--ease-standard) both;
   }
 
   .status-dot.active {
     animation: status-pulse 1.8s var(--ease-standard) infinite;
   }
 
-  .timeline-step.current .step-icon svg {
-    animation: gentle-spin 1.6s linear infinite;
+  .milestone.current .milestone-marker {
+    animation: status-pulse 1.6s var(--ease-standard) infinite;
   }
+
 }
 
 @keyframes rise-in {
@@ -1724,12 +1730,6 @@ a {
   }
 }
 
-@keyframes gentle-spin {
-  to {
-    transform: rotate(360deg);
-  }
-}
-
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
@@ -1738,6 +1738,11 @@ a {
     animation-iteration-count: 1 !important;
     scroll-behavior: auto !important;
     transition-duration: 0.01ms !important;
+  }
+
+  .milestone.current .milestone-marker,
+  .status-dot.active {
+    animation: none !important;
   }
 }
 
@@ -1785,7 +1790,7 @@ a {
 }
 
 .receipt-link svg {
-  color: var(--accent);
+  color: var(--muted-foreground);
 }
 
 .receipt-link.disabled {
@@ -1871,7 +1876,7 @@ a {
   gap: 8px;
   padding: 14px;
   border: 1px solid var(--border);
-  border-radius: 16px;
+  border-radius: var(--radius-lg);
   background: var(--surface-muted);
 }
 
@@ -1975,7 +1980,6 @@ a {
 .milestone.current .milestone-marker {
   border-color: var(--accent);
   background: var(--accent);
-  animation: status-pulse 1.6s var(--ease-standard) infinite;
 }
 
 .milestone.failed .milestone-marker {
@@ -2013,7 +2017,7 @@ a {
 
 /* Collapsible receipt — secondary while in-flight, opened once complete. */
 .receipt-details {
-  border-top: 1px dashed var(--border-strong);
+  border-top: 1px solid var(--border-strong);
   padding-top: 6px;
 }
 
@@ -2045,7 +2049,7 @@ a {
 }
 
 .support-row .secondary-button {
-  min-height: 38px;
+  min-height: 44px;
   font-size: 13px;
 }
 
@@ -2092,6 +2096,7 @@ a {
 
 .receipt-card {
   position: relative;
+  box-shadow: none;
 }
 
 .receipt-header {
@@ -2133,8 +2138,8 @@ a {
   z-index: 1;
   margin-top: 24px;
   padding: 22px 0;
-  border-top: 1px dashed var(--border-strong);
-  border-bottom: 1px dashed var(--border-strong);
+  border-top: 1px solid var(--border-strong);
+  border-bottom: 1px solid var(--border-strong);
 }
 
 .receipt-amount span,
@@ -2187,7 +2192,7 @@ a {
   margin-top: 18px;
   padding: 14px;
   border: 1px solid var(--border);
-  border-radius: 18px;
+  border-radius: var(--radius-lg);
   background: var(--surface-muted);
 }
 
@@ -2270,7 +2275,63 @@ a {
   justify-content: space-between;
   gap: 12px;
   min-height: 34px;
-  border-bottom: 1px dashed var(--border);
+  border-bottom: 1px solid var(--border);
+}
+
+.activity-values {
+  display: grid;
+  gap: 8px;
+}
+
+.activity-value-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px 12px;
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface-muted);
+}
+
+.activity-value-label {
+  color: var(--muted-foreground);
+  font-size: 12px;
+  font-weight: 760;
+}
+
+.activity-value-row code {
+  grid-column: 1;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--foreground);
+  font-family: var(--font-geist-mono), ui-monospace, monospace;
+  font-size: 12px;
+  font-weight: 680;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.activity-value-row code.is-expanded {
+  overflow: visible;
+  overflow-wrap: anywhere;
+  text-overflow: clip;
+  white-space: normal;
+}
+
+.activity-value-actions {
+  display: flex;
+  grid-row: 1 / 3;
+  grid-column: 2;
+  align-items: center;
+  gap: 6px;
+}
+
+.activity-value-actions .secondary-button {
+  width: auto;
+  min-width: 44px;
+  min-height: 44px;
+  padding-inline: 12px;
 }
 
 .receipt-line strong {
@@ -2503,6 +2564,12 @@ a {
     min-height: 0;
   }
 
+  .detail-topbar-actions {
+    display: grid;
+    grid-template-columns: 44px minmax(0, 1fr);
+    width: 100%;
+  }
+
   .brand {
     justify-content: space-between;
   }
@@ -2682,10 +2749,8 @@ a {
   }
 }
 
-/* Preflight review — a confirmation surface over the swap card. The primary CTA
-   never submits directly; a valid transfer opens this, and only its "Confirm in
-   wallet" action reaches the wallet. Scoped to the card (absolute fill) so it
-   reads as a step in the same flow rather than a detached modal. */
+/* Preflight review — centered inside the bridge card on desktop and promoted to
+   a viewport sheet at the mobile breakpoint below. */
 .preflight-overlay {
   position: absolute;
   inset: 0;
@@ -2696,7 +2761,7 @@ a {
   padding: 10px;
   border-radius: var(--radius-lg);
   background: var(--overlay);
-  animation: swap-content-fade var(--duration-base) var(--ease-standard) both;
+  animation: preflight-backdrop-enter 260ms var(--ease-standard) both;
 }
 
 .preflight-panel {
@@ -2711,6 +2776,13 @@ a {
   border-radius: var(--radius-lg);
   background: var(--surface);
   box-shadow: var(--shadow-card);
+}
+
+.preflight-body {
+  display: flex;
+  min-height: 0;
+  flex-direction: column;
+  gap: 12px;
 }
 
 .preflight-head {
@@ -2815,6 +2887,10 @@ a {
 }
 
 .preflight-inspect {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
   flex: 0 0 auto;
   padding: 3px 8px;
   border: 1px solid var(--border);
@@ -2839,6 +2915,7 @@ a {
 .preflight-actions {
   display: flex;
   gap: 8px;
+  flex: 0 0 auto;
 }
 
 .preflight-actions .preflight-cancel {
@@ -2852,12 +2929,54 @@ a {
 }
 
 @media (max-width: 640px) {
-  .app-shell {
+  .app-shell,
+  .detail-shell {
     padding:
       max(12px, env(safe-area-inset-top))
       max(12px, env(safe-area-inset-right))
       max(12px, env(safe-area-inset-bottom))
       max(12px, env(safe-area-inset-left));
+  }
+
+  .detail-topbar {
+    gap: 8px;
+  }
+
+  .detail-topbar .brand {
+    min-height: 44px;
+  }
+
+  .detail-simple {
+    width: 100%;
+  }
+
+  .detail-simple .receipt-card {
+    gap: 12px;
+    padding: 14px;
+    border-radius: var(--radius-lg);
+  }
+
+  .back-link,
+  .receipt-link,
+  .receipt-details > summary,
+  .support-row .secondary-button,
+  .action-panel .primary-button {
+    min-height: 44px;
+  }
+
+  .receipt-details > summary {
+    display: flex;
+    align-items: center;
+  }
+
+  .activity-value-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .activity-value-actions {
+    grid-row: auto;
+    grid-column: 1;
+    justify-content: flex-start;
   }
 
   .topbar {
@@ -2902,6 +3021,50 @@ a {
   .preflight-close,
   .preflight-inspect {
     min-width: 44px;
+  }
+
+  .preflight-overlay {
+    position: fixed;
+    z-index: 110;
+    inset: 0;
+    align-items: flex-end;
+    padding: 0;
+    border-radius: 0;
+    height: 100dvh;
+  }
+
+  .preflight-panel {
+    width: 100%;
+    max-height: min(88dvh, 720px);
+    overflow: hidden;
+    padding: 16px 16px 0;
+    border-right: 0;
+    border-bottom: 0;
+    border-left: 0;
+    border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+    background: var(--surface-elevated);
+    animation: preflight-sheet-enter 260ms var(--ease-standard) both;
+  }
+
+  .preflight-body {
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-gutter: stable;
+  }
+
+  .preflight-actions {
+    position: sticky;
+    z-index: 1;
+    bottom: 0;
+    margin: 0 -16px;
+    padding: 10px 16px calc(10px + env(safe-area-inset-bottom));
+    border-top: 1px solid var(--border);
+    background: var(--surface-elevated);
+  }
+
+  .preflight-rows div {
+    align-items: flex-start;
   }
 
   .balance-refresh {
@@ -3084,5 +3247,18 @@ a {
   from {
     opacity: 0;
     transform: translateY(24px);
+  }
+}
+
+@keyframes preflight-backdrop-enter {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes preflight-sheet-enter {
+  from {
+    opacity: 0;
+    transform: translateY(18px);
   }
 }

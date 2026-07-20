@@ -326,6 +326,8 @@ export function BridgeExperience() {
   // Reveals the full destination value in the preflight (a long Miden id / 0x
   // address is shortened by default, with an affordance to inspect it in full).
   const [showFullDestination, setShowFullDestination] = useState(false);
+  const [preflightDestinationCopied, setPreflightDestinationCopied] =
+    useState(false);
   // Whether the live Epoch quote is currently recomputing — lifted from
   // EpochQuotePreview so the CTA can show "Fetching quote…" instead of "Review".
   const [epochQuoteLoading, setEpochQuoteLoading] = useState(false);
@@ -333,6 +335,7 @@ export function BridgeExperience() {
   const walletClusterRef = useRef<HTMLDivElement>(null);
   const preflightConfirmRef = useRef<HTMLButtonElement>(null);
   const primaryActionRef = useRef<HTMLButtonElement>(null);
+  const preflightPreviousFocusRef = useRef<HTMLElement | null>(null);
   // Prefill the destination input with the connected wallet once per direction;
   // cleared in selectMode so switching modes re-prefills for the new side.
   const destinationPrefilledRef = useRef(false);
@@ -1076,7 +1079,13 @@ export function BridgeExperience() {
         ".wallet-pill",
       );
     const midenPill = pills?.[pills.length - 1];
-    midenPill?.scrollIntoView({ block: "center", behavior: "smooth" });
+    const reducedMotion = window.matchMedia(
+      "(prefers-reduced-motion: reduce)",
+    ).matches;
+    midenPill?.scrollIntoView({
+      block: "center",
+      behavior: reducedMotion ? "auto" : "smooth",
+    });
     midenPill?.focus();
   }
 
@@ -1096,6 +1105,11 @@ export function BridgeExperience() {
       case "review":
         setBridgeError("");
         setShowFullDestination(false);
+        setPreflightDestinationCopied(false);
+        preflightPreviousFocusRef.current =
+          document.activeElement instanceof HTMLElement
+            ? document.activeElement
+            : primaryActionRef.current;
         setShowPreflight(true);
         return;
       default:
@@ -1108,7 +1122,9 @@ export function BridgeExperience() {
   function cancelPreflight() {
     // Close the review with all entered data intact (form state is untouched).
     setShowPreflight(false);
-    window.requestAnimationFrame(() => primaryActionRef.current?.focus());
+    const focusTarget =
+      preflightPreviousFocusRef.current ?? primaryActionRef.current;
+    window.requestAnimationFrame(() => focusTarget?.focus());
   }
 
   function confirmPreflight() {
@@ -1116,18 +1132,52 @@ export function BridgeExperience() {
     void submitTransfer();
   }
 
+  async function copyPreflightDestination() {
+    try {
+      await navigator.clipboard.writeText(previewDestination);
+      setPreflightDestinationCopied(true);
+      window.setTimeout(() => setPreflightDestinationCopied(false), 2_000);
+    } catch {
+      // Clipboard access may be blocked. Keep the action available for retry.
+    }
+  }
+
   // While the preflight is open, focus its confirm action and let Escape cancel
   // it — keyboard parity with the rest of the flow.
   useEffect(() => {
     if (!showPreflight) return;
-    preflightConfirmRef.current?.focus();
+    const focusFrame = window.requestAnimationFrame(() =>
+      preflightConfirmRef.current?.focus(),
+    );
 
     function closeOnEscape(event: KeyboardEvent) {
       if (event.key === "Escape") cancelPreflight();
     }
     document.addEventListener("keydown", closeOnEscape);
-    return () => document.removeEventListener("keydown", closeOnEscape);
+    return () => {
+      window.cancelAnimationFrame(focusFrame);
+      document.removeEventListener("keydown", closeOnEscape);
+    };
   }, [showPreflight]);
+
+  function handlePreflightKeyDown(event: ReactKeyboardEvent<HTMLDivElement>) {
+    if (event.key !== "Tab") return;
+    const focusable = Array.from(
+      event.currentTarget.querySelectorAll<HTMLElement>(
+        'button:not([disabled]), [href], input:not([disabled]), [tabindex]:not([tabindex="-1"])',
+      ),
+    );
+    if (focusable.length === 0) return;
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    if (event.shiftKey && document.activeElement === first) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault();
+      first.focus();
+    }
+  }
 
   async function submitTransfer() {
     setBridgeError("");
@@ -1854,6 +1904,7 @@ export function BridgeExperience() {
               role="dialog"
               aria-modal="true"
               aria-label={`Review ${mode === "receive" ? "receive" : "send"}`}
+              onKeyDown={handlePreflightKeyDown}
               onClick={(event) => {
                 // A backdrop click cancels; clicks inside the panel don't bubble.
                 if (event.target === event.currentTarget) cancelPreflight();
@@ -1875,14 +1926,15 @@ export function BridgeExperience() {
                   </button>
                 </div>
 
-                <div className="preflight-route">
-                  <strong>{copy.from}</strong>
-                  <ArrowRight size={15} aria-hidden="true" />
-                  <strong>{copy.to}</strong>
-                  <span className="preflight-testnet">Testnet</span>
-                </div>
+                <div className="preflight-body">
+                  <div className="preflight-route">
+                    <strong>{copy.from}</strong>
+                    <ArrowRight size={15} aria-hidden="true" />
+                    <strong>{copy.to}</strong>
+                    <span className="preflight-testnet">Testnet</span>
+                  </div>
 
-                <dl className="preflight-rows">
+                  <dl className="preflight-rows">
                   <div>
                     <dt>You send</dt>
                     <dd>
@@ -1903,8 +1955,10 @@ export function BridgeExperience() {
                     <dt>Destination</dt>
                     <dd className="preflight-destination">
                       <span
+                        id="preflight-destination-value"
                         className={showFullDestination ? "full" : undefined}
                         title={previewDestination}
+                        aria-label={`Destination: ${previewDestination}`}
                       >
                         {showFullDestination
                           ? previewDestination
@@ -1914,6 +1968,11 @@ export function BridgeExperience() {
                         <button
                           type="button"
                           className="preflight-inspect"
+                          aria-controls="preflight-destination-value"
+                          aria-expanded={showFullDestination}
+                          aria-label={`${
+                            showFullDestination ? "Hide" : "Show full"
+                          } destination`}
                           onClick={() =>
                             setShowFullDestination((shown) => !shown)
                           }
@@ -1921,6 +1980,19 @@ export function BridgeExperience() {
                           {showFullDestination ? "Hide" : "Show full"}
                         </button>
                       ) : null}
+                      <button
+                        type="button"
+                        className="preflight-inspect"
+                        aria-label="Copy destination"
+                        onClick={copyPreflightDestination}
+                      >
+                        {preflightDestinationCopied ? (
+                          <Check size={14} aria-hidden="true" />
+                        ) : (
+                          <Copy size={14} aria-hidden="true" />
+                        )}
+                        {preflightDestinationCopied ? "Copied" : "Copy"}
+                      </button>
                     </dd>
                   </div>
                   <div>
@@ -1939,9 +2011,10 @@ export function BridgeExperience() {
                     <dt>Provider fee</dt>
                     <dd>{quote.bridgeFee}</dd>
                   </div>
-                </dl>
+                  </dl>
 
-                <p className="preflight-note">{routeNote}</p>
+                  <p className="preflight-note">{routeNote}</p>
+                </div>
 
                 <div className="preflight-actions">
                   <button

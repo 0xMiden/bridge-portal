@@ -13,7 +13,7 @@ import {
 } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useState } from "react";
 import { type AgglayerDepositStatus } from "../lib/agglayer";
 import { findMidenToEvmDeposit } from "../lib/agglayer-status";
 import {
@@ -32,6 +32,7 @@ import {
   providers,
   quoteFor,
   saveActivities,
+  shortAddress,
   sourceExplorer,
   statusLabel,
   statusTone,
@@ -43,6 +44,7 @@ import { epochActivityStatus, epochDestinationTx } from "../lib/epoch/epoch-stat
 import { MIDEN_DESTINATION_CHAIN_ID } from "../lib/epoch/config";
 import { sepoliaGasUnitsFor, useSepoliaGasEstimate } from "../lib/sepolia-gas";
 import { formatAgo } from "../lib/relative-time";
+import { ThemeToggle } from "./ThemeToggle";
 
 const SEPOLIA_CHAIN_ID = 11155111;
 
@@ -140,6 +142,63 @@ function ExplorerLinkButton({ link, side }: { link: ExplorerLink; side: string }
       </span>
       <span className="receipt-link-hint">{side} · not created yet</span>
     </span>
+  );
+}
+
+function ActivityValue({ label, value }: { label: string; value: string }) {
+  const valueId = useId();
+  const [showFull, setShowFull] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const isLong = value.length > 18;
+
+  async function copyValue() {
+    try {
+      await navigator.clipboard.writeText(value);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 2_000);
+    } catch {
+      // Clipboard access may be blocked. Keep the action available for retry.
+    }
+  }
+
+  return (
+    <div className="activity-value-row">
+      <span className="activity-value-label">{label}</span>
+      <code
+        id={valueId}
+        className={showFull ? "is-expanded" : undefined}
+        aria-label={`${label}: ${value}`}
+      >
+        {showFull || !isLong ? value : shortAddress(value)}
+      </code>
+      <div className="activity-value-actions">
+        {isLong ? (
+          <button
+            type="button"
+            className="secondary-button"
+            aria-controls={valueId}
+            aria-expanded={showFull}
+            aria-label={`${showFull ? "Hide" : "Show full"} ${label}`}
+            onClick={() => setShowFull((visible) => !visible)}
+          >
+            {showFull ? "Hide" : "Show"}
+          </button>
+        ) : null}
+        <button
+          type="button"
+          className="secondary-button"
+          aria-label={`Copy ${label}`}
+          onClick={copyValue}
+        >
+          {copied ? (
+            <Check size={15} aria-hidden="true" />
+          ) : (
+            <Copy size={15} aria-hidden="true" />
+          )}
+          {copied ? "Copied" : "Copy"}
+        </button>
+      </div>
+    </div>
   );
 }
 
@@ -425,7 +484,7 @@ export function ActivityDetail({ id }: { id: string }) {
   // Epoch-ms of the last monitor read; rendered as a live "updated Ns ago" that
   // ticks each second so the page visibly reflects the ≤10s polling cadence.
   const [lastCheckedAt, setLastCheckedAt] = useState(0);
-  const [now, setNow] = useState(0);
+  const [now, setNow] = useState(() => Date.now());
   const activity = activities.find((item) => item.id === id);
   const quote = useMemo(
     () =>
@@ -533,6 +592,12 @@ export function ActivityDetail({ id }: { id: string }) {
   const nextAction = activity ? nextActionFor(activity) : null;
   const guidance = activity ? guidanceFor(activity) : null;
   const milestones = activity ? milestonesFor(activity) : [];
+  const transactionHash = activity
+    ? activity.destinationTxHash ??
+      activity.claimTxHash ??
+      activity.sourceTxHash ??
+      activity.midenTxId
+    : undefined;
 
   const observeActivity = useCallback(
     (activityId: string, observation: BridgeMonitorObservation) => {
@@ -575,7 +640,6 @@ export function ActivityDetail({ id }: { id: string }) {
   // Tick a 1s clock while the transfer is live so the "updated Ns ago" label
   // advances in real time — a visible signal that monitoring is current.
   useEffect(() => {
-    setNow(Date.now());
     if (!isActive) return;
     const id = window.setInterval(() => setNow(Date.now()), 1_000);
     return () => window.clearInterval(id);
@@ -799,10 +863,13 @@ export function ActivityDetail({ id }: { id: string }) {
           />
           <span>Bridge</span>
         </Link>
-        <Link className="back-link" href="/">
-          <ArrowLeft size={17} aria-hidden="true" />
-          New transfer
-        </Link>
+        <div className="detail-topbar-actions">
+          <ThemeToggle />
+          <Link className="back-link" href="/">
+            <ArrowLeft size={17} aria-hidden="true" />
+            New transfer
+          </Link>
+        </div>
       </header>
 
       {!activity || !quote ? (
@@ -830,14 +897,22 @@ export function ActivityDetail({ id }: { id: string }) {
               </span>
             </div>
 
+            {nextAction ? (
+              <p
+                className="sr-only activity-status-announcement"
+                role="status"
+                aria-live="polite"
+                aria-atomic="true"
+              >
+                {statusLabel(activity.status)}. {nextAction.headline}
+              </p>
+            ) : null}
+
             {/* 1. Dominant status + plain-language next action. This is the
                 first thing the eye lands on — the amount is demoted to the
                 collapsible receipt below. */}
             {nextAction ? (
-              <div
-                className={`status-hero ${statusTone(activity.status)}`}
-                aria-live="polite"
-              >
+              <div className={`status-hero ${statusTone(activity.status)}`}>
                 <span className="status-hero-kicker">
                   {isComplete ? "Complete" : statusLabel(activity.status)}
                 </span>
@@ -898,7 +973,7 @@ export function ActivityDetail({ id }: { id: string }) {
 
             {/* 2. Named lifecycle milestones — a labeled progress list, not
                 unexplained bars. */}
-            <ol className="milestone-list" aria-live="polite">
+            <ol className="milestone-list">
               {milestones.map((milestone) => {
                 const failedAtDestination = /destination/i.test(activity.eta);
                 const failedIndex = failedAtDestination
@@ -970,6 +1045,23 @@ export function ActivityDetail({ id }: { id: string }) {
                 <strong>{modeCopy?.to}</strong>
               </div>
             </div>
+
+            {activity.destination || transactionHash ? (
+              <div
+                className="activity-values"
+                aria-label="Transfer identifiers"
+              >
+                {activity.destination ? (
+                  <ActivityValue
+                    label="Destination"
+                    value={activity.destination}
+                  />
+                ) : null}
+                {transactionHash ? (
+                  <ActivityValue label="Transaction hash" value={transactionHash} />
+                ) : null}
+              </div>
+            ) : null}
 
             {sourceLink || destinationLink ? (
               <div className="receipt-links">
