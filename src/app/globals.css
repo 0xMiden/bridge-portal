@@ -45,6 +45,18 @@
   --duration-slow: 520ms;
   --ease-standard: cubic-bezier(0.16, 1, 0.3, 1);
   --ease-press: cubic-bezier(0.2, 0, 0, 1);
+  /* Smooth ease-out for interactive states — no overshoot, no snap. */
+  --ease-smooth: cubic-bezier(0.33, 0, 0.2, 1);
+  /* One shared transition for every interactive element so hover changes
+     (background, border, shadow, colour, transform) animate together instead of
+     some sliding while others snap. */
+  --transition-interactive:
+    background-color 180ms var(--ease-smooth),
+    border-color 180ms var(--ease-smooth),
+    box-shadow 180ms var(--ease-smooth),
+    color 180ms var(--ease-smooth),
+    filter 180ms var(--ease-smooth),
+    transform 180ms var(--ease-smooth);
   --shadow-card: 0 18px 44px rgba(68, 54, 33, 0.08);
   --shadow-raised: 0 4px 12px rgba(68, 54, 33, 0.08);
   --shadow-control: inset 0 1px 0 var(--inset-highlight);
@@ -220,9 +232,7 @@ a {
   background: var(--surface);
   color: var(--muted-foreground);
   box-shadow: var(--shadow-control);
-  transition:
-    opacity var(--duration-fast) var(--ease-standard),
-    transform var(--duration-fast) var(--ease-press);
+  transition: var(--transition-interactive);
 }
 
 .theme-trigger:active {
@@ -320,9 +330,7 @@ a {
   background: var(--surface);
   color: var(--muted-foreground);
   box-shadow: var(--shadow-control);
-  transition:
-    opacity var(--duration-fast) var(--ease-standard),
-    transform var(--duration-fast) var(--ease-press);
+  transition: var(--transition-interactive);
 }
 
 .faucet-trigger:active {
@@ -403,9 +411,7 @@ a {
   font-weight: 720;
   white-space: nowrap;
   cursor: pointer;
-  transition:
-    filter var(--duration-fast) var(--ease-standard),
-    transform var(--duration-fast) var(--ease-press);
+  transition: var(--transition-interactive);
 }
 
 .faucet-mint-btn:hover:not(:disabled) {
@@ -465,6 +471,7 @@ a {
   font-size: 12.5px;
   font-weight: 620;
   text-decoration: none;
+  transition: var(--transition-interactive);
 }
 
 .faucet-link:hover {
@@ -543,9 +550,7 @@ a {
 .destination-input input,
 .swap-box,
 .timeline-step {
-  transition:
-    opacity var(--duration-fast) var(--ease-standard),
-    transform var(--duration-fast) var(--ease-press);
+  transition: var(--transition-interactive);
 }
 
 .wallet-button:hover,
@@ -836,6 +841,7 @@ a {
   text-align: left;
   font-size: 13px;
   font-weight: 780;
+  transition: var(--transition-interactive);
 }
 
 .wallet-menu-item:hover {
@@ -1278,7 +1284,7 @@ a {
   font: inherit;
   font-weight: 760;
   cursor: pointer;
-  transition: transform var(--duration-fast) var(--ease-press);
+  transition: var(--transition-interactive);
 }
 
 .balance-show:hover {
@@ -1296,7 +1302,7 @@ a {
   background: transparent;
   color: var(--muted-foreground);
   cursor: pointer;
-  transition: transform var(--duration-fast) var(--ease-press);
+  transition: var(--transition-interactive);
 }
 
 .balance-refresh:hover {
@@ -1347,7 +1353,7 @@ a {
   font-size: 11px;
   font-weight: 780;
   cursor: pointer;
-  transition: transform var(--duration-fast) var(--ease-press);
+  transition: var(--transition-interactive);
 }
 
 .wallet-chip-switch:hover {
@@ -1403,9 +1409,7 @@ a {
   font-size: 14px;
   font-weight: 800;
   cursor: pointer;
-  transition:
-    box-shadow 0.15s ease,
-    transform 0.12s ease;
+  transition: var(--transition-interactive);
 }
 
 .token-select-trigger:hover {
@@ -1473,7 +1477,7 @@ a {
   color: var(--foreground);
   text-align: left;
   cursor: pointer;
-  transition: background 0.12s ease;
+  transition: var(--transition-interactive);
 }
 
 .token-option:hover {
@@ -1707,6 +1711,7 @@ a {
   color: var(--primary-foreground);
   padding: 0 16px;
   font-weight: 840;
+  transition: var(--transition-interactive);
 }
 
 .primary-button:hover {
@@ -1720,7 +1725,7 @@ a {
 .primary-button svg,
 .back-link svg,
 .explorer-link svg {
-  transition: transform var(--duration-fast) var(--ease-standard);
+  transition: transform 180ms var(--ease-smooth);
 }
 
 .primary-button:hover svg,
