@@ -5,8 +5,8 @@ import { ArrowUpRight, Check, Droplets, Loader2 } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
 import { type EvmProvider } from "../lib/evm-wallet";
 import {
-  EPOCH_DASHBOARD_FAUCET_URL,
   FAUCET_MINT_AMOUNT,
+  MIDEN_TESTNET_FAUCET_URL,
   SEPOLIA_ETH_FAUCET_URL,
   mintSepoliaUsdc,
   sepoliaTxUrl,
@@ -148,11 +148,11 @@ export function FaucetMenu({ onMinted }: { onMinted?: () => void }) {
             </a>
             <a
               className="faucet-link"
-              href={EPOCH_DASHBOARD_FAUCET_URL}
+              href={MIDEN_TESTNET_FAUCET_URL}
               target="_blank"
               rel="noopener noreferrer"
             >
-              Miden USDC / ETH
+              Miden testnet faucet
               <ArrowUpRight size={13} aria-hidden="true" />
             </a>
           </div>

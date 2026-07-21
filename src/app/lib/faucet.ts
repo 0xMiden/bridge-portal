@@ -15,7 +15,7 @@ export const FAUCET_SEPOLIA_USDC = {
 } as const;
 
 /** Default one-click mint size. */
-export const FAUCET_MINT_AMOUNT = "1000";
+export const FAUCET_MINT_AMOUNT = "10";
 
 const MINT_ABI = [
   {
@@ -64,8 +64,9 @@ export function sepoliaTxUrl(hash: string): string {
   return `${AGGLAYER_BALI.sepoliaExplorer.replace(/\/$/, "")}/tx/${hash}`;
 }
 
-// Assets we can't mint from a contract: gas ETH (never mintable) and the
-// Miden-side faucets (Epoch dashboard only). Surface these as external links.
+// Assets we can't mint from the connected wallet: gas ETH (never mintable) and
+// native Miden testnet tokens. Surface these as external faucet links. The Miden
+// faucet is the same one the wallet app opens (faucet.testnet.miden.io).
 export const SEPOLIA_ETH_FAUCET_URL =
   "https://cloud.google.com/application/web3/faucet/ethereum/sepolia";
-export const EPOCH_DASHBOARD_FAUCET_URL = "https://app.epochprotocol.xyz/faucets";
+export const MIDEN_TESTNET_FAUCET_URL = "https://faucet.testnet.miden.io";
