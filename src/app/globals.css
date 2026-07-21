@@ -175,6 +175,14 @@ a {
   min-width: 0;
 }
 
+/* Faucet + theme icons travel together so they share one cell in the mobile
+   two-column header grid instead of wrapping onto separate rows. */
+.topbar-utilities {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .detail-topbar-actions {
   display: flex;
   align-items: center;
@@ -291,6 +299,187 @@ a {
 
 .theme-menu-check[data-visible="true"] {
   opacity: 1;
+}
+
+/* Testnet faucet — reuses the theme-menu trigger/popover system. */
+.faucet-menu-root {
+  position: relative;
+  display: inline-flex;
+  flex: 0 0 auto;
+}
+
+.faucet-trigger {
+  display: inline-grid;
+  place-items: center;
+  width: 44px;
+  min-width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  color: var(--muted-foreground);
+  box-shadow: var(--shadow-control);
+  transition:
+    opacity var(--duration-fast) var(--ease-standard),
+    transform var(--duration-fast) var(--ease-press);
+}
+
+.faucet-trigger:active {
+  transform: scale(0.97);
+}
+
+.faucet-trigger:hover,
+.faucet-trigger[aria-expanded="true"] {
+  border-color: var(--border-strong);
+  background: var(--surface-muted);
+  color: var(--accent);
+}
+
+.faucet-menu {
+  position: absolute;
+  z-index: 80;
+  top: calc(100% + 8px);
+  right: 0;
+  display: grid;
+  gap: 4px;
+  min-width: 244px;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface-elevated);
+  box-shadow: var(--shadow-raised);
+  transform-origin: top right;
+  animation: theme-menu-enter 200ms var(--ease-standard) both;
+}
+
+.faucet-menu-title {
+  margin: 0 2px 4px;
+  color: var(--faint-foreground);
+  font-size: 10px;
+  font-weight: 820;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.faucet-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 6px 2px 6px 4px;
+}
+
+.faucet-row-info {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.faucet-row-info strong {
+  font-size: 14px;
+  font-weight: 760;
+}
+
+.faucet-row-info small {
+  color: var(--muted-foreground);
+  font-size: 11px;
+  font-weight: 560;
+}
+
+.faucet-mint-btn {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 5px;
+  min-height: 32px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--accent);
+  color: var(--on-accent);
+  font-size: 13px;
+  font-weight: 720;
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    filter var(--duration-fast) var(--ease-standard),
+    transform var(--duration-fast) var(--ease-press);
+}
+
+.faucet-mint-btn:hover:not(:disabled) {
+  filter: brightness(1.05);
+}
+
+.faucet-mint-btn:active:not(:disabled) {
+  transform: scale(0.97);
+}
+
+.faucet-mint-btn:disabled {
+  background: var(--surface-strong);
+  color: var(--muted-foreground);
+  cursor: not-allowed;
+}
+
+.faucet-note {
+  margin: 0 2px;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.faucet-note-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  color: var(--accent-foreground);
+  text-decoration: none;
+}
+
+.faucet-note-link:hover {
+  text-decoration: underline;
+}
+
+.faucet-note-error {
+  color: var(--danger-foreground);
+  overflow-wrap: anywhere;
+}
+
+.faucet-links {
+  display: grid;
+  gap: 2px;
+  margin-top: 6px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+}
+
+.faucet-link {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 34px;
+  padding: 0 4px;
+  border-radius: var(--radius-sm);
+  color: var(--muted-foreground);
+  font-size: 12.5px;
+  font-weight: 620;
+  text-decoration: none;
+}
+
+.faucet-link:hover {
+  background: var(--surface-muted);
+  color: var(--foreground);
+}
+
+.faucet-spin {
+  animation: faucet-spin 0.8s linear infinite;
+}
+
+@keyframes faucet-spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .brand {
@@ -2992,7 +3181,7 @@ a {
     justify-content: flex-start;
   }
 
-  .theme-menu-root {
+  .topbar-utilities {
     justify-self: end;
   }
 
