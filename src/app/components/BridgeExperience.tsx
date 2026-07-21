@@ -79,7 +79,7 @@ import {
 } from "@reown/appkit/react";
 import { type EvmProvider, ensureSepolia } from "../lib/evm-wallet";
 import { gsap, useGSAP } from "../lib/gsap";
-import { DUR, EASE, motionMM } from "../lib/motion";
+import { EASE, motionMM } from "../lib/motion";
 // Type-only import — erased at build, so the eager-WASM adapter never reaches SSR.
 import type { MidenFiWalletContextState } from "@miden-sdk/miden-wallet-adapter-react";
 
@@ -381,8 +381,11 @@ export function BridgeExperience() {
 
   // Tier B: when the mode (Receive/Send) or route changes, the swap boxes and
   // quote summary now update IN PLACE (no more key-based remount + slide). Give
-  // the changed content a subtle opacity cross-fade so it reads as "refreshed"
-  // without anything moving. Skips the first mount; reduced-motion → no fade.
+  // the changed CONTENT (not the boxes themselves — fading a box blinks its
+  // background) a gentle, slow settle so the whole route's details re-materialise
+  // in unison instead of some fading while token icons / amounts snap. Every
+  // changed row fades together from a shallow floor, so it reads as smooth rather
+  // than a flash. Skips the first mount; reduced-motion → no fade.
   const swapCardRef = useRef<HTMLElement>(null);
   const swapFadeFirstRun = useRef(true);
   useGSAP(
@@ -396,12 +399,12 @@ export function BridgeExperience() {
       motionMM(({ reduced }) => {
         if (reduced) return;
         const targets = root.querySelectorAll(
-          ".swap-box > div:first-child, .quote-summary",
+          ".swap-box > *, .quote-summary > div, .route-disclaimer span",
         );
         gsap.fromTo(
           targets,
-          { opacity: 0.4 },
-          { opacity: 1, duration: DUR.enter, ease: EASE.standard, overwrite: true },
+          { opacity: 0.6 },
+          { opacity: 1, duration: 0.36, ease: EASE.standard, overwrite: true },
         );
       });
     },
