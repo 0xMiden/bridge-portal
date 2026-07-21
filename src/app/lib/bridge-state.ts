@@ -303,7 +303,7 @@ export function shortAddress(value: string) {
 
 export const SEPOLIA_CHAIN_ID = 11155111;
 export const SEPOLIA_WALLET_NAME = "Sepolia wallet";
-export const MIDEN_WALLET_NAME = "Miden wallet";
+export const MIDEN_WALLET_NAME = "Bread";
 
 export type WalletControlState =
   | "idle"
@@ -381,7 +381,7 @@ export function midenWalletIdentity(view: MidenWalletView): WalletIdentity {
     return {
       name: MIDEN_WALLET_NAME,
       pillLabel: "Connecting",
-      actionLabel: "Connecting Miden wallet",
+      actionLabel: "Connecting Bread wallet",
       stateText: "Connecting…",
       state: "connecting",
     };
@@ -390,7 +390,7 @@ export function midenWalletIdentity(view: MidenWalletView): WalletIdentity {
     return {
       name: MIDEN_WALLET_NAME,
       pillLabel: shortAddress(view.address),
-      actionLabel: "Miden wallet menu",
+      actionLabel: "Bread wallet menu",
       stateText: shortAddress(view.address),
       state: "connected",
     };
@@ -399,9 +399,9 @@ export function midenWalletIdentity(view: MidenWalletView): WalletIdentity {
     // Explicit unavailable state — never the generic "Install wallet", and it
     // doesn't read as though a wallet were already connected.
     return {
-      name: "MidenFi",
-      pillLabel: "MidenFi not installed",
-      actionLabel: "MidenFi wallet not installed",
+      name: "Bread",
+      pillLabel: "Bread not installed",
+      actionLabel: "Bread wallet not installed",
       stateText: "Not installed",
       state: "unavailable",
     };
@@ -409,7 +409,7 @@ export function midenWalletIdentity(view: MidenWalletView): WalletIdentity {
   return {
     name: MIDEN_WALLET_NAME,
     pillLabel: MIDEN_WALLET_NAME,
-    actionLabel: "Connect Miden wallet",
+    actionLabel: "Connect Bread wallet",
     stateText: "Not connected",
     state: "idle",
   };
@@ -553,7 +553,7 @@ export function deriveCtaState(input: CtaInputs): CtaState {
   if (!input.sourceConnected)
     return actionable(
       "connect-source",
-      input.mode === "receive" ? "Connect Sepolia wallet" : "Connect Miden wallet",
+      input.mode === "receive" ? "Connect Sepolia wallet" : "Connect Bread wallet",
     );
   if (!input.hasDestination)
     return actionable(

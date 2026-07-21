@@ -97,8 +97,8 @@ describe("midenWalletIdentity (issue #54 chain-specific identity)", () => {
       ready: true,
       address: "",
     });
-    expect(id.pillLabel).toBe("Miden wallet");
-    expect(id.actionLabel).toBe("Connect Miden wallet");
+    expect(id.pillLabel).toBe("Bread");
+    expect(id.actionLabel).toBe("Connect Bread wallet");
     expect(id.state).toBe("idle");
   });
 
@@ -109,7 +109,7 @@ describe("midenWalletIdentity (issue #54 chain-specific identity)", () => {
       ready: false,
       address: "",
     });
-    expect(id.pillLabel).toBe("MidenFi not installed");
+    expect(id.pillLabel).toBe("Bread not installed");
     expect(id.stateText).toBe("Not installed");
     expect(id.state).toBe("unavailable");
   });
@@ -132,7 +132,7 @@ describe("midenWalletIdentity (issue #54 chain-specific identity)", () => {
     });
     expect(connected.pillLabel).toBe(connected.stateText);
     expect(connected.state).toBe("connected");
-    expect(connected.actionLabel).toBe("Miden wallet menu");
+    expect(connected.actionLabel).toBe("Bread wallet menu");
   });
 });
 
@@ -188,7 +188,7 @@ describe("deriveCtaState (primary CTA progression)", () => {
     expect(receive.disabled).toBe(false);
 
     const send = deriveCtaState({ ...ready, mode: "send", sourceConnected: false });
-    expect(send.label).toBe("Connect Miden wallet");
+    expect(send.label).toBe("Connect Bread wallet");
   });
 
   it("prompts for the correct destination when it's missing", () => {

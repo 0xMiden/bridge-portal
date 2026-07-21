@@ -514,10 +514,10 @@ export function BridgeExperience() {
   const destinationHelp =
     mode === "receive"
       ? midenWallet.connected
-        ? `Defaults to your connected Miden wallet ${shortAddress(midenAddress)}. Paste a different Miden account (mcst1…/30-hex) to override.`
+        ? `Defaults to your connected Bread wallet ${shortAddress(midenAddress)}. Paste a different Miden account (mcst1…/30-hex) to override.`
         : launchMidenAccount
-          ? `Preloaded from wallet launch: ${shortAddress(launchMidenAccount)}. Connect MidenFi before signing Miden-side actions.`
-          : "Connect your Miden wallet, or paste a Miden account (mcst1…/30-hex)."
+          ? `Preloaded from wallet launch: ${shortAddress(launchMidenAccount)}. Connect Bread before signing Miden-side actions.`
+          : "Connect your Bread wallet, or paste a Miden account (mcst1…/30-hex)."
       : walletConnected
         ? `Defaults to your connected Sepolia wallet ${shortAddress(walletAccount)}. Paste a different 0x address to override.`
         : "Connect your Sepolia wallet, or paste a 0x destination address.";
@@ -1201,7 +1201,7 @@ export function BridgeExperience() {
     // Every send signs on Miden (Epoch send + Agglayer bridge-out) — require the
     // MidenFi wallet up front so the CTA and error are clear (not a late throw).
     if (mode === "send" && !midenWallet.connected) {
-      setBridgeError("Connect your MidenFi wallet to sign the send.");
+      setBridgeError("Connect your Bread wallet to sign the send.");
       return;
     }
 
@@ -1215,7 +1215,7 @@ export function BridgeExperience() {
         !senderAddress
       ) {
         setBridgeError(
-          "Connect your MidenFi wallet before bridging out to Sepolia.",
+          "Connect your Bread wallet before bridging out to Sepolia.",
         );
         setIsSubmitting(false);
         return;
@@ -1304,7 +1304,7 @@ export function BridgeExperience() {
       const destinationAccount = destination.trim() || midenAddress;
       if (!destinationAccount) {
         setBridgeError(
-          "Connect Miden wallet or paste a Miden account ID before receiving.",
+          "Connect Bread or paste a Miden account ID before receiving.",
         );
         setIsSubmitting(false);
         return;
@@ -1391,7 +1391,7 @@ export function BridgeExperience() {
       // doesn't create a failed ("Needs recovery") activity.
       if (mode === "receive" && !resolvedDestination) {
         setBridgeError(
-          "Connect your Miden wallet or paste a Miden account to receive into.",
+          "Connect your Bread wallet or paste a Miden account to receive into.",
         );
         setIsSubmitting(false);
         return;

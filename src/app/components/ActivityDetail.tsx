@@ -227,8 +227,8 @@ function milestonesFor(activity: Activity) {
     status: "signature",
     label: "Sign Miden note",
     detail: isEpoch
-      ? "Approve the collateral note in your Miden wallet."
-      : "Approve the outbound note in your Miden wallet.",
+      ? "Approve the collateral note in your Bread wallet."
+      : "Approve the outbound note in your Bread wallet.",
   };
 
   let steps: Step[];
@@ -346,8 +346,8 @@ function nextActionFor(activity: Activity): { headline: string; body: string } {
         body: isReceive
           ? "Approve the Sepolia deposit in your Ethereum wallet to start the transfer."
           : isEpoch
-            ? "Approve the collateral note in your Miden wallet to start the transfer."
-            : "Approve the outbound note in your Miden wallet to start the transfer.",
+            ? "Approve the collateral note in your Bread wallet to start the transfer."
+            : "Approve the outbound note in your Bread wallet to start the transfer.",
       };
     case "source_finality":
       return {

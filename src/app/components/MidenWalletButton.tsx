@@ -86,7 +86,7 @@ function clearWalletConnected() {
 class WalletRequestTimeoutError extends Error {
   constructor() {
     super(
-      "Miden wallet did not return after 45 seconds. Reset the connection and try again.",
+      "Bread wallet did not return after 45 seconds. Reset the connection and try again.",
     );
     this.name = "WalletRequestTimeoutError";
   }
@@ -262,7 +262,7 @@ function MidenWalletButtonInner({
     setMenuOpen(false);
     if (!ready) {
       setError(
-        "Install or enable the MidenFi wallet extension, then refresh this page.",
+        "Install or enable the Bread wallet extension, then refresh this page.",
       );
       return;
     }
@@ -437,7 +437,7 @@ function MidenWalletButtonInner({
               <WalletBrandIcon src={walletLogo} size={16} />
             </span>
             <span>
-              <strong>Miden wallet</strong>
+              <strong>Bread wallet</strong>
               <small>
                 {wallet.connected
                   ? `${shortAddress(address)} · ${balanceText}`
@@ -503,7 +503,7 @@ function MidenWalletButtonInner({
               ) : null}
               {!wallet.connecting && !ready ? (
                 <p className="wallet-menu-note">
-                  Install or enable the MidenFi wallet extension, then reset the
+                  Install or enable the Bread wallet extension, then reset the
                   wallet state.
                 </p>
               ) : null}
