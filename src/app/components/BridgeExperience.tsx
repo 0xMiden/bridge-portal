@@ -63,6 +63,7 @@ import {
 import { sepoliaGasUnitsFor, useSepoliaGasEstimate } from "../lib/sepolia-gas";
 import { RelativeTime } from "./RelativeTime";
 import { TokenSelect } from "./TokenSelect";
+import { FaucetMenu } from "./FaucetMenu";
 import { ThemeToggle } from "./ThemeToggle";
 import type {
   MidenRouteBalances,
@@ -308,6 +309,8 @@ export function BridgeExperience() {
     chainId != null &&
     Number(chainId) !== SEPOLIA_CHAIN_ID;
   const [evmBalance, setEvmBalance] = useState("");
+  // Bumped after a faucet mint to force the Sepolia balance to refetch.
+  const [evmBalanceNonce, setEvmBalanceNonce] = useState(0);
   // Numeric Sepolia balance of the route's source token, for the
   // insufficient-balance guard (null = unknown / not yet loaded).
   const [evmBalanceValue, setEvmBalanceValue] = useState<number | null>(null);
@@ -770,7 +773,7 @@ export function BridgeExperience() {
     return () => {
       cancelled = true;
     };
-  }, [walletAccount, provider]);
+  }, [walletAccount, provider, evmBalanceNonce]);
 
   // Default the destination input to the connected wallet on the relevant side
   // (Miden for receive, Sepolia for send). Runs once per direction; the user can
@@ -1531,7 +1534,10 @@ export function BridgeExperience() {
         </Link>
 
         <div className="topbar-actions">
-          <ThemeToggle />
+          <div className="topbar-utilities">
+            <FaucetMenu onMinted={() => setEvmBalanceNonce((n) => n + 1)} />
+            <ThemeToggle />
+          </div>
           <div
             className="wallet-cluster"
             aria-label="Connected wallets"
