@@ -78,6 +78,8 @@ import {
   useWalletInfo,
 } from "@reown/appkit/react";
 import { type EvmProvider, ensureSepolia } from "../lib/evm-wallet";
+import { gsap, useGSAP } from "../lib/gsap";
+import { DUR, EASE, motionMM } from "../lib/motion";
 // Type-only import — erased at build, so the eager-WASM adapter never reaches SSR.
 import type { MidenFiWalletContextState } from "@miden-sdk/miden-wallet-adapter-react";
 
@@ -376,6 +378,35 @@ export function BridgeExperience() {
   const [routeMenuOpen, setRouteMenuOpen] = useState(false);
   const routeMenuRef = useRef<HTMLDivElement>(null);
   const routeTriggerRef = useRef<HTMLButtonElement>(null);
+
+  // Tier B: when the mode (Receive/Send) or route changes, the swap boxes and
+  // quote summary now update IN PLACE (no more key-based remount + slide). Give
+  // the changed content a subtle opacity cross-fade so it reads as "refreshed"
+  // without anything moving. Skips the first mount; reduced-motion → no fade.
+  const swapCardRef = useRef<HTMLElement>(null);
+  const swapFadeFirstRun = useRef(true);
+  useGSAP(
+    () => {
+      if (swapFadeFirstRun.current) {
+        swapFadeFirstRun.current = false;
+        return;
+      }
+      const root = swapCardRef.current;
+      if (!root) return;
+      motionMM(({ reduced }) => {
+        if (reduced) return;
+        const targets = root.querySelectorAll(
+          ".swap-box > div:first-child, .quote-summary",
+        );
+        gsap.fromTo(
+          targets,
+          { opacity: 0.4 },
+          { opacity: 1, duration: DUR.enter, ease: EASE.standard, overwrite: true },
+        );
+      });
+    },
+    { dependencies: [mode, provider], scope: swapCardRef },
+  );
 
   const copy = modes[mode];
   const providerCopy = providers[provider];
@@ -1653,7 +1684,7 @@ export function BridgeExperience() {
       ) : null}
 
       <section className="swap-stage">
-        <section className="swap-card" aria-label="Miden bridge">
+        <section className="swap-card" aria-label="Miden bridge" ref={swapCardRef}>
           <div className="swap-card-top">
             <h1>Bridge</h1>
             <div
@@ -1775,7 +1806,7 @@ export function BridgeExperience() {
             ))}
           </div>
 
-          <div className="swap-box swap-fade" key={`from-${mode}-${provider}`}>
+          <div className="swap-box">
             <div>
               <span>From</span>
               <strong>{copy.from}</strong>
@@ -1807,7 +1838,7 @@ export function BridgeExperience() {
             <ArrowDown size={18} />
           </div>
 
-          <div className="swap-box swap-fade" key={`to-${mode}-${provider}`}>
+          <div className="swap-box">
             <div>
               <span>To</span>
               <strong>{copy.to}</strong>
@@ -1857,11 +1888,7 @@ export function BridgeExperience() {
           </label>
           {bridgeError ? <p className="form-error">{bridgeError}</p> : null}
 
-          <div
-            className="quote-summary swap-fade"
-            aria-label="Route quote"
-            key={`qs-${mode}-${provider}`}
-          >
+          <div className="quote-summary" aria-label="Route quote">
             <div>
               <span>ETA</span>
               <strong>{quote.eta}</strong>
