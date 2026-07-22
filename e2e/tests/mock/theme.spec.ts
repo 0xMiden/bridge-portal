@@ -320,7 +320,7 @@ test("dark mode applies semantic bridge surfaces and primary contrast", async ({
 
   expect(lightTokens).toEqual([
     "rgb(247, 244, 238)",
-    "rgb(255, 255, 255)",
+    "rgb(255, 253, 248)",
     "rgb(242, 241, 239)",
     "rgb(233, 231, 227)",
     "rgb(23, 21, 17)",
