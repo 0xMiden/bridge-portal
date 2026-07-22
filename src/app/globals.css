@@ -930,7 +930,10 @@ a {
 .swap-card {
   position: relative;
   width: min(500px, 100%);
-  padding: 8px;
+  /* Gutter around the nested boxes sits a touch above their own 14px inner
+     padding, so the sub-cards read as deliberately inset rather than crammed
+     against the card edge. */
+  padding: 12px;
   border: 0;
   border-radius: var(--radius-lg);
   background: var(--surface);
@@ -3457,7 +3460,7 @@ a {
 
   .swap-card {
     width: 100%;
-    padding: 8px;
+    padding: 12px;
     border-radius: var(--radius-lg);
     box-shadow: none;
     animation: none;
