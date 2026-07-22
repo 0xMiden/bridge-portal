@@ -253,6 +253,7 @@ test("dark mode applies semantic bridge surfaces and primary contrast", async ({
         primaryForeground: resolvedToken("--primary-foreground"),
         accent: resolvedToken("--accent"),
       },
+      field: resolvedToken("--field"),
       card: resolvedStyles(".swap-card"),
       routeControl: resolvedStyles(".route-trigger"),
       walletMenu: resolvedStyles(".wallet-actions-menu"),
@@ -278,7 +279,8 @@ test("dark mode applies semantic bridge surfaces and primary contrast", async ({
     accent: "rgb(255, 106, 42)",
   });
   expect(colors.card.background).toBe(colors.tokens.surface);
-  expect(colors.routeControl.background).toBe(colors.tokens.surface);
+  // The route trigger is now a filled control (--field), borderless.
+  expect(colors.routeControl.background).toBe(colors.field);
   expect(colors.walletMenu.background).toBe(colors.tokens.surfaceElevated);
   expect(colors.primaryButton.background).toBe(colors.tokens.primary);
   expect(colors.primaryButton.foreground).toBe(colors.tokens.primaryForeground);
