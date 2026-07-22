@@ -3092,10 +3092,10 @@ a {
 
   /* Overlay the dropdown (don't push the page down). Anchor the left button's
      menu to its left edge and the right button's to its right so neither runs
-     off screen; cap the width to the viewport. */
+     off screen. A fixed width (capped to the viewport) keeps both menus the same
+     size — otherwise content-sizing let the Miden menu's note stretch it wide. */
   .wallet-actions-menu {
-    width: max-content;
-    min-width: 232px;
+    width: 268px;
     max-width: calc(100vw - 24px);
   }
 

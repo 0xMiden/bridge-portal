@@ -64,6 +64,7 @@ import { ActivityStack } from "./ActivityStack";
 import { InfoTip } from "./InfoTip";
 import { RelativeTime } from "./RelativeTime";
 import { TokenSelect } from "./TokenSelect";
+import { WalletMenu } from "./WalletMenu";
 import { FaucetMenu } from "./FaucetMenu";
 import { ThemeToggle } from "./ThemeToggle";
 import type {
@@ -1613,21 +1614,20 @@ export function BridgeExperience() {
             </button>
 
             {walletConnected ? (
-              <div
-                className={`wallet-actions-menu ${evmMenuOpen ? "open" : ""}`}
-                role="menu"
-              >
-                <div className="wallet-menu-summary">
+              <WalletMenu
+                open={evmMenuOpen}
+                avatar={
                   <span className="wallet-menu-avatar connected">
                     <Wallet size={16} aria-hidden="true" />
                   </span>
-                  <span>
-                    <strong>{evmWalletLabel}</strong>
-                    <small>
-                      {shortAddress(walletAccount)} · {evmBalanceText}
-                    </small>
-                  </span>
-                </div>
+                }
+                name={evmWalletLabel}
+                subtitle={
+                  <>
+                    {shortAddress(walletAccount)} · {evmBalanceText}
+                  </>
+                }
+              >
                 <button
                   type="button"
                   role="menuitem"
@@ -1675,7 +1675,7 @@ export function BridgeExperience() {
                   <LogOut size={15} aria-hidden="true" />
                   <span>Forget in app</span>
                 </button>
-              </div>
+              </WalletMenu>
             ) : null}
           </div>
 
