@@ -3,17 +3,15 @@
 import {
   AlertTriangle,
   ArrowLeft,
-  ArrowRight,
   Check,
   Copy,
-  ExternalLink,
   RotateCcw,
   ShieldCheck,
   Wallet,
 } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
-import { useCallback, useEffect, useId, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { type AgglayerDepositStatus } from "../lib/agglayer";
 import { findMidenToEvmDeposit } from "../lib/agglayer-status";
 import {
@@ -26,13 +24,9 @@ import {
 import {
   type Activity,
   type ActivityStatus,
-  type ExplorerLink,
   loadStoredActivities,
-  modes,
-  providers,
   quoteFor,
   saveActivities,
-  shortAddress,
   sourceExplorer,
   statusLabel,
   statusTone,
@@ -106,102 +100,6 @@ async function fetchSepoliaTx(hash: string): Promise<ChainTxObservation> {
     );
   }
   return payload as ChainTxObservation;
-}
-
-/**
- * Explorer link that only becomes clickable once its transaction exists. Before
- * that (e.g. a Send's Sepolia payout, a Receive's Miden delivery) it renders as
- * a disabled control so users don't follow a link to a not-yet-created tx. The
- * sublabel spells out whether the transaction exists yet so the disabled state
- * doesn't read as a dead link.
- */
-function ExplorerLinkButton({ link, side }: { link: ExplorerLink; side: string }) {
-  if (link.available && link.href) {
-    return (
-      <a
-        href={link.href}
-        target="_blank"
-        rel="noreferrer"
-        className="receipt-link"
-      >
-        <span className="receipt-link-main">
-          {link.label}
-          <ExternalLink size={14} aria-hidden="true" />
-        </span>
-        <span className="receipt-link-hint">{side} · ready</span>
-      </a>
-    );
-  }
-  return (
-    <span
-      className="receipt-link disabled"
-      aria-disabled="true"
-      title="Available once the transaction is created"
-    >
-      <span className="receipt-link-main">
-        {link.label}
-        <ExternalLink size={14} aria-hidden="true" />
-      </span>
-      <span className="receipt-link-hint">{side} · not created yet</span>
-    </span>
-  );
-}
-
-function ActivityValue({ label, value }: { label: string; value: string }) {
-  const valueId = useId();
-  const [showFull, setShowFull] = useState(false);
-  const [copied, setCopied] = useState(false);
-  const isLong = value.length > 18;
-
-  async function copyValue() {
-    try {
-      await navigator.clipboard.writeText(value);
-      setCopied(true);
-      window.setTimeout(() => setCopied(false), 2_000);
-    } catch {
-      // Clipboard access may be blocked. Keep the action available for retry.
-    }
-  }
-
-  return (
-    <div className="activity-value-row">
-      <span className="activity-value-label">{label}</span>
-      <code
-        id={valueId}
-        className={showFull ? "is-expanded" : undefined}
-        aria-label={`${label}: ${value}`}
-      >
-        {showFull || !isLong ? value : shortAddress(value)}
-      </code>
-      <div className="activity-value-actions">
-        {isLong ? (
-          <button
-            type="button"
-            className="secondary-button"
-            aria-controls={valueId}
-            aria-expanded={showFull}
-            aria-label={`${showFull ? "Hide" : "Show full"} ${label}`}
-            onClick={() => setShowFull((visible) => !visible)}
-          >
-            {showFull ? "Hide" : "Show"}
-          </button>
-        ) : null}
-        <button
-          type="button"
-          className="secondary-button"
-          aria-label={`Copy ${label}`}
-          onClick={copyValue}
-        >
-          {copied ? (
-            <Check size={15} aria-hidden="true" />
-          ) : (
-            <Copy size={15} aria-hidden="true" />
-          )}
-          {copied ? "Copied" : "Copy"}
-        </button>
-      </div>
-    </div>
-  );
 }
 
 /**
@@ -573,7 +471,6 @@ export function ActivityDetail({ id }: { id: string }) {
     activity?.mode,
     activity?.status,
   ]);
-  const modeCopy = activity ? modes[activity.mode] : null;
   const sourceLink = activity ? sourceExplorer(activity) : null;
   const destinationLink = activity ? destinationExplorer(activity) : null;
   // Which timeline step we're on, so the labeled milestone list marks
@@ -583,14 +480,6 @@ export function ActivityDetail({ id }: { id: string }) {
     : -1;
   const isComplete = activity?.status === "complete";
   const isFailed = activity?.status === "failed";
-  const receiptAmountLabel =
-    activity?.status === "complete"
-      ? activity.mode === "receive"
-        ? "Delivered on Miden"
-        : "Released on Sepolia"
-      : activity?.mode === "receive"
-        ? "Expected on Miden"
-        : "Expected on Sepolia";
   const nextAction = activity ? nextActionFor(activity) : null;
   const guidance = activity ? guidanceFor(activity) : null;
   const milestones = activity ? milestonesFor(activity) : [];
@@ -882,8 +771,21 @@ export function ActivityDetail({ id }: { id: string }) {
             Back to bridge
           </Link>
         </section>
-      ) : isComplete ? (
+      ) : (
         <section className="detail-simple detail-complete">
+          {nextAction ? (
+            <p
+              className="sr-only activity-status-announcement"
+              role="status"
+              aria-live="polite"
+              aria-atomic="true"
+            >
+              {statusLabel(activity.status)}. {nextAction.headline}
+            </p>
+          ) : null}
+
+          {/* One receipt card backs every state; an in-flight or failed transfer
+              adds a status pill and reads "Expected" instead of "Received". */}
           <TempoReceipt
             activity={activity}
             received={activity.receivedAmount ?? quote.expectedReceived}
@@ -891,136 +793,21 @@ export function ActivityDetail({ id }: { id: string }) {
             sourceLink={sourceLink}
             destinationLink={destinationLink}
             transactionHash={transactionHash ?? activity.txHash}
+            status={
+              isComplete
+                ? undefined
+                : {
+                    label: statusLabel(activity.status),
+                    tone: statusTone(activity.status),
+                  }
+            }
+            pending={!isComplete}
           />
 
-          {/* Keep the bridging status indicators on the settled view — every
-              lifecycle step shown complete, so the receipt reads as the outcome
-              of a visible, verified sequence rather than a bare summary. */}
-          <div className="steps-card">
+          {/* Bridge steps — a compact confirmed checklist once settled, the full
+              live timeline (with per-step detail) while in flight or failed. */}
+          <div className={`steps-card ${isComplete ? "compact" : ""}`}>
             <p className="steps-card-title">Bridge steps</p>
-            <ol className="milestone-list">
-              {milestones.map((milestone) => (
-                <li key={milestone.status} className="milestone done">
-                  <span className="milestone-marker" aria-hidden="true">
-                    <Check size={12} />
-                  </span>
-                  <div className="milestone-copy">
-                    <strong>{milestone.label}</strong>
-                    <span>{milestone.detail}</span>
-                  </div>
-                </li>
-              ))}
-              {activity.mode === "receive" &&
-              activity.provider === "agglayer" ? (
-                <li className="milestone consume current">
-                  <span className="milestone-marker" aria-hidden="true">
-                    <Wallet size={12} />
-                  </span>
-                  <div className="milestone-copy">
-                    <strong>Consume note in your wallet</strong>
-                    <span>
-                      Balance updates only after you claim the note in Bread —
-                      this happens in your wallet, not here.
-                    </span>
-                  </div>
-                </li>
-              ) : null}
-            </ol>
-          </div>
-        </section>
-      ) : (
-        <section className="detail-simple">
-          <div
-            className={`receipt-card ${isComplete ? "is-complete" : ""} ${
-              isFailed ? "is-failed" : ""
-            }`}
-          >
-            <div className="receipt-topline">
-              <p className="kicker">
-                {activity.mode === "send" ? "Send" : "Receive"} ·{" "}
-                {providers[activity.provider].label}
-              </p>
-              <span className={`status-badge ${statusTone(activity.status)}`}>
-                {statusLabel(activity.status)}
-              </span>
-            </div>
-
-            {nextAction ? (
-              <p
-                className="sr-only activity-status-announcement"
-                role="status"
-                aria-live="polite"
-                aria-atomic="true"
-              >
-                {statusLabel(activity.status)}. {nextAction.headline}
-              </p>
-            ) : null}
-
-            {/* 1. Dominant status + plain-language next action. This is the
-                first thing the eye lands on — the amount is demoted to the
-                collapsible receipt below. */}
-            {nextAction ? (
-              <div className={`status-hero ${statusTone(activity.status)}`}>
-                <span className="status-hero-kicker">
-                  {isComplete ? "Complete" : statusLabel(activity.status)}
-                </span>
-                <strong className="status-hero-action">
-                  {nextAction.headline}
-                </strong>
-                <p className="status-hero-body">{nextAction.body}</p>
-                <p className="status-hero-meta">
-                  {isComplete ? (
-                    <>
-                      <ShieldCheck size={14} aria-hidden="true" />
-                      Settled — nothing left to monitor.
-                    </>
-                  ) : isFailed ? (
-                    <>
-                      <AlertTriangle size={14} aria-hidden="true" />
-                      {activity.eta}
-                    </>
-                  ) : (
-                    <>
-                      <ShieldCheck size={14} aria-hidden="true" />
-                      Safe to leave — this keeps progressing on-chain and
-                      monitoring resumes when you reopen this page.
-                      {lastCheckedLabel ? ` Updated ${lastCheckedLabel}.` : ""}
-                    </>
-                  )}
-                </p>
-              </div>
-            ) : null}
-
-            {/* 4. Recovery / follow-up action, only when the state calls for it. */}
-            {guidance ? (
-              <div className={`action-panel ${guidance.tone}`}>
-                <div className="action-panel-head">
-                  {guidance.icon === "alert" ? (
-                    <AlertTriangle size={16} aria-hidden="true" />
-                  ) : (
-                    <Wallet size={16} aria-hidden="true" />
-                  )}
-                  <strong>{guidance.title}</strong>
-                </div>
-                <p>{guidance.body}</p>
-                {guidance.steps ? (
-                  <ol className="action-panel-steps">
-                    {guidance.steps.map((step) => (
-                      <li key={step}>{step}</li>
-                    ))}
-                  </ol>
-                ) : null}
-                {isFailed ? (
-                  <Link className="primary-button" href="/">
-                    <RotateCcw size={16} aria-hidden="true" />
-                    Start a new transfer
-                  </Link>
-                ) : null}
-              </div>
-            ) : null}
-
-            {/* 2. Named lifecycle milestones — a labeled progress list, not
-                unexplained bars. */}
             <ol className="milestone-list">
               {milestones.map((milestone) => {
                 const failedAtDestination = /destination/i.test(activity.eta);
@@ -1081,70 +868,51 @@ export function ActivityDetail({ id }: { id: string }) {
               ) : null}
             </ol>
 
-            {/* 3. Source / provider / destination evidence. */}
-            <div className="receipt-route">
-              <div>
-                <span>From</span>
-                <strong>{modeCopy?.from}</strong>
+            {!isComplete && !isFailed ? (
+              <p className="steps-note">
+                <ShieldCheck size={13} aria-hidden="true" />
+                Safe to leave — this keeps progressing on-chain and monitoring
+                resumes when you reopen this page.
+                {lastCheckedLabel ? ` Updated ${lastCheckedLabel}.` : ""}
+              </p>
+            ) : null}
+          </div>
+
+          {/* Recovery / follow-up, in the same restrained card language. */}
+          {guidance ? (
+            <div className={`action-panel ${guidance.tone}`}>
+              <div className="action-panel-head">
+                {guidance.icon === "alert" ? (
+                  <AlertTriangle size={16} aria-hidden="true" />
+                ) : (
+                  <Wallet size={16} aria-hidden="true" />
+                )}
+                <strong>{guidance.title}</strong>
               </div>
-              <ArrowRight size={16} aria-hidden="true" />
-              <div>
-                <span>To</span>
-                <strong>{modeCopy?.to}</strong>
-              </div>
+              <p>{guidance.body}</p>
+              {guidance.steps ? (
+                <ol className="action-panel-steps">
+                  {guidance.steps.map((step) => (
+                    <li key={step}>{step}</li>
+                  ))}
+                </ol>
+              ) : null}
+              {isFailed ? (
+                <Link className="primary-button" href="/">
+                  <RotateCcw size={16} aria-hidden="true" />
+                  Start a new transfer
+                </Link>
+              ) : null}
             </div>
+          ) : null}
 
-            {activity.destination || transactionHash ? (
-              <div
-                className="activity-values"
-                aria-label="Transfer identifiers"
-              >
-                {activity.destination ? (
-                  <ActivityValue
-                    label="Destination"
-                    value={activity.destination}
-                  />
-                ) : null}
-                {transactionHash ? (
-                  <ActivityValue label="Transaction hash" value={transactionHash} />
-                ) : null}
-              </div>
-            ) : null}
+          {monitorError ? (
+            <p className="form-error compact">{monitorError}</p>
+          ) : null}
 
-            {sourceLink || destinationLink ? (
-              <div className="receipt-links">
-                {sourceLink ? (
-                  <ExplorerLinkButton link={sourceLink} side="Source" />
-                ) : null}
-                {destinationLink ? (
-                  <ExplorerLinkButton link={destinationLink} side="Destination" />
-                ) : null}
-              </div>
-            ) : null}
-
-            {monitorError ? (
-              <p className="form-error compact">{monitorError}</p>
-            ) : null}
-
-            {/* 5. Amount, fees, ETA — the receipt, collapsed while in-flight and
-                opened once complete so a settled transfer reads as a receipt. */}
-            <details className="receipt-details" open={isComplete}>
-              <summary>Receipt details</summary>
-              <div className="receipt-amount">
-                <span>{receiptAmountLabel}</span>
-                <strong>{quote.expectedReceived}</strong>
-              </div>
-              <div className="receipt-lines">
-                <ReceiptLine label="ETA" value={activity.eta} />
-                <ReceiptLine
-                  label={activity.receivedAmount ? "Received" : "Min received"}
-                  value={activity.receivedAmount ?? quote.minReceived}
-                />
-                <ReceiptLine label="Network fee" value={networkFeeDisplay} />
-              </div>
-            </details>
-
-            {/* Support: a diagnostic bundle is always one click away. */}
+          {/* Support: a diagnostic bundle is one click away while a transfer is
+              still live or has failed. */}
+          {!isComplete ? (
             <div className="support-row">
               <button
                 type="button"
@@ -1159,18 +927,9 @@ export function ActivityDetail({ id }: { id: string }) {
                 {copied ? "Diagnostics copied" : "Copy diagnostics"}
               </button>
             </div>
-          </div>
+          ) : null}
         </section>
       )}
     </main>
-  );
-}
-
-function ReceiptLine({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="receipt-line">
-      <span>{label}</span>
-      <strong>{value}</strong>
-    </div>
   );
 }

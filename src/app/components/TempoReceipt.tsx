@@ -21,9 +21,11 @@ function two(n: number) {
 }
 
 /**
- * A settled bridge transfer rendered as a clean receipt card — header meta, a
- * line item with token dots, totals, and the two chain explorer links. Uses the
- * Miden design system (system sans, hairline rules, tabular figures).
+ * A bridge transfer rendered as a clean receipt card — header meta, a line item
+ * with token dots, totals, and the two chain explorer links. Uses the Miden
+ * design system (system sans, hairline rules, tabular figures). The same card
+ * backs every detail-page state: pass `status` + `pending` for an in-flight or
+ * failed transfer (adds a status pill and switches "Received" → "Expected").
  */
 export function TempoReceipt({
   activity,
@@ -32,6 +34,8 @@ export function TempoReceipt({
   sourceLink,
   destinationLink,
   transactionHash,
+  status,
+  pending = false,
 }: {
   activity: Activity;
   received: string;
@@ -39,9 +43,13 @@ export function TempoReceipt({
   sourceLink: Link;
   destinationLink: Link;
   transactionHash: string;
+  status?: { label: string; tone: string };
+  pending?: boolean;
 }) {
   const route = providers[activity.provider]?.label ?? activity.provider;
   const mode = modes[activity.mode];
+  const hash =
+    transactionHash || (activity.txHash !== "0x0" ? activity.txHash : "");
 
   const d = new Date(activity.updatedAt);
   const date = `${two(d.getMonth() + 1)}/${two(d.getDate())}/${d.getFullYear()}`;
@@ -57,13 +65,18 @@ export function TempoReceipt({
   return (
     <article className="rcpt-paper" aria-label="Transfer receipt">
       <header className="rcpt-head">
-        <Image
-          className="rcpt-logo"
-          src="/miden-logo-horizontal.svg"
-          alt="Miden"
-          width={92}
-          height={28}
-        />
+        <div className="rcpt-head-top">
+          <Image
+            className="rcpt-logo"
+            src="/miden-logo-horizontal.svg"
+            alt="Miden"
+            width={92}
+            height={28}
+          />
+          {status ? (
+            <span className={`rcpt-status ${status.tone}`}>{status.label}</span>
+          ) : null}
+        </div>
         <dl className="rcpt-meta">
           <div>
             <dt>Route</dt>
@@ -83,7 +96,9 @@ export function TempoReceipt({
           </div>
           <div>
             <dt>Hash</dt>
-            <dd className="rcpt-hash">{shortAddress(transactionHash || activity.txHash)}</dd>
+            <dd className="rcpt-hash">
+              {hash ? shortAddress(hash) : "Pending"}
+            </dd>
           </div>
         </dl>
       </header>
@@ -121,7 +136,7 @@ export function TempoReceipt({
           <dd>{activity.eta}</dd>
         </div>
         <div>
-          <dt>Received</dt>
+          <dt>{pending ? "Expected" : "Received"}</dt>
           <dd>{received}</dd>
         </div>
         <div>
