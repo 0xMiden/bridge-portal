@@ -61,6 +61,8 @@ export function TempoReceipt({
   destinationLink,
   sourceHash,
   destinationHash,
+  sourceTxAt,
+  destinationTxAt,
   status,
   pending = false,
 }: {
@@ -71,16 +73,20 @@ export function TempoReceipt({
   destinationLink: Link;
   sourceHash?: string;
   destinationHash?: string;
+  sourceTxAt?: number;
+  destinationTxAt?: number;
   status?: { label: string; tone: string };
   pending?: boolean;
 }) {
   const route = providers[activity.provider]?.label ?? activity.provider;
   const mode = modes[activity.mode];
   const hashCell = (h?: string) => (h ? shortAddress(h) : "Pending");
-
-  const d = new Date(activity.updatedAt);
-  const date = `${two(d.getMonth() + 1)}/${two(d.getDate())}/${d.getFullYear()}`;
-  const time = `${two(d.getHours())}:${two(d.getMinutes())}:${two(d.getSeconds())}`;
+  // A leg with no tx yet reads "—" (em dash), not a fabricated time.
+  const timeCell = (ms?: number) => {
+    if (!ms) return "—";
+    const d = new Date(ms);
+    return `${two(d.getMonth() + 1)}/${two(d.getDate())}/${d.getFullYear()} ${two(d.getHours())}:${two(d.getMinutes())}:${two(d.getSeconds())}`;
+  };
 
   const Token = ({ symbol }: { symbol: string }) => (
     <span className="rcpt-token">
@@ -113,21 +119,23 @@ export function TempoReceipt({
             <dt>Type</dt>
             <dd>{activity.mode === "send" ? "Bridge out" : "Bridge in"}</dd>
           </div>
-          <div>
-            <dt>Date</dt>
-            <dd>{date}</dd>
-          </div>
-          <div>
-            <dt>Time</dt>
-            <dd>{time}</dd>
-          </div>
+          {/* A bridge transfer is two transactions — one per chain — so each leg
+              carries its own hash and time (source first, then destination). */}
           <div>
             <dt>{mode.from} tx</dt>
             <dd className="rcpt-hash">{hashCell(sourceHash)}</dd>
           </div>
           <div>
+            <dt>{mode.from} time</dt>
+            <dd>{timeCell(sourceTxAt)}</dd>
+          </div>
+          <div>
             <dt>{mode.to} tx</dt>
             <dd className="rcpt-hash">{hashCell(destinationHash)}</dd>
+          </div>
+          <div>
+            <dt>{mode.to} time</dt>
+            <dd>{timeCell(destinationTxAt)}</dd>
           </div>
         </dl>
       </header>

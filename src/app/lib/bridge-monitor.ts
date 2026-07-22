@@ -43,7 +43,35 @@ function depositCount(value: AgglayerDeposit | ClaimPlanObservation | null | und
   return undefined;
 }
 
-export function deriveMonitoredActivity(activity: Activity, observation: BridgeMonitorObservation): Activity {
+/**
+ * Stamp each leg's transaction time the first time its hash appears, and never
+ * again (idempotent) — so re-observing a settled transfer doesn't overwrite when
+ * a leg actually landed. Source is usually already stamped at creation; this
+ * backfills it for activities that arrive hash-first (e.g. merged history).
+ */
+export function stampLegTimes(activity: Activity): Activity {
+  const now = Date.now();
+  let next = activity;
+  if (next.sourceTxHash && !next.sourceTxAt) {
+    next = { ...next, sourceTxAt: now };
+  }
+  const hasDestinationTx = Boolean(
+    next.destinationTxHash || next.midenTxId || next.claimTxHash,
+  );
+  if (hasDestinationTx && !next.destinationTxAt) {
+    next = { ...next, destinationTxAt: now };
+  }
+  return next;
+}
+
+export function deriveMonitoredActivity(
+  activity: Activity,
+  observation: BridgeMonitorObservation,
+): Activity {
+  return stampLegTimes(deriveMonitoredActivityCore(activity, observation));
+}
+
+function deriveMonitoredActivityCore(activity: Activity, observation: BridgeMonitorObservation): Activity {
   // `updatedAt` records when the row last changed (epoch ms), independent of the
   // monitor's display-only `checkedAt`.
   let next: Activity = { ...activity, updatedAt: Date.now() };

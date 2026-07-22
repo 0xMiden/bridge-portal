@@ -56,6 +56,11 @@ export type Activity = {
   /** Source-relative ordering hint (higher = newer) for merged remote history. */
   sortKey?: number;
   updatedAt: number;
+  /** When each leg's transaction was first recorded (epoch ms). A bridge transfer
+   * is two transactions — one per chain — so the receipt times them separately;
+   * `destinationTxAt` stays undefined until that leg's tx exists. */
+  sourceTxAt?: number;
+  destinationTxAt?: number;
 };
 
 export const activityStorageKey = "miden.bridge.ui.activities";
@@ -625,6 +630,9 @@ export function createActivity(
     destinationTxHash: undefined,
     midenTxId: undefined,
     updatedAt: Date.now(),
+    // The activity is born when the source leg is submitted, so this is the
+    // source-chain transaction time.
+    sourceTxAt: Date.now(),
   };
 
   return { ...activity, ...overrides };
