@@ -2008,6 +2008,13 @@ a {
     animation: rise-in var(--duration-base) 80ms var(--ease-standard) both;
   }
 
+  /* Navigating into a transfer's detail page rises the content in the same way
+     the bridge card enters, so the route change reads as one motion language. */
+  .detail-simple,
+  .detail-empty {
+    animation: rise-in 420ms var(--ease-standard) both;
+  }
+
   .status-dot.active {
     animation: status-pulse 1.8s var(--ease-standard) infinite;
   }
