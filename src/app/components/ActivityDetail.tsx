@@ -503,10 +503,14 @@ export function ActivityDetail({ id }: { id: string }) {
       : activity.claimTxHash ?? activity.destinationTxHash
     : undefined;
   // Per-leg transaction times. Source falls back to the row's timestamp for
-  // legacy rows created before we tracked it; destination stays undefined (shown
-  // as "—") until that leg's tx exists.
+  // legacy rows created before we tracked it. Destination shows "—" until that
+  // leg's tx exists; once it does (the hash is present) but wasn't stamped —
+  // e.g. a transfer that settled before we tracked it — fall back to the row's
+  // last-updated time so a settled transfer still shows a time and a duration.
   const sourceTxAt = activity?.sourceTxAt ?? activity?.updatedAt;
-  const destinationTxAt = activity?.destinationTxAt;
+  const destinationTxAt =
+    activity?.destinationTxAt ??
+    (destinationHash ? activity?.updatedAt : undefined);
 
   const observeActivity = useCallback(
     (activityId: string, observation: BridgeMonitorObservation) => {
