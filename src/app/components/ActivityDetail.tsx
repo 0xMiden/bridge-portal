@@ -44,7 +44,9 @@ import { epochActivityStatus, epochDestinationTx } from "../lib/epoch/epoch-stat
 import { MIDEN_DESTINATION_CHAIN_ID } from "../lib/epoch/config";
 import { sepoliaGasUnitsFor, useSepoliaGasEstimate } from "../lib/sepolia-gas";
 import { formatAgo } from "../lib/relative-time";
+import { DEMO_ACTIVITIES } from "../lib/activity-demo";
 import { ThemeToggle } from "./ThemeToggle";
+import { TempoReceipt } from "./TempoReceipt";
 
 const SEPOLIA_CHAIN_ID = 11155111;
 
@@ -485,7 +487,7 @@ export function ActivityDetail({ id }: { id: string }) {
   // ticks each second so the page visibly reflects the ≤10s polling cadence.
   const [lastCheckedAt, setLastCheckedAt] = useState(0);
   const [now, setNow] = useState(() => Date.now());
-  const activity = activities.find((item) => item.id === id);
+  const activity = DEMO_ACTIVITIES[id] ?? activities.find((item) => item.id === id);
   const quote = useMemo(
     () =>
       activity
@@ -879,6 +881,17 @@ export function ActivityDetail({ id }: { id: string }) {
           <Link className="primary-button" href="/">
             Back to bridge
           </Link>
+        </section>
+      ) : isComplete ? (
+        <section className="detail-simple">
+          <TempoReceipt
+            activity={activity}
+            received={activity.receivedAmount ?? quote.expectedReceived}
+            networkFee={networkFeeDisplay}
+            sourceLink={sourceLink}
+            destinationLink={destinationLink}
+            transactionHash={transactionHash ?? activity.txHash}
+          />
         </section>
       ) : (
         <section className="detail-simple">
