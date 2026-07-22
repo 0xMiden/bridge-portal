@@ -3078,6 +3078,13 @@ a {
     width: auto;
   }
 
+  /* The collapsed single-row topbar sits tight against the receipt here; the
+     64px min-height that spaced them on desktop is gone. Re-add breathing room
+     so the receipt doesn't crowd the nav on tablet/mobile. */
+  .detail-simple {
+    margin-top: 18px;
+  }
+
   .brand {
     justify-content: space-between;
   }
