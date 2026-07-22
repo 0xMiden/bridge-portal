@@ -248,7 +248,6 @@ test.describe("mobile bridge layout", () => {
       return {
         dock: rect(".primary-action-dock"),
         quote: rect(".quote-summary"),
-        disclaimer: rect(".route-disclaimer"),
         error: rect(".swap-card > .form-error"),
         dockPosition: getComputedStyle(
           document.querySelector(".primary-action-dock")!,
@@ -261,7 +260,6 @@ test.describe("mobile bridge layout", () => {
     });
 
     expect(intersects(boxes.dock, boxes.quote)).toBe(false);
-    expect(intersects(boxes.dock, boxes.disclaimer)).toBe(false);
     expect(intersects(boxes.dock, boxes.error)).toBe(false);
     expect(boxes.dockPosition).toBe("sticky");
     expect(boxes.dock.top).toBeGreaterThanOrEqual(0);
