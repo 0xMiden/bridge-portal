@@ -37,15 +37,22 @@
   --inset-border: rgba(23, 21, 17, 0.06);
   --on-accent: #ffffff;
   --on-status: #ffffff;
+  /* Radius scale — 4 steps (was sm==md==10). */
   --radius-sm: 10px;
-  --radius-md: 10px;
-  --radius-lg: 14px;
-  --duration-fast: 140ms;
-  --duration-base: 220ms;
-  --duration-slow: 520ms;
-  --ease-standard: cubic-bezier(0.16, 1, 0.3, 1);
+  --radius-md: 14px;
+  --radius-lg: 18px;
+  --radius-pill: 999px;
+  /* Clean near-white field fill for input wells (replaces the muddy beige).
+     Adapts per theme: always one calm step off the surface. */
+  --field: color-mix(in srgb, var(--foreground) 4.5%, var(--surface));
+  /* Motion — one calm ease, three durations + a data tier (retires the springy
+     cubic-bezier(0.16,1,0.3,1) and the 140/220/520 sprawl). */
+  --duration-fast: 120ms;
+  --duration-base: 180ms;
+  --duration-slow: 260ms;
+  --duration-data: 450ms;
+  --ease-standard: cubic-bezier(0.33, 0, 0.2, 1);
   --ease-press: cubic-bezier(0.2, 0, 0, 1);
-  /* Smooth ease-out for interactive states — no overshoot, no snap. */
   --ease-smooth: cubic-bezier(0.33, 0, 0.2, 1);
   /* One shared transition for every interactive element so hover changes
      (background, border, shadow, colour, transform) animate together instead of
@@ -227,7 +234,7 @@ a {
   min-width: 44px;
   height: 44px;
   padding: 0;
-  border: 1px solid var(--border);
+  border: 0;
   border-radius: var(--radius-md);
   background: var(--surface);
   color: var(--muted-foreground);
@@ -259,7 +266,7 @@ a {
   display: grid;
   min-width: 168px;
   padding: 5px;
-  border: 1px solid var(--border);
+  border: 0;
   border-radius: var(--radius-lg);
   background: var(--surface-elevated);
   box-shadow: var(--shadow-raised);
@@ -325,7 +332,7 @@ a {
   min-width: 44px;
   height: 44px;
   padding: 0;
-  border: 1px solid var(--border);
+  border: 0;
   border-radius: var(--radius-md);
   background: var(--surface);
   color: var(--muted-foreground);
@@ -353,7 +360,7 @@ a {
   gap: 4px;
   min-width: 244px;
   padding: 10px;
-  border: 1px solid var(--border);
+  border: 0;
   border-radius: var(--radius-lg);
   background: var(--surface-elevated);
   box-shadow: var(--shadow-raised);
@@ -366,8 +373,8 @@ a {
   color: var(--faint-foreground);
   font-size: 10px;
   font-weight: 820;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
+  letter-spacing: 0;
+  text-transform: none;
 }
 
 .faucet-row {
@@ -404,7 +411,7 @@ a {
   min-height: 32px;
   padding: 0 12px;
   border: 0;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: var(--accent);
   color: var(--on-accent);
   font-size: 13px;
@@ -518,11 +525,11 @@ a {
 .secondary-button,
 .route-trigger,
 .destination-input input {
-  border: 1px solid var(--border);
+  border: 0;
   border-radius: var(--radius-md);
-  background: var(--surface);
+  background: var(--field);
   color: var(--foreground);
-  box-shadow: var(--shadow-control);
+  box-shadow: none;
 }
 
 .wallet-button,
@@ -606,7 +613,7 @@ a {
   min-height: 44px;
   max-width: 240px;
   padding: 6px 13px 6px 6px;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
 }
 
 .wallet-menu-root .wallet-pill {
@@ -619,7 +626,7 @@ a {
   flex: 0 0 auto;
   width: 30px;
   height: 30px;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: var(--surface-strong);
   box-shadow: inset 0 0 0 1px var(--inset-border);
 }
@@ -634,7 +641,7 @@ a {
   height: 16px;
   overflow: hidden;
   border: 2px solid var(--surface);
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: var(--surface);
   color: var(--muted-foreground);
 }
@@ -665,8 +672,8 @@ a {
   width: 30px;
   height: 30px;
   place-items: center;
-  border: 1px solid var(--border);
-  border-radius: 10px;
+  border: 0;
+  border-radius: var(--radius-sm);
   background: var(--surface-muted);
   color: var(--muted-foreground);
 }
@@ -701,7 +708,7 @@ a {
   font-weight: 800;
   line-height: 1.1;
   text-overflow: ellipsis;
-  text-transform: uppercase;
+  text-transform: none;
   white-space: nowrap;
 }
 
@@ -716,7 +723,7 @@ a {
 .wallet-status-dot {
   width: 6px;
   height: 6px;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: var(--faint-foreground);
   box-shadow: 0 0 0 2px var(--inset-border);
 }
@@ -766,7 +773,7 @@ a {
   gap: 4px;
   width: 268px;
   padding: 8px;
-  border: 1px solid var(--border);
+  border: 0;
   border-radius: var(--radius-lg);
   background: var(--surface-elevated);
   box-shadow: var(--shadow-raised);
@@ -884,7 +891,7 @@ a {
   position: relative;
   width: min(500px, 100%);
   padding: 8px;
-  border: 1px solid var(--border);
+  border: 0;
   border-radius: var(--radius-lg);
   background: var(--surface);
   box-shadow: var(--shadow-card);
@@ -954,7 +961,7 @@ a {
   min-height: 38px;
   min-width: 188px;
   padding: 0 11px;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   text-align: left;
 }
 
@@ -980,7 +987,7 @@ a {
 
 .route-trigger span,
 .kicker {
-  text-transform: uppercase;
+  text-transform: none;
   letter-spacing: 0;
 }
 
@@ -1024,7 +1031,7 @@ a {
   max-height: min(70vh, 460px);
   overflow-y: auto;
   padding: 6px;
-  border: 1px solid var(--border);
+  border: 0;
   border-radius: var(--radius-lg);
   background: var(--surface-elevated);
   box-shadow: var(--shadow-raised);
@@ -1065,9 +1072,7 @@ a {
 /* Selected state carries a visible ring + accent border, not a subtle bg
    change alone, so the active route reads at a glance. */
 .route-option.selected {
-  border-color: var(--accent-border);
-  background: var(--accent-soft);
-  box-shadow: inset 0 0 0 1px var(--accent-ring);
+  background: color-mix(in srgb, var(--foreground) 8%, var(--surface));
 }
 
 .route-option:focus-visible {
@@ -1106,11 +1111,11 @@ a {
   align-items: center;
   min-height: 19px;
   padding: 0 7px;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   font-size: 10px;
   font-weight: 820;
   letter-spacing: 0.02em;
-  text-transform: uppercase;
+  text-transform: none;
   white-space: nowrap;
 }
 
@@ -1149,7 +1154,7 @@ a {
   min-height: 22px;
   align-items: center;
   justify-content: center;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   padding: 0 10px;
   /* Borderless soft chips — a faint neutral wash instead of a bordered box. */
   background: var(--surface-strong);
@@ -1232,9 +1237,9 @@ a {
   margin-top: 7px;
   padding: 14px;
   position: relative;
-  border: 1px solid var(--border);
+  border: 0;
   border-radius: var(--radius-lg);
-  background: var(--surface-muted);
+  background: var(--field);
 }
 
 /* When a token menu is open, lift its box above the divider + sibling box so
@@ -1274,8 +1279,8 @@ a {
   align-items: center;
   gap: 5px;
   padding: 2px 9px;
-  border: 1px solid var(--border);
-  border-radius: 999px;
+  border: 0;
+  border-radius: var(--radius-pill);
   background: transparent;
   color: var(--accent);
   font: inherit;
@@ -1343,7 +1348,7 @@ a {
   flex: 0 0 auto;
   padding: 1px 9px;
   border: 1px solid var(--danger);
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: transparent;
   color: var(--danger);
   font: inherit;
@@ -1399,7 +1404,7 @@ a {
   gap: 6px;
   padding: 4px 9px 4px 4px;
   border: 0;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: var(--surface);
   box-shadow: var(--shadow-raised);
   color: var(--foreground);
@@ -1420,7 +1425,7 @@ a {
 .token-icon {
   display: block;
   flex: 0 0 auto;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
 }
 
 .token-select-symbol {
@@ -1443,7 +1448,7 @@ a {
   z-index: 40;
   min-width: 216px;
   padding: 6px;
-  border: 1px solid var(--border);
+  border: 0;
   border-radius: var(--radius-lg);
   background: var(--surface-elevated);
   box-shadow: var(--shadow-raised);
@@ -1482,7 +1487,7 @@ a {
 }
 
 .token-option.selected {
-  background: var(--accent-soft);
+  background: color-mix(in srgb, var(--foreground) 8%, var(--surface));
 }
 
 .token-option-text {
@@ -1544,7 +1549,7 @@ a {
   margin: -12px auto -20px;
   place-items: center;
   border: 4px solid var(--surface);
-  border-radius: 14px;
+  border-radius: var(--radius-md);
   background: var(--accent);
   color: var(--on-accent);
   position: relative;
@@ -1578,7 +1583,7 @@ a {
   margin: 10px 2px 0;
   padding: 10px 12px;
   border: 1px solid var(--danger-border);
-  border-radius: 14px;
+  border-radius: var(--radius-md);
   background: var(--danger-soft);
   color: var(--danger-foreground);
   font-size: 13px;
@@ -1596,7 +1601,7 @@ a {
   gap: 6px;
   margin-top: 8px;
   padding: 6px;
-  border: 1px solid var(--border);
+  border: 0;
   border-radius: var(--radius-lg);
   background: var(--surface);
 }
@@ -1620,7 +1625,7 @@ a {
   font-size: 11px;
   font-weight: 820;
   text-overflow: ellipsis;
-  text-transform: uppercase;
+  text-transform: none;
   white-space: nowrap;
 }
 
@@ -1631,7 +1636,7 @@ a {
   margin-top: 10px;
   padding: 6px;
   border-radius: var(--radius-lg);
-  border: 1px solid var(--border);
+  border: 0;
   background: transparent;
   color: var(--foreground);
 }
@@ -1668,8 +1673,8 @@ a {
   gap: 9px;
   margin-top: 8px;
   padding: 8px 10px;
-  border: 1px solid var(--border);
-  border-radius: 16px;
+  border: 0;
+  border-radius: var(--radius-lg);
   background: var(--surface-muted);
   color: var(--muted-foreground);
   font-size: 12px;
@@ -1762,7 +1767,7 @@ a {
   min-width: 26px;
   height: 26px;
   place-items: center;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: var(--surface);
   color: var(--muted-foreground);
   font-size: 12px;
@@ -1781,7 +1786,7 @@ a {
   gap: 12px;
   min-height: 64px;
   padding: 12px 14px;
-  border: 1px solid var(--border);
+  border: 0;
   border-radius: var(--radius-lg);
   background: var(--surface);
 }
@@ -1965,8 +1970,8 @@ a {
   gap: 7px;
   min-height: 42px;
   padding: 0 12px;
-  border: 1px solid var(--border);
-  border-radius: 14px;
+  border: 0;
+  border-radius: var(--radius-md);
   background: var(--surface-muted);
   color: var(--foreground);
   font-size: 13px;
@@ -1992,7 +1997,7 @@ a {
   display: grid;
   gap: 6px;
   padding: 16px;
-  border: 1px solid var(--border);
+  border: 0;
   border-radius: var(--radius-lg);
   background: var(--surface-muted);
 }
@@ -2021,8 +2026,8 @@ a {
   color: var(--muted-foreground);
   font-size: 11px;
   font-weight: 800;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
+  letter-spacing: 0;
+  text-transform: none;
 }
 
 .status-hero-action {
@@ -2059,7 +2064,7 @@ a {
   display: grid;
   gap: 8px;
   padding: 14px;
-  border: 1px solid var(--border);
+  border: 0;
   border-radius: var(--radius-lg);
   background: var(--surface-muted);
 }
@@ -2151,7 +2156,7 @@ a {
   height: 20px;
   margin-top: 1px;
   border: 2px solid var(--border-strong);
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: var(--surface);
   color: var(--on-status);
 }
@@ -2272,7 +2277,7 @@ a {
 .receipt-card,
 .detail-empty {
   padding: 18px;
-  border: 1px solid var(--border);
+  border: 0;
   border-radius: var(--radius-lg);
   background: var(--surface);
   box-shadow: var(--shadow-card);
@@ -2297,8 +2302,8 @@ a {
   width: 44px;
   height: 44px;
   place-items: center;
-  border: 1px solid var(--border);
-  border-radius: 14px;
+  border: 0;
+  border-radius: var(--radius-md);
   background: var(--surface-muted);
   color: var(--accent);
 }
@@ -2350,8 +2355,8 @@ a {
   gap: 5px;
   margin-top: 14px;
   padding: 12px;
-  border: 1px solid var(--border);
-  border-radius: 16px;
+  border: 0;
+  border-radius: var(--radius-lg);
   background: var(--surface-muted);
 }
 
@@ -2375,7 +2380,7 @@ a {
   gap: 12px;
   margin-top: 18px;
   padding: 14px;
-  border: 1px solid var(--border);
+  border: 0;
   border-radius: var(--radius-lg);
   background: var(--surface-muted);
 }
@@ -2421,8 +2426,8 @@ a {
   gap: 4px 8px;
   min-height: 72px;
   padding: 12px;
-  border: 1px solid var(--border);
-  border-radius: 16px;
+  border: 0;
+  border-radius: var(--radius-lg);
   background: var(--surface-muted);
 }
 
@@ -2473,7 +2478,7 @@ a {
   gap: 8px 12px;
   min-width: 0;
   padding: 12px;
-  border: 1px solid var(--border);
+  border: 0;
   border-radius: var(--radius-lg);
   background: var(--surface-muted);
 }
@@ -2554,8 +2559,8 @@ a {
   min-height: 30px;
   align-items: center;
   justify-content: center;
-  border: 1px solid var(--border);
-  border-radius: 999px;
+  border: 0;
+  border-radius: var(--radius-pill);
   padding: 0 10px;
   font-size: 12px;
   font-weight: 800;
@@ -2579,8 +2584,8 @@ a {
   min-height: 74px;
   min-width: 0;
   padding: 12px;
-  border: 1px solid var(--border);
-  border-radius: 16px;
+  border: 0;
+  border-radius: var(--radius-lg);
   background: var(--surface-muted);
 }
 
@@ -2594,8 +2599,8 @@ a {
 .recovery-copy {
   margin-top: 14px;
   padding: 12px;
-  border: 1px solid var(--border);
-  border-radius: 16px;
+  border: 0;
+  border-radius: var(--radius-lg);
   background: var(--surface-muted);
   color: var(--muted-foreground);
   line-height: 1.45;
@@ -2617,8 +2622,8 @@ a {
   grid-template-columns: 36px minmax(0, 1fr);
   gap: 10px;
   padding: 12px;
-  border: 1px solid var(--border);
-  border-radius: 16px;
+  border: 0;
+  border-radius: var(--radius-lg);
   background: var(--surface-muted);
 }
 
@@ -2637,8 +2642,8 @@ a {
   width: 32px;
   height: 32px;
   place-items: center;
-  border: 1px solid var(--border);
-  border-radius: 10px;
+  border: 0;
+  border-radius: var(--radius-sm);
   background: var(--surface);
   color: var(--muted-foreground);
 }
@@ -2668,8 +2673,8 @@ a {
   gap: 7px;
   margin-top: 14px;
   padding: 12px;
-  border: 1px solid var(--border);
-  border-radius: 16px;
+  border: 0;
+  border-radius: var(--radius-lg);
   background: var(--surface-muted);
 }
 
@@ -2956,7 +2961,7 @@ a {
   max-height: 100%;
   overflow-y: auto;
   padding: 16px;
-  border: 1px solid var(--border);
+  border: 0;
   border-radius: var(--radius-lg);
   background: var(--surface);
   box-shadow: var(--shadow-card);
@@ -2990,8 +2995,8 @@ a {
   place-items: center;
   width: 44px;
   height: 44px;
-  border: 1px solid var(--border);
-  border-radius: 999px;
+  border: 0;
+  border-radius: var(--radius-pill);
   background: var(--surface-muted);
   color: var(--muted-foreground);
 }
@@ -3001,7 +3006,7 @@ a {
   align-items: center;
   gap: 8px;
   padding: 9px 12px;
-  border-radius: 14px;
+  border-radius: var(--radius-md);
   background: var(--surface-muted);
   color: var(--foreground);
   font-weight: 820;
@@ -3010,12 +3015,12 @@ a {
 .preflight-route .preflight-testnet {
   margin-left: auto;
   padding: 3px 9px;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: var(--warning-soft);
   color: var(--warning-foreground);
   font-size: 11px;
   font-weight: 820;
-  text-transform: uppercase;
+  text-transform: none;
   letter-spacing: 0.02em;
 }
 
@@ -3079,8 +3084,8 @@ a {
   min-width: 44px;
   min-height: 44px;
   padding: 3px 8px;
-  border: 1px solid var(--border);
-  border-radius: 999px;
+  border: 0;
+  border-radius: var(--radius-pill);
   background: var(--surface-muted);
   color: var(--muted-foreground);
   font-size: 11px;
@@ -3090,7 +3095,7 @@ a {
 .preflight-note {
   margin: 0;
   padding: 9px 11px;
-  border-radius: 14px;
+  border-radius: var(--radius-md);
   background: var(--surface-muted);
   color: var(--muted-foreground);
   font-size: 12px;
@@ -3321,7 +3326,7 @@ a {
     max-height: min(72dvh, 560px);
     flex-direction: column;
     padding-top: 24px;
-    border: 1px solid var(--border);
+    border: 0;
     border-bottom: 0;
     border-radius: var(--radius-lg) var(--radius-lg) 0 0;
     background: var(--surface-elevated);
@@ -3336,7 +3341,7 @@ a {
     left: 50%;
     width: 42px;
     height: 4px;
-    border-radius: 999px;
+    border-radius: var(--radius-pill);
     background: var(--border-strong);
     transform: translateX(-50%);
   }
