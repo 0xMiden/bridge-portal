@@ -1807,10 +1807,29 @@ export function BridgeExperience() {
           </div>
 
           <div className="swap-box">
-            <div>
+            <div className="swap-box-head">
               <span>From</span>
               <strong>{copy.from}</strong>
-              {renderWalletChip(sourceIdentity)}
+              {/* The Miden account is already in the field below, and a connected
+                  Sepolia address is already in the header — so a chip here only
+                  earns its space for an actionable/unconnected state (connect,
+                  connecting, wrong network). Once connected, the balance row is
+                  all that's needed. */}
+              {sourceIdentity === evmIdentity &&
+              sourceIdentity.state !== "connected"
+                ? renderWalletChip(sourceIdentity)
+                : null}
+            </div>
+            <label className="swap-box-amount">
+              <input
+                aria-label="Amount"
+                inputMode="decimal"
+                placeholder="0"
+                value={amount}
+                onChange={(event) => setAmount(event.target.value)}
+              />
+            </label>
+            <div className="swap-box-foot">
               {(() => {
                 const line =
                   mode === "send" ? renderMidenBalance() : renderEvmBalance();
@@ -1819,19 +1838,12 @@ export function BridgeExperience() {
                 ) : null;
               })()}
             </div>
-            <label>
-              <input
-                aria-label="Amount"
-                inputMode="decimal"
-                placeholder="0"
-                value={amount}
-                onChange={(event) => setAmount(event.target.value)}
-              />
+            <div className="swap-box-token">
               <TokenSelect
                 provider={provider}
                 onSelectProvider={selectProvider}
               />
-            </label>
+            </div>
           </div>
 
           <div className="swap-divider" aria-hidden="true">
@@ -1839,19 +1851,15 @@ export function BridgeExperience() {
           </div>
 
           <div className="swap-box">
-            <div>
+            <div className="swap-box-head">
               <span>To</span>
               <strong>{copy.to}</strong>
-              {renderWalletChip(destinationIdentity)}
-              {(() => {
-                const line =
-                  mode === "receive" ? renderMidenBalance() : renderEvmBalance();
-                return line ? (
-                  <small className="balance-line">{line}</small>
-                ) : null;
-              })()}
+              {destinationIdentity === evmIdentity &&
+              destinationIdentity.state !== "connected"
+                ? renderWalletChip(destinationIdentity)
+                : null}
             </div>
-            <label className="readonly-amount">
+            <label className="readonly-amount swap-box-amount">
               <strong>
                 {provider === "epoch" ? (
                   <EpochQuotePreview
@@ -1868,11 +1876,22 @@ export function BridgeExperience() {
                   expectedReceivedAmount
                 )}
               </strong>
+            </label>
+            <div className="swap-box-foot">
+              {(() => {
+                const line =
+                  mode === "receive" ? renderMidenBalance() : renderEvmBalance();
+                return line ? (
+                  <small className="balance-line">{line}</small>
+                ) : null;
+              })()}
+            </div>
+            <div className="swap-box-token">
               <TokenSelect
                 provider={provider}
                 onSelectProvider={selectProvider}
               />
-            </label>
+            </div>
           </div>
 
           <label className="destination-input">
