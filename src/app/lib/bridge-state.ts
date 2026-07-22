@@ -777,6 +777,20 @@ export function buildDiagnostics(
   };
 }
 
+/**
+ * When the transfer began = the source-chain transaction time. Prefers the
+ * stamped `sourceTxAt`, else the id-encoded creation time (`act-<base36 ms>`),
+ * else the row's `updatedAt`. Used so the history list counts forward from when
+ * the transfer was initiated, not from the last monitor poll.
+ */
+export function activityStartedAt(activity: Activity): number {
+  if (activity.sourceTxAt) return activity.sourceTxAt;
+  const match = /^act-([0-9a-z]+)$/.exec(activity.id);
+  const fromId = match ? parseInt(match[1], 36) : NaN;
+  if (Number.isFinite(fromId) && fromId > 1_600_000_000_000) return fromId;
+  return activity.updatedAt;
+}
+
 function normalizeActivity(activity: Activity): Activity {
   const legacyMode = activity.mode as FlowMode | "deposit" | "withdraw";
   const mode: FlowMode = legacyMode === "deposit" ? "receive" : legacyMode === "withdraw" ? "send" : legacyMode;

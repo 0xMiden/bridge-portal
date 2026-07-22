@@ -41,6 +41,7 @@ import {
   SEPOLIA_CHAIN_ID,
   evmWalletIdentity,
   midenWalletIdentity,
+  activityStartedAt,
   createActivity,
   deriveCtaState,
   loadStoredActivities,
@@ -2114,7 +2115,7 @@ export function BridgeExperience() {
                         <strong>
                           {activity.amount} {activity.asset}
                         </strong>
-                        <small><RelativeTime at={activity.updatedAt} /></small>
+                        <small><RelativeTime at={activityStartedAt(activity)} /></small>
                       </span>
                       <ChevronRight size={16} aria-hidden="true" />
                     </Link>

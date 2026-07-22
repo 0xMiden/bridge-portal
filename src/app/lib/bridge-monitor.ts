@@ -1,5 +1,5 @@
 import type { AgglayerDeposit } from "./agglayer";
-import type { Activity } from "./bridge-state";
+import { type Activity, activityStartedAt } from "./bridge-state";
 
 export const sourceTxPollMs = 6_000;
 export const agglayerPollMs = 10_000;
@@ -53,7 +53,9 @@ export function stampLegTimes(activity: Activity): Activity {
   const now = Date.now();
   let next = activity;
   if (next.sourceTxHash && !next.sourceTxAt) {
-    next = { ...next, sourceTxAt: now };
+    // The source leg is the transfer's start — use its real start time (id-
+    // encoded creation), never "now", so a late backfill can't read as "just now".
+    next = { ...next, sourceTxAt: activityStartedAt(next) };
   }
   const hasDestinationTx = Boolean(
     next.destinationTxHash || next.midenTxId || next.claimTxHash,
