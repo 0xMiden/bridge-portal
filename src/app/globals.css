@@ -3051,19 +3051,31 @@ a {
   }
 
   .topbar,
+  /* The detail bar only holds brand + theme + a back link, so keep it one
+     compact row (unlike the main bar's stacked wallet cluster). Don't let the
+     back link stretch full-width — on a tablet that read as an oversized button,
+     and the stacked bar wasted vertical space on mobile. */
   .detail-topbar {
-    align-items: stretch;
-    flex-direction: column;
-    /* Tighten the stacked app bar: the brand row + wallet cluster shouldn't
-       claim a tall header before the form even begins. */
-    gap: 10px;
+    flex-direction: row;
+    align-items: center;
+    gap: 12px;
     min-height: 0;
   }
 
+  .detail-topbar .brand {
+    justify-content: flex-start;
+    flex: 0 1 auto;
+    min-width: 0;
+  }
+
   .detail-topbar-actions {
-    display: grid;
-    grid-template-columns: 44px minmax(0, 1fr);
-    width: 100%;
+    display: flex;
+    flex: 0 0 auto;
+    width: auto;
+  }
+
+  .detail-topbar .back-link {
+    width: auto;
   }
 
   .brand {
@@ -3440,6 +3452,13 @@ a {
 
   .detail-topbar .brand {
     min-height: 44px;
+  }
+
+  /* On phones the single-row detail bar is tight; the "Bridge" wordmark beside
+     the logo would crowd the theme + back-link, so drop it — the logo alone
+     still links home, and the receipt carries its own MIDEN mark. */
+  .detail-topbar .brand > span {
+    display: none;
   }
 
   .detail-simple {
