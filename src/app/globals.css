@@ -3534,9 +3534,9 @@ a {
    detail page. Restrained: system sans, hairline rules (no printed-receipt
    monospace or dashed tears); mono is reserved for the hash alone. */
 .rcpt-paper {
+  /* Fill the detail column so the receipt and the bridge-steps card share the
+     exact same width — no inset mismatch between the two stacked cards. */
   width: 100%;
-  max-width: 460px;
-  margin: 0 auto;
   padding: 24px;
   background: var(--surface);
   border-radius: var(--radius-lg);
@@ -3580,21 +3580,13 @@ a {
   margin-top: 16px; padding-top: 14px;
   border-top: 1px solid var(--border);
 }
-.rcpt-actions button, .rcpt-actions a {
+.rcpt-actions a {
   display: inline-flex; align-items: center; justify-content: center; gap: 6px;
   padding: 8px 4px; border: 0; background: transparent;
   color: var(--muted-foreground); font: inherit; font-size: 13px; font-weight: 700;
   cursor: pointer; text-decoration: none;
   transition: color 180ms var(--ease-smooth);
 }
-.rcpt-actions button + a, .rcpt-actions a + a { border-left: 1px solid var(--border); }
-.rcpt-actions button:hover, .rcpt-actions a:hover { color: var(--accent-ink); }
-.rcpt-view {
-  display: flex; align-items: center; justify-content: center; gap: 7px;
-  margin-top: 8px; padding: 12px;
-  color: var(--muted-foreground); font-size: 13px; font-weight: 700;
-  text-decoration: none;
-  transition: color 180ms var(--ease-smooth);
-}
-.rcpt-view:hover { color: var(--accent-ink); }
+.rcpt-actions a + a { border-left: 1px solid var(--border); }
+.rcpt-actions a:hover { color: var(--accent-ink); }
 .dark .rcpt-logo { filter: invert(1) hue-rotate(180deg); }

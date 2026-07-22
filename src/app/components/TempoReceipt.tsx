@@ -1,8 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { ArrowRight, Check, Copy } from "lucide-react";
-import { useState } from "react";
+import { ArrowRight } from "lucide-react";
 import {
   type Activity,
   modes,
@@ -22,9 +21,9 @@ function two(n: number) {
 }
 
 /**
- * A settled bridge transfer rendered as a printed-receipt — monospace, dashed
- * tear-lines, a numbered line item, totals, and explorer actions. Styled after
- * the Tempo explorer receipt, in the Miden design system.
+ * A settled bridge transfer rendered as a clean receipt card — header meta, a
+ * line item with token dots, totals, and the two chain explorer links. Uses the
+ * Miden design system (system sans, hairline rules, tabular figures).
  */
 export function TempoReceipt({
   activity,
@@ -41,25 +40,12 @@ export function TempoReceipt({
   destinationLink: Link;
   transactionHash: string;
 }) {
-  const [copied, setCopied] = useState(false);
   const route = providers[activity.provider]?.label ?? activity.provider;
   const mode = modes[activity.mode];
-  const dot = TOKEN_DOT[activity.asset] ?? "var(--muted-foreground)";
-  const primaryLink = sourceLink?.href ?? destinationLink?.href;
 
   const d = new Date(activity.updatedAt);
   const date = `${two(d.getMonth() + 1)}/${two(d.getDate())}/${d.getFullYear()}`;
   const time = `${two(d.getHours())}:${two(d.getMinutes())}:${two(d.getSeconds())}`;
-
-  const copyHash = async () => {
-    try {
-      await navigator.clipboard.writeText(transactionHash || activity.txHash);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1600);
-    } catch {
-      /* clipboard blocked — no-op */
-    }
-  };
 
   const Token = ({ symbol }: { symbol: string }) => (
     <span className="rcpt-token">
@@ -144,32 +130,27 @@ export function TempoReceipt({
         </div>
       </dl>
 
-      <div className="rcpt-actions">
-        <button type="button" onClick={copyHash}>
-          {copied ? <Check size={14} aria-hidden="true" /> : <Copy size={14} aria-hidden="true" />}
-          {copied ? "Copied" : "Copy hash"}
-        </button>
-        {sourceLink?.href ? (
-          <a href={sourceLink.href} target="_blank" rel="noopener noreferrer">
-            Etherscan
-          </a>
-        ) : null}
-        {destinationLink?.href ? (
-          <a href={destinationLink.href} target="_blank" rel="noopener noreferrer">
-            Midenscan
-          </a>
-        ) : null}
-      </div>
-
-      {primaryLink ? (
-        <a
-          className="rcpt-view"
-          href={primaryLink}
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          View transaction <ArrowRight size={14} aria-hidden="true" />
-        </a>
+      {sourceLink?.href || destinationLink?.href ? (
+        <div className="rcpt-actions">
+          {/* Each link carries its own chain-correct label ("View on
+              Etherscan" / "…Midenscan"), which flips by direction — a Send's
+              source is Miden, a Receive's source is Sepolia — so we render the
+              link's own label rather than a fixed position. */}
+          {sourceLink?.href ? (
+            <a href={sourceLink.href} target="_blank" rel="noopener noreferrer">
+              {(sourceLink.label ?? "").replace(/^View on /, "")}
+            </a>
+          ) : null}
+          {destinationLink?.href ? (
+            <a
+              href={destinationLink.href}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              {(destinationLink.label ?? "").replace(/^View on /, "")}
+            </a>
+          ) : null}
+        </div>
       ) : null}
     </article>
   );
