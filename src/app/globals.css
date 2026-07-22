@@ -3,8 +3,10 @@
 :root {
   color-scheme: light;
   --background: #f7f4ee;
-  --surface: #ffffff;
-  --surface-elevated: #ffffff;
+  --surface: #fffdf8;
+  --surface-elevated: #fffdf8;
+  --bg-glow: rgba(255, 85, 0, 0.06);
+  --bg-line: rgba(23, 21, 17, 0.08);
   --surface-muted: #f2f1ef;
   --surface-strong: #e9e7e3;
   --foreground: #171511;
@@ -74,6 +76,8 @@
   --background: #14110d;
   --surface: #1b1712;
   --surface-elevated: #221d16;
+  --bg-glow: rgba(255, 106, 42, 0.09);
+  --bg-line: rgba(246, 243, 236, 0.07);
   --surface-muted: #241f18;
   --surface-strong: #302a20;
   --foreground: #f6f3ec;
@@ -123,8 +127,25 @@
 html,
 body {
   min-height: 100%;
-  background: var(--background);
+  background:
+    radial-gradient(1000px 460px at 50% -12%, var(--bg-glow), transparent 62%),
+    var(--background);
   color: var(--foreground);
+}
+
+/* Ambient depth behind the content: faint concentric rings rising from the
+   bottom (masked so they dissolve upward), echoing an explorer's line-art. */
+body::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background-image: radial-gradient(var(--bg-line) 1.2px, transparent 1.2px);
+  background-size: 26px 26px;
+  background-position: center top;
+  -webkit-mask-image: radial-gradient(115% 80% at 50% 8%, #000 32%, transparent 82%);
+  mask-image: radial-gradient(115% 80% at 50% 8%, #000 32%, transparent 82%);
 }
 
 body {
@@ -171,6 +192,8 @@ a {
 
 .app-shell,
 .detail-shell {
+  position: relative;
+  z-index: 1;
   min-height: 100dvh;
   width: min(1180px, 100%);
   margin: 0 auto;
