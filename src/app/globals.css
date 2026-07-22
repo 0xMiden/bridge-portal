@@ -553,14 +553,15 @@ a {
   transition: var(--transition-interactive);
 }
 
+/* Hover never MOVES an element (a lifting list item / button reads as glitchy).
+   Feedback is a calm border + shadow that fades in via --transition-interactive.
+   route-option is intentionally excluded — it uses a plain background highlight. */
 .wallet-button:hover,
 .back-link:hover,
 .secondary-button:hover,
 .route-trigger:hover,
-.route-option:hover,
 .home-activity-item:hover,
 .explorer-link:hover {
-  transform: translateY(-0.5px);
   border-color: var(--border-strong);
   box-shadow: var(--shadow-raised);
 }
@@ -1044,13 +1045,15 @@ a {
 
 .route-option {
   display: grid;
-  gap: 7px;
+  gap: 4px;
+  align-content: center;
   width: 100%;
+  min-height: 62px;
   border: 1px solid transparent;
   border-radius: var(--radius-md);
   background: transparent;
   color: var(--foreground);
-  padding: 11px 12px;
+  padding: 10px 12px;
   text-align: left;
 }
 
@@ -1129,12 +1132,6 @@ a {
   font-weight: 640;
 }
 
-.route-unavailable {
-  color: var(--muted-foreground);
-  font-size: 11px;
-  font-weight: 640;
-  line-height: 1.35;
-}
 
 .route-status-line {
   display: flex;
@@ -1714,8 +1711,8 @@ a {
   transition: var(--transition-interactive);
 }
 
-.primary-button:hover {
-  transform: translateY(-0.5px);
+.primary-button:hover:not(:disabled) {
+  filter: brightness(1.08);
 }
 
 .primary-button:disabled {

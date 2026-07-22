@@ -1761,13 +1761,8 @@ export function BridgeExperience() {
                           ) : null}
                         </span>
                         <span className="route-option-sub">
-                          {c.asset} · {c.eta}
+                          {disabled ? "Paused for this build" : `${c.asset} · ${c.eta}`}
                         </span>
-                        {disabled && c.unavailableReason ? (
-                          <small className="route-unavailable">
-                            {c.unavailableReason}
-                          </small>
-                        ) : null}
                       </button>
                     );
                     })}
