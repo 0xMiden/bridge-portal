@@ -59,7 +59,8 @@ export function TempoReceipt({
   networkFee,
   sourceLink,
   destinationLink,
-  transactionHash,
+  sourceHash,
+  destinationHash,
   status,
   pending = false,
 }: {
@@ -68,14 +69,14 @@ export function TempoReceipt({
   networkFee: string;
   sourceLink: Link;
   destinationLink: Link;
-  transactionHash: string;
+  sourceHash?: string;
+  destinationHash?: string;
   status?: { label: string; tone: string };
   pending?: boolean;
 }) {
   const route = providers[activity.provider]?.label ?? activity.provider;
   const mode = modes[activity.mode];
-  const hash =
-    transactionHash || (activity.txHash !== "0x0" ? activity.txHash : "");
+  const hashCell = (h?: string) => (h ? shortAddress(h) : "Pending");
 
   const d = new Date(activity.updatedAt);
   const date = `${two(d.getMonth() + 1)}/${two(d.getDate())}/${d.getFullYear()}`;
@@ -121,10 +122,12 @@ export function TempoReceipt({
             <dd>{time}</dd>
           </div>
           <div>
-            <dt>Hash</dt>
-            <dd className="rcpt-hash">
-              {hash ? shortAddress(hash) : "Pending"}
-            </dd>
+            <dt>{mode.from} tx</dt>
+            <dd className="rcpt-hash">{hashCell(sourceHash)}</dd>
+          </div>
+          <div>
+            <dt>{mode.to} tx</dt>
+            <dd className="rcpt-hash">{hashCell(destinationHash)}</dd>
           </div>
         </dl>
       </header>

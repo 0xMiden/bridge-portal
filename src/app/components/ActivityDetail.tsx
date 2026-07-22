@@ -483,11 +483,18 @@ export function ActivityDetail({ id }: { id: string }) {
   const nextAction = activity ? nextActionFor(activity) : null;
   const guidance = activity ? guidanceFor(activity) : null;
   const milestones = activity ? milestonesFor(activity) : [];
-  const transactionHash = activity
-    ? activity.destinationTxHash ??
-      activity.claimTxHash ??
-      activity.sourceTxHash ??
-      activity.midenTxId
+  // The tx on each chain, shown as its own labeled row on the receipt. Source is
+  // the leg the user signed (Sepolia deposit for a receive, Miden note for a
+  // send); destination is where the funds land (the Miden note / the Sepolia
+  // payout). Either can be absent while that leg is still pending.
+  const sourceHash = activity
+    ? activity.sourceTxHash ??
+      (activity.mode === "send" ? activity.midenTxId : undefined)
+    : undefined;
+  const destinationHash = activity
+    ? activity.mode === "receive"
+      ? activity.midenTxId ?? activity.destinationTxHash
+      : activity.claimTxHash ?? activity.destinationTxHash
     : undefined;
 
   const observeActivity = useCallback(
@@ -792,7 +799,8 @@ export function ActivityDetail({ id }: { id: string }) {
             networkFee={networkFeeDisplay}
             sourceLink={sourceLink}
             destinationLink={destinationLink}
-            transactionHash={transactionHash ?? activity.txHash}
+            sourceHash={sourceHash}
+            destinationHash={destinationHash}
             status={
               isComplete
                 ? undefined
