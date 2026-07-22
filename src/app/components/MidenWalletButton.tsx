@@ -15,6 +15,7 @@ import {
   walletGradient,
 } from "../lib/bridge-state";
 import { useResetMidenProvider } from "./MidenWalletProvider";
+import { WalletMenu } from "./WalletMenu";
 
 /** MidenFi brand logo from the wallet adapter, or a neutral wallet fallback. */
 function WalletBrandIcon({ src, size }: { src?: string; size: number }) {
@@ -425,31 +426,27 @@ function MidenWalletButtonInner({
         />
       </button>
 
-      {menuOpen ? (
-        <div
-          className={`wallet-actions-menu ${menuOpen ? "open" : ""}`}
-          role="menu"
-        >
-          <div className="wallet-menu-summary">
-            <span
-              className={`wallet-menu-avatar ${wallet.connected ? "connected" : wallet.connecting ? "pending" : ""}`}
-            >
-              <WalletBrandIcon src={walletLogo} size={16} />
-            </span>
-            <span>
-              <strong>Bread wallet</strong>
-              <small>
-                {wallet.connected
-                  ? `${shortAddress(address)} · ${balanceText}`
-                  : wallet.connecting
-                    ? "Connection pending"
-                    : ready
-                      ? "Ready to connect"
-                      : "Wallet extension not detected"}
-              </small>
-            </span>
-          </div>
-          {wallet.connected ? (
+      <WalletMenu
+        open={menuOpen}
+        avatar={
+          <span
+            className={`wallet-menu-avatar ${wallet.connected ? "connected" : wallet.connecting ? "pending" : ""}`}
+          >
+            <WalletBrandIcon src={walletLogo} size={16} />
+          </span>
+        }
+        name="Bread wallet"
+        subtitle={
+          wallet.connected
+            ? `${shortAddress(address)} · ${balanceText}`
+            : wallet.connecting
+              ? "Connection pending"
+              : ready
+                ? "Ready to connect"
+                : "Wallet extension not detected"
+        }
+      >
+        {wallet.connected ? (
             <>
               <p className="wallet-menu-note">
                 Note sync: {noteSyncStatus}. Note consume remains
@@ -533,8 +530,7 @@ function MidenWalletButtonInner({
               </button>
             </>
           )}
-        </div>
-      ) : null}
+      </WalletMenu>
     </div>
   );
 }
