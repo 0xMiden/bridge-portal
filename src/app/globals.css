@@ -905,11 +905,26 @@ a {
 }
 
 .swap-stage {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  padding: 0 0 56px;
+}
+
+/* The bridge card is the hero: it stays centered in the first screen regardless
+   of how much transfer history sits below it (which scrolls in underneath). */
+.swap-hero {
   display: grid;
-  row-gap: 4px;
-  min-height: calc(100dvh - 100px);
   place-items: center;
-  padding: 14px 0 56px;
+  width: 100%;
+  min-height: calc(100dvh - 120px);
+}
+
+.activity-region {
+  display: grid;
+  gap: 16px;
+  width: min(500px, 100%);
 }
 
 .swap-card {
@@ -1869,6 +1884,80 @@ a {
   font-size: 13px;
 }
 
+/* Apple-style notification stack for settled history. */
+.activity-stack-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: var(--surface);
+  color: var(--muted-foreground);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: color var(--duration-fast) var(--ease-standard);
+}
+
+.activity-stack-toggle:hover {
+  color: var(--foreground);
+}
+
+.activity-stack-toggle svg {
+  transition: transform var(--duration-base) var(--ease-standard);
+}
+
+.activity-stack-toggle svg.is-open {
+  transform: rotate(180deg);
+}
+
+.activity-stack {
+  position: relative;
+  display: block;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+
+/* Top card is a real, opaque activity row; the ghost cards sit behind it,
+   nudged down and narrowed so only a sliver reads as "more underneath". */
+.activity-stack-top {
+  position: relative;
+  z-index: 2;
+  transition:
+    transform var(--duration-base) var(--ease-standard),
+    box-shadow var(--duration-base) var(--ease-standard);
+}
+
+.activity-stack:hover .activity-stack-top {
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-raised);
+}
+
+.activity-stack-peek {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  height: 100%;
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  box-shadow: var(--shadow-card);
+  z-index: calc(2 - var(--i));
+  transform-origin: top center;
+  transform: translateY(calc(var(--i) * 8px)) scaleX(calc(1 - var(--i) * 0.05));
+  opacity: calc(1 - var(--i) * 0.22);
+  transition: transform var(--duration-base) var(--ease-standard);
+}
+
+.activity-stack:hover .activity-stack-peek {
+  transform: translateY(calc(var(--i) * 11px)) scaleX(calc(1 - var(--i) * 0.05));
+}
+
 .status-dot {
   width: 9px;
   height: 9px;
@@ -1999,21 +2088,39 @@ a {
 /* Settled steps are a compact confirmed checklist — label only, tight rows. The
    verbose per-step "what's happening" copy is reserved for the live in-flight
    view; here it would only push the receipt off a single centered screen. */
-.steps-card .milestone {
+.steps-card.compact .milestone {
   padding: 3px 0 10px;
 }
 
-.steps-card .milestone-copy {
+.steps-card.compact .milestone-copy {
   align-self: center;
 }
 
-.steps-card .milestone-copy span {
+.steps-card.compact .milestone-copy span {
   display: none;
 }
 
-.steps-card .milestone:not(:last-child)::before {
+.steps-card.compact .milestone:not(:last-child)::before {
   top: 20px;
   height: calc(100% - 16px);
+}
+
+/* Reassurance line under the live steps — a transfer keeps progressing on-chain
+   even if the tab is closed. */
+.steps-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin: 2px 0 0;
+  color: var(--muted-foreground);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.4;
+}
+
+.steps-note svg {
+  flex: none;
+  margin-top: 1px;
 }
 
 .receipt-topline {
@@ -2135,11 +2242,11 @@ a {
 .action-panel {
   display: grid;
   gap: 8px;
-  padding: 14px;
+  padding: 20px 22px;
   border: 0;
   border-radius: var(--radius-lg);
   background: var(--surface);
-  box-shadow: var(--shadow-raised);
+  box-shadow: var(--shadow-card);
 }
 
 /* Neutral surface card; tone shown only by the head icon color, no color flood. */
@@ -3551,7 +3658,28 @@ a {
   display: grid;
   gap: 16px;
 }
+.rcpt-head-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
 .rcpt-logo { height: 24px; width: auto; justify-self: start; }
+/* Status pill for in-flight / failed receipts — the same small tone-accent as
+   the home status badges, so state reads without a full color flood. */
+.rcpt-status {
+  flex: none;
+  padding: 4px 11px;
+  border-radius: var(--radius-pill);
+  background: var(--surface-muted);
+  color: var(--muted-foreground);
+  font-size: 12px;
+  font-weight: 700;
+}
+.rcpt-status.success { background: var(--success-soft); color: var(--success-foreground); }
+.rcpt-status.warning { background: var(--warning-soft); color: var(--warning-foreground); }
+.rcpt-status.danger { background: var(--danger-soft); color: var(--danger-foreground); }
+.rcpt-status.active { background: var(--accent-soft); color: var(--accent-ink); }
 .rcpt-meta { display: grid; gap: 6px; margin: 0; min-width: 0; }
 .rcpt-meta > div { display: flex; align-items: baseline; justify-content: space-between; gap: 14px; }
 .rcpt-meta dt { color: var(--muted-foreground); font-size: 13px; font-weight: 500; }

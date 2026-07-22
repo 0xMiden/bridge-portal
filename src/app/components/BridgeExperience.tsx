@@ -61,6 +61,7 @@ import {
   walletGradient,
 } from "../lib/bridge-state";
 import { sepoliaGasUnitsFor, useSepoliaGasEstimate } from "../lib/sepolia-gas";
+import { ActivityStack } from "./ActivityStack";
 import { RelativeTime } from "./RelativeTime";
 import { TokenSelect } from "./TokenSelect";
 import { FaucetMenu } from "./FaucetMenu";
@@ -1687,6 +1688,7 @@ export function BridgeExperience() {
       ) : null}
 
       <section className="swap-stage">
+        <div className="swap-hero">
         <section className="swap-card" aria-label="Miden bridge" ref={swapCardRef}>
           <div className="swap-card-top">
             <h1>Bridge</h1>
@@ -2069,75 +2071,52 @@ export function BridgeExperience() {
             </div>
           ) : null}
         </section>
+        </div>
 
-        {inFlightActivities.length > 0 && (
-          <section className="home-activity" aria-label="Current transfer">
-            <div className="home-activity-title">
-              <h2>Current transfer</h2>
-            </div>
-            <div className="home-activity-list">
-              {inFlightActivities.map((activity) => (
-                <Link
-                  className="home-activity-item"
-                  href={`/activity/${activity.id}`}
-                  key={activity.id}
-                >
-                  <span
-                    className={`status-dot ${statusTone(activity.status)}`}
-                  />
-                  <span className="activity-copy">
-                    <strong>{activity.summary}</strong>
-                    <small>
-                      {providers[activity.provider].label} -{" "}
-                      {statusLabel(activity.status)}
-                    </small>
-                  </span>
-                  <span className="activity-meta">
-                    <strong>
-                      {activity.amount} {activity.asset}
-                    </strong>
-                    <small><RelativeTime at={activity.updatedAt} /></small>
-                  </span>
-                  <ChevronRight size={16} aria-hidden="true" />
-                </Link>
-              ))}
-            </div>
-          </section>
-        )}
+        {(inFlightActivities.length > 0 || pastActivities.length > 0) && (
+          <div className="activity-region">
+            {/* Live transfers stay as prominent standalone rows (they're what
+                you're waiting on); settled history collapses into the stack. */}
+            {inFlightActivities.length > 0 && (
+              <section className="home-activity" aria-label="Current transfer">
+                <div className="home-activity-title">
+                  <h2>Current transfer</h2>
+                </div>
+                <div className="home-activity-list">
+                  {inFlightActivities.map((activity) => (
+                    <Link
+                      className="home-activity-item"
+                      href={`/activity/${activity.id}`}
+                      key={activity.id}
+                    >
+                      <span
+                        className={`status-dot ${statusTone(activity.status)}`}
+                      />
+                      <span className="activity-copy">
+                        <strong>{activity.summary}</strong>
+                        <small>
+                          {providers[activity.provider].label} -{" "}
+                          {statusLabel(activity.status)}
+                        </small>
+                      </span>
+                      <span className="activity-meta">
+                        <strong>
+                          {activity.amount} {activity.asset}
+                        </strong>
+                        <small><RelativeTime at={activity.updatedAt} /></small>
+                      </span>
+                      <ChevronRight size={16} aria-hidden="true" />
+                    </Link>
+                  ))}
+                </div>
+              </section>
+            )}
 
-        {pastActivities.length > 0 && (
-          <section className="home-activity" aria-label="Recent transfers">
-            <div className="home-activity-title">
-              <h2>Recent transfers</h2>
-            </div>
-            <div className="home-activity-list">
-              {pastActivities.map((activity) => (
-                <Link
-                  className="home-activity-item"
-                  href={`/activity/${activity.id}`}
-                  key={activity.id}
-                >
-                  <span
-                    className={`status-dot ${statusTone(activity.status)}`}
-                  />
-                  <span className="activity-copy">
-                    <strong>{activity.summary}</strong>
-                    <small>
-                      {providers[activity.provider].label} -{" "}
-                      {statusLabel(activity.status)}
-                    </small>
-                  </span>
-                  <span className="activity-meta">
-                    <strong>
-                      {activity.amount} {activity.asset}
-                    </strong>
-                    <small><RelativeTime at={activity.updatedAt} /></small>
-                  </span>
-                  <ChevronRight size={16} aria-hidden="true" />
-                </Link>
-              ))}
-            </div>
-          </section>
+            <ActivityStack
+              activities={pastActivities}
+              title="Recent transfers"
+            />
+          </div>
         )}
       </section>
     </main>
