@@ -3834,13 +3834,20 @@ a {
   margin-top: 16px; padding-top: 14px;
   border-top: 1px solid var(--border);
 }
-.rcpt-actions a {
+.rcpt-actions a,
+.rcpt-actions .rcpt-action-disabled {
   display: inline-flex; align-items: center; justify-content: center; gap: 6px;
   padding: 8px 4px; border: 0; background: transparent;
   color: var(--muted-foreground); font: inherit; font-size: 13px; font-weight: 700;
   cursor: pointer; text-decoration: none;
   transition: color 180ms var(--ease-smooth);
 }
-.rcpt-actions a + a { border-left: 1px solid var(--border); }
+.rcpt-actions > * + * { border-left: 1px solid var(--border); }
 .rcpt-actions a:hover { color: var(--accent-ink); }
+/* A leg whose tx doesn't exist yet — visible but not clickable. */
+.rcpt-actions .rcpt-action-disabled {
+  color: var(--muted-foreground);
+  opacity: 0.45;
+  cursor: default;
+}
 .dark .rcpt-logo { filter: invert(1) hue-rotate(180deg); }

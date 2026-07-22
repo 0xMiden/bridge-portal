@@ -21,6 +21,32 @@ function two(n: number) {
 }
 
 /**
+ * A chain explorer link that only becomes clickable once that leg's transaction
+ * exists (`available`). Before then it renders as a disabled control, so a
+ * still-pending destination never links to an unrelated account page.
+ */
+function ExplorerAction({ link }: { link: Link }) {
+  if (!link?.label) return null;
+  const label = link.label.replace(/^View on /, "");
+  if (link.available && link.href) {
+    return (
+      <a href={link.href} target="_blank" rel="noopener noreferrer">
+        {label}
+      </a>
+    );
+  }
+  return (
+    <span
+      className="rcpt-action-disabled"
+      aria-disabled="true"
+      title="Available once this transfer lands on that chain"
+    >
+      {label}
+    </span>
+  );
+}
+
+/**
  * A bridge transfer rendered as a clean receipt card — header meta, a line item
  * with token dots, totals, and the two chain explorer links. Uses the Miden
  * design system (system sans, hairline rules, tabular figures). The same card
@@ -145,26 +171,14 @@ export function TempoReceipt({
         </div>
       </dl>
 
-      {sourceLink?.href || destinationLink?.href ? (
+      {sourceLink || destinationLink ? (
         <div className="rcpt-actions">
-          {/* Each link carries its own chain-correct label ("View on
-              Etherscan" / "…Midenscan"), which flips by direction — a Send's
-              source is Miden, a Receive's source is Sepolia — so we render the
-              link's own label rather than a fixed position. */}
-          {sourceLink?.href ? (
-            <a href={sourceLink.href} target="_blank" rel="noopener noreferrer">
-              {(sourceLink.label ?? "").replace(/^View on /, "")}
-            </a>
-          ) : null}
-          {destinationLink?.href ? (
-            <a
-              href={destinationLink.href}
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              {(destinationLink.label ?? "").replace(/^View on /, "")}
-            </a>
-          ) : null}
+          {/* Each link carries its own chain-correct label + an `available` flag.
+              A leg's explorer link is only clickable once that leg's tx exists —
+              otherwise it's disabled, so we never send the user to an unrelated
+              account page for a transfer that hasn't landed on that chain yet. */}
+          <ExplorerAction link={sourceLink} />
+          <ExplorerAction link={destinationLink} />
         </div>
       ) : null}
     </article>
