@@ -23,9 +23,13 @@ function make(over: Partial<Activity>): Activity {
     asset: "USDC",
     txHash: "0x0",
     updatedAt: 1747845606000, // fixed so the receipt date/time is stable
+    sourceTxAt: 1747845606000, // source leg time (settled demos set a later dest)
     ...over,
   };
 }
+
+// A realistic gap between the two legs for the settled demos (~12 min later).
+const DEMO_DEST_AT = 1747845606000 + 12 * 60 * 1000;
 
 export const DEMO_ACTIVITIES: Record<string, Activity> = {
   "demo-epoch-receive": make({
@@ -40,6 +44,7 @@ export const DEMO_ACTIVITIES: Record<string, Activity> = {
     midenAccountHex: "0x1f2c9a5b7e0d34a8c6f10b92e4d78156",
     sourceTxHash: HASH_A,
     midenTxId: HASH_C,
+    destinationTxAt: DEMO_DEST_AT,
     txHash: HASH_A,
     summary: "Receive 10 USDC on Miden",
   }),
@@ -55,6 +60,7 @@ export const DEMO_ACTIVITIES: Record<string, Activity> = {
     sourceTxHash: HASH_B,
     midenTxId: HASH_B,
     destinationTxHash: HASH_D,
+    destinationTxAt: DEMO_DEST_AT,
     txHash: HASH_B,
     summary: "Send 5 USDC to Sepolia",
   }),
@@ -71,6 +77,7 @@ export const DEMO_ACTIVITIES: Record<string, Activity> = {
     midenAccountHex: "0x1f2c9a5b7e0d34a8c6f10b92e4d78156",
     sourceTxHash: HASH_C,
     midenTxId: HASH_A,
+    destinationTxAt: DEMO_DEST_AT,
     txHash: HASH_C,
     summary: "Receive 0.01 ETH on Miden",
   }),
@@ -86,6 +93,7 @@ export const DEMO_ACTIVITIES: Record<string, Activity> = {
     sourceTxHash: HASH_D,
     midenTxId: HASH_D,
     destinationTxHash: HASH_B,
+    destinationTxAt: DEMO_DEST_AT,
     txHash: HASH_D,
     summary: "Send 0.005 ETH to Sepolia",
   }),

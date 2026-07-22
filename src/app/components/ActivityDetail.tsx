@@ -20,6 +20,7 @@ import {
   type ChainTxObservation,
   deriveMonitoredActivity,
   sourceTxPollMs,
+  stampLegTimes,
 } from "../lib/bridge-monitor";
 import {
   type Activity,
@@ -452,7 +453,12 @@ export function ActivityDetail({ id }: { id: string }) {
                     }
                   : { destinationTxHash: item.destinationTxHash ?? destTx }
                 : {};
-              return { ...item, ...withTx, status: nextStatus, updatedAt: Date.now() };
+              return stampLegTimes({
+                ...item,
+                ...withTx,
+                status: nextStatus,
+                updatedAt: Date.now(),
+              });
             });
             saveActivities(updated);
             return updated;
@@ -496,6 +502,11 @@ export function ActivityDetail({ id }: { id: string }) {
       ? activity.midenTxId ?? activity.destinationTxHash
       : activity.claimTxHash ?? activity.destinationTxHash
     : undefined;
+  // Per-leg transaction times. Source falls back to the row's timestamp for
+  // legacy rows created before we tracked it; destination stays undefined (shown
+  // as "—") until that leg's tx exists.
+  const sourceTxAt = activity?.sourceTxAt ?? activity?.updatedAt;
+  const destinationTxAt = activity?.destinationTxAt;
 
   const observeActivity = useCallback(
     (activityId: string, observation: BridgeMonitorObservation) => {
@@ -801,6 +812,8 @@ export function ActivityDetail({ id }: { id: string }) {
             destinationLink={destinationLink}
             sourceHash={sourceHash}
             destinationHash={destinationHash}
+            sourceTxAt={sourceTxAt}
+            destinationTxAt={destinationTxAt}
             status={
               isComplete
                 ? undefined
