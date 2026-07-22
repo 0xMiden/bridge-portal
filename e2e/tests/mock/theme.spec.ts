@@ -138,7 +138,7 @@ test("dark route and status states use semantic contrast", async ({
         dangerForeground: resolvedToken("--danger-foreground"),
       },
       testnet: resolvedStyles(".route-tag.testnet"),
-      disabled: resolvedStyles(".route-unavailable"),
+      disabled: resolvedStyles(".route-option.disabled .route-option-sub"),
       warning: resolvedStyles(".route-disclaimer.mock"),
       success: resolvedStyles("#e2e-status-states .status-badge.success"),
       statusWarning: resolvedStyles(
