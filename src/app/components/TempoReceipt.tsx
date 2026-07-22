@@ -106,7 +106,6 @@ export function TempoReceipt({
 
       <div className="rcpt-item">
         <div className="rcpt-item-line">
-          <span className="rcpt-num">1.</span>
           <span className="rcpt-tag">Bridge</span>
           <span className="rcpt-amt">
             {activity.amount} <Token symbol={activity.asset} />

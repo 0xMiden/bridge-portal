@@ -194,6 +194,8 @@ a {
 .detail-shell {
   position: relative;
   z-index: 1;
+  display: flex;
+  flex-direction: column;
   min-height: 100dvh;
   width: min(1180px, 100%);
   margin: 0 auto;
@@ -1605,7 +1607,7 @@ a {
   min-height: 40px;
   margin: 10px 2px 0;
   padding: 10px 12px;
-  border: 1px solid var(--danger-border);
+  border: 0;
   border-radius: var(--radius-md);
   background: var(--danger-soft);
   color: var(--danger-foreground);
@@ -1961,12 +1963,57 @@ a {
 /* Compact detail: a single narrow card, centered like the swap card. */
 .detail-simple {
   width: min(480px, 100%);
-  margin: 22px auto 0;
+  /* Center in the space below the topbar; a taller in-flight page just flows
+     from the top and scrolls (auto margins collapse when there's no slack). */
+  margin: auto;
+  padding: 24px 0;
 }
 
 .detail-simple .receipt-card {
   display: grid;
   gap: 14px;
+}
+
+/* Settled view: receipt + the completed bridge-steps card, stacked. */
+.detail-complete {
+  display: grid;
+  gap: 14px;
+}
+
+.steps-card {
+  display: grid;
+  gap: 12px;
+  padding: 20px 22px;
+  background: var(--surface);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-card);
+}
+
+.steps-card-title {
+  margin: 0;
+  color: var(--muted-foreground);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+/* Settled steps are a compact confirmed checklist — label only, tight rows. The
+   verbose per-step "what's happening" copy is reserved for the live in-flight
+   view; here it would only push the receipt off a single centered screen. */
+.steps-card .milestone {
+  padding: 3px 0 10px;
+}
+
+.steps-card .milestone-copy {
+  align-self: center;
+}
+
+.steps-card .milestone-copy span {
+  display: none;
+}
+
+.steps-card .milestone:not(:last-child)::before {
+  top: 20px;
+  height: calc(100% - 16px);
 }
 
 .receipt-topline {
@@ -2027,32 +2074,32 @@ a {
   box-shadow: var(--shadow-raised);
 }
 
-.status-hero.active {
-  border-color: var(--accent-border);
-  background: var(--accent-soft);
-}
-
-.status-hero.warning {
-  border-color: var(--warning-border);
-  background: var(--warning-soft);
-}
-
-.status-hero.success {
-  border-color: var(--success-border);
-  background: var(--success-soft);
-}
-
-.status-hero.danger {
-  border-color: var(--danger-border);
-  background: var(--danger-soft);
-}
+/* Tone is carried by a compact colored kicker + a thin accent rule — never a
+   full-bleed color flood. The card itself stays a neutral surface everywhere. */
+.status-hero.active .status-hero-kicker { color: var(--accent-ink); }
+.status-hero.warning .status-hero-kicker { color: var(--warning-foreground); }
+.status-hero.success .status-hero-kicker { color: var(--success-foreground); }
+.status-hero.danger .status-hero-kicker { color: var(--danger-foreground); }
 
 .status-hero-kicker {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
   color: var(--muted-foreground);
-  font-size: 11px;
-  font-weight: 800;
+  font-size: 12px;
+  font-weight: 700;
   letter-spacing: 0;
   text-transform: none;
+}
+
+/* Small tone dot ahead of the kicker so state reads at a glance without color. */
+.status-hero-kicker::before {
+  content: "";
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: currentColor;
+  flex: none;
 }
 
 .status-hero-action {
@@ -2095,20 +2142,10 @@ a {
   box-shadow: var(--shadow-raised);
 }
 
-.action-panel.danger {
-  border-color: var(--danger-border);
-  background: var(--danger-soft);
-}
-
-.action-panel.success {
-  border-color: var(--success-border);
-  background: var(--success-soft);
-}
-
-.action-panel.active {
-  border-color: var(--accent-border);
-  background: var(--accent-soft);
-}
+/* Neutral surface card; tone shown only by the head icon color, no color flood. */
+.action-panel.danger .action-panel-head svg { color: var(--danger-foreground); }
+.action-panel.success .action-panel-head svg { color: var(--success-foreground); }
+.action-panel.active .action-panel-head svg { color: var(--accent-ink); }
 
 .action-panel-head {
   display: flex;
@@ -3493,16 +3530,18 @@ a {
 }
 
 /* ── Tempo-style printed receipt (settled transfers) ─────────────────────── */
+/* Settled-transfer receipt — the same clean surface card as the rest of the
+   detail page. Restrained: system sans, hairline rules (no printed-receipt
+   monospace or dashed tears); mono is reserved for the hash alone. */
 .rcpt-paper {
   width: 100%;
   max-width: 460px;
-  margin: 12px auto 0;
-  padding: 28px 28px 18px;
+  margin: 0 auto;
+  padding: 24px;
   background: var(--surface);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-card);
-  font-family: var(--font-geist-mono), ui-monospace, monospace;
-  font-size: 13px;
+  font-size: 14px;
   color: var(--foreground);
 }
 .rcpt-head {
@@ -3511,41 +3550,40 @@ a {
   justify-content: space-between;
   gap: 18px;
 }
-.rcpt-logo { height: 26px; width: auto; flex: none; }
-.rcpt-meta { display: grid; gap: 5px; margin: 0; min-width: 0; flex: 1; }
+.rcpt-logo { height: 24px; width: auto; flex: none; }
+.rcpt-meta { display: grid; gap: 6px; margin: 0; min-width: 0; flex: 1; }
 .rcpt-meta > div { display: flex; align-items: baseline; justify-content: space-between; gap: 14px; }
-.rcpt-meta dt { color: var(--muted-foreground); font-weight: 500; }
-.rcpt-meta dd { margin: 0; font-weight: 700; white-space: nowrap; }
-.rcpt-hash { color: var(--accent-ink); }
-.rcpt-tear { height: 0; margin: 18px 0; border-top: 1.5px dashed var(--border-strong); }
-.rcpt-item { display: grid; gap: 7px; }
-.rcpt-item-line { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-weight: 700; }
-.rcpt-num { color: var(--muted-foreground); }
+.rcpt-meta dt { color: var(--muted-foreground); font-size: 13px; font-weight: 500; }
+.rcpt-meta dd { margin: 0; font-size: 13px; font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.rcpt-hash { font-family: var(--font-geist-mono), monospace; color: var(--muted-foreground); }
+.rcpt-tear { height: 0; margin: 16px 0; border-top: 1px solid var(--border); }
+.rcpt-item { display: grid; gap: 8px; }
+.rcpt-item-line { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-size: 15px; font-weight: 700; }
 .rcpt-tag {
-  padding: 2px 8px; border-radius: var(--radius-sm);
-  background: var(--accent-soft); color: var(--accent-ink);
+  padding: 3px 9px; border-radius: var(--radius-pill);
+  background: var(--surface-muted); color: var(--muted-foreground);
   font-size: 12px; font-weight: 700;
 }
-.rcpt-amt { display: inline-flex; align-items: center; gap: 6px; }
+.rcpt-amt { display: inline-flex; align-items: center; gap: 6px; font-variant-numeric: tabular-nums; }
 .rcpt-token { display: inline-flex; align-items: center; gap: 5px; }
-.rcpt-token i { width: 12px; height: 12px; border-radius: 50%; display: inline-block; flex: none; }
+.rcpt-token i { width: 11px; height: 11px; border-radius: 50%; display: inline-block; flex: none; }
 .rcpt-arrow { color: var(--muted-foreground); flex: none; }
-.rcpt-item-sub { display: flex; align-items: center; gap: 7px; color: var(--muted-foreground); font-size: 12px; }
-.rcpt-item-to { color: var(--muted-foreground); font-size: 12px; overflow-wrap: anywhere; }
-.rcpt-item-to span { color: var(--foreground); }
-.rcpt-totals { display: grid; gap: 6px; margin: 0; }
+.rcpt-item-sub { display: flex; align-items: center; gap: 7px; color: var(--muted-foreground); font-size: 13px; }
+.rcpt-item-to { color: var(--muted-foreground); font-size: 13px; overflow-wrap: anywhere; }
+.rcpt-item-to span { color: var(--foreground); font-family: var(--font-geist-mono), monospace; }
+.rcpt-totals { display: grid; gap: 8px; margin: 0; }
 .rcpt-totals > div { display: flex; align-items: baseline; justify-content: space-between; gap: 14px; }
-.rcpt-totals dt { color: var(--muted-foreground); font-weight: 500; }
-.rcpt-totals dd { margin: 0; font-weight: 700; font-variant-numeric: tabular-nums; }
+.rcpt-totals dt { color: var(--muted-foreground); font-size: 13px; font-weight: 500; }
+.rcpt-totals dd { margin: 0; font-size: 13px; font-weight: 700; font-variant-numeric: tabular-nums; }
 .rcpt-actions {
   display: grid; grid-auto-flow: column; grid-auto-columns: 1fr;
-  margin-top: 18px; padding-top: 14px;
-  border-top: 1.5px dashed var(--border-strong);
+  margin-top: 16px; padding-top: 14px;
+  border-top: 1px solid var(--border);
 }
 .rcpt-actions button, .rcpt-actions a {
   display: inline-flex; align-items: center; justify-content: center; gap: 6px;
   padding: 8px 4px; border: 0; background: transparent;
-  color: var(--muted-foreground); font: inherit; font-size: 12.5px; font-weight: 700;
+  color: var(--muted-foreground); font: inherit; font-size: 13px; font-weight: 700;
   cursor: pointer; text-decoration: none;
   transition: color 180ms var(--ease-smooth);
 }
@@ -3554,7 +3592,7 @@ a {
 .rcpt-view {
   display: flex; align-items: center; justify-content: center; gap: 7px;
   margin-top: 8px; padding: 12px;
-  color: var(--muted-foreground); font-size: 12.5px; font-weight: 700;
+  color: var(--muted-foreground); font-size: 13px; font-weight: 700;
   text-decoration: none;
   transition: color 180ms var(--ease-smooth);
 }
