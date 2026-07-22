@@ -5,6 +5,7 @@ import { ChevronDown, ChevronRight } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import {
   type Activity,
+  activityStartedAt,
   providers,
   statusLabel,
   statusTone,
@@ -28,7 +29,7 @@ function Row({ activity }: { activity: Activity }) {
           {activity.amount} {activity.asset}
         </strong>
         <small>
-          <RelativeTime at={activity.updatedAt} />
+          <RelativeTime at={activityStartedAt(activity)} />
         </small>
       </span>
       <ChevronRight size={16} aria-hidden="true" />
