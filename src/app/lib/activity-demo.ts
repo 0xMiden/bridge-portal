@@ -1,8 +1,9 @@
 import type { Activity } from "./bridge-state";
 
-// Dummy, fully-settled transfers for previewing the receipt across all four
-// flows. Reachable at /activity/demo-<provider>-<mode>. Never persisted; ignored
-// by real history. Purely for design review.
+// Dummy transfers for previewing the detail page without a live bridge run:
+// the four settled receipts (/activity/demo-<provider>-<mode>) plus a failed and
+// an in-flight state (/activity/demo-failed, /activity/demo-inflight) so every
+// status surface is reviewable. Never persisted; ignored by real history.
 const MIDEN_ACCOUNT = "mtst1aqk5t00kapdcnq2yyf77dz6xcyssweun_qr7qqq9wr6w";
 const SEPOLIA_ADDR = "0x3650dB63221d7A67f9b99B0C3590D366701D0Dd9";
 const HASH_A = "0x6da1f0c4b8e29d7a3f51c0b96e4d8127ac3e5f90b21748c6be9d0a2f34c656978";
@@ -83,5 +84,31 @@ export const DEMO_ACTIVITIES: Record<string, Activity> = {
     midenTxId: HASH_D,
     txHash: HASH_D,
     summary: "Send 0.005 ETH to Sepolia",
+  }),
+  "demo-failed": make({
+    id: "demo-failed",
+    mode: "receive",
+    provider: "epoch",
+    status: "failed",
+    asset: "USDC",
+    amount: "10",
+    eta: "Stalled at source finality",
+    destination: MIDEN_ACCOUNT,
+    sourceTxHash: HASH_A,
+    txHash: HASH_A,
+    summary: "Receive 10 USDC on Miden",
+  }),
+  "demo-inflight": make({
+    id: "demo-inflight",
+    mode: "receive",
+    provider: "epoch",
+    status: "message_observed",
+    asset: "USDC",
+    amount: "10",
+    eta: "1-3 min",
+    destination: MIDEN_ACCOUNT,
+    sourceTxHash: HASH_A,
+    txHash: HASH_A,
+    summary: "Receive 10 USDC on Miden",
   }),
 };

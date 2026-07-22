@@ -883,7 +883,7 @@ export function ActivityDetail({ id }: { id: string }) {
           </Link>
         </section>
       ) : isComplete ? (
-        <section className="detail-simple">
+        <section className="detail-simple detail-complete">
           <TempoReceipt
             activity={activity}
             received={activity.receivedAmount ?? quote.expectedReceived}
@@ -892,6 +892,41 @@ export function ActivityDetail({ id }: { id: string }) {
             destinationLink={destinationLink}
             transactionHash={transactionHash ?? activity.txHash}
           />
+
+          {/* Keep the bridging status indicators on the settled view — every
+              lifecycle step shown complete, so the receipt reads as the outcome
+              of a visible, verified sequence rather than a bare summary. */}
+          <div className="steps-card">
+            <p className="steps-card-title">Bridge steps</p>
+            <ol className="milestone-list">
+              {milestones.map((milestone) => (
+                <li key={milestone.status} className="milestone done">
+                  <span className="milestone-marker" aria-hidden="true">
+                    <Check size={12} />
+                  </span>
+                  <div className="milestone-copy">
+                    <strong>{milestone.label}</strong>
+                    <span>{milestone.detail}</span>
+                  </div>
+                </li>
+              ))}
+              {activity.mode === "receive" &&
+              activity.provider === "agglayer" ? (
+                <li className="milestone consume current">
+                  <span className="milestone-marker" aria-hidden="true">
+                    <Wallet size={12} />
+                  </span>
+                  <div className="milestone-copy">
+                    <strong>Consume note in your wallet</strong>
+                    <span>
+                      Balance updates only after you claim the note in Bread —
+                      this happens in your wallet, not here.
+                    </span>
+                  </div>
+                </li>
+              ) : null}
+            </ol>
+          </div>
         </section>
       ) : (
         <section className="detail-simple">
