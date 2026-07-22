@@ -92,9 +92,11 @@ export function TempoReceipt({
 }) {
   const route = providers[activity.provider]?.label ?? activity.provider;
   const mode = modes[activity.mode];
-  // Once both legs have landed, the real duration replaces the ETA estimate.
+  // Real duration between the legs. Strict `>`: if the two times collapse to the
+  // same value (a legacy row with no distinct per-leg data) we show "—", not a
+  // misleading "0s".
   const timeTook =
-    sourceTxAt && destinationTxAt && destinationTxAt >= sourceTxAt
+    sourceTxAt && destinationTxAt && destinationTxAt > sourceTxAt
       ? formatDuration(destinationTxAt - sourceTxAt)
       : null;
   const hashCell = (h?: string) => (h ? shortAddress(h) : "Pending");
@@ -186,8 +188,10 @@ export function TempoReceipt({
 
       <dl className="rcpt-totals">
         <div>
-          <dt>{timeTook ? "Time it took" : "ETA"}</dt>
-          <dd>{timeTook ?? activity.eta}</dd>
+          {/* Settled → the real duration ("—" if it can't be determined);
+              still in flight → the ETA estimate. */}
+          <dt>{pending ? "ETA" : "Time it took"}</dt>
+          <dd>{pending ? activity.eta : (timeTook ?? "—")}</dd>
         </div>
         <div>
           <dt>{pending ? "Expected" : "Received"}</dt>
