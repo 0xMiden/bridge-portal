@@ -1688,7 +1688,7 @@ export function BridgeExperience() {
       ) : null}
 
       <section className="swap-stage">
-        <div className="swap-hero">
+        <div className="swap-group">
         <section className="swap-card" aria-label="Miden bridge" ref={swapCardRef}>
           <div className="swap-card-top">
             <h1>Bridge</h1>
@@ -2071,7 +2071,6 @@ export function BridgeExperience() {
             </div>
           ) : null}
         </section>
-        </div>
 
         {(inFlightActivities.length > 0 || pastActivities.length > 0) && (
           <div className="activity-region">
@@ -2118,6 +2117,7 @@ export function BridgeExperience() {
             />
           </div>
         )}
+        </div>
       </section>
     </main>
   );
