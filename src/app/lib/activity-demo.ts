@@ -6,7 +6,7 @@ import type { Activity } from "./bridge-state";
 // status surface is reviewable. Never persisted; ignored by real history.
 const MIDEN_ACCOUNT = "mtst1aqk5t00kapdcnq2yyf77dz6xcyssweun_qr7qqq9wr6w";
 const SEPOLIA_ADDR = "0x3650dB63221d7A67f9b99B0C3590D366701D0Dd9";
-const HASH_A = "0x6da1f0c4b8e29d7a3f51c0b96e4d8127ac3e5f90b21748c6be9d0a2f34c656978";
+const HASH_A = "0x6da1f0c4b8e29d7a3f51c0b96e4d8127ac3e5f90b21748c6be9d0a2f34c65678";
 const HASH_B = "0xab12cd34ef5678901234567890abcdef1234567890abcdef1234567890ab7f01";
 const HASH_C = "0x9f3c7e21ab45d089c1234567890abcdef67890abcdef1234567890abcd5b8e44";
 const HASH_D = "0x7c88b0aa1122334455667788990011223344556677889900aabbccddee9c1f30";
@@ -107,6 +107,9 @@ export const DEMO_ACTIVITIES: Record<string, Activity> = {
     amount: "10",
     eta: "1-3 min",
     destination: MIDEN_ACCOUNT,
+    // Account is known, but the transfer hasn't been delivered on Miden yet —
+    // so the Midenscan link must stay disabled (not point at an account page).
+    midenAccountHex: "0x1f2c9a5b7e0d34a8c6f10b92e4d78156",
     sourceTxHash: HASH_A,
     txHash: HASH_A,
     summary: "Receive 10 USDC on Miden",
