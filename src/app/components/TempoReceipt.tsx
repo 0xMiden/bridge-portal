@@ -20,6 +20,18 @@ function two(n: number) {
   return String(n).padStart(2, "0");
 }
 
+/** Human duration between the two legs, e.g. "12m", "1m 30s", "45s", "1h 5m". */
+function formatDuration(ms: number) {
+  const totalSec = Math.max(0, Math.round(ms / 1000));
+  if (totalSec < 60) return `${totalSec}s`;
+  const min = Math.floor(totalSec / 60);
+  const sec = totalSec % 60;
+  if (min < 60) return sec ? `${min}m ${sec}s` : `${min}m`;
+  const hr = Math.floor(min / 60);
+  const rem = min % 60;
+  return rem ? `${hr}h ${rem}m` : `${hr}h`;
+}
+
 /**
  * A chain explorer link that only becomes clickable once that leg's transaction
  * exists (`available`). Before then it renders as a disabled control, so a
@@ -80,6 +92,11 @@ export function TempoReceipt({
 }) {
   const route = providers[activity.provider]?.label ?? activity.provider;
   const mode = modes[activity.mode];
+  // Once both legs have landed, the real duration replaces the ETA estimate.
+  const timeTook =
+    sourceTxAt && destinationTxAt && destinationTxAt >= sourceTxAt
+      ? formatDuration(destinationTxAt - sourceTxAt)
+      : null;
   const hashCell = (h?: string) => (h ? shortAddress(h) : "Pending");
   // A leg with no tx yet reads "—" (em dash), not a fabricated time.
   const timeCell = (ms?: number) => {
@@ -169,8 +186,8 @@ export function TempoReceipt({
 
       <dl className="rcpt-totals">
         <div>
-          <dt>ETA</dt>
-          <dd>{activity.eta}</dd>
+          <dt>{timeTook ? "Time it took" : "ETA"}</dt>
+          <dd>{timeTook ?? activity.eta}</dd>
         </div>
         <div>
           <dt>{pending ? "Expected" : "Received"}</dt>
