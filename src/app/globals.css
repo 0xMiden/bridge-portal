@@ -2178,10 +2178,11 @@ a {
 /* Compact detail: a single narrow card, centered like the swap card. */
 .detail-simple {
   width: min(480px, 100%);
-  /* Center in the space below the topbar; a taller in-flight page just flows
-     from the top and scrolls (auto margins collapse when there's no slack). */
-  margin: auto;
-  padding: 24px 0;
+  /* A receipt reads top-down, so sit just under the topbar with the same small
+     gap the bridge card has on the home page — not vertically centered, which
+     left a big slack gap above shorter receipts. */
+  margin: 0 auto;
+  padding: 0 0 40px;
 }
 
 .detail-simple .receipt-card {
@@ -3239,9 +3240,6 @@ a {
     padding: 8px 10px;
   }
 
-  .detail-simple {
-    margin-top: 14px;
-  }
 }
 
 /* Preflight review — centered inside the bridge card on desktop and promoted to
