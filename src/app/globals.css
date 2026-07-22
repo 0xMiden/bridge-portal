@@ -3544,17 +3544,18 @@ a {
   font-size: 14px;
   color: var(--foreground);
 }
+/* Logo sits on its own row above the meta list, so every label/value row in the
+   card (header meta + totals) shares one left edge instead of the meta block
+   being inset to the right of the logo. */
 .rcpt-head {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 18px;
+  display: grid;
+  gap: 16px;
 }
-.rcpt-logo { height: 24px; width: auto; flex: none; }
-.rcpt-meta { display: grid; gap: 6px; margin: 0; min-width: 0; flex: 1; }
+.rcpt-logo { height: 24px; width: auto; justify-self: start; }
+.rcpt-meta { display: grid; gap: 6px; margin: 0; min-width: 0; }
 .rcpt-meta > div { display: flex; align-items: baseline; justify-content: space-between; gap: 14px; }
 .rcpt-meta dt { color: var(--muted-foreground); font-size: 13px; font-weight: 500; }
-.rcpt-meta dd { margin: 0; font-size: 13px; font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.rcpt-meta dd { margin: 0; font-size: 13px; font-weight: 700; white-space: nowrap; }
 .rcpt-hash { font-family: var(--font-geist-mono), monospace; color: var(--muted-foreground); }
 .rcpt-tear { height: 0; margin: 16px 0; border-top: 1px solid var(--border); }
 .rcpt-item { display: grid; gap: 8px; }
