@@ -557,6 +557,13 @@ a {
   box-shadow: none;
 }
 
+/* The "New transfer" control matches the theme toggle beside it in the detail
+   topbar — a raised surface, not the recessed field fill. */
+.back-link {
+  background: var(--surface);
+  box-shadow: var(--shadow-control);
+}
+
 .wallet-button,
 .back-link,
 .secondary-button {
