@@ -1,7 +1,6 @@
 "use client";
 
 import {
-  AlertTriangle,
   ArrowDown,
   ArrowRight,
   Check,
@@ -62,6 +61,7 @@ import {
 } from "../lib/bridge-state";
 import { sepoliaGasUnitsFor, useSepoliaGasEstimate } from "../lib/sepolia-gas";
 import { ActivityStack } from "./ActivityStack";
+import { InfoTip } from "./InfoTip";
 import { RelativeTime } from "./RelativeTime";
 import { TokenSelect } from "./TokenSelect";
 import { FaucetMenu } from "./FaucetMenu";
@@ -517,7 +517,7 @@ export function BridgeExperience() {
       : provider === "agglayer"
         ? mode === "receive"
           ? "Your Sepolia wallet sends to Miden through Agglayer with no provider bridge fee (~10-20 min)."
-          : "Bridge out from Miden through Agglayer. The Sepolia claim is auto-submitted by the gateway once the exit settles (~10-20 min) — nothing to claim manually."
+          : "Bridge out from Miden through Agglayer. The Sepolia claim is auto-submitted by Gateway once the exit settles (~10-20 min) — nothing to claim manually."
         : "Testnet route. Epoch integration status is tracked from activity details.";
   // The connected wallet on the direction's source side — the guard for whether
   // the CTA should prompt a connection (receive sources from Sepolia, send from
@@ -1782,6 +1782,7 @@ export function BridgeExperience() {
               {providerCopy.badge}
             </span>
             <span className="route-pill">{quote.eta}</span>
+            <InfoTip label={routeNote} />
           </div>
 
           {walletError ? (
@@ -1920,14 +1921,6 @@ export function BridgeExperience() {
               <span>Network fee</span>
               <strong>{networkFeeDisplay}</strong>
             </div>
-          </div>
-
-          {/* Material route warning belongs before the CTA, not only in a
-              footnote after it — the user should read the testnet/route caveat
-              before committing funds. */}
-          <div className={`route-disclaimer ${routeTone}`} role="note">
-            <AlertTriangle size={15} aria-hidden="true" />
-            <span>{routeNote}</span>
           </div>
 
           <div className="primary-action-dock">
