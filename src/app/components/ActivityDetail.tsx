@@ -25,6 +25,7 @@ import {
 import {
   type Activity,
   type ActivityStatus,
+  activityStartedAt,
   loadStoredActivities,
   quoteFor,
   saveActivities,
@@ -502,12 +503,13 @@ export function ActivityDetail({ id }: { id: string }) {
       ? activity.midenTxId ?? activity.destinationTxHash
       : activity.claimTxHash ?? activity.destinationTxHash
     : undefined;
-  // Per-leg transaction times. Source falls back to the row's timestamp for
-  // legacy rows created before we tracked it. Destination shows "—" until that
-  // leg's tx exists; once it does (the hash is present) but wasn't stamped —
-  // e.g. a transfer that settled before we tracked it — fall back to the row's
-  // last-updated time so a settled transfer still shows a time and a duration.
-  const sourceTxAt = activity?.sourceTxAt ?? activity?.updatedAt;
+  // Per-leg transaction times. Source is the transfer's start — for legacy rows
+  // that's the id-encoded creation time (via activityStartedAt), NOT updatedAt,
+  // so it stays distinct from the destination. Destination shows "—" until that
+  // leg's tx exists; once the hash is present but wasn't stamped (e.g. a transfer
+  // that settled before we tracked it) fall back to updatedAt (≈ settlement), so
+  // source (creation) and destination (settlement) still yield a real duration.
+  const sourceTxAt = activity ? activityStartedAt(activity) : undefined;
   const destinationTxAt =
     activity?.destinationTxAt ??
     (destinationHash ? activity?.updatedAt : undefined);
