@@ -5,8 +5,8 @@
   --background: #f7f4ee;
   --surface: #ffffff;
   --surface-elevated: #ffffff;
-  --surface-muted: #f1eee7;
-  --surface-strong: #ebe6dc;
+  --surface-muted: #f2f1ef;
+  --surface-strong: #e9e7e3;
   --foreground: #171511;
   --muted-foreground: #706b61;
   --faint-foreground: #9a9286;
@@ -1972,7 +1972,8 @@ a {
   padding: 0 12px;
   border: 0;
   border-radius: var(--radius-md);
-  background: var(--surface-muted);
+  background: var(--surface);
+  box-shadow: var(--shadow-raised);
   color: var(--foreground);
   font-size: 13px;
   font-weight: 800;
@@ -1999,7 +2000,8 @@ a {
   padding: 16px;
   border: 0;
   border-radius: var(--radius-lg);
-  background: var(--surface-muted);
+  background: var(--surface);
+  box-shadow: var(--shadow-raised);
 }
 
 .status-hero.active {
@@ -2066,7 +2068,8 @@ a {
   padding: 14px;
   border: 0;
   border-radius: var(--radius-lg);
-  background: var(--surface-muted);
+  background: var(--surface);
+  box-shadow: var(--shadow-raised);
 }
 
 .action-panel.danger {
@@ -2304,7 +2307,7 @@ a {
   place-items: center;
   border: 0;
   border-radius: var(--radius-md);
-  background: var(--surface-muted);
+  background: var(--field);
   color: var(--accent);
 }
 
@@ -2357,7 +2360,8 @@ a {
   padding: 12px;
   border: 0;
   border-radius: var(--radius-lg);
-  background: var(--surface-muted);
+  background: var(--surface);
+  box-shadow: var(--shadow-raised);
 }
 
 .receipt-next-action span {
@@ -2382,7 +2386,8 @@ a {
   padding: 14px;
   border: 0;
   border-radius: var(--radius-lg);
-  background: var(--surface-muted);
+  background: var(--surface);
+  box-shadow: var(--shadow-raised);
 }
 
 .receipt-route > div {
@@ -2428,7 +2433,8 @@ a {
   padding: 12px;
   border: 0;
   border-radius: var(--radius-lg);
-  background: var(--surface-muted);
+  background: var(--surface);
+  box-shadow: var(--shadow-raised);
 }
 
 .explorer-link span,
@@ -2480,7 +2486,8 @@ a {
   padding: 12px;
   border: 0;
   border-radius: var(--radius-lg);
-  background: var(--surface-muted);
+  background: var(--surface);
+  box-shadow: var(--shadow-raised);
 }
 
 .activity-value-label {
@@ -2586,7 +2593,8 @@ a {
   padding: 12px;
   border: 0;
   border-radius: var(--radius-lg);
-  background: var(--surface-muted);
+  background: var(--surface);
+  box-shadow: var(--shadow-raised);
 }
 
 .metric strong {
@@ -2601,7 +2609,8 @@ a {
   padding: 12px;
   border: 0;
   border-radius: var(--radius-lg);
-  background: var(--surface-muted);
+  background: var(--surface);
+  box-shadow: var(--shadow-raised);
   color: var(--muted-foreground);
   line-height: 1.45;
 }
@@ -2624,17 +2633,12 @@ a {
   padding: 12px;
   border: 0;
   border-radius: var(--radius-lg);
-  background: var(--surface-muted);
+  background: transparent;
 }
 
+/* The active step gets a subtle highlight; state otherwise reads from the marker. */
 .timeline-step.current {
-  border-color: var(--accent-border);
-  background: var(--surface-strong);
-}
-
-.timeline-step.done {
-  border-color: var(--border);
-  background: var(--surface-muted);
+  background: var(--accent-soft);
 }
 
 .step-icon {
@@ -2644,8 +2648,16 @@ a {
   place-items: center;
   border: 0;
   border-radius: var(--radius-sm);
-  background: var(--surface);
+  background: var(--field);
   color: var(--muted-foreground);
+}
+
+.timeline-step.current .step-icon {
+  background: var(--accent-soft);
+}
+
+.timeline-step.done .step-icon {
+  background: var(--success-soft);
 }
 
 .timeline-step.current .step-icon {
@@ -2675,7 +2687,8 @@ a {
   padding: 12px;
   border: 0;
   border-radius: var(--radius-lg);
-  background: var(--surface-muted);
+  background: var(--surface);
+  box-shadow: var(--shadow-raised);
 }
 
 .live-monitor-panel > div {
