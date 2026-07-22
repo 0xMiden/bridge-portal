@@ -1255,6 +1255,12 @@ a {
   transform: translateX(calc(100% + 4px));
 }
 
+/* The first box sat tighter under the Receive/Send toggle than the other
+   inter-element gaps; give it the same breathing room. */
+.mode-switch + .swap-box {
+  margin-top: 14px;
+}
+
 .mode-switch button {
   position: relative;
   z-index: 1;
@@ -1274,18 +1280,49 @@ a {
   color: var(--foreground);
 }
 
+/* Two explicit rows: identity + amount on top, balance + token beneath — so the
+   balance line and the token selector always share the bottom row (aligned) and
+   the space between rows is a controlled gap, not a stretched column. */
 .swap-box {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(165px, auto);
+  grid-template-columns: minmax(0, 1fr) minmax(140px, auto);
+  grid-template-rows: auto auto;
   align-items: center;
-  gap: 10px;
-  min-height: 106px;
+  column-gap: 12px;
+  row-gap: 6px;
   margin-top: 7px;
   padding: 14px;
   position: relative;
   border: 0;
   border-radius: var(--radius-lg);
   background: var(--field);
+}
+
+.swap-box-head {
+  grid-column: 1;
+  grid-row: 1;
+  min-width: 0;
+}
+
+.swap-box-amount {
+  grid-column: 2;
+  grid-row: 1;
+  justify-self: end;
+}
+
+.swap-box-foot {
+  grid-column: 1;
+  grid-row: 2;
+  min-width: 0;
+  /* Reserve the row height even before a balance loads, so the box doesn't jump
+     when "Available …" appears. */
+  min-height: 22px;
+}
+
+.swap-box-token {
+  grid-column: 2;
+  grid-row: 2;
+  justify-self: end;
 }
 
 /* When a token menu is open, lift its box above the divider + sibling box so
@@ -1305,7 +1342,6 @@ a {
   align-items: center;
   gap: 6px;
   max-width: 230px;
-  margin-top: 8px;
   overflow: hidden;
   color: var(--muted-foreground);
   font-size: 12px;
@@ -1419,7 +1455,7 @@ a {
   color: var(--danger);
 }
 
-.swap-box label {
+.swap-box-amount {
   display: grid;
   justify-items: end;
 }
@@ -1440,7 +1476,6 @@ a {
    opened, lets you pick the token (which switches to its route). */
 .token-select {
   position: relative;
-  margin-top: 8px;
   justify-self: end;
 }
 
