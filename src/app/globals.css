@@ -557,9 +557,11 @@ a {
   box-shadow: none;
 }
 
-/* The "New transfer" control matches the theme toggle beside it in the detail
-   topbar — a raised surface, not the recessed field fill. */
-.back-link {
+/* The "New transfer" control and the unconnected wallet buttons match the theme
+   toggle beside them — a raised surface, not the recessed field fill. (Connected
+   wallets already use --surface via .wallet-button.connected below.) */
+.back-link,
+.wallet-button {
   background: var(--surface);
   box-shadow: var(--shadow-control);
 }
