@@ -128,7 +128,7 @@ in the activity detail page.
 
 ## Integration boundary
 
-This UI lives inside the `miden-testnet-bridge` monorepo. It uses local mock
+This UI lives in the `0xMiden/bridge-portal` repository. It uses local mock
 quote and activity state until each backend/provider contract is wired. Backend
 integration should keep the same state-machine model and replace mock
 quote/activity functions with API calls.
