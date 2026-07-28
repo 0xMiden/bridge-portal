@@ -38,11 +38,9 @@ lives in activity details.
 
 ## Routes
 
-- NEAR Intents: testnet mock service built for this project, not the official
-  NEAR Intents service.
 - AggLayer: testnet service route.
-- Epoch: testnet service route. Use `0xMiden/tutorials#199` and its
-  `examples/bridging-app` as the current implementation reference for
+- Epoch: testnet service route. Use
+  `0xMiden/tutorials/examples/bridging-app` as the implementation reference for
   Sepolia <-> Miden Epoch flows.
 
 ## Wallet-launched flows
@@ -122,16 +120,16 @@ in the activity detail page.
 - Every async state is resumable from activity history.
 - Progress, claim, and recovery are moved off the home screen and into activity
   details.
-- Privacy and provider boundaries are explained in details, especially for
-  testnet mock routes.
+- Privacy and provider boundaries are explained in details for every testnet
+  route.
 - Stuck-funds paths are explicit enough for support and user recovery.
 
 ## Integration boundary
 
-This UI lives in the `0xMiden/bridge-portal` repository. It uses local mock
-quote and activity state until each backend/provider contract is wired. Backend
-integration should keep the same state-machine model and replace mock
-quote/activity functions with API calls.
+This UI lives in the `0xMiden/bridge-portal` repository. Agglayer and Epoch
+integrations keep the same state-machine model while adapting each provider's
+quote, source submission, observation, destination settlement, and recovery
+states.
 
 Miden-specific frontend rules are captured in
 [miden-frontend-integration.md](miden-frontend-integration.md). Use that note

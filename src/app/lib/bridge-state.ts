@@ -124,13 +124,13 @@ export const providers: Record<
     badge: "Testnet",
     route: "Agglayer testnet route",
     disclosure:
-      "Agglayer routes Sepolia→Miden through the canonical bridge with no provider fee. Miden→Sepolia send is not available yet (needs Miden SDK B2AGG note support); the Sepolia-side claimAsset is built in-app once the outbound note lands.",
+      "Agglayer bridges ETH in both directions through the canonical testnet bridge. Gateway auto-claims Miden→Sepolia exits; Sepolia→Miden recipients consume the delivered note in Bread.",
     comparison: {
       asset: "ETH",
       eta: "10-20 min",
       feeModel: "No provider fee (canonical bridge)",
       trust: "Agglayer canonical bridge",
-      claim: "Gateway auto-claims on Sepolia; note auto-consumed on Miden",
+      claim: "Gateway auto-claims on Sepolia; user consumes the Miden note",
       availability: "Available",
       differentiator: "Canonical ETH route",
     },
