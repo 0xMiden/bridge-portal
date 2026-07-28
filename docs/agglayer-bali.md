@@ -8,7 +8,7 @@ Ethereum Sepolia into Miden testnet.
 - Route: Sepolia to Miden.
 - Action: `bridgeAsset(uint32,address,uint256,address,bool,bytes)` on the Sepolia bridge contract.
 - Contract: `0x1348947e282138d8f377b467f7d9c2eb0f335d1f`.
-- Destination network ID: `76`.
+- Destination network ID: `78`.
 - Token: native Sepolia ETH.
 - Wallet: WalletConnect when `NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID` is set,
   with `window.ethereum` as a local extension fallback.
@@ -27,32 +27,30 @@ bridge destination slot as:
 
 ## Cross-chain Send support
 
-Cross-chain Send from Miden to Sepolia still needs the Miden-side bridge note
-created by a wallet-native Miden client flow or an operator runner. Once Gateway
-FM reports the bridge row as ready, the UI can call the backend claim plan API
-and submit `claimAsset(...)` on Sepolia through the connected EVM wallet.
+Cross-chain Send from Miden to Sepolia creates a `B2AGG` bridge note through the
+connected Miden wallet. Gateway FM observes the exit and auto-claims it on
+Sepolia once the proof is ready.
 
 The Activity detail page keeps these states separate:
 
 - Miden bridge note submitted.
 - Gateway FM proof ready.
-- Sepolia `claimAsset` submitted.
+- Sepolia auto-claim submitted.
 - Sepolia claim settled.
 
 ## Product behavior
 
-- NEAR Intents remains visible but disabled in this UI while AggLayer and Epoch
-  are the active testnet routes.
-- AggLayer Cross-chain Receive is the first route that can submit a real
-  Sepolia transaction.
+- AggLayer Cross-chain Receive submits a real Sepolia transaction.
 - AggLayer activity receipts link to Etherscan, Midenscan, and the Gateway FM
   Bali monitor so the frontend can show both wallet-local state and public
   bridge evidence.
-- AggLayer Cross-chain Send can submit the Sepolia `claimAsset` transaction once
-  proof is ready, but should not claim full one-click support until the Miden
-  side is wallet-native.
+- AggLayer Cross-chain Send creates the wallet-native `B2AGG` note and tracks
+  Gateway's Sepolia auto-claim.
 - Activity details poll bridge status and update the receipt once the bridge
   service reports a bridge event for the destination.
+- A Sepolia-to-Miden bridge is delivered when the Miden claim transaction
+  creates the recipient note. The user still consumes that note in Bread before
+  the asset appears in the spendable balance.
 
 ## Tailnet preview
 

@@ -3,10 +3,9 @@
 Next.js app for the wallet-native Miden bridge transfer flow — the wallet-facing
 cross-chain Receive/Send surface.
 
-The current app is a frontend prototype with local mock quote and activity state
-plus a first AggLayer Sepolia-to-Miden testnet submit path. It models Cross-chain
-Receive, Cross-chain Send, route selection, claim, and stuck-funds recovery
-before every route is wired to backend state.
+The current app implements Agglayer and Epoch testnet routes between Miden and
+Ethereum Sepolia. It models Cross-chain Receive, Cross-chain Send, route
+selection, destination settlement, and stuck-funds recovery.
 
 ## Product model
 

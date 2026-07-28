@@ -72,10 +72,15 @@ function toBech32Account(value: string): string {
 export function createBridgeP2IDNoteCallback(deps: MidenNoteDeps): CreateMidenP2IDNote {
   return async (faucetId, amount, allocatorId) => {
     try {
-      // `amount` is base units (matches the bigint the intent params carried).
-      // The adapter's send API is number-typed, so we widen here; testnet
-      // amounts stay well inside Number.MAX_SAFE_INTEGER.
-      const amountUnits = Number(amount);
+      // Epoch supplies `amount` as a base-unit string. Parse it losslessly before
+      // crossing into the wallet adapter's number-typed send API.
+      const amountBaseUnits = BigInt(amount);
+      if (amountBaseUnits > BigInt(Number.MAX_SAFE_INTEGER)) {
+        throw new Error(
+          `Miden bridge amount ${amount} exceeds Number.MAX_SAFE_INTEGER.`,
+        );
+      }
+      const amountUnits = Number(amountBaseUnits);
       if (!Number.isFinite(amountUnits) || amountUnits <= 0) {
         throw new Error(`Invalid Miden bridge amount: "${amount}".`);
       }
