@@ -148,7 +148,7 @@ export function buildEpochTaskDataParams(
   const scaledMinTokenOut = (params.minTokenOut ?? "").trim() || "0";
 
   const taskDataParams = {
-    taskType: "gettokenout" as TaskType,
+    taskType: TaskType.GetTokenOut,
     intentData: {
       // isNative must be false — tokenIn is zero-address (Miden-sourced) but tokenOut is a real EVM token
       isNative: false,
