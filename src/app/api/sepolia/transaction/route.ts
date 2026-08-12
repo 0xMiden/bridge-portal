@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 
-const sepoliaRpcUrl =
-  process.env.AGGLAYER_SEPOLIA_RPC_URL ?? process.env.EVM_RPC_URL ?? "https://ethereum-sepolia-rpc.publicnode.com";
+import { getSepoliaRpcUrl } from "../rpc";
+
+const sepoliaRpcUrl = getSepoliaRpcUrl();
 
 type RpcResponse<T> = {
   result?: T;
