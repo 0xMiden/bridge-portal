@@ -1,7 +1,9 @@
 import { NextResponse } from "next/server";
 import { formatEther, formatUnits } from "viem";
 
-const sepoliaRpcUrl = "https://ethereum-sepolia-rpc.publicnode.com";
+import { getSepoliaRpcUrl } from "../rpc";
+
+const sepoliaRpcUrl = getSepoliaRpcUrl();
 
 export const dynamic = "force-dynamic";
 
