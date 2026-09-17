@@ -1,12 +1,12 @@
 name: deploy
 
 # Deploy the Worker to Cloudflare (bridge.miden.xyz) automatically after the
-# `e2e` workflow succeeds on main. Gating on that workflow's success keeps the
-# "only deploy validated code" rule true without re-running the suite here, and
-# replaces the manual `npm run cf:deploy` from a laptop.
+# `ci` workflow succeeds on main. That suite is typecheck + lint + unit + mock
+# e2e; live testnet E2E is a follow-up and will become the deploy gate once it
+# exists. Replaces the manual `npm run cf:deploy` from a laptop.
 on:
   workflow_run:
-    workflows: [e2e]
+    workflows: [ci]
     types: [completed]
     branches: [main]
 
@@ -18,7 +18,7 @@ concurrency:
 
 jobs:
   deploy:
-    # Only when the triggering e2e run passed. A failed/cancelled run never ships.
+    # Only when the triggering ci run passed. A failed/cancelled run never ships.
     if: ${{ github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
     timeout-minutes: 20

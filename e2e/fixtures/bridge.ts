@@ -11,7 +11,7 @@ export const test = base.extend<{ bridge: BridgePage }>({
     const bridge = new BridgePage(page);
     if (process.env.E2E_NETWORK === "mock") await stubNetwork(page);
     await page.goto("/");
-    await bridge.waitForReady().catch(() => undefined);
+    await bridge.waitForReady();
     await use(bridge);
   },
 });

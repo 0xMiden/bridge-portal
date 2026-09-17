@@ -8,7 +8,7 @@ const nextConfig: NextConfig = {
   // standalone output under the full path, so opennext can't find
   // .next/standalone/.next/server/*.
   outputFileTracingRoot: __dirname,
-  allowedDevOrigins: ["127.0.0.1", "homelab.tail477b3c.ts.net"],
+  allowedDevOrigins: ["127.0.0.1"],
   // NOTE: We intentionally do NOT set cross-origin isolation (COOP/COEP/CORP).
   // - COOP: same-origin breaks wallet connectors that rely on popups with
   //   window.opener (e.g. the Coinbase Wallet SDK throws without it).
@@ -23,7 +23,7 @@ const nextConfig: NextConfig = {
         headers: [
           {
             key: "Content-Security-Policy",
-            value: "frame-ancestors 'self' https://homelab.tail477b3c.ts.net",
+            value: "frame-ancestors 'self'",
           },
         ],
       },
