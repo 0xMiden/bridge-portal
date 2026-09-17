@@ -71,4 +71,36 @@ describe("createBridgeP2IDNoteCallback", () => {
       expect.objectContaining({ amount: Number.MAX_SAFE_INTEGER }),
     );
   });
+
+  it("rejects zero, negative, and non-numeric amounts before wallet submission", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const requestSend = vi.fn();
+    const callback = createBridgeP2IDNoteCallback({
+      senderAddress: TEST_ACCOUNT_ID,
+      requestSend: requestSend as unknown as MidenNoteDeps["requestSend"],
+      waitForTransaction: vi.fn() as unknown as MidenNoteDeps["waitForTransaction"],
+    });
+
+    for (const amount of ["0", "-1", "not-a-number"]) {
+      const result = await callback(TEST_ACCOUNT_ID, amount, TEST_ACCOUNT_ID);
+      expect(result).toEqual({ success: false });
+    }
+    expect(requestSend).not.toHaveBeenCalled();
+  });
+
+  it("returns failure when the committed tx has no output note", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const requestSend = vi.fn().mockResolvedValue("wallet-request-id");
+    const callback = createBridgeP2IDNoteCallback({
+      senderAddress: TEST_ACCOUNT_ID,
+      requestSend: requestSend as unknown as MidenNoteDeps["requestSend"],
+      waitForTransaction: vi.fn().mockResolvedValue({
+        txHash: "0xtx",
+        outputNotes: [],
+      }) as unknown as MidenNoteDeps["waitForTransaction"],
+    });
+
+    const result = await callback(TEST_ACCOUNT_ID, "1000", TEST_ACCOUNT_ID);
+    expect(result).toEqual({ success: false });
+  });
 });
