@@ -158,19 +158,16 @@ status, claim status, and recovery actions.
 
 ## Next.js Requirements
 
-Because this project imports Miden wallet and SDK packages, keep these headers
-enabled in `next.config.ts`:
+Do **not** set COOP/COEP/CORP on this app. Proving happens in the connected
+Miden wallet, not in-page, and `Cross-Origin-Opener-Policy: same-origin`
+breaks wallet-connector popups that need `window.opener`. The decision and
+the revisit trigger are in
+[docs/decisions/wasm-threading-coop-coep.md](decisions/wasm-threading-coop-coep.md);
+`next.config.ts` encodes it.
 
-```text
-Cross-Origin-Opener-Policy: same-origin
-Cross-Origin-Embedder-Policy: require-corp
-Cross-Origin-Resource-Policy: same-origin
-```
-
-These are required for the Miden WASM path and SharedArrayBuffer behavior. If a
-future Next or Turbopack release changes `.wasm` asset handling, verify the
-browser can load files like `/_next/static/media/miden_client_web...wasm`
-before adding more Miden client logic.
+If a future Next or Turbopack release changes `.wasm` asset handling, verify
+the browser can load files like `/_next/static/media/miden_client_web...wasm`
+before adding more in-page Miden client logic.
 
 ## Remaining Gaps
 

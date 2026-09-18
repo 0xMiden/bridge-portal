@@ -30,7 +30,7 @@ Testnet only. To exercise the live bridge path locally you need:
 - **Sepolia funds** — an EVM wallet (WalletConnect or a `window.ethereum`
   extension) holding Sepolia ETH from any public Sepolia faucet, for the
   AggLayer deposit leg.
-- **Node 20+** and npm.
+- **Node 22+** and npm.
 
 ## Local development
 
@@ -130,9 +130,11 @@ npm run build       # next build --webpack
 
 ```bash
 npm run playwright:install     # one-time: chromium + deps
-npm run test:e2e:mock          # mock tier — no secrets, network stubbed
-npm run test:e2e:testnet       # real-testnet tier — needs .env.e2e (see .env.e2e.example)
+npm run test:e2e:mock          # mock tier: no secrets, network stubbed
 ```
+
+Live testnet E2E is not wired yet (`playwright.e2e.config.ts` is not in the
+tree). `npm run test:e2e:testnet` exits 1 with that message until it lands.
 
 ## Docker
 

@@ -20,6 +20,15 @@ function two(n: number) {
   return String(n).padStart(2, "0");
 }
 
+function Token({ symbol }: { symbol: string }) {
+  return (
+    <span className="rcpt-token">
+      <i style={{ background: TOKEN_DOT[symbol] ?? "var(--muted-foreground)" }} />
+      {symbol}
+    </span>
+  );
+}
+
 /** Human duration between the two legs, e.g. "12m", "1m 30s", "45s", "1h 5m". */
 function formatDuration(ms: number) {
   const totalSec = Math.max(0, Math.round(ms / 1000));
@@ -106,13 +115,6 @@ export function TempoReceipt({
     const d = new Date(ms);
     return `${two(d.getMonth() + 1)}/${two(d.getDate())}/${d.getFullYear()} ${two(d.getHours())}:${two(d.getMinutes())}:${two(d.getSeconds())}`;
   };
-
-  const Token = ({ symbol }: { symbol: string }) => (
-    <span className="rcpt-token">
-      <i style={{ background: TOKEN_DOT[symbol] ?? "var(--muted-foreground)" }} />
-      {symbol}
-    </span>
-  );
 
   return (
     <article className="rcpt-paper" aria-label="Transfer receipt">

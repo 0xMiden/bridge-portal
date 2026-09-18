@@ -1,6 +1,6 @@
 "use client";
 
-import { type ReactNode, useRef, useState } from "react";
+import { type ReactNode, useLayoutEffect, useRef, useState } from "react";
 import { gsap, useGSAP } from "../../lib/gsap";
 import { DUR, EASE, motionMM } from "../../lib/motion";
 
@@ -30,7 +30,9 @@ export function Crossfade({ token, children, className }: CrossfadeProps) {
     token,
     node: children,
   });
-  latest.current = { token, node: children };
+  useLayoutEffect(() => {
+    latest.current = { token, node: children };
+  });
 
   // Fade the current content OUT when the incoming token differs, then swap.
   useGSAP(

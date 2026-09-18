@@ -23,10 +23,15 @@ export function useFlipSwap(
 
   const { contextSafe } = useGSAP({ scope });
 
-  const capture = contextSafe(() => {
-    if (!scope.current) return;
-    stateRef.current = Flip.getState(scope.current.querySelectorAll(selector));
-  });
+  // Wrap at call time (event handler), not during render: contextSafe may
+  // inspect the callback, and the refs rule treats that as a render-time read.
+  const capture = () => {
+    contextSafe(() => {
+      const root = scope.current;
+      if (!root) return;
+      stateRef.current = Flip.getState(root.querySelectorAll(selector));
+    })();
+  };
 
   // After the deps-driven re-render, play the captured state → new geometry.
   useGSAP(

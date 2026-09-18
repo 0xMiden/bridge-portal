@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef } from "react";
+import { useRef, useState } from "react";
 import { gsap, useGSAP } from "../../lib/gsap";
 import { DUR, EASE, motionMM } from "../../lib/motion";
 
@@ -34,7 +34,7 @@ export function AnimatedNumber({
   const proxy = useRef({ v: value });
   // Captured once: React renders this for SSR/no-JS and never re-reconciles it,
   // leaving GSAP free to own textContent on every subsequent update.
-  const initialText = useRef(format(value)).current;
+  const [initialText] = useState(() => format(value));
 
   useGSAP(
     () => {
