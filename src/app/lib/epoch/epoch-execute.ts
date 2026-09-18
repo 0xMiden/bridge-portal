@@ -32,6 +32,7 @@ import type {
   EVMToMidenIntentParams,
   IntentResult,
 } from "./types";
+import { e2eNetwork, isE2E } from "../e2e/env";
 
 /**
  * Epoch execute/submit orchestration — the half the quote layer didn't cover.
@@ -254,6 +255,18 @@ export async function runEpochTransfer(
   args: RunEpochTransferArgs,
 ): Promise<EpochExecuteResult> {
   assertCommonArgs(args);
+  if (isE2E() && e2eNetwork() === "mock") {
+    const sourceTxHash = `0x${"ab".repeat(32)}`;
+    return {
+      direction: args.mode,
+      intentNonce: "42",
+      sponsorAddress: args.evmAddress.trim(),
+      sourceTxHash,
+      midenNoteId: args.mode === "send" ? `0x${"cd".repeat(32)}` : undefined,
+      outputAmount: "0.99",
+      raw: {} as IntentResult,
+    };
+  }
   return args.mode === "send" ? runEpochSend(args) : runEpochReceive(args);
 }
 

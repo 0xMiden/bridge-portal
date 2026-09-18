@@ -29,6 +29,7 @@ function rejectIfConfigured() {
  */
 function createMockMidenSigner(): E2EMidenSigner {
   const fakeTxId = `0x${"cd".repeat(32)}`;
+  const fakeNoteId = `0x${"ee".repeat(32)}`;
   return {
     address: MOCK_MIDEN_ADDRESS,
     requestSend: (async () => {
@@ -39,9 +40,16 @@ function createMockMidenSigner(): E2EMidenSigner {
       rejectIfConfigured();
       return fakeTxId;
     }) as unknown as E2EMidenSigner["requestTransaction"],
-    waitForTransaction: (async () =>
-      undefined) as unknown as E2EMidenSigner["waitForTransaction"],
-    requestAssets: (async () => []) as unknown as E2EMidenSigner["requestAssets"],
+    waitForTransaction: (async () => ({
+      txHash: fakeTxId,
+      outputNotes: [{ id: () => ({ toString: () => fakeNoteId }) }],
+    })) as unknown as E2EMidenSigner["waitForTransaction"],
+    // Canonical testnet faucets so "Show balance" and AggLayer send can resolve
+    // assets without hitting the Miden RPC.
+    requestAssets: (async () => [
+      { faucetId: "0x387149ae66116cf114eebd60bb7381", amount: "100000000" },
+      { faucetId: "0xfc90f0f4da30e51168453b60eafed7", amount: "1000000" },
+    ]) as unknown as E2EMidenSigner["requestAssets"],
     requestConsumableNotes: (async () =>
       []) as unknown as E2EMidenSigner["requestConsumableNotes"],
   };

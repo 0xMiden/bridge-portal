@@ -1,5 +1,6 @@
 import type { MidenFiWalletContextState } from "@miden-sdk/miden-wallet-adapter-react";
 import { AGGLAYER_BALI } from "./agglayer";
+import { e2eNetwork, isE2E } from "./e2e/env";
 
 // One `requestAssets()` popup, both route balances. Each route's Miden token is
 // a fixed, known faucet: Epoch's USDC (`EPOCH_USDC_FAUCET`) and the Agglayer ETH
@@ -38,6 +39,35 @@ export interface MidenRouteBalances {
 export async function fetchMidenRouteBalances(
   requestAssets: RequestAssets,
 ): Promise<MidenRouteBalances> {
+  if (isE2E() && e2eNetwork() === "mock") {
+    const { formatUnits } = await import("viem");
+    const assets = await requestAssets();
+    const byFaucet = new Map<string, bigint>();
+    for (const asset of assets) {
+      const faucet = asset.faucetId.trim().replace(/^0x/i, "").toLowerCase();
+      byFaucet.set(faucet, (byFaucet.get(faucet) ?? 0n) + BigInt(asset.amount));
+    }
+    const usdcRaw = byFaucet.get(EPOCH_USDC_FAUCET.replace(/^0x/i, "").toLowerCase()) ?? 0n;
+    const ethRaw =
+      byFaucet.get(AGGLAYER_BALI.midenEthFaucetIdHex.replace(/^0x/i, "").toLowerCase()) ?? 0n;
+    const agglayerEth =
+      ethRaw > 0n
+        ? {
+            faucetId: AGGLAYER_BALI.midenEthFaucetIdHex,
+            amountRaw: ethRaw,
+            decimals: AGGLAYER_BALI.midenEthDecimals,
+            symbol: "ETH",
+          }
+        : null;
+    return {
+      epoch: formatUnits(usdcRaw, 6),
+      agglayer: agglayerEth
+        ? formatUnits(agglayerEth.amountRaw, agglayerEth.decimals)
+        : "0",
+      agglayerEth,
+    };
+  }
+
   const sdk = await import("@miden-sdk/miden-sdk");
   const { AccountId, RpcClient, Endpoint, BasicFungibleFaucetComponent } =
     sdk as unknown as {

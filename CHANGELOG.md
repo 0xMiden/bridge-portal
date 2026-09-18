@@ -9,6 +9,7 @@
 - [CHANGE] **`npm run test:e2e:testnet` no longer pretends.** The script named a `playwright.e2e.config.ts` that is not in the tree. It now exits 1 with that message until live testnet E2E lands.
 - [CHANGE] **CSP framing is same-origin only.** Removed a personal Tailscale host from `frame-ancestors` and `allowedDevOrigins`.
 - [CHANGE] **Unit coverage is collected from every `src` file and gated.** First floor is the measured 12/11/9/12 (statements/branches/functions/lines). Sepolia RPC fallback, B2AGG construction, Epoch taskType, and pin freeze are now unit-tested.
+- [CHANGE] **Mock E2E submits all four route x direction cells.** Confirm creates an activity whose tx hash is a 32-byte hex, not a wallet-adapter UUID. Mock Miden `waitForTransaction` now returns a hash; mock Epoch/AggLayer balance paths skip live WASM/RPC.
 
 ### Fixes
 

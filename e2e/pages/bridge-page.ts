@@ -38,6 +38,22 @@ export class BridgePage {
     await input.fill(amount);
   }
 
+  /** Opt-in Miden balance fetch (AggLayer send needs the resolved ETH faucet). */
+  async showMidenBalance(): Promise<void> {
+    const button = this.page.locator("button.balance-show");
+    if ((await button.count()) === 0) return;
+    await button.click();
+    await expect(this.page.locator("button.balance-show")).toHaveCount(0, {
+      timeout: 20_000,
+    });
+  }
+
+  async waitForActivityPage(timeout = 60_000): Promise<void> {
+    await this.page.waitForURL(/\/activity\//, { timeout });
+    await this.page.locator(".detail-simple, .rcpt-paper, .status-badge").first()
+      .waitFor({ state: "visible", timeout });
+  }
+
   async fillDestination(value: string): Promise<void> {
     await this.page.locator(".destination-input input").fill(value);
   }
