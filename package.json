@@ -16,6 +16,7 @@
     "test:e2e:testnet": "node scripts/testnet-e2e-not-wired.mjs",
     "playwright:install": "playwright install --with-deps chromium",
     "typecheck": "tsc --noEmit",
+    "check:wasm-size": "node scripts/check-wasm-size.mjs",
     "cf:build": "next build --webpack && opennextjs-cloudflare build --skipNextBuild",
     "cf:preview": "npm run cf:build && opennextjs-cloudflare preview",
     "cf:deploy": "npm run cf:build && opennextjs-cloudflare deploy"
@@ -23,10 +24,10 @@
   "dependencies": {
     "@epoch-protocol/epoch-intents-sdk": "^1.0.30",
     "@gsap/react": "^2.1.2",
-    "@miden-sdk/miden-sdk": "0.15.7",
-    "@miden-sdk/miden-wallet-adapter-base": "^0.15.1",
-    "@miden-sdk/miden-wallet-adapter-react": "^0.15.1",
-    "@miden-sdk/react": "^0.15.4",
+    "@miden-sdk/miden-sdk": "0.16.2",
+    "@miden-sdk/miden-wallet-adapter-base": "0.16.2",
+    "@miden-sdk/miden-wallet-adapter-react": "0.16.2",
+    "@miden-sdk/react": "0.16.2",
     "@reown/appkit": "^1.8.20",
     "@reown/appkit-adapter-wagmi": "^1.8.20",
     "@tanstack/react-query": "^5.101.0",
@@ -42,7 +43,7 @@
   "overrides": {
     "@wagmi/core": "2.22.1",
     "@wagmi/connectors": "6.2.0",
-    "@miden-sdk/miden-sdk": "0.15.7"
+    "@miden-sdk/miden-sdk": "0.16.2"
   },
   "devDependencies": {
     "@opennextjs/cloudflare": "^1.20.1",

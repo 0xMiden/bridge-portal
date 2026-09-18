@@ -110,20 +110,19 @@ correctly at runtime via webpack's CJS interop.
 
 ### `@miden-sdk` pin
 
-`package.json` pins `@miden-sdk/miden-sdk` to `0.15.7` (exact, mirrored in
+`package.json` pins `@miden-sdk/miden-sdk` to `0.16.2` (exact, mirrored in
 `overrides` so `@miden-sdk/react` and the wallet adapters resolve to the same
-single SDK instance). `0.15.7` is the first published release carrying the
-B2AGG callback + web-sdk (#240) fixes, and its `st` wasm ships pre-stripped
-(~17 MB), so it fits Cloudflare's 25 MiB per-asset limit without a local build.
-This replaces the earlier temporary `vendor/` tarball pin.
+single SDK instance). The `st` wasm is ~19 MB, under Cloudflare's 25 MiB
+per-asset limit. `npm run check:wasm-size` fails the PR if that regresses.
 
 ## Validation
 
 ```bash
-npm run typecheck   # tsc --noEmit
-npm run lint        # eslint
-npm run test        # vitest run
-npm run build       # next build --webpack
+npm run typecheck        # tsc --noEmit
+npm run lint             # eslint
+npm run check:wasm-size  # st wasm under 24 MiB
+npm run test             # vitest run
+npm run build            # next build --webpack
 ```
 
 ### End-to-end (Playwright)

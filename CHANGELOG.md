@@ -4,6 +4,7 @@
 
 ### Changes
 
+- [CHANGE] **Miden SDK 0.16.2.** `@miden-sdk/miden-sdk` and `@miden-sdk/react` plus the wallet adapters move off 0.15.7 onto the 0.16 line. B2AGG no longer calls `withCallbacks` (the flag is intrinsic to the faucet id). `npm run check:wasm-size` keeps the `st` wasm under 24 MiB.
 - [CHANGE] **CI is honest.** PRs now run typecheck, lint (`--max-warnings 0`), unit tests, and mock E2E. The old `e2e` workflow only ran vitest plus mock Playwright and still gated production deploys. Deploy now waits on the `ci` workflow.
 - [CHANGE] **npm is the only installer.** Dropped the `packageManager: yarn@4` field that contradicted `package-lock.json` and `npm ci`. Node `>=22` is required, matching CI and the Dockerfile.
 - [CHANGE] **`npm run test:e2e:testnet` no longer pretends.** The script named a `playwright.e2e.config.ts` that is not in the tree. It now exits 1 with that message until live testnet E2E lands.

@@ -6,13 +6,9 @@ import { EVM_AGGLAYER_NETWORK_ID, MIDEN_BRIDGE_ID } from "./agglayer-b2agg";
 // with `Note.createB2AggNote` and submits it through the MidenFi wallet's
 // `requestTransaction`.
 //
-// The Agglayer ETH faucet has transfer policies, so the asset it mints is stored
-// in the vault with `AssetCallbackFlag.Enabled`. The bridge-out note's asset must
-// carry the SAME flag or its commitment won't match the vault entry, and removal
-// fails with "amount of the asset in the vault is less than the amount to remove"
-// (for any amount). `new FungibleAsset(faucet, amount)` defaults to `Disabled`;
-// `.withCallbacks(Enabled)` is the fix (web-sdk#239 / PR#240 — shipped in the
-// published @miden-sdk 0.15.7).
+// On 0.16 the asset callback flag is intrinsic to the faucet account id. The
+// bali ETH faucet id already encodes Enabled-callback assets, so constructing
+// `new FungibleAsset(faucet, amount)` is enough. Do not call withCallbacks.
 //
 // Loaded via dynamic import at click time — it pulls the eager-WASM SDK + the
 // wallet adapter, so it must never enter the SSR/server bundle.
@@ -55,7 +51,6 @@ export async function runAgglayerSend({
 } & AgglayerSendDeps): Promise<AgglayerSendResult> {
   const {
     AccountId,
-    AssetCallbackFlag,
     EthAddress,
     FungibleAsset,
     Note,
@@ -71,11 +66,9 @@ export async function runAgglayerSend({
     ? AccountId.fromHex(faucetId)
     : AccountId.fromBech32(faucetId);
 
-  // Match the vault's callback-enabled asset (see the file header) so the note's
-  // asset removal succeeds.
-  const asset = new FungibleAsset(faucet, amount).withCallbacks(
-    AssetCallbackFlag.Enabled,
-  );
+  // 0.16: the callback flag is intrinsic to the faucet account id. Do not call
+  // withCallbacks (removed). The bali ETH faucet id already encodes Enabled.
+  const asset = new FungibleAsset(faucet, amount);
 
   const note = Note.createB2AggNote(
     sender,

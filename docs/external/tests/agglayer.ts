@@ -1,6 +1,5 @@
 import {
   AccountId,
-  AssetCallbackFlag,
   EthAddress,
   FungibleAsset,
   Note,
@@ -107,9 +106,7 @@ export async function createAgglayerBridgeOut({
   const bridge = AccountId.fromHex(AGGLAYER_BALI.midenBridgeId);
   const faucet = AccountId.fromHex(AGGLAYER_BALI.midenEthFaucetId);
 
-  const asset = new FungibleAsset(faucet, amount).withCallbacks(
-    AssetCallbackFlag.Enabled,
-  );
+  const asset = new FungibleAsset(faucet, amount);
   const note = Note.createB2AggNote(
     sender,
     bridge,
