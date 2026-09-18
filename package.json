@@ -13,7 +13,7 @@
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
     "test:e2e:mock": "E2E_NETWORK=mock playwright test --config playwright.mock.config.ts",
-    "test:e2e:testnet": "node scripts/testnet-e2e-not-wired.mjs",
+    "test:e2e:testnet": "E2E_NETWORK=testnet playwright test --config playwright.e2e.config.ts",
     "playwright:install": "playwright install --with-deps chromium",
     "typecheck": "tsc --noEmit",
     "check:wasm-size": "node scripts/check-wasm-size.mjs",

@@ -130,10 +130,11 @@ npm run build            # next build --webpack
 ```bash
 npm run playwright:install     # one-time: chromium + deps
 npm run test:e2e:mock          # mock tier: no secrets, network stubbed
+npm run test:e2e:testnet       # live Sepolia + Miden; needs .env.e2e
 ```
 
-Live testnet E2E is not wired yet (`playwright.e2e.config.ts` is not in the
-tree). `npm run test:e2e:testnet` exits 1 with that message until it lands.
+CI runs that suite on `main` / `workflow_dispatch` (serialized, one funded key).
+It skips cleanly until the `E2E_*` repo secrets exist. See `docs/runbook.md`.
 
 ## Docker
 
