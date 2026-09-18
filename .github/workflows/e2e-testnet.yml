@@ -1,0 +1,55 @@
+name: e2e-testnet
+
+# Live Sepolia + Miden testnet. One funded key, so serialize and do not cancel
+# an in-flight run (nonce collision). Not a PR required check.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: e2e-testnet-main
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  testnet:
+    name: live testnet
+    runs-on: ubuntu-latest
+    timeout-minutes: 70
+    env:
+      E2E_NETWORK: testnet
+      E2E_EVM_PRIVATE_KEY: ${{ secrets.E2E_EVM_PRIVATE_KEY }}
+      E2E_MIDEN_SEED: ${{ secrets.E2E_MIDEN_SEED }}
+      E2E_MIDEN_ACCOUNT_ID: ${{ secrets.E2E_MIDEN_ACCOUNT_ID }}
+      E2E_MIDEN_ACCOUNT_FILE: ${{ secrets.E2E_MIDEN_ACCOUNT_FILE }}
+      E2E_SEPOLIA_RPC_URL: ${{ secrets.E2E_SEPOLIA_RPC_URL }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Skip when secrets are not configured
+        id: secrets
+        run: |
+          if [ -z "$E2E_EVM_PRIVATE_KEY" ] || [ -z "$E2E_MIDEN_ACCOUNT_ID" ]; then
+            echo "E2E_EVM_PRIVATE_KEY / E2E_MIDEN_ACCOUNT_ID not set. Add repo secrets to enable live testnet E2E."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+      - if: steps.secrets.outputs.skip != 'true'
+        run: npm ci
+      - if: steps.secrets.outputs.skip != 'true'
+        run: npx playwright install --with-deps chromium
+      - if: steps.secrets.outputs.skip != 'true'
+        run: npm run test:e2e:testnet
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: testnet-results
+          path: test-results/
+          retention-days: 7
