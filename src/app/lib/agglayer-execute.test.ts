@@ -1,6 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const withCallbacks = vi.fn();
 const createB2AggNote = vi.fn(() => "b2agg-note");
 const fromHex = vi.fn((value: string) => ({ id: value, kind: "hex" }));
 const fromBech32 = vi.fn((value: string) => ({ id: value, kind: "bech32" }));
@@ -11,20 +10,13 @@ const createCustomTransaction = vi.fn(() => "wallet-tx");
 
 vi.mock("@miden-sdk/miden-sdk", () => ({
   AccountId: { fromHex, fromBech32 },
-  AssetCallbackFlag: { Enabled: "Enabled" },
   EthAddress: { fromHex: ethFromHex },
   FungibleAsset: class {
     faucet: unknown;
     amount: unknown;
-    flag?: unknown;
     constructor(faucet: unknown, amount: unknown) {
       this.faucet = faucet;
       this.amount = amount;
-    }
-    withCallbacks(flag: unknown) {
-      withCallbacks(flag);
-      this.flag = flag;
-      return this;
     }
   },
   Note: { createB2AggNote },
@@ -67,7 +59,7 @@ describe("runAgglayerSend", () => {
     vi.clearAllMocks();
   });
 
-  it("builds a B2AGG note with callback-enabled assets and the EVM destination", async () => {
+  it("builds a B2AGG note with the EVM destination", async () => {
     const requestTransaction = vi.fn(async () => "uuid-not-a-hash");
     const waitForTransaction = vi.fn(async () => ({ txHash: `0x${"ab".repeat(32)}` }));
 
@@ -80,7 +72,6 @@ describe("runAgglayerSend", () => {
       waitForTransaction: waitForTransaction as never,
     });
 
-    expect(withCallbacks).toHaveBeenCalledWith("Enabled");
     expect(createB2AggNote).toHaveBeenCalledWith(
       expect.objectContaining({ kind: "hex" }),
       expect.objectContaining({ id: MIDEN_BRIDGE_ID }),

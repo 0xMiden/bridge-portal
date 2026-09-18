@@ -205,7 +205,6 @@ sequenceDiagram
 ```typescript
 import {
   AccountId,
-  AssetCallbackFlag,
   EthAddress,
   FungibleAsset,
   Note,
@@ -232,9 +231,7 @@ export async function createAgglayerBridgeOut({
   const bridge = AccountId.fromHex(AGGLAYER_BALI.midenBridgeId);
   const faucet = AccountId.fromHex(AGGLAYER_BALI.midenEthFaucetId);
 
-  const asset = new FungibleAsset(faucet, amount).withCallbacks(
-    AssetCallbackFlag.Enabled,
-  );
+  const asset = new FungibleAsset(faucet, amount);
   const note = Note.createB2AggNote(
     sender,
     bridge,
@@ -257,9 +254,8 @@ export async function createAgglayerBridgeOut({
 }
 ```
 
-The callback flag is required. Constructing the asset without
-`AssetCallbackFlag.Enabled` changes its commitment and the bridge transaction
-cannot remove the callback-enabled asset held by the wallet.
+On 0.16 the callback flag is intrinsic to the faucet account id. The bali ETH
+faucet id already encodes Enabled-callback assets; do not call `withCallbacks`.
 
 The wallet adapter initially returns a request UUID. Wait for settlement and
 persist `output.txHash`; a request UUID is not a Midenscan transaction hash.
