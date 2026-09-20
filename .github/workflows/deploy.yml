@@ -1,40 +1,57 @@
 name: deploy
 
-# Deploy the Worker to Cloudflare (bridge.miden.xyz) automatically after the
-# `ci` workflow succeeds on main. That suite is typecheck + lint + unit + mock
-# e2e; live testnet E2E is a follow-up and will become the deploy gate once it
-# exists. Replaces the manual `npm run cf:deploy` from a laptop.
+# Ship the Worker only after live testnet E2E (or its skip-until-secrets path)
+# succeeded on main. That workflow itself waits on `ci`, so a red mock suite
+# never reaches here.
 on:
   workflow_run:
-    workflows: [ci]
+    workflows: [e2e-testnet]
     types: [completed]
     branches: [main]
 
-# Never run two production deploys at once; let an in-flight deploy finish
-# rather than cancelling it mid-upload.
 concurrency:
   group: deploy-production
   cancel-in-progress: false
 
 jobs:
   deploy:
-    # Only when the triggering ci run passed. A failed/cancelled run never ships.
     if: ${{ github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
         with:
-          # Deploy the exact commit the e2e run validated, not whatever is at
-          # the tip of main by the time this fires.
           ref: ${{ github.event.workflow_run.head_sha }}
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+          cache: npm
       - run: npm ci
-      # cf:build (next build --webpack + opennextjs-cloudflare build) then deploy.
-      # account_id + the bridge.miden.xyz custom-domain route come from
-      # wrangler.jsonc; only the API token is a secret.
-      - run: npm run cf:deploy
+      - name: Production Cloudflare build
+        run: npm run cf:build
+        env:
+          NEXT_PUBLIC_APP_URL: https://bridge.miden.xyz
+          NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID: ${{ secrets.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID }}
+      - name: Refuse E2E secrets in the production bundle
+        run: node scripts/check-prod-bundle.mjs
+      - name: Deploy Worker
+        run: npx opennextjs-cloudflare deploy
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      - name: Canary production health
+        run: |
+          sleep 15
+          curl -fsS --max-time 30 https://bridge.miden.xyz/health
+          echo
+          code=$(curl -sS -o /tmp/deep.json -w '%{http_code}' --max-time 30 \
+            https://bridge.miden.xyz/health/deep || true)
+          echo "deep HTTP $code"
+          cat /tmp/deep.json 2>/dev/null || true
+          echo
+          if [ "$code" = "404" ]; then
+            echo "deep health not on this Worker yet (first ops deploy); liveness passed"
+            exit 0
+          fi
+          if [ "$code" != "200" ]; then
+            exit 1
+          fi

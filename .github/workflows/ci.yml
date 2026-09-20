@@ -49,3 +49,26 @@ jobs:
           name: mock-results
           path: test-results/
           retention-days: 7
+
+  prod-scan:
+    name: prod-bundle-scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx next build --webpack
+        env:
+          NEXT_PUBLIC_APP_URL: https://bridge.miden.xyz
+      - run: node scripts/check-prod-bundle.mjs
+
+  docker:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build -t bridge-portal .

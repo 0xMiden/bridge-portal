@@ -40,8 +40,8 @@ npm install
 npm run dev
 ```
 
-The dev server defaults to `http://localhost:3000/`, with a health check at
-`/health`.
+The dev server defaults to `http://localhost:3000/`. `GET /health` is liveness;
+`GET /health/deep` checks Sepolia, Miden RPC, Epoch, and AggLayer.
 
 The `/api/bridge/*` proxy defaults to `http://127.0.0.1:8080` for host
 development; override with `BRIDGE_API_BASE`.
