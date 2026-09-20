@@ -4,6 +4,9 @@
 
 ### Changes
 
+- [CHANGE] **Production deploys wait on live testnet E2E**, which itself waits on `ci`. The Worker is canaried at `/health/deep` after ship. A production bundle with inlined E2E keys fails the deploy.
+- [CHANGE] **`GET /health/deep`** checks Sepolia, Miden RPC, Epoch, and AggLayer. A cron hits it every 20 minutes. `/health` stays liveness-only.
+- [CHANGE] **Nightly pin-drift vs wallet main** (SDK version + AggLayer bridge/faucet ids) and a daily floor check on the throwaway Sepolia E2E account.
 - [CHANGE] **Live testnet E2E exists.** `npm run test:e2e:testnet` drives the four route x direction cells against Sepolia + Miden. CI runs it on main, serialized, and skips until `E2E_*` secrets are set.
 - [CHANGE] **Miden SDK 0.16.2.** `@miden-sdk/miden-sdk` and `@miden-sdk/react` plus the wallet adapters move off 0.15.7 onto the 0.16 line. B2AGG no longer calls `withCallbacks` (the flag is intrinsic to the faucet id). `npm run check:wasm-size` keeps the `st` wasm under 24 MiB.
 - [CHANGE] **CI is honest.** PRs now run typecheck, lint (`--max-warnings 0`), unit tests, and mock E2E. The old `e2e` workflow only ran vitest plus mock Playwright and still gated production deploys. Deploy now waits on the `ci` workflow.

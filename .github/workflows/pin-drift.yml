@@ -1,0 +1,45 @@
+name: pin-drift
+
+on:
+  schedule:
+    - cron: "0 6 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  check:
+    name: portal vs wallet pins
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - id: drift
+        run: |
+          set +e
+          node scripts/check-pin-drift.mjs > /tmp/drift.txt 2>&1
+          status=$?
+          cat /tmp/drift.txt
+          if [ "$status" -eq 0 ]; then
+            echo "drifted=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "drifted=true" >> "$GITHUB_OUTPUT"
+          exit 1
+      - if: failure() && steps.drift.outputs.drifted == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          title="portal pins drifted from wallet main"
+          existing=$(gh issue list --repo "$GITHUB_REPOSITORY" --state open --search "$title in:title" --json number --jq '.[0].number')
+          body=$(cat /tmp/drift.txt)
+          if [ -n "$existing" ]; then
+            gh issue comment "$existing" --repo "$GITHUB_REPOSITORY" --body "$body"
+          else
+            gh issue create --repo "$GITHUB_REPOSITORY" --title "$title" --body "$body"
+          fi

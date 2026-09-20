@@ -1,0 +1,3 @@
+# Auto-request review on PRs into this branch. GitHub never requests the PR
+# author, so this adds the reviewer on everyone else's PRs, not your own.
+* @WiktorStarczewski

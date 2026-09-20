@@ -1,0 +1,30 @@
+name: health
+
+on:
+  schedule:
+    - cron: "*/20 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  deep:
+    name: production deep health
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: GET https://bridge.miden.xyz/health/deep
+        run: |
+          code=$(curl -sS -o /tmp/deep.json -w '%{http_code}' --max-time 30 \
+            https://bridge.miden.xyz/health/deep || true)
+          echo "HTTP $code"
+          cat /tmp/deep.json 2>/dev/null || true
+          echo
+          if [ "$code" = "404" ]; then
+            echo "deep health not deployed yet; failing until the ops Worker is live"
+            exit 1
+          fi
+          if [ "$code" != "200" ]; then
+            exit 1
+          fi

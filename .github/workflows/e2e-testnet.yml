@@ -1,9 +1,12 @@
 name: e2e-testnet
 
-# Live Sepolia + Miden testnet. One funded key, so serialize and do not cancel
-# an in-flight run (nonce collision). Not a PR required check.
+# Live Sepolia + Miden testnet. Runs after `ci` is green on main so we never
+# spend a funded-key run (or a production deploy) on a red mock suite. One
+# funded key: serialize and do not cancel an in-flight run.
 on:
-  push:
+  workflow_run:
+    workflows: [ci]
+    types: [completed]
     branches: [main]
   workflow_dispatch:
 
@@ -15,8 +18,18 @@ permissions:
   contents: read
 
 jobs:
+  ci-failed:
+    name: refuse failed ci
+    if: github.event_name == 'workflow_run' && github.event.workflow_run.conclusion != 'success'
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          echo "ci concluded ${{ github.event.workflow_run.conclusion }}; not running live testnet"
+          exit 1
+
   testnet:
     name: live testnet
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
     timeout-minutes: 70
     env:
@@ -28,6 +41,8 @@ jobs:
       E2E_SEPOLIA_RPC_URL: ${{ secrets.E2E_SEPOLIA_RPC_URL }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
       - uses: actions/setup-node@v4
         with:
           node-version: 22
