@@ -52,6 +52,7 @@ jobs:
 
   prod-scan:
     name: prod-bundle-scan
+    needs: [check, mock]
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -61,7 +62,7 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      - run: npx next build --webpack
+      - run: npm run cf:build
         env:
           NEXT_PUBLIC_APP_URL: https://bridge.miden.xyz
       - run: node scripts/check-prod-bundle.mjs
