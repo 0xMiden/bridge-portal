@@ -1,11 +1,12 @@
-import { MIDEN_TESTNET_FAUCET_URL } from "../faucet";
 import { faucetMintAmount, solveFaucetPow } from "./faucet-pow";
 
 // The public testnet faucet has no unauthenticated mint RPC. It hands out a
 // note after a SHA-256 proof of work (GET /pow, then GET /get_tokens). A public
 // note is what the client can see with syncState, without a note-transport key.
 
-const FAUCET_ORIGIN = MIDEN_TESTNET_FAUCET_URL.replace(/\/$/, "");
+// api_url from https://faucet.testnet.miden.io/config.json. That frontend
+// serves HTML at API paths, and config.json itself does not allow CORS.
+const FAUCET_ORIGIN = "https://faucet-api-testnet-miden.eu-central-8.gateway.fm";
 
 type FaucetMetadata = { id?: string; decimals?: number };
 type PowChallenge = { challenge: string; target: number };
