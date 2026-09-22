@@ -37,7 +37,6 @@ jobs:
       E2E_EVM_PRIVATE_KEY: ${{ secrets.E2E_EVM_PRIVATE_KEY }}
       E2E_MIDEN_SEED: ${{ secrets.E2E_MIDEN_SEED }}
       E2E_MIDEN_ACCOUNT_ID: ${{ secrets.E2E_MIDEN_ACCOUNT_ID }}
-      E2E_MIDEN_ACCOUNT_FILE: ${{ secrets.E2E_MIDEN_ACCOUNT_FILE }}
       E2E_SEPOLIA_RPC_URL: ${{ secrets.E2E_SEPOLIA_RPC_URL }}
     steps:
       - uses: actions/checkout@v4
@@ -50,8 +49,8 @@ jobs:
       - name: Skip when secrets are not configured
         id: secrets
         run: |
-          if [ -z "$E2E_EVM_PRIVATE_KEY" ] || [ -z "$E2E_MIDEN_ACCOUNT_ID" ]; then
-            echo "E2E_EVM_PRIVATE_KEY / E2E_MIDEN_ACCOUNT_ID not set. Add repo secrets to enable live testnet E2E."
+          if [ -z "$E2E_EVM_PRIVATE_KEY" ] || [ -z "$E2E_MIDEN_SEED" ]; then
+            echo "E2E_EVM_PRIVATE_KEY / E2E_MIDEN_SEED not set. Add repo secrets to enable live testnet E2E."
             echo "skip=true" >> "$GITHUB_OUTPUT"
           else
             echo "skip=false" >> "$GITHUB_OUTPUT"
