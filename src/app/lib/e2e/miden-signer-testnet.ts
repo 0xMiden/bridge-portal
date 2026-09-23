@@ -1,144 +1,116 @@
 import type { Transaction } from "@miden-sdk/miden-wallet-adapter-base";
+import type { AccountId, TransactionRequest, WasmWebClient } from "@miden-sdk/miden-sdk";
 import type { E2EMidenSigner } from "./miden-signer";
+import { parseAccountSeed } from "./faucet-pow";
+import { requestTestnetFaucetNote } from "./miden-faucet";
 
-// ⚠️ The Miden send path is the one harness piece needing a funded testnet
-// account to validate. Receive only needs the account ADDRESS (the app deposits
-// into it on Sepolia), so the signer exposes that immediately and builds the
-// heavy @miden-sdk WebClient lazily on first send — a broken client / missing
-// CLI never blocks the receive specs.
+// The harness owns this account. Bread only creates Guardian accounts, and
+// those cannot be exported, so there is no account file to import. A public
+// single-sig wallet is created from E2E_MIDEN_SEED (or imported from that
+// seed once it is on chain). Receive uses the resulting address. Send asks
+// the public testnet faucet for a note when the vault is still empty.
 
 const TESTNET_RPC = "https://rpc.testnet.miden.io";
 const TESTNET_TRANSPORT = "https://transport.miden.io";
 
-function hexToBytes(hex: string): Uint8Array {
-  const clean = hex.startsWith("0x") ? hex.slice(2) : hex;
-  const out = new Uint8Array(clean.length / 2);
-  for (let i = 0; i < out.length; i += 1) {
-    out[i] = parseInt(clean.slice(i * 2, i * 2 + 2), 16);
-  }
-  return out;
+type MidenSdk = typeof import("@miden-sdk/miden-sdk");
+
+type ReadyClient = {
+  client: WasmWebClient;
+  accountId: AccountId;
+  address: string;
+  sdk: MidenSdk;
+};
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-export async function createTestnetMidenSignerImpl(
-  seed: string,
-): Promise<E2EMidenSigner> {
-  const envAccountId = process.env.NEXT_PUBLIC_E2E_MIDEN_ACCOUNT_ID;
-  if (!envAccountId) {
-    throw new Error(
-      "Set E2E_MIDEN_ACCOUNT_ID to your funded Miden testnet account (bech32 mtst1… or 0x hex).",
-    );
+export async function createTestnetMidenSignerImpl(seed: string): Promise<E2EMidenSigner> {
+  const seedBytes = parseAccountSeed(seed);
+  let readyPromise: Promise<ReadyClient> | null = null;
+  let funded = false;
+
+  function ready(): Promise<ReadyClient> {
+    if (!readyPromise) readyPromise = openClient(seedBytes);
+    return readyPromise;
   }
-  const accountIdStr: string = envAccountId;
 
-  // Lazy, memoised WebClient — created only when a send is actually attempted.
-  let clientPromise: Promise<{
-    client: {
-      submitNewTransaction: (id: unknown, req: unknown) => Promise<unknown>;
-      newSendTransactionRequest: (...args: unknown[]) => Promise<unknown>;
-      getAccountVault: (id: unknown) => Promise<{
-        fungibleAssets: () => Array<{ faucetId(): unknown; amount(): unknown }>;
-      }>;
-      getConsumableNotes: (
-        id: unknown,
-      ) => Promise<Array<{ inputNoteRecord(): unknown }>>;
-      newConsumeTransactionRequest: (notes: unknown) => unknown;
-      syncState: () => Promise<unknown>;
-    };
-    accountId: unknown;
-    sdk: typeof import("@miden-sdk/miden-sdk");
-  }> | null = null;
+  async function getConsumableNotes() {
+    const { client, accountId, sdk } = await ready();
+    // WASM takes this argument by value. Keep the signer's AccountId alive
+    // for subsequent vault reads and transactions by passing a fresh handle.
+    return client.getConsumableNotes(sdk.AccountId.fromHex(accountId.toString()));
+  }
 
-  function getClient() {
-    if (!clientPromise) {
-      clientPromise = (async () => {
-        const sdk = await import("@miden-sdk/miden-sdk");
-        const { WebClient, AccountId, AccountFile } = sdk as unknown as {
-          WebClient: new () => { createClient: (...a: unknown[]) => Promise<never> };
-          AccountId: {
-            fromBech32: (s: string) => unknown;
-            fromHex: (s: string) => unknown;
-          };
-          AccountFile: { deserialize: (b: Uint8Array) => unknown };
-        };
-        const accountId = accountIdStr.startsWith("mtst1")
-          ? AccountId.fromBech32(accountIdStr)
-          : AccountId.fromHex(accountIdStr);
-        const client = (await new WebClient().createClient(
-          TESTNET_RPC,
-          TESTNET_TRANSPORT,
-          hexToBytes(seed),
-          "miden-bridge-e2e",
-          false,
-        )) as never;
-
-        // A PRIVATE account (MidenFi's default) cannot be reconstructed from its
-        // seed — the SDK requires the exported ACCOUNT FILE for the client to
-        // hold the account's keys + private-note context (so getConsumableNotes
-        // sees bridged notes and it can sign). Import the file when provided;
-        // otherwise fall back to import-by-id (read-only — sends won't work).
-        const fileHex = process.env.NEXT_PUBLIC_E2E_MIDEN_ACCOUNT_FILE;
-        const c = client as unknown as {
-          importAccountFile: (f: unknown) => Promise<unknown>;
-          importAccountById: (id: unknown) => Promise<unknown>;
-          syncState: () => Promise<unknown>;
-        };
-        let imported = "id-only";
-        if (fileHex) {
-          try {
-            await c.importAccountFile(AccountFile.deserialize(hexToBytes(fileHex)));
-            imported = "account-file";
-          } catch (e) {
-            imported = "file-err:" + (e as Error).message.slice(0, 60);
-          }
-        } else {
-          await c.importAccountById(accountId).catch(() => undefined);
-        }
-        await c.syncState().catch(() => undefined);
-        if (typeof window !== "undefined") {
-          (window as unknown as { __E2E_RECON__?: unknown }).__E2E_RECON__ = {
-            imported,
-          };
-        }
-        return { client, accountId, sdk } as never;
-      })();
+  async function ensureFunded(): Promise<void> {
+    if (funded) return;
+    const { client, accountId } = await ready();
+    await client.syncState().catch(() => undefined);
+    const vault = await client.getAccountVault(accountId).catch(() => null);
+    const held = vault?.fungibleAssets() ?? [];
+    if (held.some((asset) => BigInt(String(asset.amount())) > 0n)) {
+      funded = true;
+      return;
     }
-    return clientPromise;
+    const waiting = await getConsumableNotes().catch(() => []);
+    if (!waiting.length) await requestTestnetFaucetNote(accountId.toString());
+    for (let attempt = 0; attempt < 12; attempt += 1) {
+      await client.syncState().catch(() => undefined);
+      const records = await getConsumableNotes().catch(() => []);
+      if (records.length) {
+        const notes = records.map((record) => record.inputNoteRecord().toNote());
+        const request = await client.newConsumeTransactionRequest(notes, accountId);
+        await client.submitNewTransaction(accountId, request);
+        await client.syncState().catch(() => undefined);
+        funded = true;
+        return;
+      }
+      await sleep(5_000);
+    }
+    throw new Error("testnet faucet note was minted but never became consumable");
   }
 
-  async function submit(request: unknown): Promise<string> {
-    const { client, accountId } = await getClient();
+  async function submit(request: TransactionRequest): Promise<string> {
+    const { client, accountId } = await ready();
     return String(await client.submitNewTransaction(accountId, request));
   }
 
-  // Consume any bridged-in notes so their assets land in the account vault and
-  // become spendable — the account only holds this seed, so nothing else will
-  // consume them. Called before a send so a settled receive self-funds the
-  // round-trip. Best-effort: no consumable notes = no-op.
+  // Consume any bridged-in notes so their assets land in the vault. Best-effort
+  // when nothing is waiting: a send that has not received yet is a no-op.
   async function consumeBridgedNotes(): Promise<void> {
-    const { client, accountId } = await getClient();
+    await ensureFunded();
+    const { client, accountId } = await ready();
     await client.syncState().catch(() => undefined);
-    const records = (await client
-      .getConsumableNotes(accountId)
-      .catch(() => [])) as Array<{ inputNoteRecord(): unknown }>;
+    const records = await getConsumableNotes().catch(() => []);
     if (!records.length) return;
-    const notes = records.map((r) => r.inputNoteRecord());
-    const request = client.newConsumeTransactionRequest(notes as never);
-    await client.submitNewTransaction(accountId, request as never);
+    const notes = records.map((record) => record.inputNoteRecord().toNote());
+    const request = await client.newConsumeTransactionRequest(notes, accountId);
+    await client.submitNewTransaction(accountId, request);
     await client.syncState().catch(() => undefined);
   }
 
+  const { address } = await ready();
+  const expected = process.env.NEXT_PUBLIC_E2E_MIDEN_ACCOUNT_ID;
+  if (expected && expected !== address && expected !== (await ready()).accountId.toString()) {
+    throw new Error(
+      `E2E_MIDEN_ACCOUNT_ID (${expected}) is not this seed's wallet (${address}). ` +
+        "Unset it, or point it at the account this seed creates.",
+    );
+  }
+
   const requestTransaction = (async (transaction: Transaction) => {
-    const payload = transaction.payload as { transactionRequest?: unknown };
+    const payload = transaction.payload as { transactionRequest?: TransactionRequest };
     if (!payload?.transactionRequest) {
       throw new Error("E2E Miden signer: custom transaction is missing its request.");
     }
-    await consumeBridgedNotes(); // self-fund from a settled receive
+    await consumeBridgedNotes();
     return submit(payload.transactionRequest);
   }) as unknown as E2EMidenSigner["requestTransaction"];
 
   const requestSend = (async (transaction: Transaction) => {
-    await consumeBridgedNotes(); // self-fund from a settled receive
-    const { client, accountId, sdk } = await getClient();
+    await consumeBridgedNotes();
+    const { client, accountId, sdk } = await ready();
     const p = transaction.payload as unknown as {
       recipient: string;
       faucetId: string;
@@ -156,20 +128,20 @@ export async function createTestnetMidenSignerImpl(
   }) as unknown as E2EMidenSigner["requestSend"];
 
   const waitForTransaction = (async () => {
-    const { client } = await getClient();
+    const { client } = await ready();
     for (let i = 0; i < 30; i += 1) {
       await client.syncState().catch(() => undefined);
-      await new Promise((r) => setTimeout(r, 5000));
+      await sleep(5_000);
     }
   }) as unknown as E2EMidenSigner["waitForTransaction"];
 
   const requestAssets = (async () => {
     try {
-      const { client, accountId } = await getClient();
+      const { client, accountId } = await ready();
       const vault = await client.getAccountVault(accountId);
-      return vault.fungibleAssets().map((a) => ({
-        faucetId: String(a.faucetId()),
-        amount: String(a.amount()),
+      return vault.fungibleAssets().map((asset) => ({
+        faucetId: String(asset.faucetId()),
+        amount: String(asset.amount()),
       }));
     } catch {
       return [];
@@ -178,20 +150,60 @@ export async function createTestnetMidenSignerImpl(
 
   const requestConsumableNotes = (async () => {
     try {
-      const { client, accountId } = await getClient();
+      const { client } = await ready();
       await client.syncState().catch(() => undefined);
-      return await client.getConsumableNotes(accountId);
+      return await getConsumableNotes();
     } catch {
       return [];
     }
   }) as unknown as E2EMidenSigner["requestConsumableNotes"];
 
   return {
-    address: accountIdStr,
+    address,
     requestSend,
     requestTransaction,
     waitForTransaction,
     requestAssets,
     requestConsumableNotes,
   };
+}
+
+async function openClient(seedBytes: Uint8Array): Promise<ReadyClient> {
+  const sdk = await import("@miden-sdk/miden-sdk");
+  const { WasmWebClient, AccountStorageMode, AuthScheme, NetworkId, AccountInterface } = sdk;
+  // The JS factory returns the initialized client and supplies syncState().
+  // The raw WASM WebClient.createClient() only returns a status string.
+  const client = await WasmWebClient.createClient(
+    TESTNET_RPC,
+    TESTNET_TRANSPORT,
+    seedBytes,
+    "miden-bridge-e2e",
+    undefined,
+    false,
+  );
+
+  // Public, so a later run with an empty IndexedDB can import the same account
+  // from the seed. A private account cannot. Falcon matches newWallet's scheme.
+  const auth = AuthScheme.AuthRpoFalcon512;
+  let account: { id(): ReadyClient["accountId"] };
+  try {
+    account = await client.importPublicAccountFromSeed(seedBytes, auth);
+  } catch (importError) {
+    try {
+      account = await client.newWallet(AccountStorageMode.public(), auth, seedBytes);
+    } catch (createError) {
+      const existing = await client.getAccounts().catch(() => []);
+      if (existing.length !== 1) {
+        const why = importError instanceof Error ? importError.message : String(importError);
+        const created = createError instanceof Error ? createError.message : String(createError);
+        throw new Error(`seed wallet import failed (${why}); create failed (${created})`);
+      }
+      account = existing[0];
+    }
+  }
+
+  const accountId = account.id();
+  const address = accountId.toBech32(NetworkId.testnet(), AccountInterface.BasicWallet);
+  await client.syncState().catch(() => undefined);
+  return { client, accountId, address, sdk };
 }

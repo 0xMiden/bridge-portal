@@ -56,18 +56,15 @@ function createMockMidenSigner(): E2EMidenSigner {
 }
 
 /**
- * Testnet-tier Miden signer: real signing with @miden-sdk against Miden testnet,
- * seeded from E2E_MIDEN_SEED. This mirrors what the MidenFi adapter does
- * internally (build → prove → submit a TransactionRequest) but with a headless
- * key. It requires a funded Miden testnet account and must be validated against
- * the live network — it is the one piece of the harness that can't be verified
- * without Brian's funded seed. Wired lazily so the WASM SDK only loads in the
- * browser, in E2E builds.
+ * Testnet-tier Miden signer: real signing with @miden-sdk against Miden testnet.
+ * E2E_MIDEN_SEED creates a public single-sig wallet (or imports it). The first
+ * send funds that wallet from the public testnet faucet. Wired lazily so the
+ * WASM SDK only loads in the browser, in E2E builds.
  */
 async function createTestnetMidenSigner(): Promise<E2EMidenSigner> {
   if (!E2E_MIDEN_SEED) {
     throw new Error(
-      "E2E testnet Miden signer requires NEXT_PUBLIC_E2E_MIDEN_SEED (funded Miden testnet account).",
+      "E2E testnet Miden signer requires NEXT_PUBLIC_E2E_MIDEN_SEED (32-byte hex).",
     );
   }
   // Implemented against @miden-sdk WebClient + the wallet-adapter Transaction

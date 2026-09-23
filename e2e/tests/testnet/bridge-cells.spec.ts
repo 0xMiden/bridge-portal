@@ -8,13 +8,12 @@ const cells: Array<{
   route: Route;
   mode: Mode;
   provider: "agglayer" | "epoch";
-  needsAccountFile: boolean;
   showBalance: boolean;
 }> = [
-  { route: "Epoch", mode: "Receive", provider: "epoch", needsAccountFile: false, showBalance: false },
-  { route: "AggLayer", mode: "Receive", provider: "agglayer", needsAccountFile: false, showBalance: false },
-  { route: "Epoch", mode: "Send", provider: "epoch", needsAccountFile: true, showBalance: false },
-  { route: "AggLayer", mode: "Send", provider: "agglayer", needsAccountFile: true, showBalance: true },
+  { route: "Epoch", mode: "Receive", provider: "epoch", showBalance: false },
+  { route: "AggLayer", mode: "Receive", provider: "agglayer", showBalance: false },
+  { route: "Epoch", mode: "Send", provider: "epoch", showBalance: false },
+  { route: "AggLayer", mode: "Send", provider: "agglayer", showBalance: true },
 ];
 
 function activityHash(row: Record<string, unknown>): string {
@@ -29,11 +28,6 @@ for (const cell of cells) {
   test(`${cell.route} ${cell.mode}: live testnet confirm records a hash`, async ({
     bridge,
   }) => {
-    test.skip(
-      cell.needsAccountFile && !process.env.E2E_MIDEN_ACCOUNT_FILE,
-      "E2E_MIDEN_ACCOUNT_FILE is required for Send specs (exported private account file, hex).",
-    );
-
     await test.step("wallets ready", () => bridge.waitForReady());
     await test.step("select route + direction", async () => {
       await bridge.setRoute(cell.route);

@@ -29,9 +29,9 @@ export default async function globalSetup() {
       "E2E_EVM_PRIVATE_KEY is required for live testnet E2E (throwaway Sepolia key).",
     );
   }
-  if (!process.env.E2E_MIDEN_ACCOUNT_ID) {
+  if (!process.env.E2E_MIDEN_SEED) {
     throw new Error(
-      "E2E_MIDEN_ACCOUNT_ID is required (funded Miden testnet account, bech32 or 0x).",
+      "E2E_MIDEN_SEED is required (32-byte hex). The harness creates a public wallet from it.",
     );
   }
 

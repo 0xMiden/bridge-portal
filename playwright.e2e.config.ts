@@ -55,7 +55,6 @@ export default defineConfig({
       NEXT_PUBLIC_E2E_EVM_PRIVATE_KEY: process.env.E2E_EVM_PRIVATE_KEY ?? "",
       NEXT_PUBLIC_E2E_MIDEN_SEED: process.env.E2E_MIDEN_SEED ?? "",
       NEXT_PUBLIC_E2E_MIDEN_ACCOUNT_ID: process.env.E2E_MIDEN_ACCOUNT_ID ?? "",
-      NEXT_PUBLIC_E2E_MIDEN_ACCOUNT_FILE: process.env.E2E_MIDEN_ACCOUNT_FILE ?? "",
     },
   },
 });

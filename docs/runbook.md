@@ -5,12 +5,12 @@
 1. Open the failed `e2e-testnet` run and the Playwright trace artifact.
 2. Distinguish:
    - Empty faucet / below 0.001 Sepolia ETH: top up the throwaway key.
-   - `E2E_MIDEN_ACCOUNT_FILE` missing: Send specs skip; add the hex-encoded exported account file secret.
+   - Faucet note never consumed: the seed wallet's first send asks faucet.testnet.miden.io for a public note. A 429 is the faucet rate limit.
    - Kernel skew (`procedure with root digest`): SDK pin is behind the testnet node. Bump `@miden-sdk/miden-sdk`.
    - Allocator 5xx / Epoch quote empty: Epoch testnet is down. Do not "fix" the portal.
    - Activity hash is a UUID: Midenscan link bug; `waitForTransaction` did not return `txHash`.
 
-Until `E2E_EVM_PRIVATE_KEY` and `E2E_MIDEN_ACCOUNT_ID` are set, the live suite skips and still counts as green, so production can deploy. After the secrets exist, a red live suite blocks deploy.
+Until `E2E_EVM_PRIVATE_KEY` and `E2E_MIDEN_SEED` are set, the live suite skips and still counts as green, so production can deploy. After the secrets exist, a red live suite blocks deploy.
 
 ## Production looks down
 
@@ -27,9 +27,8 @@ Nightly `pin-drift` compares portal `@miden-sdk/miden-sdk`, `MIDEN_BRIDGE_ID`, a
 Repo Actions secrets (throwaway testnet only):
 
 - `E2E_EVM_PRIVATE_KEY`
-- `E2E_MIDEN_SEED`
-- `E2E_MIDEN_ACCOUNT_ID`
-- `E2E_MIDEN_ACCOUNT_FILE` (Send specs)
+- `E2E_MIDEN_SEED` (32 bytes; the harness creates a public wallet from it)
+- `E2E_MIDEN_ACCOUNT_ID` (optional; must match that seed's wallet)
 - `E2E_SEPOLIA_RPC_URL` (optional keyed RPC)
 
 Production deploy:
