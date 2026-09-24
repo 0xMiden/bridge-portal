@@ -9,7 +9,6 @@ import {
 } from "./agglayer-b2agg";
 import {
   MIDEN_DESTINATION_CHAIN_ID,
-  MIDEN_MIN_RECLAIM_BLOCKS,
   MIDEN_NATIVE_FAUCET_ID,
   MIDEN_NATIVE_TOKEN_DECIMALS,
   MIDEN_NATIVE_TOKEN_SYMBOL,
@@ -32,11 +31,10 @@ describe("testnet pin freeze", () => {
   });
 
   it("keeps the Epoch USDC faucet (not the MIDEN token)", () => {
-    expect(MIDEN_NATIVE_FAUCET_ID).toBe("0xfc90f0f4da30e51168453b60eafed7");
+    expect(MIDEN_NATIVE_FAUCET_ID).toBe("0x537c15a622074e91188aa894456c52");
     expect(MIDEN_NATIVE_TOKEN_SYMBOL).toBe("USDC");
     expect(MIDEN_NATIVE_TOKEN_DECIMALS).toBe(6);
     expect(MIDEN_DESTINATION_CHAIN_ID).toBe(999999999);
-    expect(MIDEN_MIN_RECLAIM_BLOCKS).toBe(1000);
   });
 
   it("keeps the bridgeAsset ABI shape", () => {

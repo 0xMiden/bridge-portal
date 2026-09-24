@@ -4,6 +4,7 @@
 
 ### Changes
 
+- [CHANGE] **Epoch SDK is pinned to 1.0.39.** Miden collateral uses the SDK's reclaim window and mandate-binding attachment in a custom wallet transaction; both directions use the exported witness schemas.
 - [CHANGE] **Production deploys wait on live testnet E2E**, which itself waits on `ci`. The Worker is canaried at `/health/deep` after ship. A production bundle with inlined E2E keys fails the deploy.
 - [CHANGE] **`GET /health/deep`** checks Sepolia, Miden RPC, Epoch, and AggLayer. A cron hits it every 20 minutes. `/health` stays liveness-only.
 - [CHANGE] **Nightly pin-drift vs wallet main** (SDK version + AggLayer bridge/faucet ids) and a daily floor check on the throwaway Sepolia E2E account.
@@ -18,6 +19,9 @@
 
 ### Fixes
 
+- [FIX] **Custom Miden bridge-out requests declare a fresh fee-conversion salt.** Epoch and AggLayer now support guarded multisig replay protection, including after the request is serialized to the wallet.
+
+- [FIX] **Epoch quotes use the current Miden 0.16 USDC faucet.** The retired faucet returned `NO_QUOTE_AVAILABLE`; balance reads and test fixtures now use the same current asset.
 - [FIX] **Mock E2E no longer hides a failed wallet inject.** `waitForReady()` throwing is a spec failure, not a later `toBeVisible` miss.
 - [FIX] **Lint is green** on `TempoReceipt` (hoisted `Token`), `AnimatedNumber` (no ref read during render), `Crossfade` (latest content via `useLayoutEffect`), and `useFlipSwap` (GSAP `contextSafe` at call time).
 - [FIX] **Sepolia balance and gas routes honour `AGGLAYER_SEPOLIA_RPC_URL` / `EVM_RPC_URL`.** They previously hard-coded publicnode (#119).

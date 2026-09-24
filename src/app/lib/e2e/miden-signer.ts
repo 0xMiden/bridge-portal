@@ -48,7 +48,7 @@ function createMockMidenSigner(): E2EMidenSigner {
     // assets without hitting the Miden RPC.
     requestAssets: (async () => [
       { faucetId: "0x387149ae66116cf114eebd60bb7381", amount: "100000000" },
-      { faucetId: "0xfc90f0f4da30e51168453b60eafed7", amount: "1000000" },
+      { faucetId: "0x537c15a622074e91188aa894456c52", amount: "1000000" },
     ]) as unknown as E2EMidenSigner["requestAssets"],
     requestConsumableNotes: (async () =>
       []) as unknown as E2EMidenSigner["requestConsumableNotes"],

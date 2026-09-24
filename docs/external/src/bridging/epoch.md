@@ -47,7 +47,7 @@ npm install @epoch-protocol/epoch-intents-sdk \
 ```
 
 The snippets are type-checked against
-`@epoch-protocol/epoch-intents-sdk@1.0.30`,
+`@epoch-protocol/epoch-intents-sdk@1.0.39`,
 `@miden-sdk/miden-sdk@0.15.7`, Miden wallet adapter `0.15.1`, and
 `viem@2.51.0`.
 
@@ -58,7 +58,6 @@ export const EPOCH_ALLOCATOR_URL =
   "https://testnet-dev.epochprotocol.xyz";
 export const MIDEN_CHAIN_ID = 999999999;
 export const SEPOLIA_CHAIN_ID = 11155111;
-export const RECLAIM_WINDOW_BLOCKS = 1000;
 ```
 
 ## Initialize the SDK per direction
@@ -124,23 +123,17 @@ sequenceDiagram
     App->>Epoch: Poll destination status
 ```
 
-### 1. Compute a reclaim height
+### 1. Use the allocator's reclaim window
 
-The intent declares an **absolute** Miden block height, while the wallet adapter
-uses a **relative** recall window. Derive both from the same chain tip:
-
-```typescript
-const currentBlock = await getCurrentMidenBlock();
-const reclaimHeight = currentBlock + RECLAIM_WINDOW_BLOCKS;
-```
-
-Never hard-code `1000` as the absolute reclaim height. On a chain above that
-height, the note would be reclaimable as soon as it was created.
+Epoch SDK 1.0.39 supplies `recallBlocks` and `bindingAttachmentFelts` to the
+collateral callback. Compute the absolute reclaim height from the chain head
+when creating the note. Do not put a precomputed reclaim height in the intent.
+The attachment binds the collateral to the intent and must be written unchanged.
 
 ### 2. Build and quote the intent
 
 ```typescript
-import { TaskType } from "@epoch-protocol/epoch-intents-sdk";
+import { TaskType, MIDEN_TO_EVM_EXTRA_TYPESTRING, EVM_TO_MIDEN_EXTRA_TYPESTRING } from "@epoch-protocol/epoch-intents-sdk";
 
 const task = await sdk.getTaskData({
   taskType: TaskType.GetTokenOut,
@@ -154,14 +147,12 @@ const task = await sdk.getTaskData({
     protocolHashIdentifier: ZERO_HASH,
     recipient: evmRecipient,
   },
-  extraDataTypestring:
-    "string midenSourceAccount,string midenFaucetId,string midenNoteType,string midenNoteId,uint256 midenReclaimHeight",
+  extraDataTypestring: MIDEN_TO_EVM_EXTRA_TYPESTRING,
   extraData: {
     midenSourceAccount,
     midenFaucetId,
     midenNoteType: "P2IDE",
     midenNoteId: "",
-    midenReclaimHeight: String(reclaimHeight),
   },
 });
 
@@ -178,7 +169,7 @@ decimals twice.
 
 ### 3. Create the Miden collateral note
 
-Epoch calls `createMidenP2IDNote` during `solveIntent`. The callback must create
+Epoch calls `createMidenP2IDENote` during `solveIntent`. The callback must create
 a **public, reclaimable P2IDE** note so the solver can observe it and the user
 can recover funds if the intent expires.
 
@@ -187,7 +178,23 @@ import {
   AccountId,
   AccountInterface,
   NetworkId,
+  FungibleAsset, Note, NoteArray, NoteAssets, NoteAttachment, NoteType,
+  TransactionRequestBuilder, Word,
 } from "@miden-sdk/miden-sdk";
+import { Transaction } from "@miden-sdk/miden-wallet-adapter-base";
+
+/** Fresh fee-conversion salt for custom requests, also used as a multisig replay guard. */
+function createFeeConversionSalt(): Word {
+  const felts = new BigUint64Array(4);
+  for (let i = 0; i < felts.length; i++) {
+    // Word requires canonical Goldilocks field elements. Reject the tiny
+    // out-of-field range instead of rounding or reducing random values.
+    do {
+      crypto.getRandomValues(felts.subarray(i, i + 1));
+    } while (felts[i] >= 18_446_744_069_414_584_321n);
+  }
+  return new Word(felts);
+}
 
 function toTestnetAccountAddress(value: string) {
   return value.startsWith("0x")
@@ -198,36 +205,49 @@ function toTestnetAccountAddress(value: string) {
     : value;
 }
 
-const createMidenP2IDNote = async (
+const createMidenP2IDENote = async (
   faucetId: string,
   amount: string,
   allocatorId: string,
+  recallBlocks: number,
+  bindingAttachmentFelts: bigint[],
 ) => {
-  const amountBaseUnits = BigInt(amount);
-  if (amountBaseUnits > BigInt(Number.MAX_SAFE_INTEGER)) {
-    return { success: false };
+  const currentBlock = await getCurrentMidenBlock();
+  const reclaimHeight = currentBlock + recallBlocks;
+  if (!Number.isSafeInteger(reclaimHeight) || recallBlocks <= 0 ||
+      reclaimHeight > 0xffff_ffff || bindingAttachmentFelts.length === 0) {
+    throw new Error("Invalid Epoch collateral parameters");
   }
-
-  const requestId = await requestSend({
-    senderAddress: midenSender,
-    recipientAddress: toTestnetAccountAddress(allocatorId),
-    faucetId: toTestnetAccountAddress(faucetId),
-    noteType: "public",
-    amount: Number(amountBaseUnits),
-    recallBlocks: RECLAIM_WINDOW_BLOCKS,
-  });
+  const toAccountId = (value: string) => value.startsWith("0x")
+    ? AccountId.fromHex(value) : AccountId.fromBech32(value);
+  const note = Note.createP2IDENote(
+    toAccountId(midenSourceAccount),
+    toAccountId(allocatorId),
+    new NoteAssets([new FungibleAsset(toAccountId(faucetId), BigInt(amount))]),
+    reclaimHeight,
+    null,
+    NoteType.Public,
+    new NoteAttachment(BigUint64Array.from(bindingAttachmentFelts)),
+  );
+  const expectedNoteId = note.id().toString();
+  const request = new TransactionRequestBuilder()
+    .withFeeConversionSalt(createFeeConversionSalt())
+    .withOwnOutputNotes(new NoteArray([note]))
+    .build();
+  const requestId = await requestTransaction(Transaction.createCustomTransaction(
+    midenSender, toTestnetAccountAddress(allocatorId), request,
+  ));
   const output = await waitForTransaction(requestId);
-  const noteId = output.outputNotes?.[0]?.id().toString();
-
-  return noteId
-    ? { success: true, noteId }
-    : { success: false };
+  const noteId = output.outputNotes?.find(
+    (outputNote) => outputNote.id().toString() === expectedNoteId,
+  )?.id().toString();
+  return noteId ? { success: true, noteId } : { success: false };
 };
 ```
 
-The `Number.MAX_SAFE_INTEGER` guard must run after parsing the SDK's base-unit
-string and before converting it for the wallet adapter. Otherwise JavaScript
-can silently round the collateral amount and make it differ from the intent.
+The custom transaction preserves the SDK attachment and keeps the amount as a
+`bigint`. Match the collateral note by ID because a transaction can also emit a
+fee note. `requestSend` cannot carry the required attachment.
 
 ### 4. Solve and track the destination
 
@@ -243,7 +263,7 @@ const result = await sdk.solveIntent({
   collateralType: CollateralType.Miden,
   midenFaucetId,
   midenSourceAccount,
-  createMidenP2IDNote,
+  createMidenP2IDENote,
 });
 ```
 
@@ -286,18 +306,16 @@ const task = await sdk.getTaskData({
     protocolHashIdentifier: ZERO_HASH,
     recipient: evmSourceAddress,
   },
-  extraDataTypestring:
-    "string midenRecipientAccount,string midenFaucetId,string midenNoteType",
+  extraDataTypestring: EVM_TO_MIDEN_EXTRA_TYPESTRING,
   extraData: {
     midenRecipientAccount,
     midenFaucetId,
-    midenNoteType: "P2ID",
   },
 });
 ```
 
-Use `P2ID`, not `P2IDE`, for the destination note. This direction delivers to
-the Miden recipient rather than creating reclaimable Miden-side collateral.
+Use `EVM_TO_MIDEN_EXTRA_TYPESTRING` from the Epoch SDK for this direction.
+The allocator delivers to the Miden recipient; no collateral callback is needed.
 
 ### 2. Quote and solve with EVM collateral
 

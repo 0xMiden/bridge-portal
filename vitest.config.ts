@@ -6,6 +6,8 @@ import { defineConfig } from "vitest/config";
 export default defineConfig({
   test: {
     environment: "node",
+    // Epoch publishes extensionless ESM imports; resolve them as the app bundler does.
+    server: { deps: { inline: [/@epoch-protocol\//] } },
     include: ["src/**/*.test.ts", "src/**/*.test.tsx"],
     exclude: ["e2e/**", "node_modules/**", ".next/**"],
     coverage: {

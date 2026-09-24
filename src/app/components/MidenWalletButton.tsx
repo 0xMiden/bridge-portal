@@ -43,7 +43,7 @@ export type MidenWalletSnapshot = {
    */
   requestSend?: MidenFiWalletContextState["requestSend"];
   // requestTransaction submits a custom (pre-built) TransactionRequest — the
-  // Agglayer B2AGG bridge-out note goes through this, not requestSend.
+  // Agglayer B2AGG and Epoch mandate-bound P2IDE notes use this.
   requestTransaction?: MidenFiWalletContextState["requestTransaction"];
   waitForTransaction?: MidenFiWalletContextState["waitForTransaction"];
   // requestAssets reads the wallet's (private) token balances — opens a popup.

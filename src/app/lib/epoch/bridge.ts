@@ -1,8 +1,10 @@
 import {
   CollateralType,
   EpochIntentSDK,
+  EVM_TO_MIDEN_EXTRA_TYPESTRING,
   GetTaskDataParams,
   IntentQuoteResult,
+  MIDEN_TO_EVM_EXTRA_TYPESTRING,
   SolveIntentParams,
   TaskType,
 } from "@epoch-protocol/epoch-intents-sdk";
@@ -130,14 +132,6 @@ export function normalizeMidenIdToHex(id: string): string {
 export function buildEpochTaskDataParams(
   params: CrossChainIntentParams,
 ): GetTaskDataParams {
-  if (params.midenReclaimHeight == null || params.midenReclaimHeight <= 0) {
-    throw new Error(
-      "Miden→EVM: midenReclaimHeight is required and must be an ABSOLUTE future Miden block " +
-        "(currentMidenBlock + delta, delta ≥ 1000). A stale value makes the P2IDE note reclaimable " +
-        "at creation and the intent will fail.",
-    );
-  }
-
   const midenSourceAccountHex = normalizeMidenIdToHex(params.midenAccountId);
   const midenFaucetIdHex = normalizeMidenIdToHex(params.midenFaucetId);
 
@@ -160,15 +154,12 @@ export function buildEpochTaskDataParams(
       protocolHashIdentifier: ZERO_HASH,
       recipient: params.evmRecipient,
     },
-    // Mirror EpochSwapWidget Miden extraData pattern exactly
-    extraDataTypestring:
-      "string midenSourceAccount,string midenFaucetId,string midenNoteType,string midenNoteId,uint256 midenReclaimHeight",
+    extraDataTypestring: MIDEN_TO_EVM_EXTRA_TYPESTRING,
     extraData: {
       midenSourceAccount: midenSourceAccountHex,
       midenFaucetId: midenFaucetIdHex,
       midenNoteType: "P2IDE",
       midenNoteId: "",
-      midenReclaimHeight: String(params.midenReclaimHeight),
     },
   };
 
@@ -218,12 +209,10 @@ export function buildEVMToMidenTaskDataParams(params: EVMToMidenIntentParams) {
       protocolHashIdentifier: ZERO_HASH,
       recipient: params.evmSourceAddress,
     },
-    extraDataTypestring:
-      "string midenRecipientAccount,string midenFaucetId,string midenNoteType",
+    extraDataTypestring: EVM_TO_MIDEN_EXTRA_TYPESTRING,
     extraData: {
       midenRecipientAccount: midenRecipientHex,
       midenFaucetId: midenFaucetHex,
-      midenNoteType: "P2ID",
     },
   };
 
@@ -337,7 +326,7 @@ export async function buildCrossChainIntent(
   params: CrossChainIntentParams & {
     collateralType?: CollateralType;
     midenSourceAccount?: string;
-    createMidenP2IDNote?: SolveIntentParams["createMidenP2IDNote"];
+    createMidenP2IDENote?: SolveIntentParams["createMidenP2IDENote"];
     /** Pre-fetched quote from getCrossChainQuote — skips getTaskData step. */
     preFetchedQuote?: CrossChainQuote;
   },
@@ -367,7 +356,7 @@ export async function buildCrossChainIntent(
       collateralType: (params.collateralType ?? "miden") as CollateralType,
       midenFaucetId: midenFaucetIdHex,
       midenSourceAccount: midenSourceHex,
-      createMidenP2IDNote: params.createMidenP2IDNote,
+      createMidenP2IDENote: params.createMidenP2IDENote,
     });
 
     return {

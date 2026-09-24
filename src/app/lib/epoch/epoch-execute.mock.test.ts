@@ -6,7 +6,7 @@ vi.mock("../e2e/env", () => ({
 }));
 
 vi.mock("./miden-note", () => ({
-  createBridgeP2IDNoteCallback: vi.fn(),
+  createBridgeP2IDENoteCallback: vi.fn(),
 }));
 
 vi.mock("./sdk", () => ({

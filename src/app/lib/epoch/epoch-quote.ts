@@ -8,7 +8,6 @@ import {
   isBridgeableEvmTokenConfigured,
 } from "./bridgeable-token";
 import { getCrossChainQuote, getEVMToMidenQuote } from "./bridge";
-import { getCurrentMidenBlock, MIDEN_MIN_RECLAIM_BLOCKS } from "./chain";
 import {
   MIDEN_DESTINATION_CHAIN_ID,
   MIDEN_NATIVE_FAUCET_ID,
@@ -60,7 +59,6 @@ export async function quoteEpochSend(args: {
     throw new Error("The Epoch route is not configured yet.");
   }
   const sdk = await getEpochReadOnlySdk(args.destinationAddress);
-  const currentBlock = await getCurrentMidenBlock();
   const params: CrossChainIntentParams = {
     midenAccountId: args.senderPublicKey,
     midenFaucetId: MIDEN_NATIVE_FAUCET_ID,
@@ -70,7 +68,6 @@ export async function quoteEpochSend(args: {
     outputTokenAddress: BRIDGEABLE_EVM_OUTPUT_TOKEN_ADDRESS,
     outputTokenDecimals: BRIDGEABLE_EVM_OUTPUT_TOKEN_DECIMALS,
     minTokenOut: "0",
-    midenReclaimHeight: currentBlock + MIDEN_MIN_RECLAIM_BLOCKS,
   };
   const quote = await getCrossChainQuote(sdk, params, args.destinationAddress);
   const raw =

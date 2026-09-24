@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { createE2EMidenSigner } from "../lib/e2e/miden-signer";
 import { publishE2E } from "../lib/e2e/window-hook";
 import { shortAddress } from "../lib/bridge-state";
+import { MIDEN_NATIVE_FAUCET_ID } from "../lib/epoch/config";
 import type { MidenWalletSnapshot } from "./MidenWalletButton";
 
 // E2E stand-in for MidenWalletButton: builds a headless Miden signer (mock or
@@ -64,15 +65,13 @@ export function E2EMidenWalletButton({
               faucetId?: string;
               amount?: string | number;
             }>;
-            const usdc = "0xfc90f0f4da30e51168453b60eafed7"; // Miden USDC faucet
             const total = (Array.isArray(assets) ? assets : []).reduce(
               (sum, a) =>
-                (a.faucetId ?? "").toLowerCase().includes("fc90f0f4")
+                (a.faucetId ?? "").toLowerCase() === MIDEN_NATIVE_FAUCET_ID
                   ? sum + BigInt(a.amount ?? 0)
                   : sum,
               0n,
             );
-            void usdc;
             return total.toString();
           },
         });

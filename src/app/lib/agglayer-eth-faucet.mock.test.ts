@@ -16,7 +16,7 @@ describe("fetchMidenRouteBalances (mock E2E)", () => {
   it("totals canonical faucets without loading the Miden SDK", async () => {
     const result = await fetchMidenRouteBalances(async () => [
       { faucetId: AGGLAYER_BALI.midenEthFaucetIdHex, amount: "100000000" },
-      { faucetId: "0xfc90f0f4da30e51168453b60eafed7", amount: "1000000" },
+      { faucetId: "0x537c15a622074e91188aa894456c52", amount: "1000000" },
     ]);
 
     expect(result.epoch).toBe("1");
