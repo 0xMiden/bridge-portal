@@ -4,7 +4,8 @@ import { join } from "node:path";
 
 const ROOTS = [".next", ".open-next"];
 const SKIP_DIR = new Set(["cache", "trace"]);
-const KEY_VALUE = /NEXT_PUBLIC_E2E_TEST["'`\s:=]+true/;
+// Match assignments/properties, not runtime comparisons preserved by OpenNext.
+const KEY_VALUE = /\bNEXT_PUBLIC_E2E_TEST["'`]?\s*(?::|=(?!=))\s*["'`]?true\b/;
 const PRIVKEY = /NEXT_PUBLIC_E2E_EVM_PRIVATE_KEY["'`\s:=]+0x[0-9a-fA-F]{64}/;
 const SEED = /(?:NEXT_PUBLIC_)?E2E_MIDEN_SEED["'`\s:=]+0x[0-9a-fA-F]{16,}/;
 
