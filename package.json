@@ -41,7 +41,7 @@
     "react": "19.2.4",
     "react-dom": "19.2.4",
     "viem": "^2.51.0",
-    "wagmi": "^2.19.5"
+    "wagmi": "^3.7.7"
   },
   "overrides": {
     "@wagmi/core": "2.22.1",
