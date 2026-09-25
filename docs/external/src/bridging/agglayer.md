@@ -210,9 +210,22 @@ import {
   Note,
   NoteArray,
   NoteAssets,
-  TransactionRequestBuilder,
+  TransactionRequestBuilder, Word,
 } from "@miden-sdk/miden-sdk";
 import { Transaction } from "@miden-sdk/miden-wallet-adapter-base";
+
+/** Fresh fee-conversion salt for custom requests, also used as a multisig replay guard. */
+function createFeeConversionSalt(): Word {
+  const felts = new BigUint64Array(4);
+  for (let i = 0; i < felts.length; i++) {
+    // Word requires canonical Goldilocks field elements. Reject the tiny
+    // out-of-field range instead of rounding or reducing random values.
+    do {
+      crypto.getRandomValues(felts.subarray(i, i + 1));
+    } while (felts[i] >= 18_446_744_069_414_584_321n);
+  }
+  return new Word(felts);
+}
 
 export async function createAgglayerBridgeOut({
   amount,
@@ -240,6 +253,7 @@ export async function createAgglayerBridgeOut({
     EthAddress.fromHex(destinationAddress),
   );
   const request = new TransactionRequestBuilder()
+    .withFeeConversionSalt(createFeeConversionSalt())
     .withOwnOutputNotes(new NoteArray([note]))
     .build();
   const transaction = Transaction.createCustomTransaction(

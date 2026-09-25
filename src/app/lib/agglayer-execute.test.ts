@@ -5,6 +5,7 @@ const fromHex = vi.fn((value: string) => ({ id: value, kind: "hex" }));
 const fromBech32 = vi.fn((value: string) => ({ id: value, kind: "bech32" }));
 const ethFromHex = vi.fn((value: string) => ({ evm: value }));
 const withOwnOutputNotes = vi.fn().mockReturnThis();
+const withFeeConversionSalt = vi.fn();
 const build = vi.fn(() => "tx-request");
 const createCustomTransaction = vi.fn(() => "wallet-tx");
 
@@ -33,6 +34,10 @@ vi.mock("@miden-sdk/miden-sdk", () => ({
     }
   },
   TransactionRequestBuilder: class {
+    withFeeConversionSalt(salt: unknown) {
+      withFeeConversionSalt(salt);
+      return this;
+    }
     withOwnOutputNotes() {
       withOwnOutputNotes();
       return this;
@@ -46,6 +51,7 @@ vi.mock("@miden-sdk/miden-sdk", () => ({
 vi.mock("@miden-sdk/miden-wallet-adapter-base", () => ({
   Transaction: { createCustomTransaction },
 }));
+vi.mock("./miden-transaction", () => ({ createFeeConversionSalt: () => "fresh-salt" }));
 
 import { MIDEN_BRIDGE_ID } from "./agglayer-b2agg";
 import { runAgglayerSend } from "./agglayer-execute";
@@ -80,6 +86,7 @@ describe("runAgglayerSend", () => {
       expect.objectContaining({ evm: DEST }),
     );
     expect(createCustomTransaction).toHaveBeenCalled();
+    expect(withFeeConversionSalt).toHaveBeenCalledWith("fresh-salt");
     expect(result.txId).toBe("uuid-not-a-hash");
     expect(result.txHash).toBe(`0x${"ab".repeat(32)}`);
   });

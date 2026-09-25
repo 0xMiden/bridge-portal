@@ -5,7 +5,7 @@
 //   - bridge.ts                          (EVM→Miden and Miden→EVM quote + intent builders)
 //   - client.ts / sdk.ts                 (Epoch SDK wired to this app's wagmi v2 + AppKit)
 //   - miden-note.ts                      (Miden→EVM P2IDE collateral note via the
-//                                         MidenFi adapter's requestSend)
+//                                         MidenFi adapter's requestTransaction)
 //   - chain.ts                           (current block height + native MIDEN
 //                                         faucet id, read from the chain head)
 //   - epoch-quote.ts / use-epoch-quote   (live forward quotes, both directions)
@@ -18,17 +18,16 @@
 export {
   EPOCH_ALLOCATOR_URL,
   MIDEN_DESTINATION_CHAIN_ID,
-  MIDEN_MIN_RECLAIM_BLOCKS,
   MIDEN_NATIVE_FAUCET_ID,
   MIDEN_NATIVE_TOKEN_DECIMALS,
   MIDEN_NATIVE_TOKEN_SYMBOL,
 } from "./config";
 export { getCurrentMidenBlock } from "./chain";
 export {
-  createBridgeP2IDNoteCallback,
-  useCreateBridgeP2IDNote,
+  createBridgeP2IDENoteCallback,
+  useCreateBridgeP2IDENote,
 } from "./miden-note";
-export type { CreateMidenP2IDNote, MidenNoteDeps } from "./miden-note";
+export type { CreateMidenP2IDENote, MidenNoteDeps } from "./miden-note";
 export { quoteEpochReceive, quoteEpochSend } from "./epoch-quote";
 export type { EpochQuoteOutput } from "./epoch-quote";
 export {

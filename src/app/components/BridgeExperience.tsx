@@ -113,7 +113,7 @@ const EPOCH_SEPOLIA_USDC = {
 const MIDEN_ROUTE_TOKEN: Partial<
   Record<BridgeProvider, { faucetId: string; decimals: number; symbol: string }>
 > = {
-  epoch: { faucetId: "0xfc90f0f4da30e51168453b60eafed7", decimals: 6, symbol: "USDC" },
+  epoch: { faucetId: "0x537c15a622074e91188aa894456c52", decimals: 6, symbol: "USDC" },
   agglayer: { faucetId: "0x387149ae66116cf114eebd60bb7381", decimals: 8, symbol: "ETH" },
 };
 
@@ -1483,7 +1483,7 @@ export function BridgeExperience() {
           amount,
           midenAccount: epochMidenAccount,
           evmAddress: epochEvmAddress,
-          requestSend: midenWallet.requestSend,
+          requestTransaction: midenWallet.requestTransaction,
           waitForTransaction: midenWallet.waitForTransaction,
           onStatus: (status) => {
             // Reflect live phase progress on the detail page (via the row's eta),

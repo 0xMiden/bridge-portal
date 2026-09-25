@@ -1,58 +1,50 @@
 import { describe, expect, it, vi } from "vitest";
+import { EpochIntentSDK, EVM_TO_MIDEN_EXTRA_TYPESTRING, MIDEN_TO_EVM_EXTRA_TYPESTRING, TaskType } from "@epoch-protocol/epoch-intents-sdk";
+import { createWalletClient, http } from "viem";
+import { sepolia } from "viem/chains";
 
 vi.mock("@miden-sdk/miden-sdk", () => ({
-  AccountId: {
-    fromHex: (value: string) => ({
-      toString: () => value.replace(/^0x/i, "").toLowerCase(),
-    }),
-  },
+  AccountId: { fromHex: (value: string) => ({ toString: () => value }) },
 }));
 
-vi.mock("@epoch-protocol/epoch-intents-sdk", () => ({
-  TaskType: { GetTokenOut: "gettokenout" },
-  CollateralType: {},
-  EpochIntentSDK: class {},
-}));
+import { MIDEN_NATIVE_FAUCET_ID } from "./config";
+import { buildEpochTaskDataParams, buildEVMToMidenTaskDataParams } from "./bridge";
 
-import { MIDEN_MIN_RECLAIM_BLOCKS } from "./config";
-import { buildEpochTaskDataParams } from "./bridge";
+const SPONSOR = "0x1111111111111111111111111111111111111111";
+const ACCOUNT = "0x387149ae66116cf114eebd60bb7381";
+const TOKEN = "0x2BB4FfD7E2c6D432b697554Efd77fA13bdbefd69";
+const sdk = new EpochIntentSDK({
+  apiBaseUrl: "https://unused.invalid",
+  walletClient: createWalletClient({ account: SPONSOR, chain: sepolia, transport: http() }),
+});
 
-describe("buildEpochTaskDataParams", () => {
-  it("uses TaskType.GetTokenOut and an absolute reclaim height", () => {
+describe("Epoch SDK task data compatibility", () => {
+  it("builds a Miden send accepted by the real SDK using its canonical witness", async () => {
     const params = buildEpochTaskDataParams({
-      midenAccountId: "0x387149ae66116cf114eebd60bb7381",
-      midenFaucetId: "0xfc90f0f4da30e51168453b60eafed7",
-      midenAmount: "1000000",
-      evmRecipient: "0x1111111111111111111111111111111111111111",
-      destinationChainId: 11155111,
-      outputTokenAddress: "0x2222222222222222222222222222222222222222",
-      outputTokenDecimals: 6,
-      minTokenOut: "0",
-      midenReclaimHeight: 12_000 + MIDEN_MIN_RECLAIM_BLOCKS,
+      midenAccountId: ACCOUNT, midenFaucetId: MIDEN_NATIVE_FAUCET_ID,
+      midenAmount: "1000000", evmRecipient: SPONSOR,
+      destinationChainId: 11155111, outputTokenAddress: TOKEN, minTokenOut: "0",
     });
-
-    expect(params.taskType).toBe("gettokenout");
-    expect(params.extraData).toEqual(
-      expect.objectContaining({
-        midenReclaimHeight: String(12_000 + MIDEN_MIN_RECLAIM_BLOCKS),
-        midenNoteType: "P2IDE",
-      }),
-    );
+    expect(params.taskType).toBe(TaskType.GetTokenOut);
+    expect(params.extraDataTypestring).toBe(MIDEN_TO_EVM_EXTRA_TYPESTRING);
+    const task = await sdk.getTaskData(params);
+    expect(task.intentData).toMatchObject({ tokenInAmount: "1000000", midenNoteType: "P2IDE", midenNoteId: "" });
+    expect(task.intentData).not.toHaveProperty("midenReclaimHeight");
   });
 
-  it("rejects a missing reclaim height", () => {
-    expect(() =>
-      buildEpochTaskDataParams({
-        midenAccountId: "0x387149ae66116cf114eebd60bb7381",
-        midenFaucetId: "0xfc90f0f4da30e51168453b60eafed7",
-        midenAmount: "1",
-        evmRecipient: "0x1111111111111111111111111111111111111111",
-        destinationChainId: 11155111,
-        outputTokenAddress: "0x2222222222222222222222222222222222222222",
-        outputTokenDecimals: 6,
-        minTokenOut: "0",
-        midenReclaimHeight: 0,
-      }),
-    ).toThrow(/midenReclaimHeight/);
+  it("builds a Sepolia receive with the current USDC faucet and atomic input amount", async () => {
+    const params = buildEVMToMidenTaskDataParams({
+      sourceChainId: 11155111, destinationChainId: 999999999,
+      evmSourceAddress: SPONSOR, evmTokenAddress: TOKEN, evmAmount: "1.25",
+      evmTokenDecimals: 18, midenRecipientId: ACCOUNT,
+      midenFaucetId: MIDEN_NATIVE_FAUCET_ID, minTokenOut: "0",
+    });
+    expect(params.extraDataTypestring).toBe(EVM_TO_MIDEN_EXTRA_TYPESTRING);
+    const task = await sdk.getTaskData(params);
+    expect(task.intentData).toMatchObject({
+      tokenInAmount: "1250000000000000000", destinationChainId: "999999999",
+      midenRecipientAccount: ACCOUNT, midenFaucetId: "0x537c15a622074e91188aa894456c52",
+    });
+    expect(task.intentData).not.toHaveProperty("midenSourceAccount");
   });
 });

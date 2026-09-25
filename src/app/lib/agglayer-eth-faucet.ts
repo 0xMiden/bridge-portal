@@ -9,7 +9,7 @@ import { e2eNetwork, isE2E } from "./e2e/env";
 // the Agglayer send then bridges that exact asset, the one the Agglayer bridge
 // recognises, rather than any other Miden token the wallet may also hold.
 
-const EPOCH_USDC_FAUCET = "0xfc90f0f4da30e51168453b60eafed7";
+const EPOCH_USDC_FAUCET = "0x537c15a622074e91188aa894456c52";
 
 type RequestAssets = NonNullable<MidenFiWalletContextState["requestAssets"]>;
 

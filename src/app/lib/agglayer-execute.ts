@@ -1,6 +1,7 @@
 import type { MidenFiWalletContextState } from "@miden-sdk/miden-wallet-adapter-react";
 import { normalizeMidenAccountHex } from "./agglayer";
 import { EVM_AGGLAYER_NETWORK_ID, MIDEN_BRIDGE_ID } from "./agglayer-b2agg";
+import { createFeeConversionSalt } from "./miden-transaction";
 
 // Agglayer outbound (Miden → Sepolia / L2→L1). Builds the B2AGG bridge-out note
 // with `Note.createB2AggNote` and submits it through the MidenFi wallet's
@@ -79,6 +80,7 @@ export async function runAgglayerSend({
   );
 
   const request = new TransactionRequestBuilder()
+    .withFeeConversionSalt(createFeeConversionSalt())
     .withOwnOutputNotes(new NoteArray([note]))
     .build();
 

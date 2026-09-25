@@ -17,15 +17,14 @@ import {
   EPOCH_DESTINATION_CHAIN_ID,
   isBridgeableEvmTokenConfigured,
 } from "./bridgeable-token";
-import { getCurrentMidenBlock, MIDEN_MIN_RECLAIM_BLOCKS } from "./chain";
 import {
   MIDEN_DESTINATION_CHAIN_ID,
   MIDEN_NATIVE_FAUCET_ID,
   MIDEN_NATIVE_TOKEN_DECIMALS,
 } from "./config";
 import { epochActivityStatus } from "./epoch-status";
-import type { CreateMidenP2IDNote, MidenNoteDeps } from "./miden-note";
-import { createBridgeP2IDNoteCallback } from "./miden-note";
+import type { CreateMidenP2IDENote, MidenNoteDeps } from "./miden-note";
+import { createBridgeP2IDENoteCallback } from "./miden-note";
 import { getEpochReadOnlySdk, getEpochSdk } from "./sdk";
 import type {
   CrossChainIntentParams,
@@ -48,7 +47,7 @@ import { e2eNetwork, isE2E } from "../e2e/env";
  *    allocator/solver fulfil USDC on Sepolia. No EVM signature.
  *  - receive (EVM→Miden): the connected Sepolia wallet signs a deposit into The
  *    Compact (handled inside the SDK's solveIntent), then the solver mints the
- *    native MIDEN output. No Miden signature.
+ *    Miden USDC output. No Miden signature.
  */
 
 const EVM_ADDRESS_RE = /^0x[0-9a-fA-F]{40}$/;
@@ -57,14 +56,14 @@ export type EpochDirection = "send" | "receive";
 
 export interface RunEpochTransferArgs {
   mode: EpochDirection;
-  /** Human-readable input amount as typed (MIDEN for send, USDC for receive). */
+  /** Human-readable input amount as typed (USDC in either direction). */
   amount: string;
   /** Miden account — sender (send) or recipient (receive). bech32 or 0x hex. */
   midenAccount: string;
   /** EVM address — recipient/sponsor (send) or connected source (receive). Must be 0x. */
   evmAddress: string;
   /** Miden write primitives from the connected MidenFi adapter. REQUIRED for send. */
-  requestSend?: MidenNoteDeps["requestSend"];
+  requestTransaction?: MidenNoteDeps["requestTransaction"];
   waitForTransaction?: MidenNoteDeps["waitForTransaction"];
   /**
    * Live execution status (phase + the deposit tx hash once broadcast) for UI
@@ -145,7 +144,7 @@ function assertCommonArgs(args: RunEpochTransferArgs) {
 async function runEpochSend(
   args: RunEpochTransferArgs,
 ): Promise<EpochExecuteResult> {
-  if (!args.requestSend || !args.waitForTransaction) {
+  if (!args.requestTransaction || !args.waitForTransaction) {
     throw new Error("Connect your Miden wallet to sign the send.");
   }
 
@@ -153,7 +152,6 @@ async function runEpochSend(
   const senderAddress = args.midenAccount.trim();
 
   const sdk = await getEpochReadOnlySdk(evmRecipient);
-  const currentBlock = await getCurrentMidenBlock();
 
   const params: CrossChainIntentParams = {
     midenAccountId: senderAddress,
@@ -167,14 +165,13 @@ async function runEpochSend(
     outputTokenAddress: BRIDGEABLE_EVM_OUTPUT_TOKEN_ADDRESS,
     outputTokenDecimals: BRIDGEABLE_EVM_OUTPUT_TOKEN_DECIMALS,
     minTokenOut: "0",
-    midenReclaimHeight: currentBlock + MIDEN_MIN_RECLAIM_BLOCKS,
   };
 
   // The note is minted inside solveIntent; capture its id/hash for the activity.
   let noteOutcome: { noteId: string; txHash: string } | undefined;
-  const createMidenP2IDNote: CreateMidenP2IDNote = createBridgeP2IDNoteCallback(
+  const createMidenP2IDENote: CreateMidenP2IDENote = createBridgeP2IDENoteCallback(
     {
-      requestSend: args.requestSend,
+      requestTransaction: args.requestTransaction,
       waitForTransaction: args.waitForTransaction,
       senderAddress,
       onNoteCreated: (info) => {
@@ -188,7 +185,7 @@ async function runEpochSend(
     ...params,
     collateralType: CollateralType.Miden,
     midenSourceAccount: senderAddress,
-    createMidenP2IDNote,
+    createMidenP2IDENote,
     preFetchedQuote: quote,
   });
 

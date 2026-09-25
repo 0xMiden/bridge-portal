@@ -1,3 +1,4 @@
+import { createFeeConversionSalt } from "../../../src/app/lib/miden-transaction";
 import {
   AccountId,
   EthAddress,
@@ -115,6 +116,7 @@ export async function createAgglayerBridgeOut({
     EthAddress.fromHex(destinationAddress),
   );
   const request = new TransactionRequestBuilder()
+    .withFeeConversionSalt(createFeeConversionSalt())
     .withOwnOutputNotes(new NoteArray([note]))
     .build();
   const transaction = Transaction.createCustomTransaction(

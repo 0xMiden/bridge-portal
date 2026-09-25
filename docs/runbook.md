@@ -7,7 +7,7 @@
    - Empty faucet / below 0.001 Sepolia ETH: top up the throwaway key.
    - Faucet note never consumed: the seed wallet's first send asks faucet.testnet.miden.io for a public note. A 429 is the faucet rate limit.
    - Kernel skew (`procedure with root digest`): SDK pin is behind the testnet node. Bump `@miden-sdk/miden-sdk`.
-   - Allocator 5xx / Epoch quote empty: Epoch testnet is down. Do not "fix" the portal.
+   - Allocator 5xx: check Epoch service availability. `NO_QUOTE_AVAILABLE` also occurs with stale token configuration: verify the Miden faucet against Epoch's current dashboard configuration and compare the exact quote payload before diagnosing an outage.
    - Activity hash is a UUID: Midenscan link bug; `waitForTransaction` did not return `txHash`.
 
 Until `E2E_EVM_PRIVATE_KEY` and `E2E_MIDEN_SEED` are set, the live suite skips and still counts as green, so production can deploy. After the secrets exist, a red live suite blocks deploy.

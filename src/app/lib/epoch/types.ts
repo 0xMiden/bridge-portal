@@ -25,13 +25,6 @@ export interface CrossChainIntentParams {
    * Omit / pass "0" to use reverse-quote route.
    */
   midenAmount?: string;
-  /**
-   * REQUIRED. Absolute Miden block number at which the P2IDE note becomes
-   * reclaimable. Must be `currentMidenBlock + delta` (delta ≥ MIDEN_MIN_RECLAIM_BLOCKS,
-   * default 1000). Passing a stale block fails the intent because the note
-   * is already reclaimable at creation time.
-   */
-  midenReclaimHeight: number;
   evmRecipient: string;
   destinationChainId: number;
   outputTokenAddress: string;
