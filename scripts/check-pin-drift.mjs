@@ -5,6 +5,8 @@ const WALLET_PKG =
   "https://raw.githubusercontent.com/0xMiden/wallet/main/package.json";
 const WALLET_B2AGG =
   "https://raw.githubusercontent.com/0xMiden/wallet/main/src/lib/agglayer/b2agg/constant.ts";
+const WALLET_AGGLAYER =
+  "https://raw.githubusercontent.com/0xMiden/wallet/main/src/lib/agglayer/constant.ts";
 
 function pickConst(source, name) {
   const match = source.match(
@@ -34,7 +36,23 @@ const walletB2agg = await walletB2aggRes.text();
 const walletBridge = pickConst(walletB2agg, "MIDEN_BRIDGE_ID");
 const walletFaucet = pickConst(walletB2agg, "MIDEN_AGGLAYER_FAUCET_ID");
 
+const walletAgglayerRes = await fetch(WALLET_AGGLAYER);
+if (!walletAgglayerRes.ok) {
+  throw new Error(`wallet agglayer/constant.ts HTTP ${walletAgglayerRes.status}`);
+}
+const walletAgglayer = await walletAgglayerRes.text();
+const portalAgglayer = await readFile("src/app/lib/agglayer.ts", "utf8");
+const portalNetwork = portalAgglayer.match(/destinationNetworkId:\s*(\d+)/)?.[1];
+const walletNetwork = walletAgglayer.match(/export const MIDEN_CHAIN_ID\s*=\s*(\d+)/)?.[1];
+if (!portalBridge || !walletBridge || !portalFaucet || !walletFaucet ||
+    !portalNetwork || !walletNetwork || !portalSdk || !walletSdk) {
+  throw new Error("Unable to read required deployment pins; check upstream configuration format.");
+}
+
 const drifts = [];
+if (portalNetwork !== walletNetwork) {
+  drifts.push(`Agglayer rollup ID: portal=${portalNetwork} wallet=${walletNetwork}`);
+}
 if (portalSdk !== walletSdk) {
   drifts.push(`@miden-sdk/miden-sdk: portal=${portalSdk} wallet=${walletSdk}`);
 }
@@ -49,7 +67,7 @@ if (portalFaucet && walletFaucet && portalFaucet !== walletFaucet) {
 
 if (drifts.length === 0) {
   console.log(
-    `check-pin-drift: ok (sdk ${portalSdk}, bridge ${portalBridge}, faucet ${portalFaucet})`,
+    `check-pin-drift: ok (sdk ${portalSdk}, rollup ${portalNetwork}, bridge ${portalBridge}, faucet ${portalFaucet})`,
   );
   process.exit(0);
 }

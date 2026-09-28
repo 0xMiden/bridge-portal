@@ -54,10 +54,10 @@ service endpoints can change.
 export const AGGLAYER_BALI = {
   sepoliaChainId: 11155111,
   sepoliaBridgeAddress: "0x1348947e282138d8f377b467f7d9c2eb0f335d1f",
-  midenNetworkId: 78,
+  midenNetworkId: 86,
   evmNetworkId: 0,
   nativeTokenAddress: "0x0000000000000000000000000000000000000000",
-  midenBridgeId: "0xa22ec154f9a36d911953fd5c9260a7",
+  midenBridgeId: "0x3b66e20b5088f25133b69216484652",
   midenEthFaucetId: "0x387149ae66116cf114eebd60bb7381",
   bridgeServiceApi:
     "https://miden-testnet-bridge.dev.eu-north-3.gateway.fm/api",
@@ -277,7 +277,7 @@ persist `output.txHash`; a request UUID is not a Midenscan transaction hash.
 ### 2. Track the auto-claim
 
 Query the bridge indexer with the Sepolia destination address and match a row
-whose origin is Miden network `78` and destination is EVM network `0`. A
+whose origin is the indexer’s local Miden network `1` and destination is EVM network `0`. A
 populated `claim_tx_hash` means Gateway auto-claimed the exit on Sepolia.
 
 Do not build a manual `claimAsset(...)` button for the current reference flow.

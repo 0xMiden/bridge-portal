@@ -52,9 +52,8 @@ export async function fetchDeposits(
 // `bridge-autoclaim` claims ready exits on Sepolia automatically (no manual
 // claim in this UI); when it does, `ready_for_claim` flips back to false but
 // `claim_tx_hash` is populated — so we track the exit regardless of readiness
-// to detect that auto-claim and settle. Per gateway.fm PARAMETERS.md a
-// bridge-out is indexed with the Miden rollup as origin (`network_id === 78`,
-// post rollup-78 relaunch) and Ethereum L1 as destination (`dest_net === 0`).
+// to detect that auto-claim and settle. The indexer uses its local L2 network
+// id, not the Agglayer rollup ID used by bridgeAsset.
 // Matches a known `deposit_cnt` when provided (the exact exit we're tracking),
 // else the latest L2→L1 exit to this address.
 export async function findMidenToEvmDeposit(
@@ -63,7 +62,8 @@ export async function findMidenToEvmDeposit(
 ): Promise<AgglayerDeposit | null> {
   const deposits = await fetchDeposits(l1Dest);
   const matching = deposits.filter(
-    (d) => d.network_id === 78 && d.dest_net === 0,
+    (d) => d.network_id === AGGLAYER_BALI.midenIndexerNetworkId &&
+      d.dest_net === AGGLAYER_BALI.sourceNetworkId,
   );
   if (depositCnt !== undefined) {
     const exact = matching.find(
