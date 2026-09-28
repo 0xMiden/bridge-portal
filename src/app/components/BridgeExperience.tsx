@@ -1310,7 +1310,7 @@ export function BridgeExperience() {
           status: "source_finality",
           eta: "10-20 min",
           destination: destinationAddress,
-          // origin = Miden rollup 78, destination = Ethereum L1 (0)
+          // origin = configured Miden rollup, destination = Ethereum L1 (0)
           sourceNetworkId: AGGLAYER_BALI.destinationNetworkId,
           destinationNetworkId: AGGLAYER_BALI.sourceNetworkId,
           // The real on-chain Miden tx hash (not the wallet request UUID) — this

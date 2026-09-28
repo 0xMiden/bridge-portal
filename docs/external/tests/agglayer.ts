@@ -14,10 +14,10 @@ import { encodeFunctionData, parseEther, toHex } from "viem";
 export const AGGLAYER_BALI = {
   sepoliaChainId: 11155111,
   sepoliaBridgeAddress: "0x1348947e282138d8f377b467f7d9c2eb0f335d1f",
-  midenNetworkId: 78,
+  midenNetworkId: 86,
   evmNetworkId: 0,
   nativeTokenAddress: "0x0000000000000000000000000000000000000000",
-  midenBridgeId: "0xa22ec154f9a36d911953fd5c9260a7",
+  midenBridgeId: "0x3b66e20b5088f25133b69216484652",
   midenEthFaucetId: "0x387149ae66116cf114eebd60bb7381",
   bridgeServiceApi:
     "https://miden-testnet-bridge.dev.eu-north-3.gateway.fm/api",

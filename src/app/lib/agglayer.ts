@@ -4,11 +4,12 @@ export const AGGLAYER_BALI = {
   sepoliaChainId: 11155111,
   sepoliaChainHex: "0xaa36a7",
   sepoliaBridgeAddress: "0x1348947e282138d8f377b467f7d9c2eb0f335d1f",
-  // Miden rollup network id on v15/bali, post the 2026-06-24 rollup-78
-  // relaunch — used as the inbound `bridgeAsset` destinationNetwork AND as the
-  // bridge indexer's origin net id for L2→L1 claim lookups. Authoritative:
-  // gateway.fm PARAMETERS.md (rollup 78; rollup 76/73 are explicitly stale).
-  destinationNetworkId: 78,
+  // Agglayer rollup ID, not the synthetic EVM chain ID (402699011).
+  // Verified against 0xMiden/wallet src/lib/agglayer/constant.ts.
+  destinationNetworkId: 86,
+  // The bridge-service uses a local L2 index, distinct from the rollup ID.
+  // See 0xMiden/wallet src/lib/agglayer/status.ts.
+  midenIndexerNetworkId: 1,
   sourceNetworkId: 0,
   nativeTokenAddress: "0x0000000000000000000000000000000000000000",
   gasLimit: BigInt(300000),

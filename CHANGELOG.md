@@ -19,6 +19,8 @@
 
 ### Fixes
 
+- [FIX] **Agglayer testnet follows rollup 86 and the current Miden bridge account.** Withdrawal tracking uses the bridge indexer’s local network ID 1, separately from the rollup ID. Deployment pins match wallet main as checked on 2026-09-24.
+
 - [FIX] **Custom Miden bridge-out requests declare a fresh fee-conversion salt.** Epoch and AggLayer now support guarded multisig replay protection, including after the request is serialized to the wallet.
 
 - [FIX] **Epoch quotes use the current Miden 0.16 USDC faucet.** The retired faucet returned `NO_QUOTE_AVAILABLE`; balance reads and test fixtures now use the same current asset.

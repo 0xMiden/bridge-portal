@@ -8,7 +8,7 @@ Ethereum Sepolia into Miden testnet.
 - Route: Sepolia to Miden.
 - Action: `bridgeAsset(uint32,address,uint256,address,bool,bytes)` on the Sepolia bridge contract.
 - Contract: `0x1348947e282138d8f377b467f7d9c2eb0f335d1f`.
-- Destination network ID: `78`.
+- Destination network ID: `86`.
 - Token: native Sepolia ETH.
 - Wallet: WalletConnect when `NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID` is set,
   with `window.ethereum` as a local extension fallback.

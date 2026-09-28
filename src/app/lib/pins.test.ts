@@ -19,10 +19,10 @@ import {
 
 describe("testnet pin freeze", () => {
   it("keeps the AggLayer bali ids", () => {
-    expect(MIDEN_BRIDGE_ID).toBe("0xa22ec154f9a36d911953fd5c9260a7");
+    expect(MIDEN_BRIDGE_ID).toBe("0x3b66e20b5088f25133b69216484652");
     expect(MIDEN_AGGLAYER_FAUCET_ID).toBe("0x387149ae66116cf114eebd60bb7381");
     expect(EVM_AGGLAYER_NETWORK_ID).toBe(0);
-    expect(AGGLAYER_BALI.destinationNetworkId).toBe(78);
+    expect(AGGLAYER_BALI.destinationNetworkId).toBe(86);
     expect(AGGLAYER_BALI.sepoliaChainId).toBe(11155111);
     expect(AGGLAYER_BALI.sepoliaBridgeAddress).toBe(
       "0x1348947e282138d8f377b467f7d9c2eb0f335d1f",
