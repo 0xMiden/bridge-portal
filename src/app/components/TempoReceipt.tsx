@@ -76,7 +76,7 @@ function ExplorerAction({ link }: { link: Link }) {
  */
 export function TempoReceipt({
   activity,
-  received,
+  receivedAmount,
   networkFee,
   sourceLink,
   destinationLink,
@@ -88,7 +88,7 @@ export function TempoReceipt({
   pending = false,
 }: {
   activity: Activity;
-  received: string;
+  receivedAmount: string;
   networkFee: string;
   sourceLink: Link;
   destinationLink: Link;
@@ -171,7 +171,7 @@ export function TempoReceipt({
           </span>
           <ArrowRight className="rcpt-arrow" size={14} aria-hidden="true" />
           <span className="rcpt-amt">
-            {received.replace(/[^\d.]/g, "") || received} <Token symbol={activity.asset} />
+            {receivedAmount} <Token symbol={activity.asset} />
           </span>
         </div>
         <div className="rcpt-item-sub">
@@ -197,7 +197,7 @@ export function TempoReceipt({
         </div>
         <div>
           <dt>{pending ? "Expected" : "Received"}</dt>
-          <dd>{received}</dd>
+          <dd>{receivedAmount} {activity.asset}</dd>
         </div>
         <div>
           <dt>Network fee</dt>

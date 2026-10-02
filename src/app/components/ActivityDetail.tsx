@@ -812,7 +812,7 @@ export function ActivityDetail({ id }: { id: string }) {
               adds a status pill and reads "Expected" instead of "Received". */}
           <TempoReceipt
             activity={activity}
-            received={activity.receivedAmount ?? quote.expectedReceived}
+            receivedAmount={activity.receivedAmount ?? quote.expectedReceived}
             networkFee={networkFeeDisplay}
             sourceLink={sourceLink}
             destinationLink={destinationLink}
