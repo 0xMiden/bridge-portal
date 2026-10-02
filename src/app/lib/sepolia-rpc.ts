@@ -1,5 +1,6 @@
-export const PUBLICNODE_SEPOLIA_RPC =
-  "https://ethereum-sepolia-rpc.publicnode.com";
+import { SEPOLIA_NETWORK } from "../../config/sepolia";
+
+export const PUBLICNODE_SEPOLIA_RPC = SEPOLIA_NETWORK.rpcUrl;
 
 /** First non-empty of AGGLAYER_SEPOLIA_RPC_URL, EVM_RPC_URL, publicnode. */
 export function sepoliaRpcUrl(

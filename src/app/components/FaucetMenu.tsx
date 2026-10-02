@@ -3,7 +3,7 @@
 import { useAppKitAccount, useAppKitProvider } from "@reown/appkit/react";
 import { ArrowUpRight, Check, Droplets, Loader2 } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
-import { type EvmProvider } from "../lib/evm-wallet";
+import { type EvmProvider } from "../../wallets/evm/evm-wallet";
 import {
   FAUCET_MINT_AMOUNT,
   MIDEN_TESTNET_FAUCET_URL,

@@ -2,7 +2,8 @@ import { WagmiAdapter } from "@reown/appkit-adapter-wagmi";
 import { sepolia } from "@reown/appkit/networks";
 import type { AppKitNetwork } from "@reown/appkit/networks";
 import { http } from "viem";
-import { e2eEvmConnector } from "./e2e/evm-connector";
+import { SEPOLIA_NETWORK } from "../../config/sepolia";
+import { e2eEvmConnector } from "../testing/evm-connector";
 
 export const projectId = process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID!;
 
@@ -14,7 +15,7 @@ export const networks: [AppKitNetwork, ...AppKitNetwork[]] = [sepolia];
 // public HTTP RPC the rest of the app uses so on-chain reads work standalone.
 const sepoliaRpcUrl =
   process.env.NEXT_PUBLIC_SEPOLIA_RPC_URL ??
-  "https://ethereum-sepolia-rpc.publicnode.com";
+  SEPOLIA_NETWORK.rpcUrl;
 
 // In E2E mode, register a headless test-wallet connector that signs Sepolia txs
 // with the test key (no MetaMask). The env check is inlined (not a helper call)

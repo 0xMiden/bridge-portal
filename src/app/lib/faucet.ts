@@ -1,6 +1,6 @@
 import { encodeFunctionData, parseUnits } from "viem";
 import { AGGLAYER_BALI } from "./agglayer";
-import { type EvmProvider, ensureSepolia } from "./evm-wallet";
+import { type EvmProvider, ensureSepolia } from "../../wallets/evm/evm-wallet";
 
 // Epoch's Sepolia USDC is a mock ERC20 with a permissionless `mint(to, amount)`
 // (0x40c10f19) — the same contract the bridge reads balances from. Minting this

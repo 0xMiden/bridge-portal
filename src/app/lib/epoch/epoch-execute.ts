@@ -31,7 +31,7 @@ import type {
   EVMToMidenIntentParams,
   IntentResult,
 } from "./types";
-import { e2eNetwork, isE2E } from "../e2e/env";
+import { e2eNetwork, isE2E } from "../../../wallets/testing/env";
 
 /**
  * Epoch execute/submit orchestration — the half the quote layer didn't cover.

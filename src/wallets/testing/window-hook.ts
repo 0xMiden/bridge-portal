@@ -1,6 +1,6 @@
 "use client";
 
-import { activityStorageKey } from "../bridge-state";
+import { activityStorageKey } from "../../app/lib/bridge-state";
 
 // The gated `window.__E2E__` surface — the analog of the wallet harness's
 // `window.__TEST_STORE__`. Both injected signers publish into it; `ready` flips

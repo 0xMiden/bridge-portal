@@ -2,11 +2,11 @@
 
 import Image from "next/image";
 import { ArrowRight } from "lucide-react";
+import { shortAddress } from "../../wallets/identity";
 import {
   type Activity,
   modes,
   providers,
-  shortAddress,
 } from "../lib/bridge-state";
 
 type Link = { available: boolean; href?: string; label?: string } | null;

@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("./e2e/env", () => ({
+vi.mock("../../wallets/testing/env", () => ({
   isE2E: () => true,
   e2eNetwork: () => "mock",
 }));
