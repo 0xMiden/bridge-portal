@@ -34,7 +34,7 @@ function formatEthFee(wei: bigint): string {
   if (eth === 0) return "0 ETH";
   // Keep it compact but with enough precision for sub-milli-ETH testnet gas.
   const digits = eth < 0.001 ? 6 : eth < 1 ? 5 : 4;
-  return `~${eth.toLocaleString(undefined, { maximumFractionDigits: digits })} ETH`;
+  return `~${Number(eth.toFixed(digits))} ETH`;
 }
 
 export interface SepoliaGasFee {
@@ -85,7 +85,7 @@ export function useSepoliaGasEstimate(gasUnits: number | null): SepoliaGasFee {
           loading: false,
           fee: formatEthFee(fee),
           gwei: payload.gwei
-            ? `${Number(payload.gwei).toLocaleString(undefined, { maximumFractionDigits: 2 })} gwei`
+            ? `${Number(Number(payload.gwei).toFixed(2))} gwei`
             : undefined,
         });
       } catch (error) {

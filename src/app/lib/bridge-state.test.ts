@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   type Activity,
   type BridgeProvider,
@@ -7,6 +7,7 @@ import {
   deriveCtaState,
   evmWalletIdentity,
   isValidAmount,
+  loadStoredActivities,
   midenWalletIdentity,
   providers,
   quoteFor,
@@ -278,15 +279,17 @@ describe("quoteFor refreshes fully on a route switch", () => {
   for (const mode of modesToTest) {
     it(`Epoch quote reports USDC + 1-3 min ETA (${mode})`, () => {
       const quote = quoteFor(mode, "epoch", "100");
-      expect(quote.expectedReceived).toContain("USDC");
-      expect(quote.minReceived).toContain("USDC");
+      expect(quote.asset).toBe("USDC");
+      expect(Number(quote.expectedReceived)).toBe(99.9);
+      expect(Number(quote.minReceived)).toBe(99.4005);
       expect(quote.eta).toBe("1-3 min");
     });
 
     it(`Agglayer quote reports ETH + 10-20 min ETA (${mode})`, () => {
       const quote = quoteFor(mode, "agglayer", "100");
-      expect(quote.expectedReceived).toContain("ETH");
-      expect(quote.minReceived).toContain("ETH");
+      expect(quote.asset).toBe("ETH");
+      expect(Number(quote.expectedReceived)).toBe(100);
+      expect(Number(quote.minReceived)).toBe(100);
       expect(quote.eta).toBe("10-20 min");
     });
 
@@ -294,8 +297,33 @@ describe("quoteFor refreshes fully on a route switch", () => {
       const before = quoteFor(mode, "epoch", "100");
       const after = quoteFor(mode, "agglayer", "100");
       expect(before.expectedReceived).not.toBe(after.expectedReceived);
-      expect(after.expectedReceived).not.toContain("USDC");
+      expect(after.asset).toBe("ETH");
     });
+  }
+});
+
+it("loads legacy received amounts without changing their value or token", () => {
+  const stored = [
+    agglayerSend({ receivedAmount: "0.005 ETH" }),
+    agglayerSend({ asset: "USDC", receivedAmount: "0.999 USDC" }),
+    agglayerSend({ receivedAmount: "9007199254740993.123456789012345678" }),
+    agglayerSend({}),
+  ];
+  vi.stubGlobal("window", {
+    localStorage: { getItem: () => JSON.stringify(stored) },
+  });
+
+  try {
+    expect(
+      loadStoredActivities().map(({ receivedAmount, asset }) => ({ receivedAmount, asset })),
+    ).toEqual([
+      { receivedAmount: "0.005", asset: "ETH" },
+      { receivedAmount: "0.999", asset: "USDC" },
+      { receivedAmount: "9007199254740993.123456789012345678", asset: "ETH" },
+      { receivedAmount: undefined, asset: "ETH" },
+    ]);
+  } finally {
+    vi.unstubAllGlobals();
   }
 });
 

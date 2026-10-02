@@ -420,19 +420,13 @@ export function BridgeExperience() {
     () => quoteFor(mode, provider, amount),
     [amount, mode, provider],
   );
-  // The received-token unit for the "To" box pill: Epoch bridges USDC, Agglayer ETH.
-  const destinationSymbol =
-    provider === "epoch" ? "USDC" : copy.assetOut.replace("Miden ", "");
-  // Amount without the trailing symbol (the pill renders the symbol separately).
-  const expectedReceivedAmount = quote.expectedReceived.replace(
-    /\s*[A-Za-z]+$/,
-    "",
-  );
+  const destinationSymbol = quote.asset;
+  const expectedReceivedAmount = quote.expectedReceived;
   // Min received: for Epoch use the live API quote; otherwise the route quote.
   const displayMinReceived =
     provider === "epoch" && epochQuoteAmount
-      ? `${epochQuoteAmount} USDC`
-      : quote.minReceived;
+      ? `${epochQuoteAmount} ${destinationSymbol}`
+      : `${quote.minReceived} ${destinationSymbol}`;
   // Live Sepolia gas estimate for the network-fee line (real gasPrice * gas
   // limit) where the fee is Sepolia-side; falls back to the route label
   // (e.g. "Miden fee") when the leg's fee isn't on Sepolia.
@@ -1512,9 +1506,7 @@ export function BridgeExperience() {
           midenTxId: mode === "send" ? result.midenNoteId : undefined,
           epochIntentNonce: result.intentNonce,
           epochSponsor: result.sponsorAddress,
-          receivedAmount: result.outputAmount
-            ? `${result.outputAmount} USDC`
-            : undefined,
+          receivedAmount: result.outputAmount,
         });
         setActivities(loadStoredActivities());
       } catch (error) {

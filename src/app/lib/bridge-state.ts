@@ -14,6 +14,8 @@ export type Quote = {
   networkFee: string;
   bridgeFee: string;
   relayerFee: string;
+  asset: string;
+  /** Decimal amounts without a symbol or locale formatting. */
   expectedReceived: string;
   minReceived: string;
   sourceGas: string;
@@ -48,7 +50,7 @@ export type Activity = {
   epochIntentNonce?: string;
   /** Epoch sponsor / user address the intent status is keyed on (EVM 0x). */
   epochSponsor?: string;
-  /** Real quoted output amount at execution (e.g. "99.17 USDC"), when known. */
+  /** Quoted output decimal amount (e.g. "99.17"); the symbol is in `asset`. */
   receivedAmount?: string;
   /** Owner tags for per-account filtering of account-derived history. */
   evmAddress?: string;
@@ -474,8 +476,9 @@ export function quoteFor(mode: FlowMode, provider: BridgeProvider, amount: strin
     networkFee,
     bridgeFee,
     relayerFee,
-    expectedReceived: `${expected.toLocaleString(undefined, { maximumFractionDigits: 6 })} ${outSymbol}`,
-    minReceived: `${(expected * minMultiplier).toLocaleString(undefined, { maximumFractionDigits: 6 })} ${outSymbol}`,
+    asset: outSymbol,
+    expectedReceived: String(Number(expected.toFixed(6))),
+    minReceived: String(Number((expected * minMultiplier).toFixed(6))),
     sourceGas: mode === "receive" ? "Sepolia ETH" : "Miden fee credit",
     destinationGas: mode === "receive" ? "Miden fee credit" : "Sepolia ETH",
     warning:
@@ -810,7 +813,13 @@ function normalizeActivity(activity: Activity): Activity {
     // Guard against non-timestamp ids: only accept a plausible epoch-ms value.
     if (Number.isFinite(fromId) && fromId > 1_600_000_000_000) updatedAt = fromId;
   }
-  return { ...activity, mode, summary, updatedAt };
+  // Older rows stored the SDK's decimal amount followed by the token symbol.
+  // Normalize that legacy representation only at the storage boundary.
+  const suffix = ` ${activity.asset}`;
+  const receivedAmount = activity.receivedAmount?.endsWith(suffix)
+    ? activity.receivedAmount.slice(0, -suffix.length)
+    : activity.receivedAmount;
+  return { ...activity, mode, summary, updatedAt, receivedAmount };
 }
 
 export function loadStoredActivities(): Activity[] {
