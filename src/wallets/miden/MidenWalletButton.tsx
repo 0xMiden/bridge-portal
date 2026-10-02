@@ -13,9 +13,9 @@ import {
   midenWalletIdentity,
   shortAddress,
   walletGradient,
-} from "../lib/bridge-state";
+} from "../identity";
 import { useResetMidenProvider } from "./MidenWalletProvider";
-import { WalletMenu } from "./WalletMenu";
+import { WalletMenu } from "../WalletMenu";
 
 /** MidenFi brand logo from the wallet adapter, or a neutral wallet fallback. */
 function WalletBrandIcon({ src, size }: { src?: string; size: number }) {

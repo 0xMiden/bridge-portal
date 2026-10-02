@@ -8,7 +8,7 @@ import {
   type EIP1193Provider,
 } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
-import { AGGLAYER_BALI } from "../agglayer";
+import { SEPOLIA_NETWORK } from "../../config/sepolia";
 import {
   E2E_EVM_PRIVATE_KEY,
   E2E_MOCK_EVM_ADDRESS,
@@ -16,8 +16,8 @@ import {
   e2eSignerMode,
 } from "./env";
 
-const CHAIN_ID = 11155111; // Sepolia
-const RPC_URL = AGGLAYER_BALI.sepoliaRpcUrl;
+const CHAIN_ID = SEPOLIA_NETWORK.chainId;
+const RPC_URL = SEPOLIA_NETWORK.rpcUrl;
 
 type Rpc = { method: string; params?: unknown[] };
 

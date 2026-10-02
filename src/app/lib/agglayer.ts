@@ -1,8 +1,9 @@
 import { encodeFunctionData, parseEther, toHex } from "viem";
+import { SEPOLIA_NETWORK } from "../../config/sepolia";
 
 export const AGGLAYER_BALI = {
-  sepoliaChainId: 11155111,
-  sepoliaChainHex: "0xaa36a7",
+  sepoliaChainId: SEPOLIA_NETWORK.chainId,
+  sepoliaChainHex: SEPOLIA_NETWORK.chainHex,
   sepoliaBridgeAddress: "0x1348947e282138d8f377b467f7d9c2eb0f335d1f",
   // Agglayer rollup ID, not the synthetic EVM chain ID (402699011).
   // Verified against 0xMiden/wallet src/lib/agglayer/constant.ts.
@@ -15,8 +16,8 @@ export const AGGLAYER_BALI = {
   gasLimit: BigInt(300000),
   bridgeServiceApi: "https://miden-testnet-bridge.dev.eu-north-3.gateway.fm/api",
   monitorUrl: "https://gateway-fm.github.io/miden-agglayer/bridge-monitor/bali/",
-  sepoliaRpcUrl: "https://ethereum-sepolia-rpc.publicnode.com",
-  sepoliaExplorer: "https://sepolia.etherscan.io",
+  sepoliaRpcUrl: SEPOLIA_NETWORK.rpcUrl,
+  sepoliaExplorer: SEPOLIA_NETWORK.explorerUrl,
   midenExplorer: "https://testnet.midenscan.com",
   midenEthFaucetId: "mcst1aqu8zjdwvcgkeug5a67kpwmnsym6qdsd",
   // Same account as midenEthFaucetId, hex form — this is the canonical Agglayer

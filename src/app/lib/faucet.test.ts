@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { AGGLAYER_BALI } from "./agglayer";
-import { type EvmProvider } from "./evm-wallet";
+import { type EvmProvider } from "../../wallets/evm/evm-wallet";
 import { FAUCET_SEPOLIA_USDC, mintSepoliaUsdc, sepoliaTxUrl } from "./faucet";
 
 // Records the calls a mint makes so we can assert the encoded transaction.

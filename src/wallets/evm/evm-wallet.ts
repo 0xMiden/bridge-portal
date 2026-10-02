@@ -1,4 +1,4 @@
-import { AGGLAYER_BALI } from "./agglayer";
+import { SEPOLIA_NETWORK } from "../../config/sepolia";
 
 export type EvmProvider = {
   request<T = unknown>(args: {
@@ -18,12 +18,12 @@ export type EvmProvider = {
 
 export async function ensureSepolia(provider: EvmProvider) {
   const chainId = await provider.request<string>({ method: "eth_chainId" });
-  if (chainId === AGGLAYER_BALI.sepoliaChainHex) return;
+  if (chainId === SEPOLIA_NETWORK.chainHex) return;
 
   try {
     await provider.request({
       method: "wallet_switchEthereumChain",
-      params: [{ chainId: AGGLAYER_BALI.sepoliaChainHex }],
+      params: [{ chainId: SEPOLIA_NETWORK.chainHex }],
     });
   } catch (error) {
     const code =
@@ -35,11 +35,11 @@ export async function ensureSepolia(provider: EvmProvider) {
       method: "wallet_addEthereumChain",
       params: [
         {
-          chainId: AGGLAYER_BALI.sepoliaChainHex,
+          chainId: SEPOLIA_NETWORK.chainHex,
           chainName: "Ethereum Sepolia",
           nativeCurrency: { name: "Sepolia ETH", symbol: "ETH", decimals: 18 },
-          rpcUrls: [AGGLAYER_BALI.sepoliaRpcUrl],
-          blockExplorerUrls: [AGGLAYER_BALI.sepoliaExplorer],
+          rpcUrls: [SEPOLIA_NETWORK.rpcUrl],
+          blockExplorerUrls: [SEPOLIA_NETWORK.explorerUrl],
         },
       ],
     });

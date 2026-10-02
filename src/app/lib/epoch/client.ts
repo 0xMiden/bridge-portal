@@ -4,7 +4,7 @@ import { getAccount, getWalletClient } from "@wagmi/core";
 import { type Chain, type EIP1193Provider, type WalletClient, createWalletClient, custom, http } from "viem";
 import { sepolia } from "viem/chains";
 
-import { wagmiAdapter } from "../appkit-config";
+import { wagmiAdapter } from "../../../wallets/evm/appkit-config";
 import { MIDEN_DESTINATION_CHAIN_ID } from "./config";
 
 /**

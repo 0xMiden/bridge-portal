@@ -1,11 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { createE2EMidenSigner } from "../lib/e2e/miden-signer";
-import { publishE2E } from "../lib/e2e/window-hook";
-import { shortAddress } from "../lib/bridge-state";
-import { MIDEN_NATIVE_FAUCET_ID } from "../lib/epoch/config";
-import type { MidenWalletSnapshot } from "./MidenWalletButton";
+import { createE2EMidenSigner } from "./miden-signer";
+import { publishE2E } from "./window-hook";
+import { shortAddress } from "../identity";
+import { MIDEN_NATIVE_FAUCET_ID } from "../../app/lib/epoch/config";
+import type { MidenWalletSnapshot } from "../miden/MidenWalletButton";
 
 // E2E stand-in for MidenWalletButton: builds a headless Miden signer (mock or
 // real-testnet per E2E_NETWORK), pushes the same MidenWalletSnapshot the app
