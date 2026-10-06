@@ -70,5 +70,5 @@ https://homelab.tail477b3c.ts.net:9001/health
 
 The upstream Bali bridge docs are still in review, and some examples have used
 older network IDs. This UI follows the current bridge backend defaults for the
-testnet helper. Recheck `AGGLAYER_BALI` in `src/app/lib/agglayer.ts` before a
+testnet helper. Recheck `AGGLAYER_BALI` in `src/bridge/providers/agglayer/agglayer.ts` before a
 funded testnet run.

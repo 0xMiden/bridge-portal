@@ -1,5 +1,6 @@
-import { AGGLAYER_BALI } from "./agglayer";
+import { AGGLAYER_BALI } from "../../bridge/providers/agglayer/agglayer";
 import { EPOCH_ALLOCATOR_URL } from "../../bridge/providers/epoch/config";
+import { SEPOLIA_NETWORK } from "../../config/sepolia";
 import { sepoliaRpc } from "./sepolia-rpc";
 
 export const MIDEN_RPC_URL =
@@ -34,12 +35,12 @@ async function timedFetch(
 async function checkSepolia(fetchImpl: typeof fetch): Promise<UpstreamCheck> {
   try {
     const chainId = await sepoliaRpc<string>("eth_chainId", [], fetchImpl);
-    const ok = chainId === AGGLAYER_BALI.sepoliaChainHex;
+    const ok = chainId === SEPOLIA_NETWORK.chainHex;
     return {
       ok,
       detail: ok
         ? `chainId ${chainId}`
-        : `expected ${AGGLAYER_BALI.sepoliaChainHex}, got ${chainId}`,
+        : `expected ${SEPOLIA_NETWORK.chainHex}, got ${chainId}`,
     };
   } catch (error) {
     return {

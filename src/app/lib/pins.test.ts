@@ -1,12 +1,12 @@
 import { createHash } from "node:crypto";
 import { describe, expect, it } from "vitest";
 
-import { AGGLAYER_BALI } from "./agglayer";
+import { AGGLAYER_BALI } from "../../bridge/providers/agglayer/agglayer";
 import {
   EVM_AGGLAYER_NETWORK_ID,
   MIDEN_AGGLAYER_FAUCET_ID,
   MIDEN_BRIDGE_ID,
-} from "./agglayer-b2agg";
+} from "../../bridge/providers/agglayer/agglayer-b2agg";
 import {
   MIDEN_DESTINATION_CHAIN_ID,
   MIDEN_NATIVE_FAUCET_ID,

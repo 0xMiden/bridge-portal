@@ -1,12 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("../../wallets/testing/env", () => ({
+vi.mock("../wallets/testing/env", () => ({
   isE2E: () => true,
   e2eNetwork: () => "mock",
 }));
 
-import { AGGLAYER_BALI } from "./agglayer";
-import { fetchMidenRouteBalances } from "./agglayer-eth-faucet";
+import { AGGLAYER_BALI } from "./providers/agglayer/agglayer";
+import { fetchMidenRouteBalances } from "./miden-route-balances";
 
 describe("fetchMidenRouteBalances (mock E2E)", () => {
   beforeEach(() => {

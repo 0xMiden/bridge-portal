@@ -1,5 +1,5 @@
 import { encodeFunctionData, parseUnits } from "viem";
-import { AGGLAYER_BALI } from "./agglayer";
+import { SEPOLIA_NETWORK } from "../../config/sepolia";
 import { type EvmProvider, ensureSepolia } from "../../wallets/evm/evm-wallet";
 
 // Epoch's Sepolia USDC is a mock ERC20 with a permissionless `mint(to, amount)`
@@ -61,7 +61,7 @@ export async function mintSepoliaUsdc({
 
 /** Sepolia explorer link for a broadcast faucet tx. */
 export function sepoliaTxUrl(hash: string): string {
-  return `${AGGLAYER_BALI.sepoliaExplorer.replace(/\/$/, "")}/tx/${hash}`;
+  return `${SEPOLIA_NETWORK.explorerUrl.replace(/\/$/, "")}/tx/${hash}`;
 }
 
 // Assets we can't mint from the connected wallet: gas ETH (never mintable) and

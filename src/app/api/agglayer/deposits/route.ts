@@ -4,7 +4,7 @@ import {
   type AgglayerDepositStatus,
   bridgeStatusUrl,
   midenAccountToBridgeDestination,
-} from "@/app/lib/agglayer";
+} from "@/bridge/providers/agglayer/agglayer";
 
 export const dynamic = "force-dynamic";
 

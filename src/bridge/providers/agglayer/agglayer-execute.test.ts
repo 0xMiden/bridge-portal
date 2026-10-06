@@ -51,7 +51,7 @@ vi.mock("@miden-sdk/miden-sdk", () => ({
 vi.mock("@miden-sdk/miden-wallet-adapter-base", () => ({
   Transaction: { createCustomTransaction },
 }));
-vi.mock("../../wallets/miden/miden-transaction", () => ({ createFeeConversionSalt: () => "fresh-salt" }));
+vi.mock("../../../wallets/miden/miden-transaction", () => ({ createFeeConversionSalt: () => "fresh-salt" }));
 
 import { MIDEN_BRIDGE_ID } from "./agglayer-b2agg";
 import { runAgglayerSend } from "./agglayer-execute";

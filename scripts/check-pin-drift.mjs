@@ -17,7 +17,7 @@ function pickConst(source, name) {
 
 const portalPkg = JSON.parse(await readFile("package.json", "utf8"));
 const portalSdk = portalPkg.dependencies["@miden-sdk/miden-sdk"];
-const portalB2agg = await readFile("src/app/lib/agglayer-b2agg.ts", "utf8");
+const portalB2agg = await readFile("src/bridge/providers/agglayer/agglayer-b2agg.ts", "utf8");
 const portalBridge = pickConst(portalB2agg, "MIDEN_BRIDGE_ID");
 const portalFaucet = pickConst(portalB2agg, "MIDEN_AGGLAYER_FAUCET_ID");
 
@@ -41,7 +41,7 @@ if (!walletAgglayerRes.ok) {
   throw new Error(`wallet agglayer/constant.ts HTTP ${walletAgglayerRes.status}`);
 }
 const walletAgglayer = await walletAgglayerRes.text();
-const portalAgglayer = await readFile("src/app/lib/agglayer.ts", "utf8");
+const portalAgglayer = await readFile("src/bridge/providers/agglayer/agglayer.ts", "utf8");
 const portalNetwork = portalAgglayer.match(/destinationNetworkId:\s*(\d+)/)?.[1];
 const walletNetwork = walletAgglayer.match(/export const MIDEN_CHAIN_ID\s*=\s*(\d+)/)?.[1];
 if (!portalBridge || !walletBridge || !portalFaucet || !walletFaucet ||
