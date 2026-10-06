@@ -27,7 +27,7 @@ surface that leans heavily on cross-origin popups, iframes, and gRPC-Web.
 1. **The heavy proving isn't in this app.** Note proving is delegated to the
    connected Miden wallet, not run in-page — the submit path is "the wallet
    approval + note proving happen here" and "the wallet proves + submits"
-   (`src/app/components/BridgeExperience.tsx`, `src/app/lib/epoch/miden-note.ts`).
+   (`src/app/components/BridgeExperience.tsx`, `src/bridge/providers/epoch/miden-note.ts`).
    There is **no** in-app prover instantiation (`grep` for `Prover` in `src/`
    returns nothing). So the portal captures little of threading's upside while
    paying its full compatibility cost. This is the decisive point.

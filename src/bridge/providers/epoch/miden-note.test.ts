@@ -22,14 +22,13 @@ vi.mock("@miden-sdk/miden-sdk", () => ({
 vi.mock("@miden-sdk/miden-wallet-adapter-base", () => ({
   Transaction: { createCustomTransaction: vi.fn(() => ({ type: "custom" })) },
 }));
-vi.mock("@miden-sdk/miden-wallet-adapter-react", () => ({ useMidenFiWallet: vi.fn() }));
 vi.mock("./bridge", () => ({ normalizeMidenIdToHex: (value: string) => value }));
 vi.mock("./chain", () => ({ getCurrentMidenBlock: vi.fn(async () => 12_000) }));
-vi.mock("../miden-transaction", () => ({ createFeeConversionSalt: vi.fn() }));
+vi.mock("../../../wallets/miden/miden-transaction", () => ({ createFeeConversionSalt: vi.fn() }));
 
 import { Note } from "@miden-sdk/miden-sdk";
 import { Transaction } from "@miden-sdk/miden-wallet-adapter-base";
-import { createFeeConversionSalt } from "../miden-transaction";
+import { createFeeConversionSalt } from "../../../wallets/miden/miden-transaction";
 import { getCurrentMidenBlock } from "./chain";
 import { createBridgeP2IDENoteCallback, type MidenNoteDeps } from "./miden-note";
 

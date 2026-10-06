@@ -1,7 +1,5 @@
 "use client";
 
-import { useMemo } from "react";
-
 import type { SolveIntentParams } from "@epoch-protocol/epoch-intents-sdk";
 import {
   AccountId,
@@ -15,14 +13,11 @@ import {
   TransactionRequestBuilder,
 } from "@miden-sdk/miden-sdk";
 import { Transaction } from "@miden-sdk/miden-wallet-adapter-base";
-import {
-  type MidenFiWalletContextState,
-  useMidenFiWallet,
-} from "@miden-sdk/miden-wallet-adapter-react";
+import type { MidenFiWalletContextState } from "@miden-sdk/miden-wallet-adapter-react";
 
 import { normalizeMidenIdToHex } from "./bridge";
 import { getCurrentMidenBlock } from "./chain";
-import { createFeeConversionSalt } from "../miden-transaction";
+import { createFeeConversionSalt } from "../../../wallets/miden/miden-transaction";
 
 export type CreateMidenP2IDENote = NonNullable<SolveIntentParams["createMidenP2IDENote"]>;
 
@@ -105,12 +100,4 @@ export function createBridgeP2IDENoteCallback(deps: MidenNoteDeps): CreateMidenP
       return { success: false };
     }
   };
-}
-
-export function useCreateBridgeP2IDENote(): CreateMidenP2IDENote | null {
-  const { requestTransaction, waitForTransaction, address, connected } = useMidenFiWallet();
-  return useMemo(() => {
-    if (!connected || !address || !requestTransaction || !waitForTransaction) return null;
-    return createBridgeP2IDENoteCallback({ requestTransaction, waitForTransaction, senderAddress: address });
-  }, [connected, address, requestTransaction, waitForTransaction]);
 }

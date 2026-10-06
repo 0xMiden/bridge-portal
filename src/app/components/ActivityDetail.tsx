@@ -13,6 +13,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { SEPOLIA_NETWORK } from "../../config/sepolia";
+import type { ActivityStatus } from "../../bridge/core/activity-status";
 import { type AgglayerDepositStatus } from "../lib/agglayer";
 import { findMidenToEvmDeposit } from "../lib/agglayer-status";
 import {
@@ -25,7 +26,6 @@ import {
 } from "../lib/bridge-monitor";
 import {
   type Activity,
-  type ActivityStatus,
   activityStartedAt,
   loadStoredActivities,
   quoteFor,
@@ -37,8 +37,8 @@ import {
   timeline,
   buildDiagnostics,
 } from "../lib/bridge-state";
-import { epochActivityStatus, epochDestinationTx } from "../lib/epoch/epoch-status";
-import { MIDEN_DESTINATION_CHAIN_ID } from "../lib/epoch/config";
+import { epochActivityStatus, epochDestinationTx } from "../../bridge/providers/epoch/epoch-status";
+import { MIDEN_DESTINATION_CHAIN_ID } from "../../bridge/providers/epoch/config";
 import { sepoliaGasUnitsFor, useSepoliaGasEstimate } from "../lib/sepolia-gas";
 import { formatAgo } from "../lib/relative-time";
 import { DEMO_ACTIVITIES } from "../lib/activity-demo";
@@ -426,7 +426,7 @@ export function ActivityDetail({ id }: { id: string }) {
     (async () => {
       // epoch-execute pulls the eager-WASM Miden SDK; import lazily so it stays
       // out of SSR (mirrors BridgeExperience.submitTransfer).
-      const { pollEpochIntentStatus } = await import("../lib/epoch/epoch-execute");
+      const { pollEpochIntentStatus } = await import("../../bridge/providers/epoch/epoch-execute");
       await pollEpochIntentStatus({
         sponsorAddress: sponsor,
         intentNonce: nonce,

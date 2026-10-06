@@ -12,7 +12,7 @@ import {
   MIDEN_NATIVE_FAUCET_ID,
   MIDEN_NATIVE_TOKEN_DECIMALS,
   MIDEN_NATIVE_TOKEN_SYMBOL,
-} from "./epoch/config";
+} from "../../bridge/providers/epoch/config";
 
 // Frozen testnet pins. Changing a value here is a protocol/deploy event:
 // add a CHANGELOG line and check 0xMiden/wallet's matching constants.

@@ -1,4 +1,4 @@
-import { createFeeConversionSalt } from "../../../src/app/lib/miden-transaction";
+import { createFeeConversionSalt } from "../../../src/wallets/miden/miden-transaction";
 import {
   AccountId,
   EthAddress,
