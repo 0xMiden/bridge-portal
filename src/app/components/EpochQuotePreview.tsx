@@ -2,7 +2,7 @@
 
 import { RefreshCcw } from "lucide-react";
 import { useEffect } from "react";
-import { useEpochQuote } from "../lib/epoch/use-epoch-quote";
+import { useEpochQuote } from "../lib/use-epoch-quote";
 
 /**
  * Live Epoch "you receive ~N" preview for the swap box's Expected field.

@@ -1,9 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
-
 import { EpochIntentSDK } from "@epoch-protocol/epoch-intents-sdk";
-import { useAppKitAccount } from "@reown/appkit/react";
 import { sepolia } from "viem/chains";
 
 import { buildEpochReadOnlyWalletClient, buildEpochWalletClient, getEvmConnection } from "./client";
@@ -11,7 +8,7 @@ import { EPOCH_ALLOCATOR_URL, MIDEN_DESTINATION_CHAIN_ID } from "./config";
 
 /**
  * Ported from miden-wallet/src/lib/epoch/sdk.ts and adapted for this app.
- * Singleton Epoch SDK getters keyed on (address, flow), plus a React hook.
+ * Singleton Epoch SDK getters keyed on (address, flow).
  */
 
 type SdkCache = { address: string; chainId: number; sdk: EpochIntentSDK };
@@ -35,7 +32,7 @@ async function buildSdk(address: `0x${string}`, chainOverride?: number): Promise
  * - default → walletClient with chain.id = Sepolia (EVM→Miden and everything else).
  *
  * Caches one instance per (address, flow) so repeated calls in a single
- * session don't rebuild. Resets via `resetEpochSdk()` (called on WC disconnect).
+ * session don't rebuild. Disconnected reads invalidate the connected caches.
  */
 export async function getEpochSdk(opts?: { forMidenFlow?: boolean }): Promise<EpochIntentSDK | null> {
   const { address } = await getEvmConnection();
@@ -85,35 +82,4 @@ export function resetEpochSdk(): void {
   defaultCache = null;
   midenCache = null;
   readOnlyCache = null;
-}
-
-/**
- * React wrapper for the default (Sepolia-chain) SDK. Rebuilds when the
- * connected address changes. Per Epoch's docs we initialize inside useEffect
- * (not useMemo) so React Strict Mode double-mounts don't leave us with
- * `undefined` mid-render.
- */
-export function useEpochSdk(): EpochIntentSDK | null {
-  const { address, status } = useAppKitAccount({ namespace: "eip155" });
-  const [sdk, setSdk] = useState<EpochIntentSDK | null>(null);
-
-  useEffect(() => {
-    // getEpochSdk() resolves to null when disconnected, so a single async path
-    // covers connect and disconnect — and keeps every setSdk() off the effect's
-    // synchronous body (react-hooks/set-state-in-effect).
-    let cancelled = false;
-    getEpochSdk()
-      .then((s) => {
-        if (!cancelled) setSdk(s);
-      })
-      .catch((err) => {
-        console.error("[epoch] useEpochSdk init failed", err);
-        if (!cancelled) setSdk(null);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [address, status]);
-
-  return sdk;
 }

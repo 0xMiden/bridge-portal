@@ -7,7 +7,7 @@
 // side), so there is no claim_available/claim_submitted state for Epoch.
 
 import type { IntentTransactionStatus } from "@epoch-protocol/epoch-intents-sdk";
-import type { ActivityStatus } from "../bridge-state";
+import type { ActivityStatus } from "../../core/activity-status";
 
 const TERMINAL_OK = new Set(["success", "completed"]);
 const FAILED = new Set(["failed", "reverted"]);

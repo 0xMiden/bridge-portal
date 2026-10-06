@@ -3,8 +3,8 @@
 import { useEffect, useRef, useState } from "react";
 import { parseUnits } from "viem";
 
-import { MIDEN_NATIVE_TOKEN_DECIMALS } from "./config";
-import { quoteEpochReceive, quoteEpochSend } from "./epoch-quote";
+import { MIDEN_NATIVE_TOKEN_DECIMALS } from "../../bridge/providers/epoch/config";
+import { quoteEpochReceive, quoteEpochSend } from "../../bridge/providers/epoch/epoch-quote";
 
 export interface EpochQuoteState {
   /** Whether the Epoch route is the active provider (drives whether to show this). */

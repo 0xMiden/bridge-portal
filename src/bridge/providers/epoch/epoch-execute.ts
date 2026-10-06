@@ -299,8 +299,8 @@ export function isTerminalStatus(statuses: IntentTransactionStatus[]): boolean {
 /**
  * Poll the allocator for an intent's transaction status until terminal or
  * timeout. `getIntentStatus` is a plain allocator query, so a read-only SDK
- * keyed on the sponsor is enough — no live wallet connection required. Not
- * auto-wired into the UI yet; exported for the activity-detail surface.
+ * keyed on the sponsor is enough — no live wallet connection required.
+ * The activity-detail surface drives this poll and persists each update.
  */
 export async function pollEpochIntentStatus(
   opts: PollEpochStatusOpts,

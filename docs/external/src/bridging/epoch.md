@@ -385,7 +385,7 @@ resource is locked and which recovery transaction will be signed.
 
 ### Miden implementation references
 
-- [Epoch integration in the bridge portal](https://github.com/0xMiden/bridge-portal/tree/main/src/app/lib/epoch)
+- [Epoch integration in the bridge portal](https://github.com/0xMiden/bridge-portal/tree/main/src/bridge/providers/epoch)
 - [Full Epoch bridging tutorial](../../tutorials/recipes/web/bridging_with_epoch_tutorial.md)
 - [Runnable bridging application](https://github.com/0xMiden/tutorials/tree/main/examples/bridging-app)
 - [Epoch SDK reference](https://docs.epochprotocol.xyz/integration-guides/sdk-reference)

@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { createE2EMidenSigner } from "./miden-signer";
 import { publishE2E } from "./window-hook";
 import { shortAddress } from "../identity";
-import { MIDEN_NATIVE_FAUCET_ID } from "../../app/lib/epoch/config";
+import { MIDEN_NATIVE_FAUCET_ID } from "../../bridge/providers/epoch/config";
 import type { MidenWalletSnapshot } from "../miden/MidenWalletButton";
 
 // E2E stand-in for MidenWalletButton: builds a headless Miden signer (mock or

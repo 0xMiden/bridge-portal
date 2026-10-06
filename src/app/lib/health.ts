@@ -1,5 +1,5 @@
 import { AGGLAYER_BALI } from "./agglayer";
-import { EPOCH_ALLOCATOR_URL } from "./epoch/config";
+import { EPOCH_ALLOCATOR_URL } from "../../bridge/providers/epoch/config";
 import { sepoliaRpc } from "./sepolia-rpc";
 
 export const MIDEN_RPC_URL =

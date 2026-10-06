@@ -277,7 +277,7 @@ function midenAccountLink(value: string | undefined): string | undefined {
 // click so the wallet prompt appears promptly instead of after a long load.
 let epochExecutePreload: Promise<unknown> | null = null;
 function preloadEpochExecute() {
-  epochExecutePreload ??= import("../lib/epoch/epoch-execute");
+  epochExecutePreload ??= import("../../bridge/providers/epoch/epoch-execute");
 }
 let agglayerExecutePreload: Promise<unknown> | null = null;
 function preloadAgglayerExecute() {
@@ -1459,7 +1459,7 @@ export function BridgeExperience() {
       try {
         // Dynamic import: epoch-execute pulls eager-WASM miden-sdk, so it must
         // load client-side at click time, never in the server render.
-        const { runEpochTransfer } = await import("../lib/epoch/epoch-execute");
+        const { runEpochTransfer } = await import("../../bridge/providers/epoch/epoch-execute");
 
         const optimistic = createActivity(mode, "epoch", amount, {
           status: "source_finality",

@@ -1,15 +1,8 @@
 import { SEPOLIA_NETWORK } from "../../config/sepolia";
+import type { ActivityStatus } from "../../bridge/core/activity-status";
 
 export type BridgeProvider = "near-intents" | "agglayer" | "epoch";
 export type FlowMode = "receive" | "send";
-export type ActivityStatus =
-  | "signature"
-  | "source_finality"
-  | "message_observed"
-  | "claim_available"
-  | "claim_submitted"
-  | "failed"
-  | "complete";
 
 export type Quote = {
   eta: string;
