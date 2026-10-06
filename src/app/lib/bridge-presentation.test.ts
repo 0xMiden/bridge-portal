@@ -1,17 +1,15 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   type Activity,
-  type BridgeProvider,
   type CtaInputs,
-  type FlowMode,
+  createActivity,
   deriveCtaState,
-  isValidAmount,
+  formatQuoteAmount,
   providers,
   quoteFor,
-  routeAsset,
-  routeSwitchChangesAsset,
   sourceExplorer,
-} from "./bridge-state";
+} from "./bridge-presentation";
+import type { BridgeProvider, FlowMode } from "../../bridge/core/models";
 
 // Minimal Agglayer send activity; only the fields sourceExplorer reads matter.
 function agglayerSend(overrides: Partial<Activity>): Activity {
@@ -45,19 +43,6 @@ describe("sourceExplorer (Agglayer send Midenscan link)", () => {
     const link = sourceExplorer(agglayerSend({ midenTxId: REQUEST_UUID }));
     expect(link.available).toBe(false);
     expect(link.href).toBeUndefined();
-  });
-});
-
-describe("isValidAmount (wallet-prompt floor)", () => {
-  it("accepts a finite positive amount", () => {
-    expect(isValidAmount("1")).toBe(true);
-    expect(isValidAmount("0.0001")).toBe(true);
-  });
-
-  it("rejects empty, zero, negative, malformed, and non-finite amounts", () => {
-    for (const bad of ["", "   ", "0", "0.0", "-1", "abc", "1.2.3", "1e999", "NaN", "Infinity"]) {
-      expect(isValidAmount(bad)).toBe(false);
-    }
   });
 });
 
@@ -140,48 +125,6 @@ describe("deriveCtaState (primary CTA progression)", () => {
   });
 });
 
-describe("routeAsset (route input token)", () => {
-  it("moves USDC on Epoch, ETH on Agglayer", () => {
-    expect(routeAsset("epoch")).toBe("USDC");
-    expect(routeAsset("agglayer")).toBe("ETH");
-  });
-
-  it("is direction-independent (same input token both ways)", () => {
-    expect(routeAsset("epoch")).toBe(routeAsset("epoch"));
-    expect(routeAsset("agglayer")).toBe(routeAsset("agglayer"));
-  });
-});
-
-// The reset guard the form relies on: a route switch that changes the input
-// asset must not silently preserve the numeric amount (an amount typed as USDC
-// becoming the same number of ETH). routeSwitchChangesAsset is that decision.
-describe("routeSwitchChangesAsset (amount/quote reset guard)", () => {
-  it("flags a change switching Epoch (USDC) → Agglayer (ETH)", () => {
-    expect(routeSwitchChangesAsset("epoch", "agglayer")).toBe(true);
-  });
-
-  it("flags a change switching Agglayer (ETH) → Epoch (USDC)", () => {
-    expect(routeSwitchChangesAsset("agglayer", "epoch")).toBe(true);
-  });
-
-  it("does not flag re-selecting the same route", () => {
-    expect(routeSwitchChangesAsset("epoch", "epoch")).toBe(false);
-    expect(routeSwitchChangesAsset("agglayer", "agglayer")).toBe(false);
-  });
-
-  // Model the form's clear-on-switch behavior: when the guard fires, the amount
-  // is cleared (so no stale amount survives); otherwise it is preserved.
-  it("clears the amount only when the asset changes, in both directions", () => {
-    const applySwitch = (from: BridgeProvider, to: BridgeProvider, amount: string) =>
-      routeSwitchChangesAsset(from, to) ? "" : amount;
-
-    expect(applySwitch("epoch", "agglayer", "100")).toBe("");
-    expect(applySwitch("agglayer", "epoch", "0.5")).toBe("");
-    expect(applySwitch("epoch", "epoch", "100")).toBe("100");
-    expect(applySwitch("agglayer", "agglayer", "0.5")).toBe("0.5");
-  });
-});
-
 // No stale quote or token label may survive a route switch: the fresh route's
 // quote must immediately report the new route's asset and ETA.
 describe("quoteFor refreshes fully on a route switch", () => {
@@ -239,5 +182,62 @@ describe("route comparison metadata", () => {
     for (const key of disabled) {
       expect(providers[key].comparison.unavailableReason).toBeTruthy();
     }
+  });
+});
+
+
+afterEach(() => vi.restoreAllMocks());
+
+describe("activity presentation", () => {
+  it.each([
+    ["receive", "epoch", "USDC", "Receive 10 USDC on Miden", "4 min"],
+    ["send", "epoch", "USDC", "Send 10 USDC to Sepolia", "4 min"],
+    ["receive", "agglayer", "ETH", "Receive 10 ETH on Miden", "8 min"],
+    ["send", "agglayer", "ETH", "Send 10 ETH to Sepolia", "8 min"],
+  ] as const)("preserves the stored activity fields for %s via %s", (mode, provider, asset, summary, eta) => {
+    vi.spyOn(Date, "now").mockReturnValue(1_700_000_000_000);
+    expect(createActivity(mode, provider, "10")).toEqual({
+      id: "act-loyw3v28",
+      mode,
+      provider,
+      amount: "10",
+      asset,
+      summary,
+      eta,
+      status: "signature",
+      txHash: "0xpending",
+      sourceTxHash: undefined,
+      destinationTxHash: undefined,
+      midenTxId: undefined,
+      updatedAt: 1_700_000_000_000,
+      sourceTxAt: 1_700_000_000_000,
+    });
+  });
+
+  it("applies submission data and display overrides after activity defaults", () => {
+    const overrides: Partial<Activity> = {
+      status: "message_observed",
+      sourceTxHash: REAL_TX,
+      epochIntentNonce: "42",
+      sourceTxAt: 1_700_000_000_000,
+      summary: "Imported transfer",
+      eta: "Waiting for settlement",
+      txHash: "0x5c33…ba85",
+    };
+    expect(createActivity("receive", "epoch", "10", overrides)).toMatchObject(overrides);
+  });
+});
+
+describe("Epoch quote display", () => {
+  it.each([
+    ["1234567", 6, "1.23"],
+    ["1239000000000000000", 18, "1.24"],
+    ["1.239", 6, "1.24"],
+    ["0", 6, "0.00"],
+    ["", 18, "0.00"],
+    ["1e2", 6, "1e2"],
+    ["invalid", 18, "invalid"],
+  ])("formats provider amount %s with %s decimals as %s", (amount, decimals, expected) => {
+    expect(formatQuoteAmount(amount, decimals)).toBe(expected);
   });
 });

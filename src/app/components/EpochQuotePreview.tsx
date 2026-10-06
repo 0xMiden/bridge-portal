@@ -2,6 +2,7 @@
 
 import { RefreshCcw } from "lucide-react";
 import { useEffect } from "react";
+import type { FlowMode } from "../../bridge/core/models";
 import { useEpochQuote } from "../lib/use-epoch-quote";
 
 /**
@@ -22,7 +23,7 @@ export function EpochQuotePreview({
   onAmount,
   onLoading,
 }: {
-  mode: "receive" | "send";
+  mode: FlowMode;
   amount: string;
   midenAccount: string;
   evmAddress: string;

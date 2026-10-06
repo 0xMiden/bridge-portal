@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { Activity } from "./bridge-state";
+import type { Activity } from "./bridge-presentation";
 import {
   loadStoredActivities,
   loadStoredMode,

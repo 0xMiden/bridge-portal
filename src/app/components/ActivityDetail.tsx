@@ -22,11 +22,9 @@ import {
   type ChainTxObservation,
   deriveMonitoredActivity,
   sourceTxPollMs,
-  stampLegTimes,
 } from "../lib/bridge-monitor";
 import {
   type Activity,
-  activityStartedAt,
   quoteFor,
   sourceExplorer,
   statusLabel,
@@ -34,7 +32,8 @@ import {
   destinationExplorer,
   timeline,
   buildDiagnostics,
-} from "../lib/bridge-state";
+} from "../lib/bridge-presentation";
+import { activityStartedAt, stampLegTimes } from "../../bridge/core/rules";
 import {
   loadStoredActivities,
   saveActivities,

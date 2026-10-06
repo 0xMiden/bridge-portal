@@ -1,4 +1,4 @@
-import type { Activity } from "./bridge-state";
+import type { Activity } from "./bridge-presentation";
 
 // Dummy transfers for previewing the detail page without a live bridge run:
 // the four settled receipts (/activity/demo-<provider>-<mode>) plus a failed and

@@ -2,7 +2,7 @@
 
 import { Check, ChevronDown } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import type { BridgeProvider } from "../lib/bridge-state";
+import type { BridgeProvider } from "../../bridge/core/models";
 
 // Each bridgeable token maps 1:1 to the route that carries it (Epoch = USDC,
 // Agglayer = ETH). Structured as a list so more tokens/routes drop in later.

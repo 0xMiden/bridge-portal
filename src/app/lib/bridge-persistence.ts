@@ -1,4 +1,5 @@
-import { type Activity, type BridgeProvider, type FlowMode, providers } from "./bridge-state";
+import type { BridgeProvider, FlowMode } from "../../bridge/core/models";
+import { type Activity, providers } from "./bridge-presentation";
 
 export const activityStorageKey = "miden.bridge.ui.activities";
 

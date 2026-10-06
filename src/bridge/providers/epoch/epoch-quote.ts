@@ -1,5 +1,3 @@
-import { formatUnits } from "viem";
-
 import {
   BRIDGEABLE_EVM_OUTPUT_TOKEN_ADDRESS,
   BRIDGEABLE_EVM_OUTPUT_TOKEN_DECIMALS,
@@ -18,27 +16,12 @@ import { getEpochReadOnlySdk, getEpochSdk } from "./sdk";
 import type { CrossChainIntentParams, EVMToMidenIntentParams } from "./types";
 
 export interface EpochQuoteOutput {
-  /** Estimated output amount, human-formatted to 2 decimals. */
+  /** Provider output amount: base units or an already-decimal SDK response. */
   amount: string;
+  /** Decimals used when the SDK returns base units. */
+  decimals: number;
   /** Output token symbol. */
   symbol: string;
-}
-
-/**
- * Format an Epoch quote amount (base units, or an already-human decimal) to a
- * 2-decimal display string. Mirrors the wallet's send-quote formatting.
- */
-function formatQuoteAmount(raw: string, decimals: number): string {
-  if (!raw || raw === "0") return "0.00";
-  try {
-    const human = /^\d+\.\d+$/.test(raw)
-      ? raw
-      : formatUnits(BigInt(raw), decimals);
-    const n = Number(human);
-    return Number.isFinite(n) ? n.toFixed(2) : human;
-  } catch {
-    return raw;
-  }
 }
 
 /**
@@ -75,7 +58,8 @@ export async function quoteEpochSend(args: {
       ? String(quote.quoteResult.tokenOut)
       : "0";
   return {
-    amount: formatQuoteAmount(raw, BRIDGEABLE_EVM_OUTPUT_TOKEN_DECIMALS),
+    amount: raw,
+    decimals: BRIDGEABLE_EVM_OUTPUT_TOKEN_DECIMALS,
     symbol: BRIDGEABLE_EVM_OUTPUT_TOKEN_SYMBOL,
   };
 }
@@ -117,7 +101,8 @@ export async function quoteEpochReceive(args: {
       ? String(quote.quoteResult.tokenOut)
       : "0";
   return {
-    amount: formatQuoteAmount(raw, MIDEN_NATIVE_TOKEN_DECIMALS),
+    amount: raw,
+    decimals: MIDEN_NATIVE_TOKEN_DECIMALS,
     symbol: MIDEN_NATIVE_TOKEN_SYMBOL,
   };
 }

@@ -1,5 +1,6 @@
 import type { AgglayerDeposit } from "../../bridge/providers/agglayer/agglayer";
-import { type Activity, activityStartedAt } from "./bridge-state";
+import type { Activity } from "./bridge-presentation";
+import { stampLegTimes } from "../../bridge/core/rules";
 
 export const sourceTxPollMs = 6_000;
 export const agglayerPollMs = 10_000;
@@ -41,29 +42,6 @@ function depositCount(value: AgglayerDeposit | ClaimPlanObservation | null | und
   if ("deposit_cnt" in value && value.deposit_cnt !== undefined) return String(value.deposit_cnt);
   if ("depositCount" in value && value.depositCount !== undefined) return String(value.depositCount);
   return undefined;
-}
-
-/**
- * Stamp each leg's transaction time the first time its hash appears, and never
- * again (idempotent) — so re-observing a settled transfer doesn't overwrite when
- * a leg actually landed. Source is usually already stamped at creation; this
- * backfills it for activities that arrive hash-first (e.g. merged history).
- */
-export function stampLegTimes(activity: Activity): Activity {
-  const now = Date.now();
-  let next = activity;
-  if (next.sourceTxHash && !next.sourceTxAt) {
-    // The source leg is the transfer's start — use its real start time (id-
-    // encoded creation), never "now", so a late backfill can't read as "just now".
-    next = { ...next, sourceTxAt: activityStartedAt(next) };
-  }
-  const hasDestinationTx = Boolean(
-    next.destinationTxHash || next.midenTxId || next.claimTxHash,
-  );
-  if (hasDestinationTx && !next.destinationTxAt) {
-    next = { ...next, destinationTxAt: now };
-  }
-  return next;
 }
 
 export function deriveMonitoredActivity(

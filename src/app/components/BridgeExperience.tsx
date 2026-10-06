@@ -42,19 +42,17 @@ import {
   normalizeMidenAccountHex,
 } from "../../bridge/providers/agglayer/agglayer";
 import {
-  type BridgeProvider,
-  type FlowMode,
   type Activity,
-  activityStartedAt,
   createActivity,
   deriveCtaState,
   modes,
   providers,
   quoteFor,
-  routeSwitchChangesAsset,
   statusLabel,
   statusTone,
-} from "../lib/bridge-state";
+} from "../lib/bridge-presentation";
+import type { BridgeProvider, FlowMode } from "../../bridge/core/models";
+import { activityStartedAt, routeSwitchChangesAsset } from "../../bridge/core/rules";
 import {
   loadStoredActivities,
   loadStoredMode,

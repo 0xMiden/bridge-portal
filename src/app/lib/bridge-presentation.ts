@@ -1,63 +1,31 @@
+import { formatUnits } from "viem";
 import { SEPOLIA_NETWORK } from "../../config/sepolia";
-import type { ActivityStatus } from "../../bridge/core/activity-status";
+import { activitySteps, type ActivityStatus } from "../../bridge/core/activity-status";
+import type { BridgeActivity, BridgeProvider, BridgeQuote, FlowMode } from "../../bridge/core/models";
+import {
+  createActivity as createBridgeActivity,
+  deriveTransferAction,
+  quoteAmounts,
+  type TransferAction,
+  type TransferInputs,
+} from "../../bridge/core/rules";
 
-export type BridgeProvider = "near-intents" | "agglayer" | "epoch";
-export type FlowMode = "receive" | "send";
+/** Persisted activity view; the storage shape stays compatible with older rows. */
+export type Activity = BridgeActivity & {
+  summary: string;
+  eta: string;
+  /** Abbreviated hash or pending placeholder used by the application. */
+  txHash: string;
+};
 
-export type Quote = {
+export type Quote = BridgeQuote & {
   eta: string;
   networkFee: string;
   bridgeFee: string;
   relayerFee: string;
-  asset: string;
-  /** Decimal amounts without a symbol or locale formatting. */
-  expectedReceived: string;
-  minReceived: string;
   sourceGas: string;
   destinationGas: string;
   warning: string;
-};
-
-export type Activity = {
-  id: string;
-  mode: FlowMode;
-  provider: BridgeProvider;
-  summary: string;
-  status: ActivityStatus;
-  eta: string;
-  amount: string;
-  asset: string;
-  destination?: string;
-  bridgeDestinationAddress?: string;
-  /** Recipient Miden account id (0x + 30 hex) for a receive — drives the
-   * Midenscan account link when there's no AggLayer bridge destination (Epoch). */
-  midenAccountHex?: string;
-  txHash: string;
-  sourceTxHash?: string;
-  destinationTxHash?: string;
-  midenTxId?: string;
-  claimTxHash?: string;
-  depositCount?: string;
-  readyForClaim?: boolean;
-  sourceNetworkId?: number;
-  destinationNetworkId?: number;
-  /** Epoch intent nonce — `getIntentStatus(epochSponsor, epochIntentNonce)`. */
-  epochIntentNonce?: string;
-  /** Epoch sponsor / user address the intent status is keyed on (EVM 0x). */
-  epochSponsor?: string;
-  /** Quoted output decimal amount (e.g. "99.17"); the symbol is in `asset`. */
-  receivedAmount?: string;
-  /** Owner tags for per-account filtering of account-derived history. */
-  evmAddress?: string;
-  midenAccount?: string;
-  /** Source-relative ordering hint (higher = newer) for merged remote history. */
-  sortKey?: number;
-  updatedAt: number;
-  /** When each leg's transaction was first recorded (epoch ms). A bridge transfer
-   * is two transactions — one per chain — so the receipt times them separately;
-   * `destinationTxAt` stays undefined until that leg's tx exists. */
-  sourceTxAt?: number;
-  destinationTxAt?: number;
 };
 
 /**
@@ -148,32 +116,6 @@ export const providers: Record<
   },
 };
 
-/**
- * The token symbol a route moves on its input side. Epoch's SIO route is
- * USDC↔USDC; every other active route moves ETH. This is the single fact that
- * decides whether switching routes changes the asset — and therefore whether a
- * numeric amount entered for the old route can carry over (it must not when the
- * asset changes, so an amount typed as USDC never becomes the same number of
- * ETH silently). Mode-independent: the input token is the same in both
- * directions for the active routes.
- */
-export function routeAsset(provider: BridgeProvider): string {
-  return provider === "epoch" ? "USDC" : "ETH";
-}
-
-/**
- * True when moving from one route to another changes the input asset — the
- * signal the form uses to clear the amount and any stale quote on a route
- * switch. Same-asset switches (or re-selecting the same route) return false so
- * the amount is preserved.
- */
-export function routeSwitchChangesAsset(
-  from: BridgeProvider,
-  to: BridgeProvider,
-): boolean {
-  return routeAsset(from) !== routeAsset(to);
-}
-
 export const modes: Record<
   FlowMode,
   {
@@ -206,38 +148,37 @@ export const modes: Record<
   },
 };
 
-export const timeline: Array<{ status: ActivityStatus; label: string; detail: string }> = [
-  {
-    status: "signature",
+const timelineCopy: Record<(typeof activitySteps)[number], { label: string; detail: string }> = {
+  signature: {
     label: "Sign source transaction",
     detail: "Confirm the transfer in the source wallet.",
   },
-  {
-    status: "source_finality",
+  source_finality: {
     label: "Wait for finality",
     detail: "The source transaction needs confirmation before the route can continue.",
   },
-  {
-    status: "message_observed",
+  message_observed: {
     label: "Bridge message observed",
     detail: "The provider has observed the message or proof.",
   },
-  {
-    status: "claim_available",
+  claim_available: {
     label: "Claim available",
     detail: "Destination funds can be claimed or released.",
   },
-  {
-    status: "claim_submitted",
+  claim_submitted: {
     label: "Claim submitted",
     detail: "The destination claim transaction is waiting for confirmation.",
   },
-  {
-    status: "complete",
+  complete: {
     label: "Complete",
     detail: "Funds are available in the destination account.",
   },
-];
+};
+
+export const timeline = activitySteps.map((status) => ({
+  status,
+  ...timelineCopy[status],
+}));
 
 export const explorerUrls = {
   sepolia: SEPOLIA_NETWORK.explorerUrl,
@@ -245,14 +186,6 @@ export const explorerUrls = {
 };
 
 export function quoteFor(mode: FlowMode, provider: BridgeProvider, amount: string): Quote {
-  const parsedAmount = Number(amount) || 0;
-  // Agglayer is a canonical 1:1 bridge (no provider fee), so what you send is
-  // what you receive. Other routes carry a small fee spread.
-  const isOneToOne = provider === "agglayer";
-  const expected = isOneToOne
-    ? parsedAmount
-    : Math.max(parsedAmount * 0.999, 0);
-  const minMultiplier = isOneToOne ? 1 : 0.995;
   const routeName = providers[provider].label;
   // Epoch's quote API returns only the net output amount (no fee breakdown), so
   // don't fabricate specific fees — the cost is baked into the quoted rate.
@@ -274,19 +207,12 @@ export function quoteFor(mode: FlowMode, provider: BridgeProvider, amount: strin
     : isEpoch
       ? "In quoted rate"
       : "0.03 USD";
-  // Token depends on the route: Agglayer bridges ETH, Epoch bridges USDC.
-  // The mode-based assetOut ("Miden ETH") is only correct for Agglayer.
-  const outSymbol =
-    provider === "epoch" ? "USDC" : modes[mode].assetOut.replace("Miden ", "");
-
   return {
     eta: provider === "agglayer" ? "10-20 min" : "1-3 min",
     networkFee,
     bridgeFee,
     relayerFee,
-    asset: outSymbol,
-    expectedReceived: String(Number(expected.toFixed(6))),
-    minReceived: String(Number((expected * minMultiplier).toFixed(6))),
+    ...quoteAmounts(provider, amount),
     sourceGas: mode === "receive" ? "Sepolia ETH" : "Miden fee credit",
     destinationGas: mode === "receive" ? "Miden fee credit" : "Sepolia ETH",
     warning:
@@ -296,94 +222,54 @@ export function quoteFor(mode: FlowMode, provider: BridgeProvider, amount: strin
   };
 }
 
-// A finite, strictly-positive amount is the floor for any wallet prompt: empty,
-// zero, negative, malformed ("1.2.3" → NaN), and non-finite ("1e999" → Infinity)
-// inputs all fail this and can never advance the flow.
-export function isValidAmount(amount: string): boolean {
-  const parsed = Number(amount);
-  return Number.isFinite(parsed) && parsed > 0;
+/**
+ * Format an Epoch quote amount (base units, or an already-human decimal) to a
+ * 2-decimal display string. Mirrors the wallet's send-quote formatting.
+ */
+export function formatQuoteAmount(raw: string, decimals: number): string {
+  if (!raw || raw === "0") return "0.00";
+  try {
+    const human = /^\d+\.\d+$/.test(raw)
+      ? raw
+      : formatUnits(BigInt(raw), decimals);
+    const n = Number(human);
+    return Number.isFinite(n) ? n.toFixed(2) : human;
+  } catch {
+    return raw;
+  }
 }
 
-// The single action the primary CTA offers, in strict order of the form's
-// progression. Anything disabled can't open a wallet; only "review" leads to
-// the preflight surface (and, from there, the wallet).
-export type CtaAction =
-  | "submitting"
-  | "enter-amount"
-  | "connect-source"
-  | "add-destination"
-  | "insufficient"
-  | "quote-loading"
-  | "review";
-
 export interface CtaState {
-  action: CtaAction;
+  action: TransferAction;
   label: string;
-  /** Informational only — the button can't advance the flow (no wallet prompt). */
   disabled: boolean;
-  /** Clicking opens the preflight review (the only path to a wallet prompt). */
   opensReview: boolean;
 }
 
-export interface CtaInputs {
+export interface CtaInputs extends TransferInputs {
   mode: FlowMode;
-  /** True once the direction's source wallet is connected (receive: Sepolia; send: Miden). */
-  sourceConnected: boolean;
-  /** True once a destination is resolvable (typed value or connected wallet). */
-  hasDestination: boolean;
-  /** The raw amount input, validated here. */
-  amount: string;
-  /** Source token symbol for the insufficient-balance copy ("USDC"/"ETH"). */
   sourceTokenSymbol: string;
-  insufficientBalance: boolean;
-  /** A live route quote (Epoch) is in flight — not yet a ready transfer. */
-  quoteLoading: boolean;
-  isSubmitting: boolean;
-  /** Phase-specific progress copy while submitting. */
   submitPhase: string;
 }
 
-/**
- * Derive the primary CTA from the form state as a deterministic progression:
- * incomplete input → wallet connection → destination → ready-to-review. The CTA
- * always names the next action it will actually perform, and only the terminal
- * "review" action can reach a wallet. Pure so it's unit-tested directly.
- */
+/** Add button copy and interaction state to the core transfer decision. */
 export function deriveCtaState(input: CtaInputs): CtaState {
-  const disabled = (action: CtaAction, label: string): CtaState => ({
+  const action = deriveTransferAction(input);
+  const labels: Record<TransferAction, string> = {
+    submitting: input.submitPhase || "Preparing…",
+    "enter-amount": "Enter amount",
+    "connect-source": input.mode === "receive" ? "Connect Sepolia wallet" : "Connect Bread wallet",
+    "add-destination": input.mode === "receive" ? "Add Miden account" : "Add Sepolia address",
+    insufficient: `Not enough ${input.sourceTokenSymbol}`,
+    "quote-loading": "Fetching quote…",
+    review: input.mode === "receive" ? "Review receive" : "Review send",
+  };
+  return {
     action,
-    label,
-    disabled: true,
-    opensReview: false,
-  });
-  const actionable = (
-    action: CtaAction,
-    label: string,
-    opensReview = false,
-  ): CtaState => ({ action, label, disabled: false, opensReview });
-
-  if (input.isSubmitting)
-    return disabled("submitting", input.submitPhase || "Preparing…");
-  if (!isValidAmount(input.amount))
-    return disabled("enter-amount", "Enter amount");
-  if (!input.sourceConnected)
-    return actionable(
-      "connect-source",
-      input.mode === "receive" ? "Connect Sepolia wallet" : "Connect Bread wallet",
-    );
-  if (!input.hasDestination)
-    return actionable(
-      "add-destination",
-      input.mode === "receive" ? "Add Miden account" : "Add Sepolia address",
-    );
-  if (input.insufficientBalance)
-    return disabled("insufficient", `Not enough ${input.sourceTokenSymbol}`);
-  if (input.quoteLoading) return disabled("quote-loading", "Fetching quote…");
-  return actionable(
-    "review",
-    input.mode === "receive" ? "Review receive" : "Review send",
-    true,
-  );
+    label: labels[action],
+    disabled: action !== "connect-source" && action !== "add-destination" && action !== "review",
+    opensReview: action === "review",
+  };
 }
 
 export function statusLabel(status: ActivityStatus) {
@@ -406,47 +292,23 @@ export function statusTone(status: ActivityStatus) {
   return "active";
 }
 
-export function nextStatus(activity: Activity): ActivityStatus {
-  if (activity.status === "failed") return "claim_available";
-  const index = timeline.findIndex((step) => step.status === activity.status);
-  if (index === -1) return "signature";
-  return timeline[Math.min(index + 1, timeline.length - 1)].status;
-}
-
 export function createActivity(
   mode: FlowMode,
   provider: BridgeProvider,
   amount: string,
   overrides: Partial<Activity> = {},
 ): Activity {
-  const copy = modes[mode];
-  // Token depends on the route: Epoch bridges USDC, Agglayer/others bridge ETH.
-  const asset =
-    provider === "epoch" ? "USDC" : copy.assetIn.replace("Miden ", "");
+  const activity = createBridgeActivity(mode, provider, amount);
   const destination = mode === "receive" ? "Miden" : "Sepolia";
-
-  const activity: Activity = {
-    id: `act-${Date.now().toString(36)}`,
-    mode,
-    provider,
-    summary: mode === "receive" ? `Receive ${amount || "0"} ${asset} on ${destination}` : `Send ${amount || "0"} ${asset} to ${destination}`,
-    status: "signature",
+  return {
+    ...activity,
+    summary: mode === "receive"
+      ? `Receive ${activity.amount} ${activity.asset} on ${destination}`
+      : `Send ${activity.amount} ${activity.asset} to ${destination}`,
     eta: provider === "agglayer" ? "8 min" : "4 min",
-    amount: amount || "0",
-    asset,
-    // Honest pending defaults — the real hashes are filled in by the submit flow
-    // as the transfer progresses (no fabricated tx hashes on a pending activity).
     txHash: "0xpending",
-    sourceTxHash: undefined,
-    destinationTxHash: undefined,
-    midenTxId: undefined,
-    updatedAt: Date.now(),
-    // The activity is born when the source leg is submitted, so this is the
-    // source-chain transaction time.
-    sourceTxAt: Date.now(),
+    ...overrides,
   };
-
-  return { ...activity, ...overrides };
 }
 
 // Only a full, real hash makes a valid `/tx/` deep link. The `txHash` field is
@@ -471,7 +333,7 @@ export interface ExplorerLink {
   available: boolean;
 }
 
-export function sourceExplorer(activity: Activity): ExplorerLink {
+export function sourceExplorer(activity: BridgeActivity): ExplorerLink {
   if (activity.mode === "receive") {
     // Source = the Sepolia deposit the user signed.
     const tx = fullHash(activity.sourceTxHash);
@@ -500,7 +362,7 @@ function midenAccountFromBridgeDest(dest?: string): string | undefined {
   return match ? `0x${match[1].toLowerCase()}` : undefined;
 }
 
-export function destinationExplorer(activity: Activity): ExplorerLink {
+export function destinationExplorer(activity: BridgeActivity): ExplorerLink {
   if (activity.mode === "receive") {
     // Midenscan's /tx/ page errors on a cold load (it only renders after a
     // manual refresh — its own message says so), so a deep link to the Miden
@@ -586,18 +448,4 @@ export function buildDiagnostics(
     }),
     lastMonitorError: extra.monitorError || undefined,
   };
-}
-
-/**
- * When the transfer began = the source-chain transaction time. Prefers the
- * stamped `sourceTxAt`, else the id-encoded creation time (`act-<base36 ms>`),
- * else the row's `updatedAt`. Used so the history list counts forward from when
- * the transfer was initiated, not from the last monitor poll.
- */
-export function activityStartedAt(activity: Activity): number {
-  if (activity.sourceTxAt) return activity.sourceTxAt;
-  const match = /^act-([0-9a-z]+)$/.exec(activity.id);
-  const fromId = match ? parseInt(match[1], 36) : NaN;
-  if (Number.isFinite(fromId) && fromId > 1_600_000_000_000) return fromId;
-  return activity.updatedAt;
 }

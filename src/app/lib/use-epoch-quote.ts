@@ -2,6 +2,9 @@
 
 import { useEffect, useRef, useState } from "react";
 import { parseUnits } from "viem";
+import type { FlowMode } from "../../bridge/core/models";
+import { isValidAmount } from "../../bridge/core/rules";
+import { formatQuoteAmount } from "./bridge-presentation";
 
 import { MIDEN_NATIVE_TOKEN_DECIMALS } from "../../bridge/providers/epoch/config";
 import { quoteEpochReceive, quoteEpochSend } from "../../bridge/providers/epoch/epoch-quote";
@@ -20,7 +23,7 @@ export interface EpochQuoteState {
 export interface UseEpochQuoteOpts {
   /** Gate: only quote when the Epoch route is active. */
   enabled: boolean;
-  mode: "receive" | "send";
+  mode: FlowMode;
   /** Human input amount as typed. */
   amount: string;
   /** Sender (send) / recipient (receive) Miden account. */
@@ -54,11 +57,9 @@ export function useEpochQuote({
   midenAccount,
   evmAddress,
 }: UseEpochQuoteOpts): EpochQuoteState {
-  const amountNum = Number(amount);
   const ready =
     enabled &&
-    Number.isFinite(amountNum) &&
-    amountNum > 0 &&
+    isValidAmount(amount) &&
     !!midenAccount &&
     isEvmAddress(evmAddress);
 
@@ -109,7 +110,7 @@ export function useEpochQuote({
             setState({
               enabled,
               loading: false,
-              amount: result.amount,
+              amount: formatQuoteAmount(result.amount, result.decimals),
               symbol: result.symbol,
             });
           }
