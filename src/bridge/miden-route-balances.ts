@@ -1,6 +1,10 @@
 import type { MidenFiWalletContextState } from "@miden-sdk/miden-wallet-adapter-react";
-import { AGGLAYER_BALI } from "./agglayer";
-import { e2eNetwork, isE2E } from "../../wallets/testing/env";
+import { AGGLAYER_BALI } from "./providers/agglayer/agglayer";
+import {
+  MIDEN_NATIVE_FAUCET_ID as EPOCH_USDC_FAUCET,
+  MIDEN_NATIVE_TOKEN_DECIMALS as EPOCH_USDC_DECIMALS,
+} from "./providers/epoch/config";
+import { e2eNetwork, isE2E } from "../wallets/testing/env";
 
 // One `requestAssets()` popup, both route balances. Each route's Miden token is
 // a fixed, known faucet: Epoch's USDC (`EPOCH_USDC_FAUCET`) and the Agglayer ETH
@@ -8,8 +12,6 @@ import { e2eNetwork, isE2E } from "../../wallets/testing/env";
 // the bridge-out-tool). We total the wallet's holding of each specific faucet —
 // the Agglayer send then bridges that exact asset, the one the Agglayer bridge
 // recognises, rather than any other Miden token the wallet may also hold.
-
-const EPOCH_USDC_FAUCET = "0x537c15a622074e91188aa894456c52";
 
 type RequestAssets = NonNullable<MidenFiWalletContextState["requestAssets"]>;
 
@@ -33,8 +35,8 @@ export interface MidenRouteBalances {
 
 /**
  * One `requestAssets()` popup, both route balances. USDC totals against Epoch's
- * known faucet; the Agglayer ETH is resolved as the non-USDC, non-gas fungible
- * the wallet holds, with its decimals/symbol read from the faucet on-chain.
+ * known faucet; ETH totals against Agglayer's known faucet, with its decimals
+ * and symbol read from the faucet on-chain.
  */
 export async function fetchMidenRouteBalances(
   requestAssets: RequestAssets,
@@ -60,7 +62,7 @@ export async function fetchMidenRouteBalances(
           }
         : null;
     return {
-      epoch: formatUnits(usdcRaw, 6),
+      epoch: formatUnits(usdcRaw, EPOCH_USDC_DECIMALS),
       agglayer: agglayerEth
         ? formatUnits(agglayerEth.amountRaw, agglayerEth.decimals)
         : "0",
@@ -145,7 +147,7 @@ export async function fetchMidenRouteBalances(
   }
 
   return {
-    epoch: formatUnits(usdcRaw, 6),
+    epoch: formatUnits(usdcRaw, EPOCH_USDC_DECIMALS),
     agglayer: agglayerEth
       ? formatUnits(agglayerEth.amountRaw, agglayerEth.decimals)
       : "0",

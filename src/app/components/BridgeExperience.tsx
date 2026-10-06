@@ -40,7 +40,7 @@ import {
   AGGLAYER_BALI,
   buildSepoliaDepositTransaction,
   normalizeMidenAccountHex,
-} from "../lib/agglayer";
+} from "../../bridge/providers/agglayer/agglayer";
 import {
   type BridgeProvider,
   type FlowMode,
@@ -73,7 +73,7 @@ import { ThemeToggle } from "./ThemeToggle";
 import type {
   MidenRouteBalances,
   ResolvedEthAsset,
-} from "../lib/agglayer-eth-faucet";
+} from "../../bridge/miden-route-balances";
 import {
   useAppKit,
   useAppKitAccount,
@@ -281,7 +281,7 @@ function preloadEpochExecute() {
 }
 let agglayerExecutePreload: Promise<unknown> | null = null;
 function preloadAgglayerExecute() {
-  agglayerExecutePreload ??= import("../lib/agglayer-execute");
+  agglayerExecutePreload ??= import("../../bridge/providers/agglayer/agglayer-execute");
 }
 
 function compactTokenAmount(value: string) {
@@ -870,7 +870,7 @@ export function BridgeExperience() {
       midenBalanceInflightRef.current ??
       (midenBalanceInflightRef.current = (async () => {
         const { fetchMidenRouteBalances } = await import(
-          "../lib/agglayer-eth-faucet"
+          "../../bridge/miden-route-balances"
         );
         return fetchMidenRouteBalances(requestMidenAssets);
       })());
@@ -1295,7 +1295,7 @@ export function BridgeExperience() {
         // once the send actually goes through do we record an activity row.
         // Dynamic import: agglayer-execute pulls the eager-WASM SDK + wallet
         // adapter, so it must load client-side at click time, never in SSR.
-        const { runAgglayerSend } = await import("../lib/agglayer-execute");
+        const { runAgglayerSend } = await import("../../bridge/providers/agglayer/agglayer-execute");
         setSubmitPhase("Confirm in your wallet…");
         const { txHash } = await runAgglayerSend({
           amount: unitsAmount,

@@ -14,8 +14,8 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { SEPOLIA_NETWORK } from "../../config/sepolia";
 import type { ActivityStatus } from "../../bridge/core/activity-status";
-import { type AgglayerDepositStatus } from "../lib/agglayer";
-import { findMidenToEvmDeposit } from "../lib/agglayer-status";
+import { type AgglayerDepositStatus } from "../../bridge/providers/agglayer/agglayer";
+import { findMidenToEvmDeposit } from "../../bridge/providers/agglayer/agglayer-status";
 import {
   agglayerPollMs,
   type BridgeMonitorObservation,

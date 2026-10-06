@@ -1,4 +1,4 @@
-import type { AgglayerDeposit } from "./agglayer";
+import type { AgglayerDeposit } from "../../bridge/providers/agglayer/agglayer";
 import { type Activity, activityStartedAt } from "./bridge-state";
 
 export const sourceTxPollMs = 6_000;

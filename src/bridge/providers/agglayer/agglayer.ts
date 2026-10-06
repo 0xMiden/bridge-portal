@@ -1,5 +1,5 @@
 import { encodeFunctionData, parseEther, toHex } from "viem";
-import { SEPOLIA_NETWORK } from "../../config/sepolia";
+import { SEPOLIA_NETWORK } from "../../../config/sepolia";
 
 export const AGGLAYER_BALI = {
   sepoliaChainId: SEPOLIA_NETWORK.chainId,

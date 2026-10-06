@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { AGGLAYER_BALI } from "./agglayer";
+import { SEPOLIA_NETWORK } from "../../config/sepolia";
 import { type EvmProvider } from "../../wallets/evm/evm-wallet";
 import { FAUCET_SEPOLIA_USDC, mintSepoliaUsdc, sepoliaTxUrl } from "./faucet";
 
@@ -13,7 +13,7 @@ function fakeProvider(): {
     async request<T>({ method, params }: { method: string; params?: unknown[] }) {
       calls.push({ method, params });
       // Report Sepolia so ensureSepolia doesn't try to switch networks.
-      if (method === "eth_chainId") return AGGLAYER_BALI.sepoliaChainHex as T;
+      if (method === "eth_chainId") return SEPOLIA_NETWORK.chainHex as T;
       if (method === "eth_sendTransaction") return "0xdeadbeef" as T;
       return undefined as T;
     },
@@ -67,7 +67,7 @@ describe("mintSepoliaUsdc", () => {
 describe("sepoliaTxUrl", () => {
   it("builds an explorer tx link without a double slash", () => {
     expect(sepoliaTxUrl("0xabc")).toBe(
-      `${AGGLAYER_BALI.sepoliaExplorer.replace(/\/$/, "")}/tx/0xabc`,
+      "https://sepolia.etherscan.io/tx/0xabc",
     );
   });
 });

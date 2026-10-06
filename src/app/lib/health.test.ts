@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { AGGLAYER_BALI } from "./agglayer";
+import { SEPOLIA_NETWORK } from "../../config/sepolia";
 import { checkDeepHealth } from "./health";
 
 function jsonRpc(result: string, status = 200): Response {
@@ -20,7 +20,7 @@ describe("checkDeepHealth", () => {
     const fetchImpl = vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input);
       if (url.includes("ethereum-sepolia") || url.includes("publicnode")) {
-        return jsonRpc(AGGLAYER_BALI.sepoliaChainHex);
+        return jsonRpc(SEPOLIA_NETWORK.chainHex);
       }
       return http(200);
     }) as unknown as typeof fetch;
@@ -52,7 +52,7 @@ describe("checkDeepHealth", () => {
     const fetchImpl = vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input);
       if (url.includes("publicnode") || url.includes("sepolia")) {
-        return jsonRpc(AGGLAYER_BALI.sepoliaChainHex);
+        return jsonRpc(SEPOLIA_NETWORK.chainHex);
       }
       if (url.includes("epochprotocol")) return http(404);
       if (url.includes("gateway.fm")) return http(502);
