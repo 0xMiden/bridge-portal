@@ -48,20 +48,22 @@ import {
   activityStartedAt,
   createActivity,
   deriveCtaState,
-  loadStoredActivities,
-  loadStoredMode,
-  loadStoredRoute,
   modes,
-  patchStoredActivity,
   providers,
   quoteFor,
   routeSwitchChangesAsset,
-  saveActivities,
-  saveStoredMode,
-  saveStoredRoute,
   statusLabel,
   statusTone,
 } from "../lib/bridge-state";
+import {
+  loadStoredActivities,
+  loadStoredMode,
+  loadStoredRoute,
+  patchStoredActivity,
+  saveActivities,
+  saveStoredMode,
+  saveStoredRoute,
+} from "../lib/bridge-persistence";
 import { sepoliaGasUnitsFor, useSepoliaGasEstimate } from "../lib/sepolia-gas";
 import { ActivityStack } from "./ActivityStack";
 import { InfoTip } from "./InfoTip";

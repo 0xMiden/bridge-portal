@@ -27,9 +27,7 @@ import {
 import {
   type Activity,
   activityStartedAt,
-  loadStoredActivities,
   quoteFor,
-  saveActivities,
   sourceExplorer,
   statusLabel,
   statusTone,
@@ -37,6 +35,10 @@ import {
   timeline,
   buildDiagnostics,
 } from "../lib/bridge-state";
+import {
+  loadStoredActivities,
+  saveActivities,
+} from "../lib/bridge-persistence";
 import { epochActivityStatus, epochDestinationTx } from "../../bridge/providers/epoch/epoch-status";
 import { MIDEN_DESTINATION_CHAIN_ID } from "../../bridge/providers/epoch/config";
 import { sepoliaGasUnitsFor, useSepoliaGasEstimate } from "../lib/sepolia-gas";

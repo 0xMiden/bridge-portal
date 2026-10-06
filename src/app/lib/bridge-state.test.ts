@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import {
   type Activity,
   type BridgeProvider,
@@ -6,7 +6,6 @@ import {
   type FlowMode,
   deriveCtaState,
   isValidAmount,
-  loadStoredActivities,
   providers,
   quoteFor,
   routeAsset,
@@ -211,31 +210,6 @@ describe("quoteFor refreshes fully on a route switch", () => {
       expect(before.expectedReceived).not.toBe(after.expectedReceived);
       expect(after.asset).toBe("ETH");
     });
-  }
-});
-
-it("loads legacy received amounts without changing their value or token", () => {
-  const stored = [
-    agglayerSend({ receivedAmount: "0.005 ETH" }),
-    agglayerSend({ asset: "USDC", receivedAmount: "0.999 USDC" }),
-    agglayerSend({ receivedAmount: "9007199254740993.123456789012345678" }),
-    agglayerSend({}),
-  ];
-  vi.stubGlobal("window", {
-    localStorage: { getItem: () => JSON.stringify(stored) },
-  });
-
-  try {
-    expect(
-      loadStoredActivities().map(({ receivedAmount, asset }) => ({ receivedAmount, asset })),
-    ).toEqual([
-      { receivedAmount: "0.005", asset: "ETH" },
-      { receivedAmount: "0.999", asset: "USDC" },
-      { receivedAmount: "9007199254740993.123456789012345678", asset: "ETH" },
-      { receivedAmount: undefined, asset: "ETH" },
-    ]);
-  } finally {
-    vi.unstubAllGlobals();
   }
 });
 
