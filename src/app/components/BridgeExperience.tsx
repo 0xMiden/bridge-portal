@@ -28,6 +28,14 @@ import {
   useSyncExternalStore,
 } from "react";
 import { formatEther, parseUnits } from "viem";
+import { SEPOLIA_NETWORK } from "../../config/sepolia";
+import {
+  type WalletIdentity,
+  evmWalletIdentity,
+  midenWalletIdentity,
+  shortAddress,
+  walletGradient,
+} from "../../wallets/identity";
 import {
   AGGLAYER_BALI,
   buildSepoliaDepositTransaction,
@@ -37,10 +45,6 @@ import {
   type BridgeProvider,
   type FlowMode,
   type Activity,
-  type WalletIdentity,
-  SEPOLIA_CHAIN_ID,
-  evmWalletIdentity,
-  midenWalletIdentity,
   activityStartedAt,
   createActivity,
   deriveCtaState,
@@ -55,17 +59,15 @@ import {
   saveActivities,
   saveStoredMode,
   saveStoredRoute,
-  shortAddress,
   statusLabel,
   statusTone,
-  walletGradient,
 } from "../lib/bridge-state";
 import { sepoliaGasUnitsFor, useSepoliaGasEstimate } from "../lib/sepolia-gas";
 import { ActivityStack } from "./ActivityStack";
 import { InfoTip } from "./InfoTip";
 import { RelativeTime } from "./RelativeTime";
 import { TokenSelect } from "./TokenSelect";
-import { WalletMenu } from "./WalletMenu";
+import { WalletMenu } from "../../wallets/WalletMenu";
 import { FaucetMenu } from "./FaucetMenu";
 import { ThemeToggle } from "./ThemeToggle";
 import type {
@@ -80,7 +82,7 @@ import {
   useDisconnect,
   useWalletInfo,
 } from "@reown/appkit/react";
-import { type EvmProvider, ensureSepolia } from "../lib/evm-wallet";
+import { type EvmProvider, ensureSepolia } from "../../wallets/evm/evm-wallet";
 import { gsap, useGSAP } from "../lib/gsap";
 import { EASE, motionMM } from "../lib/motion";
 // Type-only import — erased at build, so the eager-WASM adapter never reaches SSR.
@@ -170,8 +172,12 @@ function modeFromIntent(value: string | null): FlowMode | null {
 const MidenWalletButton = dynamic(
   () =>
     process.env.NEXT_PUBLIC_E2E_TEST === "true"
-      ? import("./E2EMidenWalletButton").then((mod) => mod.E2EMidenWalletButton)
-      : import("./MidenWalletButton").then((mod) => mod.MidenWalletButton),
+      ? import("../../wallets/testing/E2EMidenWalletButton").then(
+          (mod) => mod.E2EMidenWalletButton,
+        )
+      : import("../../wallets/miden/MidenWalletButton").then(
+          (mod) => mod.MidenWalletButton,
+        ),
   {
     ssr: false,
     loading: () => (
@@ -312,7 +318,7 @@ export function BridgeExperience() {
   const wrongNetwork =
     walletConnected &&
     chainId != null &&
-    Number(chainId) !== SEPOLIA_CHAIN_ID;
+    Number(chainId) !== SEPOLIA_NETWORK.chainId;
   const [evmBalance, setEvmBalance] = useState("");
   // Bumped after a faucet mint to force the Sepolia balance to refetch.
   const [evmBalanceNonce, setEvmBalanceNonce] = useState(0);

@@ -2,7 +2,7 @@
 
 import { useEffect } from "react";
 import { useAccount, useConnect } from "wagmi";
-import { publishE2E } from "../lib/e2e/window-hook";
+import { publishE2E } from "./window-hook";
 
 // E2E-only: auto-connects the headless test-wallet connector (registered in
 // appkit-config when the flag is set) so the app is "connected" without a

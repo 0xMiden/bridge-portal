@@ -1,6 +1,6 @@
 import type { MidenFiWalletContextState } from "@miden-sdk/miden-wallet-adapter-react";
 import { AGGLAYER_BALI } from "./agglayer";
-import { e2eNetwork, isE2E } from "./e2e/env";
+import { e2eNetwork, isE2E } from "../../wallets/testing/env";
 
 // One `requestAssets()` popup, both route balances. Each route's Miden token is
 // a fixed, known faucet: Epoch's USDC (`EPOCH_USDC_FAUCET`) and the Agglayer ETH

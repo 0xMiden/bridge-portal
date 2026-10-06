@@ -12,6 +12,7 @@ import {
 import Image from "next/image";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { SEPOLIA_NETWORK } from "../../config/sepolia";
 import { type AgglayerDepositStatus } from "../lib/agglayer";
 import { findMidenToEvmDeposit } from "../lib/agglayer-status";
 import {
@@ -43,8 +44,6 @@ import { formatAgo } from "../lib/relative-time";
 import { DEMO_ACTIVITIES } from "../lib/activity-demo";
 import { ThemeToggle } from "./ThemeToggle";
 import { TempoReceipt } from "./TempoReceipt";
-
-const SEPOLIA_CHAIN_ID = 11155111;
 
 function errorMessage(error: unknown) {
   const code =
@@ -422,7 +421,7 @@ export function ActivityDetail({ id }: { id: string }) {
     const isReceive = activity.mode === "receive";
     const destinationChainId = isReceive
       ? MIDEN_DESTINATION_CHAIN_ID
-      : SEPOLIA_CHAIN_ID;
+      : SEPOLIA_NETWORK.chainId;
 
     (async () => {
       // epoch-execute pulls the eager-WASM Miden SDK; import lazily so it stays

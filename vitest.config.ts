@@ -18,7 +18,7 @@ export default defineConfig({
         "src/**/*.test.ts",
         "src/**/*.test.tsx",
         "src/**/*.d.ts",
-        "src/app/lib/e2e/**",
+        "src/wallets/testing/**",
         "src/app/lib/activity-demo.ts",
         "src/app/components/motion/**",
       ],

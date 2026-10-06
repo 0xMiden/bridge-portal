@@ -1,5 +1,7 @@
+import { SEPOLIA_NETWORK } from "../../../config/sepolia";
+
 /** EVM destination chain for the Epoch route (Sepolia). */
-export const EPOCH_DESTINATION_CHAIN_ID = 11155111;
+export const EPOCH_DESTINATION_CHAIN_ID = SEPOLIA_NETWORK.chainId;
 
 /** Sepolia USDC — the fixed EVM output token for the Epoch (Fast) route. */
 export const BRIDGEABLE_EVM_OUTPUT_TOKEN_ADDRESS: string = "0x2BB4FfD7E2c6D432b697554Efd77fA13bdbefd69";

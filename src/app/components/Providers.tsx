@@ -2,8 +2,8 @@
 
 import dynamic from "next/dynamic";
 import type { ReactNode } from "react";
-import { AppKitProvider } from "./AppKitProvider";
-import { RejectionGuard } from "./RejectionGuard";
+import { AppKitProvider } from "../../wallets/evm/AppKitProvider";
+import { RejectionGuard } from "../../wallets/RejectionGuard";
 import { ThemeProvider } from "./ThemeProvider";
 
 // E2E-only: auto-connect the headless test wallet. ssr:false + flag-gated so it
@@ -11,7 +11,10 @@ import { ThemeProvider } from "./ThemeProvider";
 const E2EAutoConnect =
   process.env.NEXT_PUBLIC_E2E_TEST === "true"
     ? dynamic(
-        () => import("./E2EAutoConnect").then((m) => m.E2EAutoConnect),
+        () =>
+          import("../../wallets/testing/E2EAutoConnect").then(
+            (m) => m.E2EAutoConnect,
+          ),
         { ssr: false },
       )
     : null;
@@ -20,7 +23,10 @@ const E2EAutoConnect =
 // the server render — load it client-only. Mounting it here (at the app root)
 // keeps the wallet connected across route navigations.
 const MidenWalletProvider = dynamic(
-  () => import("./MidenWalletProvider").then((mod) => mod.MidenWalletProvider),
+  () =>
+    import("../../wallets/miden/MidenWalletProvider").then(
+      (mod) => mod.MidenWalletProvider,
+    ),
   { ssr: false },
 );
 

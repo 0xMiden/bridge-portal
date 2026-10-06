@@ -9,7 +9,7 @@ import {
   networks,
   projectId,
   wagmiAdapter,
-} from "../lib/appkit-config";
+} from "./appkit-config";
 
 const queryClient = new QueryClient();
 

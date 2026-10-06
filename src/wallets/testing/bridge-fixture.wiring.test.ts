@@ -3,7 +3,7 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
 const fixture = readFileSync(
-  fileURLToPath(new URL("../../../../e2e/fixtures/bridge.ts", import.meta.url)),
+  fileURLToPath(new URL("../../../e2e/fixtures/bridge.ts", import.meta.url)),
   "utf8",
 );
 
