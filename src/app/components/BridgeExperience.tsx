@@ -27,7 +27,7 @@ import {
   useState,
   useSyncExternalStore,
 } from "react";
-import { formatEther, parseUnits } from "viem";
+import { formatEther } from "viem";
 import { SEPOLIA_NETWORK } from "../../config/sepolia";
 import {
   type WalletIdentity,
@@ -36,32 +36,28 @@ import {
   shortAddress,
   walletGradient,
 } from "../../wallets/identity";
+import { AGGLAYER_BALI } from "../../bridge/providers/agglayer/agglayer";
 import {
-  AGGLAYER_BALI,
-  buildSepoliaDepositTransaction,
-  normalizeMidenAccountHex,
-} from "../../bridge/providers/agglayer/agglayer";
-import {
-  type BridgeProvider,
-  type FlowMode,
   type Activity,
-  activityStartedAt,
-  createActivity,
   deriveCtaState,
+  modes,
+  providers,
+  quoteFor,
+  statusLabel,
+  statusTone,
+} from "../lib/bridge-presentation";
+import type { BridgeProvider, FlowMode } from "../../bridge/core/models";
+import { activityStartedAt, routeSwitchChangesAsset } from "../../bridge/core/rules";
+import {
   loadStoredActivities,
   loadStoredMode,
   loadStoredRoute,
-  modes,
-  patchStoredActivity,
-  providers,
-  quoteFor,
-  routeSwitchChangesAsset,
   saveActivities,
   saveStoredMode,
   saveStoredRoute,
-  statusLabel,
-  statusTone,
-} from "../lib/bridge-state";
+} from "../lib/bridge-persistence";
+import { preloadBridgeSubmission, submitBridgeTransfer } from "../lib/bridge-submission";
+import { errorMessage } from "../lib/wallet-errors";
 import { sepoliaGasUnitsFor, useSepoliaGasEstimate } from "../lib/sepolia-gas";
 import { ActivityStack } from "./ActivityStack";
 import { InfoTip } from "./InfoTip";
@@ -208,81 +204,6 @@ const EpochQuotePreview = dynamic(
     ),
   },
 );
-
-// A wallet rejection is a normal user action, not a failure — detect it so the
-// UI can show a short, friendly line instead of a raw multi-line SDK/viem dump.
-function isUserRejection(error: unknown): boolean {
-  if (
-    typeof error === "object" &&
-    error !== null &&
-    "code" in error &&
-    (error as { code?: unknown }).code === 4001
-  ) {
-    return true;
-  }
-  const message = (
-    error instanceof Error ? error.message : String(error ?? "")
-  ).toLowerCase();
-  return (
-    message.includes("user rejected") ||
-    message.includes("user denied") ||
-    message.includes("denied transaction") ||
-    message.includes("rejected the request") ||
-    message.includes("action_rejected")
-  );
-}
-
-function errorMessage(error: unknown) {
-  if (isUserRejection(error)) return "You cancelled the request in your wallet.";
-  if (error instanceof Error) return error.message;
-  if (typeof error === "object" && error && "message" in error)
-    return String(error.message);
-  return "Something went wrong. Try again.";
-}
-
-// Human labels for the Epoch SDK's execution phases, so the button reflects
-// real progress (approve/deposit/batch) instead of a frozen "Waiting".
-const EPOCH_PHASE_LABEL: Record<string, string> = {
-  starting: "Preparing your Epoch deposit…",
-  "switching-chain": "Switch to Sepolia in your wallet…",
-  "preparing-transaction": "Preparing your Epoch deposit…",
-  "waiting-for-transaction": "Confirming your deposit on Sepolia…",
-  batching: "Approve &amp; deposit in your wallet…",
-  sending: "Confirm the deposit in your wallet…",
-  // After the deposit is broadcast, solveIntent keeps running while Epoch's
-  // solver delivers on Miden — no further phases fire, so this label persists
-  // and must explain the wait rather than read as a generic "submitting".
-  sent: "Deposit sent — Epoch is delivering to Miden (1–3 min)…",
-};
-
-// A full Sepolia (66-char) tx hash — used to gate the early jump to the detail
-// page on a real deposit tx rather than an abbreviated/absent value.
-function isSepoliaTxHash(value: string | undefined): value is string {
-  return !!value && /^0x[0-9a-fA-F]{64}$/.test(value);
-}
-
-// Derive the 0x-prefixed Miden account id for a receive so the activity can link
-// to the Midenscan account page. Epoch receives carry no AggLayer bridge
-// destination, so the recipient account is the only handle we can persist.
-function midenAccountLink(value: string | undefined): string | undefined {
-  if (!value) return undefined;
-  try {
-    return `0x${normalizeMidenAccountHex(value)}`;
-  } catch {
-    return undefined;
-  }
-}
-
-// Warm the heavy client-only execute chunks (each eager-loads WASM) ahead of the
-// click so the wallet prompt appears promptly instead of after a long load.
-let epochExecutePreload: Promise<unknown> | null = null;
-function preloadEpochExecute() {
-  epochExecutePreload ??= import("../../bridge/providers/epoch/epoch-execute");
-}
-let agglayerExecutePreload: Promise<unknown> | null = null;
-function preloadAgglayerExecute() {
-  agglayerExecutePreload ??= import("../../bridge/providers/agglayer/agglayer-execute");
-}
 
 function compactTokenAmount(value: string) {
   // A nonzero amount below the 4-dp display precision shouldn't read as "0".
@@ -448,8 +369,7 @@ export function BridgeExperience() {
   // the click-to-wallet-prompt delay is minimal instead of "seeming stuck".
   useEffect(() => {
     if (!(Number(amount) > 0)) return;
-    if (provider === "epoch") preloadEpochExecute();
-    else if (provider === "agglayer") preloadAgglayerExecute();
+    preloadBridgeSubmission(provider);
   }, [amount, provider]);
   const midenAddress = midenWallet.address || launchMidenAccount;
   // Map the form fields to the Epoch quote's directional roles:
@@ -1219,339 +1139,43 @@ export function BridgeExperience() {
     }
   }
 
-  async function submitTransfer() {
+  function submitTransfer() {
     setBridgeError("");
     setWalletError("");
-
-    if (providers[provider].disabled) {
-      setBridgeError("This route isn't available in this build.");
-      return;
-    }
-    // Guard the deposit before opening the wallet: a request above the Sepolia
-    // balance reverts on-chain (MetaMask "likely to fail").
-    if (insufficientBalance) {
-      setBridgeError(
-        `Not enough ${sourceTokenSymbol} — this wallet holds ${evmBalance}. Lower the amount.`,
-      );
-      return;
-    }
-    // Every send signs on Miden (Epoch send + Agglayer bridge-out) — require the
-    // MidenFi wallet up front so the CTA and error are clear (not a late throw).
-    if (mode === "send" && !midenWallet.connected) {
-      setBridgeError("Connect your Bread wallet to sign the send.");
-      return;
-    }
-
-    if (provider === "agglayer" && mode === "send") {
-      setIsSubmitting(true);
-      const senderAddress = midenAddress;
-      if (
-        !midenWallet.connected ||
-        !midenWallet.requestTransaction ||
-        !midenWallet.waitForTransaction ||
-        !senderAddress
-      ) {
-        setBridgeError(
-          "Connect your Bread wallet before bridging out to Sepolia.",
-        );
-        setIsSubmitting(false);
-        return;
-      }
-      const destinationAddress = destination.trim() || walletAccount;
-      if (!/^0x[0-9a-fA-F]{40}$/.test(destinationAddress)) {
-        setBridgeError(
-          "Enter a valid Sepolia (0x…) destination, or connect your Sepolia wallet.",
-        );
-        setIsSubmitting(false);
-        return;
-      }
-      // The wrapped-ETH faucet + its decimals are resolved from the wallet's
-      // held asset (Show balance) — there's no hardcodeable id. Require it so we
-      // burn the exact token the user holds, at its real precision.
-      if (!agglayerEth) {
-        setBridgeError(
-          'Tap "Show balance" first so we can detect the Miden ETH you\'re sending.',
-        );
-        setIsSubmitting(false);
-        return;
-      }
-      let unitsAmount: bigint;
-      try {
-        unitsAmount = parseUnits(amount, agglayerEth.decimals);
-      } catch {
-        setBridgeError("Enter a valid amount.");
-        setIsSubmitting(false);
-        return;
-      }
-      if (unitsAmount <= BigInt(0)) {
-        setBridgeError("Enter an amount greater than zero.");
-        setIsSubmitting(false);
-        return;
-      }
-
-      setSubmitPhase("Preparing bridge note…");
-      try {
-        // Submit first — the wallet approval + note proving happen here. Only
-        // once the send actually goes through do we record an activity row.
-        // Dynamic import: agglayer-execute pulls the eager-WASM SDK + wallet
-        // adapter, so it must load client-side at click time, never in SSR.
-        const { runAgglayerSend } = await import("../../bridge/providers/agglayer/agglayer-execute");
-        setSubmitPhase("Confirm in your wallet…");
-        const { txHash } = await runAgglayerSend({
-          amount: unitsAmount,
-          faucetId: agglayerEth.faucetId,
-          destinationAddress,
-          senderAddress,
+    return submitBridgeTransfer(
+      {
+        provider,
+        mode,
+        amount,
+        destination,
+        activities,
+        insufficientBalance,
+        sourceTokenSymbol,
+        evmBalance,
+        evmWallet: {
+          connected: walletConnected,
+          address: walletAccount,
+          provider: walletProvider,
+        },
+        midenWallet: {
+          connected: midenWallet.connected,
+          address: midenAddress,
           requestTransaction: midenWallet.requestTransaction,
           waitForTransaction: midenWallet.waitForTransaction,
-        });
-        // Note submitted on Miden; Agglayer hasn't observed the exit yet.
-        const activity = createActivity(mode, provider, amount, {
-          status: "source_finality",
-          eta: "10-20 min",
-          destination: destinationAddress,
-          // origin = configured Miden rollup, destination = Ethereum L1 (0)
-          sourceNetworkId: AGGLAYER_BALI.destinationNetworkId,
-          destinationNetworkId: AGGLAYER_BALI.sourceNetworkId,
-          // The real on-chain Miden tx hash (not the wallet request UUID) — this
-          // feeds the Midenscan /tx/ deep link on the send detail page.
-          midenTxId: txHash,
-        });
-        const updated = [activity, ...activities];
-        setActivities(updated);
-        saveActivities(updated);
-        router.push(`/activity/${activity.id}`);
-      } catch (error) {
-        setBridgeError(errorMessage(error));
-      } finally {
-        setIsSubmitting(false);
-        setSubmitPhase("");
-      }
-      return;
-    }
-
-    if (isLiveAgglayerReceive) {
-      setIsSubmitting(true);
-      if (!walletConnected || !walletProvider || !walletAccount) {
-        await open();
-        setIsSubmitting(false);
-        return;
-      }
-      const account = walletAccount;
-      const destinationAccount = destination.trim() || midenAddress;
-      if (!destinationAccount) {
-        setBridgeError(
-          "Connect Bread or paste a Miden account ID before receiving.",
-        );
-        setIsSubmitting(false);
-        return;
-      }
-      let transaction: ReturnType<typeof buildSepoliaDepositTransaction>;
-      try {
-        await ensureSepolia(walletProvider);
-        transaction = buildSepoliaDepositTransaction({
-          amountEth: amount,
-          midenAccountId: normalizeMidenAccountHex(destinationAccount),
-        });
-      } catch (error) {
-        setBridgeError(errorMessage(error));
-        setIsSubmitting(false);
-        return;
-      }
-
-      setSubmitPhase("Confirm in your wallet…");
-      try {
-        // Sign + submit the Sepolia deposit first (wallet approval here). Only
-        // record the activity row once the deposit tx is actually broadcast.
-        const txHash = await walletProvider.request<string>({
-          method: "eth_sendTransaction",
-          params: [
-            {
-              from: account,
-              to: transaction.to,
-              data: transaction.data,
-              value: transaction.value,
-              gas: transaction.gas,
-            },
-          ],
-        });
-        setSubmitPhase("Submitting…");
-        const activity = createActivity(mode, provider, amount, {
-          status: "source_finality",
-          eta: "10-20 min",
-          destination: destinationAccount,
-          bridgeDestinationAddress: transaction.destinationAddress,
-          midenAccountHex: midenAccountLink(destinationAccount),
-          // midenTxId is left unset until the bridge creates the note on Miden;
-          // the monitor fills it with the real claim_tx_hash (the destination
-          // address is not a transaction and must not seed the Midenscan link).
-          sourceNetworkId: AGGLAYER_BALI.sourceNetworkId,
-          destinationNetworkId: AGGLAYER_BALI.destinationNetworkId,
-          txHash: shortAddress(txHash),
-          sourceTxHash: txHash,
-        });
-        const updated = [activity, ...activities];
-        setActivities(updated);
-        saveActivities(updated);
-        router.push(`/activity/${activity.id}`);
-      } catch (error) {
-        setBridgeError(errorMessage(error));
-      } finally {
-        setIsSubmitting(false);
-        setSubmitPhase("");
-      }
-      return;
-    }
-
-    if (provider === "epoch") {
-      setIsSubmitting(true);
-      // Receive (EVM→Miden) signs a Sepolia deposit, so it needs a connected
-      // EVM wallet on Sepolia. Send (Miden→EVM) signs only on Miden.
-      if (mode === "receive") {
-        if (!walletConnected || !walletProvider || !walletAccount) {
-          await open();
-          setIsSubmitting(false);
-          return;
-        }
-        try {
-          await ensureSepolia(walletProvider);
-        } catch (error) {
-          setBridgeError(errorMessage(error));
-          setIsSubmitting(false);
-          return;
-        }
-      }
-
-      const resolvedDestination =
-        mode === "send" ? epochEvmAddress : epochMidenAccount;
-      // Require a valid recipient before starting, so a missing destination
-      // doesn't create a failed ("Needs recovery") activity.
-      if (mode === "receive" && !resolvedDestination) {
-        setBridgeError(
-          "Connect your Bread wallet or paste a Miden account to receive into.",
-        );
-        setIsSubmitting(false);
-        return;
-      }
-      if (
-        mode === "send" &&
-        !/^0x[0-9a-fA-F]{40}$/.test(resolvedDestination)
-      ) {
-        setBridgeError(
-          "Enter a valid Sepolia (0x…) address, or connect your Sepolia wallet.",
-        );
-        setIsSubmitting(false);
-        return;
-      }
-      setSubmitPhase(
-        mode === "receive"
-          ? "Preparing your Epoch deposit…"
-          : "Preparing your Epoch send…",
-      );
-      // Open the transfer's detail page up front, then run the transfer. The
-      // Epoch SDK doesn't reliably surface the deposit tx hash mid-flight for the
-      // injected/live wallet path, so waiting on it left the button frozen at
-      // "Preparing…" long after the Sepolia deposit had already confirmed.
-      // Instead the row is created + navigated to immediately (a live,
-      // monitorable page), patched as the transfer progresses and resolves, and
-      // removed / marked failed if the wallet prompt is rejected.
-      let activityId: string | null = null;
-      try {
-        // Dynamic import: epoch-execute pulls eager-WASM miden-sdk, so it must
-        // load client-side at click time, never in the server render.
-        const { runEpochTransfer } = await import("../../bridge/providers/epoch/epoch-execute");
-
-        const optimistic = createActivity(mode, "epoch", amount, {
-          status: "source_finality",
-          eta:
-            mode === "receive"
-              ? "Confirm the deposit in your wallet…"
-              : "Confirm the send in your wallet…",
-          destination: resolvedDestination,
-          midenAccountHex:
-            mode === "receive" ? midenAccountLink(resolvedDestination) : undefined,
-          epochSponsor: epochEvmAddress,
-        });
-        activityId = optimistic.id;
-        const withNew = [optimistic, ...activities];
-        setActivities(withNew);
-        saveActivities(withNew);
-        router.push(`/activity/${optimistic.id}`);
-
-        const result = await runEpochTransfer({
-          mode,
-          amount,
-          midenAccount: epochMidenAccount,
-          evmAddress: epochEvmAddress,
-          requestTransaction: midenWallet.requestTransaction,
-          waitForTransaction: midenWallet.waitForTransaction,
-          onStatus: (status) => {
-            // Reflect live phase progress on the detail page (via the row's eta),
-            // and capture the deposit tx hash if/when the SDK provides it.
-            const patch: Partial<Activity> = {
-              eta: EPOCH_PHASE_LABEL[status.phase] ?? "Working…",
-            };
-            if (isSepoliaTxHash(status.transactionHash)) {
-              patch.status = "message_observed";
-              patch.txHash = shortAddress(status.transactionHash);
-              patch.sourceTxHash = status.transactionHash;
-            }
-            patchStoredActivity(optimistic.id, patch);
-            setActivities(loadStoredActivities());
-          },
-        });
-
-        // Final details — the intent nonce starts the detail-page status poll.
-        patchStoredActivity(optimistic.id, {
-          status: "message_observed",
-          eta: "1-3 min",
-          txHash: result.sourceTxHash
-            ? shortAddress(result.sourceTxHash)
-            : "0xpending",
-          sourceTxHash: result.sourceTxHash,
-          midenTxId: mode === "send" ? result.midenNoteId : undefined,
-          epochIntentNonce: result.intentNonce,
-          epochSponsor: result.sponsorAddress,
-          receivedAmount: result.outputAmount,
-        });
-        setActivities(loadStoredActivities());
-      } catch (error) {
-        if (activityId) {
-          if (isUserRejection(error)) {
-            // Nothing was submitted — drop the optimistic row and return to the
-            // form so the cancellation doesn't leave a stuck "preparing" row.
-            const remaining = loadStoredActivities().filter(
-              (item) => item.id !== activityId,
-            );
-            saveActivities(remaining);
-            setActivities(remaining);
-            router.push("/");
-          } else {
-            // Errored mid-transfer — keep the row but mark it failed.
-            patchStoredActivity(activityId, {
-              status: "failed",
-              eta: "Transfer failed",
-            });
-            setActivities(loadStoredActivities());
-          }
-        }
-        setBridgeError(errorMessage(error));
-      } finally {
-        setIsSubmitting(false);
-        setSubmitPhase("");
-      }
-      return;
-    }
-
-    const resolvedDestination =
-      destination.trim() || (mode === "receive" ? midenAddress : walletAccount);
-    const next = createActivity(mode, provider, amount, {
-      destination: resolvedDestination,
-    });
-    const updated = [next, ...activities];
-    setActivities(updated);
-    saveActivities(updated);
-    router.push(`/activity/${next.id}`);
+        },
+        agglayerEth,
+        epochEvmAddress,
+        epochMidenAccount,
+      },
+      {
+        openEvmWallet: open,
+        onError: setBridgeError,
+        onSubmittingChange: setIsSubmitting,
+        onPhaseChange: setSubmitPhase,
+        onActivitiesChange: setActivities,
+        navigate: (path) => router.push(path),
+      },
+    );
   }
 
   return (

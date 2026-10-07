@@ -7,7 +7,7 @@ import {
   type Activity,
   modes,
   providers,
-} from "../lib/bridge-state";
+} from "../lib/bridge-presentation";
 
 type Link = { available: boolean; href?: string; label?: string } | null;
 

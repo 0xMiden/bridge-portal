@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { formatEther } from "viem";
-import type { BridgeProvider, FlowMode } from "./bridge-state";
+import type { BridgeProvider, FlowMode } from "../../bridge/core/models";
 
 // Rough gas-limit estimates for the Sepolia-side operation of each route. These
 // are the units multiplied by the live gas price to produce a fee estimate;

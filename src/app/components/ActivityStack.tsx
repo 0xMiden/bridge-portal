@@ -5,11 +5,11 @@ import { ChevronDown, ChevronRight } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import {
   type Activity,
-  activityStartedAt,
   providers,
   statusLabel,
   statusTone,
-} from "../lib/bridge-state";
+} from "../lib/bridge-presentation";
+import { activityStartedAt } from "../../bridge/core/rules";
 import { RelativeTime } from "./RelativeTime";
 import { gsap } from "../lib/gsap";
 import { EASE } from "../lib/motion";

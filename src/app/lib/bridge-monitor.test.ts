@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import type { Activity } from "./bridge-state";
+import type { Activity } from "./bridge-presentation";
 import { deriveMonitoredActivity } from "./bridge-monitor";
 
 const baseReceive: Activity = {

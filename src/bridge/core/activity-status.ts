@@ -7,3 +7,13 @@ export type ActivityStatus =
   | "claim_submitted"
   | "failed"
   | "complete";
+
+/** Ordered lifecycle milestones; failures are handled separately. */
+export const activitySteps = [
+  "signature",
+  "source_finality",
+  "message_observed",
+  "claim_available",
+  "claim_submitted",
+  "complete",
+] as const satisfies readonly ActivityStatus[];

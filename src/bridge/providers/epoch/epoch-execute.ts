@@ -4,6 +4,8 @@ import {
   type TransactionExecutionStatus,
 } from "@epoch-protocol/epoch-intents-sdk";
 import { formatUnits, parseUnits } from "viem";
+import type { FlowMode } from "../../core/models";
+import { isValidAmount } from "../../core/rules";
 
 import {
   buildCrossChainIntent,
@@ -52,10 +54,8 @@ import { e2eNetwork, isE2E } from "../../../wallets/testing/env";
 
 const EVM_ADDRESS_RE = /^0x[0-9a-fA-F]{40}$/;
 
-export type EpochDirection = "send" | "receive";
-
 export interface RunEpochTransferArgs {
-  mode: EpochDirection;
+  mode: FlowMode;
   /** Human-readable input amount as typed (USDC in either direction). */
   amount: string;
   /** Miden account — sender (send) or recipient (receive). bech32 or 0x hex. */
@@ -74,7 +74,7 @@ export interface RunEpochTransferArgs {
 }
 
 export interface EpochExecuteResult {
-  direction: EpochDirection;
+  direction: FlowMode;
   /** Intent nonce for status polling (`getIntentStatus(sponsorAddress, nonce)`). */
   intentNonce?: string;
   /** Sponsor / user address the intent status is keyed on (always the EVM 0x). */
@@ -120,8 +120,7 @@ function assertCommonArgs(args: RunEpochTransferArgs) {
   if (!isBridgeableEvmTokenConfigured()) {
     throw new Error("The Epoch route is not configured yet.");
   }
-  const amountNum = Number(args.amount);
-  if (!Number.isFinite(amountNum) || amountNum <= 0) {
+  if (!isValidAmount(args.amount)) {
     throw new Error("Enter an amount greater than zero.");
   }
   if (!EVM_ADDRESS_RE.test(args.evmAddress.trim())) {
