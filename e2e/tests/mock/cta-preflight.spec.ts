@@ -14,6 +14,26 @@ const combos: Array<{ route: Route; mode: Mode; label: RegExp }> = [
   { route: "AggLayer", mode: "Send", label: /Review send/i },
 ];
 
+test("Miden balances are opt-in and follow the token across route and direction changes", async ({ bridge, page }) => {
+  await expect(page.getByRole("button", { name: "Show balance", exact: true })).toBeVisible();
+  await bridge.showMidenBalance();
+  const midenBalance = page.locator(".swap-box").filter({ has: page.getByRole("button", { name: "Refresh Miden balance" }) });
+  await expect(midenBalance).toContainText("Available 1 USDC");
+
+  await bridge.setRoute("AggLayer");
+  await expect(midenBalance).toContainText("Available 1 ETH");
+  await bridge.setMode("Send");
+  await expect(midenBalance).toContainText("Available 1 ETH");
+  await page.getByRole("button", { name: "Refresh Miden balance" }).click();
+  await expect(midenBalance).toContainText("Available 1 ETH");
+  await bridge.setRoute("Epoch");
+  await expect(midenBalance).toContainText("Available 1 USDC");
+
+  await page.reload();
+  await bridge.waitForReady();
+  await expect(page.getByRole("button", { name: "Show balance", exact: true })).toBeVisible();
+});
+
 test("token selection resets the amount, reads the selected asset, and restores the route after reload", async ({ bridge, page }) => {
   await bridge.setMode("Receive");
   await bridge.fillAmount("0.05");

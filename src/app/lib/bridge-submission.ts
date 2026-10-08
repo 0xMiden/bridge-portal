@@ -2,7 +2,7 @@ import { findBridgeRoute } from "../../bridge/core/routes";
 import { parseUnits } from "viem";
 import type { MidenFiWalletContextState } from "@miden-sdk/miden-wallet-adapter-react";
 import type { BridgeProvider } from "../../bridge/core/models";
-import type { ResolvedEthAsset } from "../../bridge/miden-route-balances";
+import type { ResolvedMidenAsset } from "../../bridge/miden-balances";
 import {
   AGGLAYER_BALI,
   buildSepoliaDepositTransaction,
@@ -33,7 +33,7 @@ export interface TransferSubmission {
     requestTransaction?: MidenFiWalletContextState["requestTransaction"];
     waitForTransaction?: MidenFiWalletContextState["waitForTransaction"];
   };
-  agglayerEth: ResolvedEthAsset | null;
+  agglayerEth: ResolvedMidenAsset | null;
   /** The same directional accounts used by the form's live Epoch quote. */
   epochEvmAddress: string;
   epochMidenAccount: string;
@@ -173,8 +173,8 @@ export async function submitBridgeTransfer(
       onSubmittingChange(false);
       return;
     }
-    // The wrapped-ETH faucet + its decimals are resolved from the wallet's
-    // held asset (Show balance) — there's no hardcodeable id. Require it so we
+    // The wrapped-ETH balance and decimals are resolved for the connected
+    // account's route asset (Show balance). Require it so we
     // burn the exact token the user holds, at its real precision.
     if (!agglayerEth) {
       onError(

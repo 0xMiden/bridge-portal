@@ -5,8 +5,23 @@ import {
   PrivateDataPermission,
   WalletAdapterNetwork,
 } from "@miden-sdk/miden-wallet-adapter-base";
-import { MidenFiSignerProvider } from "@miden-sdk/miden-wallet-adapter-react";
-import { createContext, useContext, useState, type ReactNode } from "react";
+import { MidenFiSignerProvider, useMidenFiWallet } from "@miden-sdk/miden-wallet-adapter-react";
+import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
+import { useBalanceStore } from "../../bridge/BalanceProvider";
+
+function MidenBalanceSession() {
+  const wallet = useMidenFiWallet();
+  const store = useBalanceStore();
+  useEffect(() => {
+    store.setMidenSession(wallet.connected && wallet.address ? {
+      account: wallet.address,
+      network: "miden-testnet",
+      requestAssets: wallet.requestAssets,
+    } : null);
+  }, [store, wallet.connected, wallet.address, wallet.requestAssets]);
+  useEffect(() => () => store.setMidenSession(null), [store]);
+  return null;
+}
 
 // Lets the wallet button force a full adapter remount to recover from a stuck
 // connection (timeout / forget). Kept as context so the provider can live at
@@ -46,6 +61,7 @@ export function MidenWalletProvider({ children }: { children: ReactNode }) {
         allowedPrivateData={AllowedPrivateData.None}
         localStorageKey="miden-bridge-wallet"
       >
+        {process.env.NEXT_PUBLIC_E2E_TEST !== "true" ? <MidenBalanceSession /> : null}
         {children}
       </MidenFiSignerProvider>
     </ResetMidenProviderContext.Provider>

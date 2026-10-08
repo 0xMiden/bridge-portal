@@ -2,7 +2,7 @@
 
 import { createAppKit } from "@reown/appkit/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { WagmiProvider, cookieToInitialState, type Config } from "wagmi";
 import {
   metadata,
@@ -10,8 +10,6 @@ import {
   projectId,
   wagmiAdapter,
 } from "./appkit-config";
-
-const queryClient = new QueryClient();
 
 // Must run once at module scope, not inside the component.
 createAppKit({
@@ -29,6 +27,7 @@ export function AppKitProvider({
   children: ReactNode;
   cookies: string | null;
 }) {
+  const [queryClient] = useState(() => new QueryClient());
   const initialState = cookieToInitialState(
     wagmiAdapter.wagmiConfig as Config,
     cookies,

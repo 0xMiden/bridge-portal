@@ -12,6 +12,8 @@ export type BridgeAsset = TokenMetadata & (
   | { network: "miden-testnet"; kind: "miden"; faucetId: string }
 );
 
+export type MidenAsset = Extract<BridgeAsset, { kind: "miden" }>;
+
 export const SEPOLIA_ETH = {
   network: "sepolia", kind: "native", symbol: "ETH", decimals: 18,
 } as const satisfies BridgeAsset;

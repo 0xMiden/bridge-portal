@@ -5,6 +5,7 @@ import type { ReactNode } from "react";
 import { AppKitProvider } from "../../wallets/evm/AppKitProvider";
 import { RejectionGuard } from "../../wallets/RejectionGuard";
 import { ThemeProvider } from "./ThemeProvider";
+import { BalanceProvider } from "../../bridge/BalanceProvider";
 
 // E2E-only: auto-connect the headless test wallet. ssr:false + flag-gated so it
 // never enters normal builds.
@@ -40,9 +41,11 @@ export function Providers({
   return (
     <ThemeProvider>
       <AppKitProvider cookies={cookies}>
-        <RejectionGuard />
-        {E2EAutoConnect ? <E2EAutoConnect /> : null}
-        <MidenWalletProvider>{children}</MidenWalletProvider>
+        <BalanceProvider>
+          <RejectionGuard />
+          {E2EAutoConnect ? <E2EAutoConnect /> : null}
+          <MidenWalletProvider>{children}</MidenWalletProvider>
+        </BalanceProvider>
       </AppKitProvider>
     </ThemeProvider>
   );

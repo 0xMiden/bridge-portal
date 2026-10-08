@@ -27,7 +27,6 @@ import {
   useState,
   useSyncExternalStore,
 } from "react";
-import { formatUnits } from "viem";
 import { SEPOLIA_NETWORK } from "../../config/sepolia";
 import {
   type WalletIdentity,
@@ -69,10 +68,7 @@ import { TokenSelect } from "./TokenSelect";
 import { WalletMenu } from "../../wallets/WalletMenu";
 import { FaucetMenu } from "./FaucetMenu";
 import { ThemeToggle } from "./ThemeToggle";
-import type {
-  MidenRouteBalances,
-  ResolvedEthAsset,
-} from "../../bridge/miden-route-balances";
+import { useMidenBalance, useSepoliaBalance } from "../../bridge/BalanceProvider";
 import {
   useAppKit,
   useAppKitAccount,
@@ -123,7 +119,6 @@ type MidenWalletSnapshot = {
   requestSend?: MidenFiWalletContextState["requestSend"];
   requestTransaction?: MidenFiWalletContextState["requestTransaction"];
   waitForTransaction?: MidenFiWalletContextState["waitForTransaction"];
-  requestAssets?: MidenFiWalletContextState["requestAssets"];
   requestConsumableNotes?: MidenFiWalletContextState["requestConsumableNotes"];
 };
 
@@ -228,12 +223,6 @@ export function BridgeExperience() {
     walletConnected &&
     chainId != null &&
     Number(chainId) !== SEPOLIA_NETWORK.chainId;
-  const [evmBalance, setEvmBalance] = useState("");
-  // Bumped after a faucet mint to force the Sepolia balance to refetch.
-  const [evmBalanceNonce, setEvmBalanceNonce] = useState(0);
-  // Numeric Sepolia balance of the route's source token, for the
-  // insufficient-balance guard (null = unknown / not yet loaded).
-  const [evmBalanceValue, setEvmBalanceValue] = useState<number | null>(null);
   const [midenWallet, setMidenWallet] =
     useState<MidenWalletSnapshot>(emptyMidenWallet);
   const [launchMidenAccount, setLaunchMidenAccount] = useState("");
@@ -262,31 +251,10 @@ export function BridgeExperience() {
   // Prefill the destination input with the connected wallet once per direction;
   // cleared in selectMode so switching modes re-prefills for the new side.
   const destinationPrefilledRef = useRef(false);
-  // Miden per-token balances (private → fetched via a one-time requestAssets
-  // popup on connect). Keyed by provider. In-flight ref dedups the popup across
-  // StrictMode's double-mount so it only ever asks once.
-  const [midenBalances, setMidenBalances] = useState<Record<
-    string,
-    string
-  > | null>(null);
-  // The Agglayer wrapped-ETH the wallet actually holds, resolved at runtime (its
-  // faucet id is minted fresh on every Gateway redeploy, so it can't be
-  // hardcoded). Drives the Agglayer balance now; the send will reuse its faucet.
-  const [agglayerEth, setAgglayerEth] = useState<ResolvedEthAsset | null>(null);
-  const [midenBalanceFetchedFor, setMidenBalanceFetchedFor] = useState("");
-  // Reading the (private) Miden balance opens a MidenFi confirmation popup, so we
-  // never do it automatically. The fetch runs only for the account the user has
-  // explicitly asked to see — via "Show balance" or the refresh button — which
-  // is recorded here. Cleared on disconnect / account change so a new account
-  // shows the button again rather than popping unprompted.
-  const [balanceRequestedFor, setBalanceRequestedFor] = useState("");
   // Live Epoch API quote amount, lifted from EpochQuotePreview so the
   // Min-received detail reflects the real quote (not a hardcoded estimate).
   const [epochQuoteAmount, setEpochQuoteAmount] = useState<string | undefined>(
     undefined,
-  );
-  const midenBalanceInflightRef = useRef<Promise<MidenRouteBalances> | null>(
-    null,
   );
   const [activities, setActivities] = useState<Activity[]>([]);
   const [hydrated, setHydrated] = useState(false);
@@ -378,14 +346,25 @@ export function BridgeExperience() {
   const epochMidenAccount =
     mode === "send" ? midenAddress : destination.trim() || midenAddress;
   const evmWalletLabel = walletInfo?.name ?? "Sepolia";
-  const evmBalanceText = walletConnected
-    ? evmBalance || "Balance unavailable"
-    : "Not connected";
   const midenRouteToken = [route.source, route.destination].find((asset) => asset.kind === "miden");
   const evmRouteToken = [route.source, route.destination].find((asset) => asset.network === "sepolia");
+  const midenBalance = useMidenBalance(midenWallet.connected ? midenAddress : "", midenRouteToken);
+  const sepoliaBalance = useSepoliaBalance(walletConnected ? walletAccount : "", evmRouteToken);
+  const midenTokenBalance = midenBalance.balance;
+  const evmBalance = sepoliaBalance.balance
+    ? `${compactTokenAmount(sepoliaBalance.balance.balance)} ${sepoliaBalance.balance.symbol}`
+    : "";
+  const evmBalanceValue = sepoliaBalance.balance ? Number(sepoliaBalance.balance.balance) : null;
+  const evmBalanceUnavailable = Boolean(sepoliaBalance.error) && !sepoliaBalance.loading;
+  const evmBalanceText = walletConnected
+    ? evmBalance || (evmBalanceUnavailable ? "Balance unavailable" : "Loading balance…")
+    : "Not connected";
+  const agglayerEth = provider === "agglayer" && midenTokenBalance && midenTokenBalance.amountRaw > 0n
+    ? midenTokenBalance
+    : null;
   const midenBalanceText = midenWallet.connected
-    ? midenBalances && midenRouteToken
-      ? `${compactTokenAmount(midenBalances[provider] ?? "0")} ${midenRouteToken.symbol}`
+    ? midenTokenBalance && midenRouteToken
+      ? `${compactTokenAmount(midenTokenBalance.balance)} ${midenRouteToken.symbol}`
       : "Syncing…"
     : launchMidenAccount
       ? "Launch account"
@@ -677,39 +656,6 @@ export function BridgeExperience() {
     }
   }
 
-  useEffect(() => {
-    if (!walletAccount || !evmRouteToken) return;
-
-    let cancelled = false;
-    const url = evmRouteToken.kind === "erc20"
-      ? `/api/sepolia/balance?address=${walletAccount}&token=${evmRouteToken.address}&decimals=${evmRouteToken.decimals}`
-      : `/api/sepolia/balance?address=${walletAccount}`;
-    fetch(url)
-      .then((response) =>
-        response.ok
-          ? response.json()
-          : Promise.reject(new Error("Unable to fetch balance")),
-      )
-      .then((payload: { balanceWei?: string; balance?: string }) => {
-        if (cancelled) return;
-        const balance = evmRouteToken.kind === "erc20"
-          ? payload.balance ?? "0"
-          : formatUnits(BigInt(payload.balanceWei ?? "0"), evmRouteToken.decimals);
-        setEvmBalance(`${compactTokenAmount(balance)} ${evmRouteToken.symbol}`);
-        setEvmBalanceValue(Number(balance));
-      })
-      .catch(() => {
-        if (!cancelled) {
-          setEvmBalance("");
-          setEvmBalanceValue(null);
-        }
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [walletAccount, evmRouteToken, evmBalanceNonce]);
-
   // Default the destination input to the connected wallet on the relevant side
   // (Miden for receive, Sepolia for send). Runs once per direction; the user can
   // freely edit or clear it afterward.
@@ -739,69 +685,6 @@ export function BridgeExperience() {
     destination,
   ]);
 
-  // Load the Miden token balances once per connected account. requestAssets
-  // opens a MidenFi permission popup (balances are private); the in-flight ref
-  // collapses concurrent/StrictMode calls into a single popup.
-  const requestMidenAssets = midenWallet.requestAssets;
-  useEffect(() => {
-    if (!midenWallet.connected) {
-      midenBalanceInflightRef.current = null;
-      // Reset only on actual disconnect — syncing to an external event.
-      /* eslint-disable react-hooks/set-state-in-effect */
-      setMidenBalances(null);
-      setAgglayerEth(null);
-      setMidenBalanceFetchedFor("");
-      setBalanceRequestedFor("");
-      /* eslint-enable react-hooks/set-state-in-effect */
-      return;
-    }
-    // Connected but the adapter's requestAssets/address hasn't settled yet — wait
-    // rather than resetting (a transient undefined must not re-trigger the popup).
-    if (!requestMidenAssets || !midenAddress) return;
-    // Never fetch (and never open the popup) unless the user explicitly asked to
-    // see this account's balance.
-    if (balanceRequestedFor !== midenAddress) return;
-    if (midenBalanceFetchedFor === midenAddress) return;
-
-    let cancelled = false;
-    const run =
-      midenBalanceInflightRef.current ??
-      (midenBalanceInflightRef.current = (async () => {
-        const { fetchMidenRouteBalances } = await import(
-          "../../bridge/miden-route-balances"
-        );
-        return fetchMidenRouteBalances(requestMidenAssets);
-      })());
-
-    run
-      .then((result) => {
-        if (cancelled) return;
-        setMidenBalances({ epoch: result.epoch, agglayer: result.agglayer });
-        setAgglayerEth(result.agglayerEth);
-        setMidenBalanceFetchedFor(midenAddress);
-      })
-      .catch(() => {
-        if (!cancelled) {
-          setMidenBalances(null);
-          setAgglayerEth(null);
-        }
-      })
-      .finally(() => {
-        if (midenBalanceInflightRef.current === run)
-          midenBalanceInflightRef.current = null;
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [
-    midenWallet.connected,
-    requestMidenAssets,
-    midenAddress,
-    midenBalanceFetchedFor,
-    balanceRequestedFor,
-  ]);
-
   function selectMode(nextMode: FlowMode) {
     const nextRoute = nextMode === mode ? route : reverseBridgeRoute(route);
     if (!nextRoute) return;
@@ -812,20 +695,6 @@ export function BridgeExperience() {
     setDestination("");
     destinationPrefilledRef.current = false;
     setBridgeError("");
-  }
-
-  // First reveal: user opts in to the balance popup for the connected account.
-  function showMidenBalance() {
-    setBalanceRequestedFor(midenAddress);
-  }
-
-  // Re-sync the Miden balance (opens a fresh requestAssets popup by clearing the
-  // fetched marker so the balance effect re-runs). Only ever called from the
-  // refresh button — never automatically.
-  function refreshMidenBalance() {
-    midenBalanceInflightRef.current = null;
-    setMidenBalanceFetchedFor("");
-    setBalanceRequestedFor(midenAddress);
   }
 
   // The chain-specific wallet identity line for a From/To panel: names the
@@ -854,7 +723,16 @@ export function BridgeExperience() {
   // above owns the disconnected/connecting/wrong-network states).
   function renderEvmBalance() {
     if (!walletConnected) return null;
-    return <>Available {evmBalanceText}</>;
+    if (sepoliaBalance.balance) return <>Available {evmBalanceText}</>;
+    if (evmBalanceUnavailable) return <>Balance unavailable</>;
+    return (
+      <>
+        <span aria-hidden="true">Available</span>
+        <span className="balance-placeholder" role="status">
+          <span className="sr-only">Loading {evmRouteToken?.symbol} balance…</span>
+        </span>
+      </>
+    );
   }
 
   // The Miden balance cell. Reactive + opt-in: it stays a "Show balance" button
@@ -863,14 +741,15 @@ export function BridgeExperience() {
     // Connection state (not connected / connecting / launch-account) lives in the
     // wallet chip above; the balance line only appears once there's a balance.
     if (!midenWallet.connected) return null;
-    if (midenBalances && midenRouteToken) {
+    if (midenTokenBalance && midenRouteToken) {
       return (
         <>
           Available {midenBalanceText}
           <button
             type="button"
             className="balance-refresh"
-            onClick={refreshMidenBalance}
+            onClick={() => void midenBalance.refresh().catch(() => {})}
+            disabled={midenBalance.loading}
             aria-label="Refresh Miden balance"
             title="Refresh Miden balance"
           >
@@ -879,12 +758,12 @@ export function BridgeExperience() {
         </>
       );
     }
-    if (balanceRequestedFor === midenAddress) return <>Available Syncing…</>;
+    if (midenBalance.loading) return <>Available Syncing…</>;
     return (
       <button
         type="button"
         className="balance-show"
-        onClick={showMidenBalance}
+        onClick={() => void midenBalance.show().catch(() => {})}
       >
         Show balance
       </button>
@@ -977,7 +856,6 @@ export function BridgeExperience() {
     } catch {
       // Ignore disconnect failures; account state is driven by AppKit hooks.
     }
-    setEvmBalance("");
   }
 
   async function switchToSepolia() {
@@ -1166,7 +1044,7 @@ export function BridgeExperience() {
 
         <div className="topbar-actions">
           <div className="topbar-utilities">
-            <FaucetMenu onMinted={() => setEvmBalanceNonce((n) => n + 1)} />
+            <FaucetMenu />
             <ThemeToggle />
           </div>
           <div

@@ -122,14 +122,18 @@ describe("Agglayer submission", () => {
       started.resolve();
       return execution.promise;
     });
-    const { input, effects } = setup({ routeId: "agglayer-eth-to-sepolia" });
+    const { input, effects } = setup({
+      routeId: "agglayer-eth-to-sepolia",
+      amount: "0.123456",
+      agglayerEth: { faucetId: MIDEN_ACCOUNT, decimals: 6, amountRaw: 1_000_000n, symbol: "ETH" },
+    });
     const submission = submitBridgeTransfer(input, effects);
     await started.promise;
 
     expect(loadStoredActivities()).toEqual([history]);
     expect(effects.navigate).not.toHaveBeenCalled();
     expect(runAgglayerSend).toHaveBeenCalledWith(expect.objectContaining({
-      amount: 12_345_678n,
+      amount: 123_456n,
       faucetId: MIDEN_ACCOUNT,
       destinationAddress: EVM_ADDRESS,
       senderAddress: MIDEN_ACCOUNT,
