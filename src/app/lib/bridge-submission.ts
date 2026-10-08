@@ -1,3 +1,7 @@
+import { captureSourceTransaction } from "../../bridge/evm/source-transaction";
+import type { CctpQuote } from "../../bridge/providers/xreserve/cctp-quote";
+import { isCctpNetwork } from "../../bridge/providers/xreserve/cctp-config";
+import { evmNetworks } from "../../config/evm-networks";
 import { findBridgeRoute } from "../../bridge/core/routes";
 import { parseUnits } from "viem";
 import type { MidenFiWalletContextState } from "@miden-sdk/miden-wallet-adapter-react";
@@ -16,6 +20,7 @@ import { errorMessage, isUserRejection } from "./wallet-errors";
 
 export interface TransferSubmission {
   routeId: string;
+  cctpQuote?: CctpQuote;
   amount: string;
   destination: string;
   activities: Activity[];
@@ -84,12 +89,15 @@ function midenAccountLink(value: string | undefined): string | undefined {
 // Warm the client-only execution chunks ahead of the wallet prompt.
 let epochExecutePreload: Promise<unknown> | null = null;
 let agglayerExecutePreload: Promise<unknown> | null = null;
+let xreserveExecutePreload: Promise<unknown> | null = null;
 
 export function preloadBridgeSubmission(provider: BridgeProvider) {
   if (provider === "epoch") {
     epochExecutePreload ??= import("../../bridge/providers/epoch/epoch-execute");
   } else if (provider === "agglayer") {
     agglayerExecutePreload ??= import("../../bridge/providers/agglayer/agglayer-execute");
+  } else if (provider === "xreserve") {
+    xreserveExecutePreload ??= import("../../bridge/providers/xreserve/deposit");
   }
 }
 
@@ -147,6 +155,76 @@ export async function submitBridgeTransfer(
   // MidenFi wallet up front so the CTA and error are clear (not a late throw).
   if (mode === "send" && !midenWallet.connected) {
     onError("Connect your Bread wallet to sign the send.");
+    return;
+  }
+
+  if (provider === "xreserve") {
+    onSubmittingChange(true);
+    let broadcastHash: string | undefined;
+    try {
+      if (!walletConnected || !walletProvider || !walletAccount) {
+        await openEvmWallet();
+        return;
+      }
+      const recipient = destination.trim() || midenAddress;
+      if (!recipient) throw new Error("Connect your Bread wallet or paste a Miden account to receive into.");
+      const { depositOnArc } = await import("../../bridge/providers/xreserve/deposit");
+      const sourceName = route.source.kind === "miden" ? "Miden" : evmNetworks[route.source.network].name;
+      const labels = {
+        checking: "Checking deposit…",
+        approving: "Approve USDC in your wallet…",
+        "approval-confirming": `Confirming USDC approval on ${sourceName}…`,
+        depositing: "Confirm the deposit in your wallet…",
+      };
+      const depositInput: Parameters<typeof depositOnArc>[0] = {
+        provider: walletProvider,
+        account: walletAccount as `0x${string}`,
+        amount,
+        recipient,
+        onPhase: (phase) => onPhaseChange(labels[phase]),
+        onBroadcast: (hash, fee?: string) => {
+          broadcastHash = hash;
+          const activity = createActivity(route, amount, {
+            status: "source_finality",
+            xreserveStatus: "submitted",
+            xreserveFee: fee,
+            sourceTxHash: hash,
+            txHash: shortAddress(hash),
+            destination: recipient,
+            midenAccountHex: midenAccountLink(recipient),
+            evmAddress: walletAccount,
+            midenAccount: recipient,
+            receivedAmount: amount.trim(),
+          });
+          // Read at broadcast time: other in-flight transfers may have updated storage.
+          const updated = [activity, ...loadStoredActivities()];
+          onActivitiesChange(updated);
+          saveActivities(updated);
+          if (route.source.network !== "miden-testnet") {
+            // Do not delay the receipt or lose the hash if the RPC is slow. The
+            // monitor retries capture while pending; writes merge with its state.
+            void captureSourceTransaction(route.source.network, hash)
+              .then((sourceTransaction) => {
+                if (sourceTransaction) patchStoredActivity(activity.id, { sourceTransaction });
+              }).catch(() => { /* The saved hash remains trackable during RPC outages. */ });
+          }
+          navigate(`/activity/${activity.id}`);
+        },
+      };
+      if (route.source.network === "arc-testnet") await depositOnArc(depositInput);
+      else {
+        if (!isCctpNetwork(route.source.network) || !input.cctpQuote) throw new Error("Review the Circle fee before sending.");
+        const { depositViaCctp } = await import("../../bridge/providers/xreserve/cctp-deposit");
+        await depositViaCctp({ ...depositInput, network: route.source.network, quote: input.cctpQuote });
+      }
+    } catch (error) {
+      onError(broadcastHash
+        ? `Deposit submitted: ${broadcastHash}. Save this hash to track it; do not deposit again. ${errorMessage(error)}`
+        : errorMessage(error));
+    } finally {
+      onSubmittingChange(false);
+      onPhaseChange("");
+    }
     return;
   }
 

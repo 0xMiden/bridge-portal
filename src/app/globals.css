@@ -1,5 +1,29 @@
 @import "tailwindcss";
 
+/* The Arc label and six-decimal USDC amounts need balanced column widths. */
+.swap-card[data-provider="xreserve"] .swap-box {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+}
+.swap-card[data-provider="xreserve"] .swap-box-amount {
+  min-width: 0;
+  max-width: 100%;
+}
+.swap-card[data-provider="xreserve"] .swap-box input {
+  width: 100%;
+  font-size: 36px;
+}
+@media (min-width: 641px) {
+  .swap-card[data-provider="xreserve"] .quote-summary:not(:has(> div:nth-child(3))) {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (max-width: 600px) {
+  .swap-card[data-provider="xreserve"] .swap-box input,
+  .swap-card[data-provider="xreserve"] .readonly-amount strong {
+    font-size: 26px;
+  }
+}
+
 :root {
   color-scheme: light;
   --background: #f7f4ee;
@@ -1365,7 +1389,9 @@ a {
    the space between rows is a controlled gap, not a stretched column. */
 .swap-box {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(140px, auto);
+  /* Constrain both columns: the input's intrinsic width must not consume the
+     chain label's track when its percentage width is resolved. */
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   grid-template-rows: auto auto;
   align-items: center;
   column-gap: 12px;
@@ -1384,9 +1410,50 @@ a {
   min-width: 0;
 }
 
+.chain-select {
+  position: relative;
+  display: flex;
+  align-items: center;
+  width: fit-content;
+  max-width: 100%;
+  margin-top: 5px;
+  border-radius: var(--radius-sm);
+}
+
+.chain-select > svg {
+  position: absolute;
+  right: 0;
+  pointer-events: none;
+  color: var(--muted-foreground);
+}
+
+.chain-select select {
+  appearance: none;
+  max-width: 100%;
+  padding: 0 21px 0 0;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--foreground);
+  font-size: 22px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.chain-select select:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 4px;
+}
+
+.chain-select select:hover {
+  color: var(--accent-foreground);
+}
+
 .swap-box-amount {
   grid-column: 2;
   grid-row: 1;
+  min-width: 0;
+  width: 100%;
   justify-self: end;
 }
 
@@ -1510,33 +1577,7 @@ a {
   white-space: nowrap;
 }
 
-.wallet-chip.wrong-network .wallet-chip-state,
 .wallet-chip.unavailable .wallet-chip-state {
-  color: var(--danger);
-}
-
-.wallet-chip-switch {
-  flex: 0 0 auto;
-  padding: 1px 8px;
-  border: 1px solid var(--danger);
-  border-radius: var(--radius-pill);
-  background: transparent;
-  color: var(--danger);
-  font: inherit;
-  font-size: 11px;
-  font-weight: 800;
-  cursor: pointer;
-  transition: var(--transition-interactive);
-}
-
-.wallet-chip-switch:hover {
-  background: var(--danger-soft);
-}
-
-/* Wrong-network / unavailable header pills read as a correction, not a normal
-   connected pill. */
-.wallet-pill.wrong-network {
-  border-color: var(--danger);
   color: var(--danger);
 }
 
@@ -1568,7 +1609,8 @@ a {
   justify-self: end;
 }
 
-.token-select-trigger {
+.token-select-trigger,
+.token-select-value {
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -1580,8 +1622,11 @@ a {
   color: var(--foreground);
   font-size: 14px;
   font-weight: 800;
-  cursor: pointer;
   transition: var(--transition-interactive);
+}
+
+.token-select-trigger {
+  cursor: pointer;
 }
 
 .token-select-trigger:hover {
@@ -3165,7 +3210,6 @@ a {
   /* Keep the label/amount on one row (Uniswap-style) instead of stacking the
      amount into a tall column — the boxes stay compact on narrow screens. */
   .swap-box {
-    grid-template-columns: minmax(0, 1fr) auto;
     min-height: auto;
     gap: 8px;
     margin-top: 6px;
@@ -3537,14 +3581,18 @@ a {
     grid-column: 1 / -1;
   }
 
+  .chain-select select {
+    font-size: 16px;
+  }
+
   .wallet-button,
   .wallet-pill,
   .wallet-menu-item,
   .balance-show,
   .balance-refresh,
-  .wallet-chip-switch,
   .route-trigger,
   .token-select-trigger,
+  .chain-select select,
   .route-option,
   .secondary-button,
   .preflight-close,
@@ -3606,8 +3654,7 @@ a {
     margin: -10px;
   }
 
-  .balance-show,
-  .wallet-chip-switch {
+  .balance-show {
     padding-block: 8px;
   }
 

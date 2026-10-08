@@ -96,9 +96,14 @@ export function FaucetMenu() {
         <div className="faucet-menu" id={menuId} role="menu" aria-label="Testnet faucet">
           <p className="faucet-menu-title">Get testnet funds</p>
 
+          <a className="faucet-row" role="menuitem" href="https://faucet.circle.com/" target="_blank" rel="noopener noreferrer">
+            <span className="faucet-row-info"><strong>Circle USDC</strong><small>Arc, Ethereum Sepolia, Base Sepolia or Arbitrum Sepolia</small></span>
+            <ArrowUpRight size={15} aria-hidden="true" />
+          </a>
+
           <div className="faucet-row">
             <span className="faucet-row-info">
-              <strong>Sepolia USDC</strong>
+              <strong>Epoch test USDC</strong>
               <small>Mints {FAUCET_MINT_AMOUNT} to your wallet</small>
             </span>
             <button

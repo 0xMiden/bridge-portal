@@ -1,7 +1,7 @@
 import { QueryClient, QueryObserver, focusManager } from "@tanstack/react-query";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { BalanceStore } from "./balance-store";
-import { MIDEN_ETH, MIDEN_USDC, SEPOLIA_ETH, SEPOLIA_USDC } from "./core/assets";
+import { ARC_USDC, MIDEN_ETH, MIDEN_USDC, SEPOLIA_ETH, SEPOLIA_USDC } from "./core/assets";
 import { midenBalanceKey } from "./miden-balances";
 
 vi.mock("../wallets/testing/env", () => ({ isE2E: () => true, e2eNetwork: () => "mock" }));
@@ -122,17 +122,17 @@ describe("public token balances", () => {
   it("shares reads for a token, isolates native ETH and other accounts, and invalidates the minted token", async () => {
     const request = vi.fn(async (url: string) => Response.json(url.includes("token=")
       ? { balanceRaw: "2500000000000000000" }
-      : { balanceWei: "750000000000000000" }));
+      : { balanceRaw: "750000000000000000" }));
     vi.stubGlobal("fetch", request);
-    const usdc = store.sepoliaQuery(evmAccount, SEPOLIA_USDC);
-    const eth = store.sepoliaQuery(evmAccount, SEPOLIA_ETH);
+    const usdc = store.evmQuery(evmAccount, SEPOLIA_USDC);
+    const eth = store.evmQuery(evmAccount, SEPOLIA_ETH);
     const results = await Promise.all([client.fetchQuery(usdc), client.fetchQuery(usdc), client.fetchQuery(eth)]);
     expect(results.map((result) => result.balance)).toEqual(["2.5", "2.5", "0.75"]);
     expect(request).toHaveBeenCalledTimes(2);
     const url = new URL(request.mock.calls[0][0], "http://localhost");
     expect(url.searchParams.get("token")).toBe(SEPOLIA_USDC.address);
     expect(url.searchParams.get("decimals")).toBe("18");
-    expect(client.getQueryData(store.sepoliaQuery("0x2222222222222222222222222222222222222222", SEPOLIA_USDC).queryKey)).toBeUndefined();
+    expect(client.getQueryData(store.evmQuery("0x2222222222222222222222222222222222222222", SEPOLIA_USDC).queryKey)).toBeUndefined();
 
     await store.invalidateSepolia(evmAccount, SEPOLIA_USDC);
     request.mockResolvedValue(Response.json({ balanceRaw: "4500000000000000000" }));
@@ -146,8 +146,21 @@ describe("public token balances", () => {
     { status: 200, payload: {} },
   ])("keeps an unavailable balance distinct from zero ($status)", async ({ status, payload }) => {
     vi.stubGlobal("fetch", vi.fn(async () => Response.json(payload, { status })));
-    const query = store.sepoliaQuery(evmAccount, SEPOLIA_USDC);
+    const query = store.evmQuery(evmAccount, SEPOLIA_USDC);
     await expect(client.fetchQuery(query)).rejects.toThrow();
     expect(client.getQueryData(query.queryKey)).toBeUndefined();
   });
+});
+
+
+it("reads Arc USDC with six decimals without reusing Sepolia's token balance", async () => {
+  const request = vi.fn(async (url: string) => Response.json({ balanceRaw: url.startsWith("/api/evm/arc-testnet/") ? "1234567" : "2500000000000000000" }));
+  vi.stubGlobal("fetch", request);
+  const [arc, sepolia] = await Promise.all([
+    client.fetchQuery(store.evmQuery(account, ARC_USDC)),
+    client.fetchQuery(store.evmQuery(account, SEPOLIA_USDC)),
+  ]);
+  expect(arc.balance).toBe("1.234567");
+  expect(sepolia.balance).toBe("2.5");
+  expect(request).toHaveBeenCalledTimes(2);
 });

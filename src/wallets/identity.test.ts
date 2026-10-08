@@ -8,7 +8,6 @@ describe("evmWalletIdentity (issue #54 chain-specific identity)", () => {
   it("names the Sepolia wallet when disconnected, not a generic label", () => {
     const id = evmWalletIdentity({
       connected: false,
-      wrongNetwork: false,
       address: "",
     });
     expect(id.pillLabel).toBe("Sepolia wallet");
@@ -20,7 +19,6 @@ describe("evmWalletIdentity (issue #54 chain-specific identity)", () => {
   it("shows a short address and a menu accessible name when connected", () => {
     const id = evmWalletIdentity({
       connected: true,
-      wrongNetwork: false,
       address: EVM_ADDRESS,
     });
     expect(id.pillLabel).toBe("0x1234...345678");
@@ -29,15 +27,6 @@ describe("evmWalletIdentity (issue #54 chain-specific identity)", () => {
     expect(id.state).toBe("connected");
   });
 
-  it("surfaces a wrong-network state inline when connected off Sepolia", () => {
-    const id = evmWalletIdentity({
-      connected: true,
-      wrongNetwork: true,
-      address: EVM_ADDRESS,
-    });
-    expect(id.stateText).toBe("Wrong network");
-    expect(id.state).toBe("wrong-network");
-  });
 });
 
 describe("midenWalletIdentity (issue #54 chain-specific identity)", () => {

@@ -13,6 +13,7 @@ import {
   E2E_EVM_PRIVATE_KEY,
   E2E_MOCK_EVM_ADDRESS,
   UserRejectedError,
+  e2eNetwork,
   e2eSignerMode,
 } from "./env";
 
@@ -30,6 +31,8 @@ type Rpc = { method: string; params?: unknown[] };
  * mock mode).
  */
 function createE2EEvmProvider(): EIP1193Provider {
+  let chainId: number = CHAIN_ID;
+  const chainListeners = new Set<(chainId: string) => void>();
   const account = E2E_EVM_PRIVATE_KEY
     ? privateKeyToAccount(E2E_EVM_PRIVATE_KEY)
     : undefined;
@@ -51,11 +54,18 @@ function createE2EEvmProvider(): EIP1193Provider {
       case "eth_accounts":
         return [address];
       case "eth_chainId":
-        return numberToHex(CHAIN_ID);
+        return numberToHex(chainId);
       case "net_version":
-        return String(CHAIN_ID);
-      // No-op chain switches — we're pinned to Sepolia.
-      case "wallet_switchEthereumChain":
+        return String(chainId);
+      case "wallet_switchEthereumChain": {
+        const next = Number((params[0] as { chainId: string }).chainId);
+        if (next === chainId) return null;
+        if (e2eNetwork() !== "mock") throw new Error("Live E2E signing is pinned to Sepolia.");
+        if (signingBlocked()) throw new UserRejectedError();
+        chainId = next;
+        chainListeners.forEach((listener) => listener(numberToHex(chainId)));
+        return null;
+      }
       case "wallet_addEthereumChain":
         return null;
       // Report no atomic-batch capability so the Epoch SDK takes the sequential
@@ -95,11 +105,15 @@ function createE2EEvmProvider(): EIP1193Provider {
     }
   }
 
-  // Minimal EIP-1193 surface (request + inert event methods).
+  // Emit chain changes so AppKit follows network switches during submission.
   return {
     request: request as EIP1193Provider["request"],
-    on: () => {},
-    removeListener: () => {},
+    on: (event: string, listener: (chainId: string) => void) => {
+      if (event === "chainChanged") chainListeners.add(listener);
+    },
+    removeListener: (event: string, listener: (chainId: string) => void) => {
+      if (event === "chainChanged") chainListeners.delete(listener);
+    },
   } as unknown as EIP1193Provider;
 }
 
@@ -116,12 +130,15 @@ export function e2eEvmConnector() {
     id: "e2e-injected",
     name: "E2E Test Wallet",
     type: "e2e" as const,
+    async setup() {
+      provider.on("chainChanged", this.onChainChanged);
+    },
     async connect() {
       connected = true;
       const accounts = (await provider.request({
         method: "eth_accounts",
       })) as `0x${string}`[];
-      return { accounts, chainId: CHAIN_ID } as never;
+      return { accounts, chainId: await this.getChainId() } as never;
     },
     async disconnect() {
       connected = false;
@@ -132,7 +149,7 @@ export function e2eEvmConnector() {
       })) as readonly `0x${string}`[];
     },
     async getChainId() {
-      return CHAIN_ID;
+      return Number(await provider.request({ method: "eth_chainId" }));
     },
     async getProvider() {
       return provider;
@@ -142,7 +159,9 @@ export function e2eEvmConnector() {
       return connected;
     },
     onAccountsChanged() {},
-    onChainChanged() {},
+    onChainChanged(chainId) {
+      config.emitter.emit("change", { chainId: Number(chainId) });
+    },
     onDisconnect() {
       connected = false;
       config.emitter.emit("disconnect");

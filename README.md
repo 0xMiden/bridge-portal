@@ -60,10 +60,11 @@ the app boots with none of them set. In brief:
 | Var | Scope | Purpose |
 | --- | --- | --- |
 | `BRIDGE_API_BASE` | server | Proxy target for `/api/bridge/*`. |
-| `AGGLAYER_SEPOLIA_RPC_URL` | server | Sepolia RPC for `/api/sepolia/transaction` (primary). |
+| `AGGLAYER_SEPOLIA_RPC_URL` | server | Primary Sepolia RPC for shared EVM reads and provider tracking. |
 | `EVM_RPC_URL` | server | Secondary Sepolia RPC fallback. |
 | `NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID` | client | WalletConnect / Reown project id. |
-| `NEXT_PUBLIC_SEPOLIA_RPC_URL` | client | Sepolia RPC for wagmi/AppKit on-chain reads. |
+| `NEXT_PUBLIC_SEPOLIA_RPC_URL` | build | Public Sepolia fallback for the shared server RPC layer. |
+| `NEXT_PUBLIC_ARC_RPC_URL` | build | Primary Arc Testnet RPC, with public fallbacks. |
 | `NEXT_PUBLIC_MIDEN_RPC_URL` | client | Miden testnet RPC for the client Miden SDK. |
 | `NEXT_PUBLIC_EPOCH_ALLOCATOR_URL` | client | Epoch Protocol allocator API base. |
 | `NEXT_PUBLIC_APP_URL` | client | App origin used for wallet metadata during SSR. |
@@ -162,3 +163,17 @@ client bundle.
 
 See [docs/agglayer-bali.md](docs/agglayer-bali.md) for the current Sepolia to
 Miden testnet integration boundary.
+
+### EVM reads and bridge providers
+
+All supported origins (Sepolia, Arc Testnet, Base Sepolia and Arbitrum Sepolia)
+use `/api/evm/[network]/{balance,rpc,gas,transaction}`. The shared network registry
+selects the chain; the server RPC layer owns upstream configuration, timeouts
+and fallbacks. Balance responses use `balanceRaw` and `balance` for both native
+and ERC-20 assets. RPC accepts only public reads and simulations; signing and
+broadcasting stay with the connected wallet.
+
+Bridge-specific operations stay under their provider: `/api/xreserve/quote`
+obtains a Circle forwarding quote, `/api/xreserve/status?network=…&hash=…`
+tracks direct Arc or CCTP deposits into Miden, and `/api/agglayer/deposits`
+reads Agglayer deposits. Browser transports never import private RPC configuration.

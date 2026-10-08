@@ -10,6 +10,12 @@ export function routeSwitchChangesAsset(from: BridgeRoute, to: BridgeRoute): boo
 
 /** Fallback quote amounts used until a live provider quote is available. */
 export function quoteAmounts(provider: BridgeProvider, amount: string, asset: string): BridgeQuote {
+  // With maxFee=0, xReserve must deliver the full amount or reject the deposit.
+  // Preserve decimal text: converting via Number loses micro-USDC above 2^53.
+  if (provider === "xreserve") {
+    const value = /^(?:0|[1-9]\d*)(?:\.\d{1,6})?$/.test(amount.trim()) ? amount.trim() : "0";
+    return { asset, expectedReceived: value, minReceived: value };
+  }
   const parsedAmount = Number(amount) || 0;
   // Agglayer is a canonical 1:1 bridge; other routes carry a small fee spread.
   const isOneToOne = provider === "agglayer";

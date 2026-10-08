@@ -41,7 +41,7 @@ test("token selection resets the amount, reads the selected asset, and restores 
   await source.getByRole("button", { name: "USDC — change token" }).click();
   const ethBalance = page.waitForRequest((request) => {
     const url = new URL(request.url());
-    return url.pathname === "/api/sepolia/balance" && !url.searchParams.has("token");
+    return url.pathname === "/api/evm/sepolia/balance" && !url.searchParams.has("token");
   });
   await source.getByRole("option", { name: /ETH/ }).click();
   await ethBalance;
@@ -61,7 +61,7 @@ test("token selection resets the amount, reads the selected asset, and restores 
 
   const usdcBalance = page.waitForRequest((request) => {
     const url = new URL(request.url());
-    return url.pathname === "/api/sepolia/balance" && url.searchParams.has("token");
+    return url.pathname === "/api/evm/sepolia/balance" && url.searchParams.has("token");
   });
   const destination = page.locator(".token-select").last();
   await destination.getByRole("button", { name: "ETH — change token" }).click();

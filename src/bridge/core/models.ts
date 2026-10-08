@@ -1,6 +1,7 @@
+import type { SourceTransaction } from "../evm/source-transaction";
 import type { ActivityStatus } from "./activity-status";
 
-export type BridgeProvider = "near-intents" | "agglayer" | "epoch";
+export type BridgeProvider = "near-intents" | "agglayer" | "epoch" | "xreserve";
 export type FlowMode = "receive" | "send";
 
 export type BridgeActivity = {
@@ -18,6 +19,9 @@ export type BridgeActivity = {
    * Epoch receives do not have an Agglayer bridge destination. */
   midenAccountHex?: string;
   sourceTxHash?: string;
+  /** Actual wallet transaction identity, retained across fee replacements and reloads. */
+  sourceTransaction?: SourceTransaction;
+  sourceOriginalTxHash?: string;
   destinationTxHash?: string;
   midenTxId?: string;
   claimTxHash?: string;
@@ -29,6 +33,14 @@ export type BridgeActivity = {
   epochIntentNonce?: string;
   /** Epoch sponsor / user address the intent status is keyed on (EVM 0x). */
   epochSponsor?: string;
+  /** Circle attestation is separate from inclusion of the recipient's Miden note. */
+  xreserveStatus?: "submitted" | "confirmed" | "attested" | "delivered" | "reverted" | "cancelled" | "replaced";
+  xreserveNoteId?: string;
+  xreserveArcTxHash?: string;
+  /** Circle forwarding fee in source USDC minor units, paid separately. */
+  xreserveFee?: string;
+  xreserveForwarding?: boolean;
+  xreserveMidenBlock?: number;
   /** Quoted output decimal amount (e.g. "99.17") in the route's destination
    * token. Legacy activities use `asset` for both sides. */
   receivedAmount?: string;

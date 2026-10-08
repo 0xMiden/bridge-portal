@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+### USDCx bridge
+
+- Unify all EVM reads under `/api/evm/[network]` and USDCx quotes/tracking under `/api/xreserve`; remove the separate Arc, CCTP and Sepolia API implementations.
+
+- Add Ethereum Sepolia, Base Sepolia and Arbitrum Sepolia origins via Circle CCTP forwarding through Arc Testnet into Miden Testnet. Show signed Circle fee quotes, approve the reviewed amount plus fee, and correlate the source burn with the Arc executor and Miden deposit. Persist the selected origin and keep source explorer links on the correct chain.
+- Fix the Sepolia chain label collapsing to zero width when the amount input claims the grid width; longer origin labels fit on mobile.
+
+- Add Arc Testnet USDC → Miden USDCx through Circle xReserve to the shared route selector, balances, review, activity history, and receipt. Confirming a deposit requests the source wallet network only when needed. Deposits check the current faucet mapping and simulate before signing; saved transfers resume from activity history.
+- Keep Miden fixed in the form and let users select an enabled origin chain. Token choices stay on that chain; selecting Arc Testnet resolves to USDC → USDCx without prompting the wallet.
+- Upgrade the Miden SDK to 0.17.1 and React/wallet adapters to 0.17.0. Pin the USDCx testnet faucet to `0x4cbdcaffe75f0a317482224dae6436`. Circle attestation remains pending until the exact v0.17 P2ID note is included on Miden; users consume the note in Bread.
+- USDCx withdrawals remain unavailable pending a verified withdrawal integration. Existing Epoch/Agglayer deployment pins are unchanged and require separate v0.17 deployment verification.
+
 ### Changes
 
 - [CHANGE] **Epoch SDK is pinned to 1.0.39.** Miden collateral uses the SDK's reclaim window and mandate-binding attachment in a custom wallet transaction; both directions use the exported witness schemas.

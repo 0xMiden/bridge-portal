@@ -1,10 +1,11 @@
 "use client";
 
 import { getAccount, getWalletClient } from "@wagmi/core";
-import { type Chain, type EIP1193Provider, type WalletClient, createWalletClient, custom, http } from "viem";
+import { type Chain, type EIP1193Provider, type WalletClient, createWalletClient, custom } from "viem";
 import { sepolia } from "viem/chains";
 
 import { wagmiAdapter } from "../../../wallets/evm/appkit-config";
+import { evmReadTransport } from "../../evm/transport";
 import { MIDEN_DESTINATION_CHAIN_ID } from "./config";
 
 /**
@@ -71,11 +72,10 @@ export function buildEpochReadOnlyWalletClient(
     opts?.chainOverride !== undefined && opts.chainOverride !== sepolia.id
       ? { ...sepolia, id: opts.chainOverride }
       : sepolia;
-  const rpcUrl = sepolia.rpcUrls.default.http[0] ?? "";
   return createWalletClient({
     account: address,
     chain,
-    transport: http(rpcUrl),
+    transport: evmReadTransport("sepolia"),
   });
 }
 

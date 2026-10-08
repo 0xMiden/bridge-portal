@@ -1,21 +1,13 @@
 import { WagmiAdapter } from "@reown/appkit-adapter-wagmi";
-import { sepolia } from "@reown/appkit/networks";
+import { sepolia, baseSepolia, arbitrumSepolia } from "@reown/appkit/networks";
 import type { AppKitNetwork } from "@reown/appkit/networks";
-import { http } from "viem";
-import { SEPOLIA_NETWORK } from "../../config/sepolia";
+import { arcTestnet } from "../../config/arc";
+import { evmReadTransport } from "../../bridge/evm/transport";
 import { e2eEvmConnector } from "../testing/evm-connector";
 
 export const projectId = process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID!;
 
-export const networks: [AppKitNetwork, ...AppKitNetwork[]] = [sepolia];
-
-// Without an explicit transport, wagmi/AppKit route reads (e.g. getBalance)
-// through WalletConnect's blockchain RPC (rpc.walletconnect.org), which needs a
-// projectId it isn't handed here and 401s regardless. Pin sepolia to the same
-// public HTTP RPC the rest of the app uses so on-chain reads work standalone.
-const sepoliaRpcUrl =
-  process.env.NEXT_PUBLIC_SEPOLIA_RPC_URL ??
-  SEPOLIA_NETWORK.rpcUrl;
+export const networks: [AppKitNetwork, ...AppKitNetwork[]] = [sepolia, arcTestnet, baseSepolia, arbitrumSepolia];
 
 // In E2E mode, register a headless test-wallet connector that signs Sepolia txs
 // with the test key (no MetaMask). The env check is inlined (not a helper call)
@@ -29,7 +21,10 @@ export const wagmiAdapter = new WagmiAdapter({
   projectId,
   ssr: true,
   transports: {
-    [sepolia.id]: http(sepoliaRpcUrl),
+    [sepolia.id]: evmReadTransport("sepolia"),
+    [arcTestnet.id]: evmReadTransport("arc-testnet"),
+    [baseSepolia.id]: evmReadTransport("base-sepolia"),
+    [arbitrumSepolia.id]: evmReadTransport("arbitrum-sepolia"),
   },
   ...(e2eConnectors.length ? { connectors: e2eConnectors } : {}),
 });

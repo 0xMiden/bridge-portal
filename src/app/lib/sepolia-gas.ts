@@ -69,7 +69,7 @@ export function useSepoliaGasEstimate(gasUnits: number | null): SepoliaGasFee {
 
     async function load() {
       try {
-        const response = await fetch("/api/sepolia/gas", { cache: "no-store" });
+        const response = await fetch("/api/evm/sepolia/gas", { cache: "no-store" });
         const payload = (await response.json()) as {
           gasPriceWei?: string;
           gwei?: string;

@@ -1,11 +1,11 @@
 import { QueryClient, queryOptions, skipToken } from "@tanstack/react-query";
 import { formatUnits } from "viem";
 import type { MidenFiWalletContextState } from "@miden-sdk/miden-wallet-adapter-react";
-import type { BridgeAsset, MidenAsset } from "./core/assets";
+import type { EvmAsset, MidenAsset } from "./core/assets";
 import { bridgeRoutes } from "./core/routes";
 import { midenBalanceScope, type MidenBalances } from "./miden-balances";
 
-export type SepoliaAsset = Extract<BridgeAsset, { network: "sepolia" }>;
+export type SepoliaAsset = EvmAsset & { network: "sepolia" };
 export type TokenBalance = {
   amountRaw: bigint;
   balance: string;
@@ -24,7 +24,7 @@ const midenAssets = bridgeRoutes
   .flatMap((route) => [route.source, route.destination])
   .filter((asset): asset is MidenAsset => asset.kind === "miden");
 
-function sepoliaKey(account: string, asset: SepoliaAsset) {
+function evmKey(account: string, asset: EvmAsset) {
   return ["balances", asset.network, account.toLowerCase(), asset.kind,
     asset.kind === "erc20" ? asset.address.toLowerCase() : "native"] as const;
 }
@@ -94,9 +94,9 @@ export class BalanceStore {
     });
   }
 
-  sepoliaQuery(account: string, asset: SepoliaAsset) {
+  evmQuery(account: string, asset: EvmAsset) {
     return queryOptions({
-      queryKey: sepoliaKey(account, asset),
+      queryKey: evmKey(account, asset),
       enabled: Boolean(account),
       staleTime: 30_000,
       retry: false,
@@ -106,10 +106,10 @@ export class BalanceStore {
           params.set("token", asset.address);
           params.set("decimals", String(asset.decimals));
         }
-        const response = await fetch(`/api/sepolia/balance?${params}`, { signal });
+        const response = await fetch(`/api/evm/${asset.network}/balance?${params}`, { signal });
         if (!response.ok) throw new Error("Unable to fetch balance");
-        const payload: { balanceWei?: string; balanceRaw?: string } = await response.json();
-        const raw = asset.kind === "erc20" ? payload.balanceRaw : payload.balanceWei;
+        const payload: { balanceRaw?: string } = await response.json();
+        const raw = payload.balanceRaw;
         if (raw === undefined) throw new Error("Balance response is missing the token amount");
         const amountRaw = BigInt(raw);
         return {
@@ -124,6 +124,6 @@ export class BalanceStore {
 
   /** A mint invalidates the minted token even if another route is currently shown. */
   invalidateSepolia(account: string, asset: SepoliaAsset) {
-    return this.client.invalidateQueries({ queryKey: sepoliaKey(account, asset) });
+    return this.client.invalidateQueries({ queryKey: evmKey(account, asset) });
   }
 }

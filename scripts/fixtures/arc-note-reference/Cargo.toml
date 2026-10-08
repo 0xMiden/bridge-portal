@@ -1,0 +1,7 @@
+[package]
+name = "arc-note-reference"
+version = "0.1.0"
+edition = "2024"
+[dependencies]
+miden-protocol = "=0.17.1"
+miden-standards = "=0.17.1"
