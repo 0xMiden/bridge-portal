@@ -15,7 +15,8 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import type { ActivityStatus } from "../../bridge/core/activity-status";
 import {
   type Activity,
-  quoteFor,
+  quoteForActivity,
+  destinationAssetSymbol,
   sourceExplorer,
   statusLabel,
   statusTone,
@@ -38,6 +39,7 @@ import { TempoReceipt } from "./TempoReceipt";
  * from that direction rather than shown as dead nodes.
  */
 function milestonesFor(activity: Activity) {
+  const asset = destinationAssetSymbol(activity);
   // Two genuinely different lifecycles. Epoch is INTENT-BASED: you sign a source
   // action, a solver picks up the intent and delivers the output directly — no
   // claim leg. Agglayer is the CANONICAL BRIDGE: deposit → the bridge observes
@@ -73,12 +75,12 @@ function milestonesFor(activity: Activity) {
             status: "message_observed",
             label: "Solver filling on Miden",
             detail:
-              "A solver picked up your intent and is delivering USDC to your Miden account.",
+              `A solver picked up your intent and is delivering ${asset} to your Miden account.`,
           },
           {
             status: "complete",
             label: "Delivered on Miden",
-            detail: "USDC is in your Miden account.",
+            detail: `${asset} is in your Miden account.`,
           },
         ]
       : [
@@ -92,12 +94,12 @@ function milestonesFor(activity: Activity) {
             status: "message_observed",
             label: "Solver filling on Sepolia",
             detail:
-              "A solver claimed your note and is paying out USDC on Sepolia.",
+              `A solver claimed your note and is paying out ${asset} on Sepolia.`,
           },
           {
             status: "complete",
             label: "Settled on Sepolia",
-            detail: "USDC delivered to your Sepolia address.",
+            detail: `${asset} delivered to your Sepolia address.`,
           },
         ];
   } else {
@@ -165,6 +167,7 @@ function milestonesFor(activity: Activity) {
  * that becomes the dominant element on the page (not a muted footnote).
  */
 function nextActionFor(activity: Activity): { headline: string; body: string } {
+  const asset = destinationAssetSymbol(activity);
   const isReceive = activity.mode === "receive";
   const isEpoch = activity.provider === "epoch";
   switch (activity.status) {
@@ -192,8 +195,8 @@ function nextActionFor(activity: Activity): { headline: string; body: string } {
         return {
           headline: "A solver is filling your intent",
           body: isReceive
-            ? "A solver picked up your intent and is delivering USDC to your Miden account."
-            : "A solver claimed your note and is paying out USDC on your Sepolia address.",
+            ? `A solver picked up your intent and is delivering ${asset} to your Miden account.`
+            : `A solver claimed your note and is paying out ${asset} on your Sepolia address.`,
         };
       }
       return {
@@ -226,11 +229,11 @@ function nextActionFor(activity: Activity): { headline: string; body: string } {
           body: "The transfer settled and the funds are available in your Sepolia account.",
         };
       }
-      // Epoch delivers the USDC directly; Agglayer delivers a note to consume.
+      // Epoch delivers the output token directly; Agglayer delivers a note to consume.
       return isEpoch
         ? {
             headline: "Delivered on Miden",
-            body: "The USDC is in your Miden account.",
+            body: `The ${asset} is in your Miden account.`,
           }
         : {
             headline: "Delivered on Miden — claim in your wallet",
@@ -273,7 +276,7 @@ function guidanceFor(activity: Activity): Guidance | null {
   if (activity.mode === "receive") {
     // Agglayer receive delivers a Miden NOTE that only becomes a balance once
     // consumed in the wallet — so surface that as a distinct user step. Epoch
-    // is intent-based: the solver delivers the USDC directly, nothing to claim.
+    // is intent-based: the solver delivers the output token directly, nothing to claim.
     const delivered =
       activity.status === "complete" || activity.status === "claim_available";
     if (delivered && activity.provider === "agglayer") {
@@ -312,7 +315,7 @@ export function ActivityDetail({ id }: { id: string }) {
   const quote = useMemo(
     () =>
       activity
-        ? quoteFor(activity.mode, activity.provider, activity.amount)
+        ? quoteForActivity(activity)
         : null,
     [activity],
   );
@@ -501,7 +504,7 @@ export function ActivityDetail({ id }: { id: string }) {
               })}
               {/* Agglayer receive delivers a Miden note that isn't a balance
                   change until consumed in the wallet — kept as a distinct step.
-                  Epoch's solver delivers the USDC directly, so no consume step. */}
+                  Epoch's solver delivers the output token directly, so no consume step. */}
               {activity.mode === "receive" && activity.provider === "agglayer" ? (
                 <li
                   className={`milestone consume ${

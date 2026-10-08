@@ -7,6 +7,8 @@ export type BridgeActivity = {
   id: string;
   mode: FlowMode;
   provider: BridgeProvider;
+  /** Explicit route for new transfers; absent on legacy saved activities. */
+  routeId?: string;
   status: ActivityStatus;
   amount: string;
   asset: string;
@@ -27,7 +29,8 @@ export type BridgeActivity = {
   epochIntentNonce?: string;
   /** Epoch sponsor / user address the intent status is keyed on (EVM 0x). */
   epochSponsor?: string;
-  /** Quoted output decimal amount (e.g. "99.17"); the symbol is in `asset`. */
+  /** Quoted output decimal amount (e.g. "99.17") in the route's destination
+   * token. Legacy activities use `asset` for both sides. */
   receivedAmount?: string;
   /** Owner tags for per-account filtering of account-derived history. */
   evmAddress?: string;

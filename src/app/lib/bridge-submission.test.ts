@@ -44,13 +44,11 @@ afterEach(() => vi.unstubAllGlobals());
 function setup(overrides: Partial<TransferSubmission> = {}) {
   const evmRequest = vi.fn<EvmProvider["request"]>().mockResolvedValue(SEPOLIA_NETWORK.chainHex);
   const input: TransferSubmission = {
-    provider: "epoch",
-    mode: "receive",
+    routeId: "epoch-usdc-to-miden",
     amount: "0.12345678",
     destination: "",
     activities: [history],
     insufficientBalance: false,
-    sourceTokenSymbol: "USDC",
     evmBalance: "1 USDC",
     evmWallet: {
       connected: true,
@@ -81,17 +79,17 @@ function setup(overrides: Partial<TransferSubmission> = {}) {
 
 describe("submission validation", () => {
   it.each([
-    ["disabled route", { provider: "near-intents" }, /isn't available/],
+    ["disabled route", { routeId: "near-intents" }, /isn't available/],
     ["insufficient balance", { insufficientBalance: true }, /Not enough USDC/],
-    ["disconnected Miden source", { mode: "send", midenWallet: { connected: false, address: "" } }, /Connect your Bread wallet/],
-    ["missing Miden signing methods", { provider: "agglayer", mode: "send", midenWallet: { connected: true, address: MIDEN_ACCOUNT } }, /Connect your Bread wallet/],
-    ["invalid Agglayer recipient", { provider: "agglayer", mode: "send", destination: "invalid" }, /valid Sepolia/],
-    ["unresolved Agglayer asset", { provider: "agglayer", mode: "send", agglayerEth: null }, /Show balance/],
-    ["malformed Agglayer amount", { provider: "agglayer", mode: "send", amount: "1.2.3" }, /valid amount/],
-    ["zero Agglayer amount", { provider: "agglayer", mode: "send", amount: "0" }, /greater than zero/],
-    ["missing Agglayer recipient", { provider: "agglayer", midenWallet: { connected: false, address: "" } }, /paste a Miden account/],
+    ["disconnected Miden source", { routeId: "epoch-usdc-to-sepolia", midenWallet: { connected: false, address: "" } }, /Connect your Bread wallet/],
+    ["missing Miden signing methods", { routeId: "agglayer-eth-to-sepolia", midenWallet: { connected: true, address: MIDEN_ACCOUNT } }, /Connect your Bread wallet/],
+    ["invalid Agglayer recipient", { routeId: "agglayer-eth-to-sepolia", destination: "invalid" }, /valid Sepolia/],
+    ["unresolved Agglayer asset", { routeId: "agglayer-eth-to-sepolia", agglayerEth: null }, /Show balance/],
+    ["malformed Agglayer amount", { routeId: "agglayer-eth-to-sepolia", amount: "1.2.3" }, /valid amount/],
+    ["zero Agglayer amount", { routeId: "agglayer-eth-to-sepolia", amount: "0" }, /greater than zero/],
+    ["missing Agglayer recipient", { routeId: "agglayer-eth-to-miden", midenWallet: { connected: false, address: "" } }, /paste a Miden account/],
     ["missing Epoch recipient", { epochMidenAccount: "" }, /paste a Miden account/],
-    ["invalid Epoch recipient", { mode: "send", epochEvmAddress: "invalid" }, /valid Sepolia/],
+    ["invalid Epoch recipient", { routeId: "epoch-usdc-to-sepolia", epochEvmAddress: "invalid" }, /valid Sepolia/],
   ] satisfies Array<[string, Partial<TransferSubmission>, RegExp]>)("rejects %s before signing or creating an activity", async (_name, overrides, message) => {
     const { input, effects, evmRequest } = setup(overrides);
     await submitBridgeTransfer(input, effects);
@@ -106,7 +104,7 @@ describe("submission validation", () => {
   });
 
   it.each(["epoch", "agglayer"] as const)("requests the EVM connection for a disconnected %s receive", async (provider) => {
-    const { input, effects } = setup({ provider, evmWallet: { connected: false, address: "" } });
+    const { input, effects } = setup({ routeId: provider === "epoch" ? "epoch-usdc-to-miden" : "agglayer-eth-to-miden", evmWallet: { connected: false, address: "" } });
     await submitBridgeTransfer(input, effects);
 
     expect(effects.openEvmWallet).toHaveBeenCalledOnce();
@@ -124,14 +122,18 @@ describe("Agglayer submission", () => {
       started.resolve();
       return execution.promise;
     });
-    const { input, effects } = setup({ provider: "agglayer", mode: "send" });
+    const { input, effects } = setup({
+      routeId: "agglayer-eth-to-sepolia",
+      amount: "0.123456",
+      agglayerEth: { faucetId: MIDEN_ACCOUNT, decimals: 6, amountRaw: 1_000_000n, symbol: "ETH" },
+    });
     const submission = submitBridgeTransfer(input, effects);
     await started.promise;
 
     expect(loadStoredActivities()).toEqual([history]);
     expect(effects.navigate).not.toHaveBeenCalled();
     expect(runAgglayerSend).toHaveBeenCalledWith(expect.objectContaining({
-      amount: 12_345_678n,
+      amount: 123_456n,
       faucetId: MIDEN_ACCOUNT,
       destinationAddress: EVM_ADDRESS,
       senderAddress: MIDEN_ACCOUNT,
@@ -155,7 +157,7 @@ describe("Agglayer submission", () => {
   });
 
   it("preserves history and clears progress when the Sepolia deposit is rejected", async () => {
-    const { input, effects, evmRequest } = setup({ provider: "agglayer" });
+    const { input, effects, evmRequest } = setup({ routeId: "agglayer-eth-to-miden" });
     evmRequest.mockResolvedValueOnce(SEPOLIA_NETWORK.chainHex).mockRejectedValueOnce({ code: 4001 });
     await submitBridgeTransfer(input, effects);
 

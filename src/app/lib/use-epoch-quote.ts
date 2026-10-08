@@ -2,11 +2,10 @@
 
 import { useEffect, useRef, useState } from "react";
 import { parseUnits } from "viem";
-import type { FlowMode } from "../../bridge/core/models";
+import type { BridgeRoute } from "../../bridge/core/routes";
 import { isValidAmount } from "../../bridge/core/rules";
 import { formatQuoteAmount } from "./bridge-presentation";
 
-import { MIDEN_NATIVE_TOKEN_DECIMALS } from "../../bridge/providers/epoch/config";
 import { quoteEpochReceive, quoteEpochSend } from "../../bridge/providers/epoch/epoch-quote";
 
 export interface EpochQuoteState {
@@ -23,7 +22,7 @@ export interface EpochQuoteState {
 export interface UseEpochQuoteOpts {
   /** Gate: only quote when the Epoch route is active. */
   enabled: boolean;
-  mode: FlowMode;
+  route: BridgeRoute;
   /** Human input amount as typed. */
   amount: string;
   /** Sender (send) / recipient (receive) Miden account. */
@@ -43,20 +42,21 @@ function errorMessage(err: unknown): string {
 /**
  * Debounced forward-quote for the Epoch route, both directions. Returns
  * `{ loading, amount, symbol, error }` for a "you receive ~N" preview. The
- * Miden side is fixed to the chain's native MIDEN asset; the EVM side is fixed
- * to USDC. In-flight requests are superseded by a request id so a slow earlier
- * quote can't overwrite a newer one.
+ * source and destination tokens come from the selected route. In-flight
+ * requests are superseded by a request id so a slow earlier quote cannot
+ * overwrite a newer one.
  *
  * setState is always deferred via queueMicrotask/timeout so none of it runs
  * synchronously in the effect body (react-hooks/set-state-in-effect).
  */
 export function useEpochQuote({
   enabled,
-  mode,
+  route,
   amount,
   midenAccount,
   evmAddress,
 }: UseEpochQuoteOpts): EpochQuoteState {
+  const mode = route.mode;
   const ready =
     enabled &&
     isValidAmount(amount) &&
@@ -97,11 +97,13 @@ export function useEpochQuote({
           const result =
             mode === "send"
               ? await quoteEpochSend({
-                  amount: parseUnits(amount, MIDEN_NATIVE_TOKEN_DECIMALS),
+                  route,
+                  amount: parseUnits(amount, route.source.decimals),
                   destinationAddress: evmAddress,
                   senderPublicKey: midenAccount,
                 })
               : await quoteEpochReceive({
+                  route,
                   evmAmount: amount,
                   evmSourceAddress: evmAddress,
                   midenRecipientId: midenAccount,
@@ -124,7 +126,7 @@ export function useEpochQuote({
     }, DEBOUNCE_MS);
 
     return () => window.clearTimeout(handle);
-  }, [ready, enabled, mode, amount, midenAccount, evmAddress]);
+  }, [ready, enabled, mode, route, amount, midenAccount, evmAddress]);
 
   return state;
 }

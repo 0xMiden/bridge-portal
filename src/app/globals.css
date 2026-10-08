@@ -1436,6 +1436,15 @@ a {
   z-index: 1;
 }
 
+.balance-placeholder {
+  display: inline-block;
+  flex-shrink: 0;
+  inline-size: 7ch;
+  block-size: 0.8em;
+  border-radius: 3px;
+  background: var(--border-strong);
+}
+
 .balance-show {
   display: inline-flex;
   align-items: center;

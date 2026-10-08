@@ -1,3 +1,5 @@
+import { MIDEN_ETH } from "../../bridge/core/assets";
+import { defaultBridgeRoute } from "../../bridge/core/routes";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   type Activity,
@@ -132,7 +134,7 @@ describe("quoteFor refreshes fully on a route switch", () => {
 
   for (const mode of modesToTest) {
     it(`Epoch quote reports USDC + 1-3 min ETA (${mode})`, () => {
-      const quote = quoteFor(mode, "epoch", "100");
+      const quote = quoteFor(defaultBridgeRoute("epoch", mode)!, "100");
       expect(quote.asset).toBe("USDC");
       expect(Number(quote.expectedReceived)).toBe(99.9);
       expect(Number(quote.minReceived)).toBe(99.4005);
@@ -140,7 +142,7 @@ describe("quoteFor refreshes fully on a route switch", () => {
     });
 
     it(`Agglayer quote reports ETH + 10-20 min ETA (${mode})`, () => {
-      const quote = quoteFor(mode, "agglayer", "100");
+      const quote = quoteFor(defaultBridgeRoute("agglayer", mode)!, "100");
       expect(quote.asset).toBe("ETH");
       expect(Number(quote.expectedReceived)).toBe(100);
       expect(Number(quote.minReceived)).toBe(100);
@@ -148,8 +150,8 @@ describe("quoteFor refreshes fully on a route switch", () => {
     });
 
     it(`a USDC→ETH switch changes the quoted token label (${mode})`, () => {
-      const before = quoteFor(mode, "epoch", "100");
-      const after = quoteFor(mode, "agglayer", "100");
+      const before = quoteFor(defaultBridgeRoute("epoch", mode)!, "100");
+      const after = quoteFor(defaultBridgeRoute("agglayer", mode)!, "100");
       expect(before.expectedReceived).not.toBe(after.expectedReceived);
       expect(after.asset).toBe("ETH");
     });
@@ -163,10 +165,9 @@ describe("route comparison metadata", () => {
     (key) => !providers[key].disabled,
   );
 
-  it("exposes asset, ETA, fee, claim, trust for each active route", () => {
+  it("exposes ETA, fee, claim, trust for each active route", () => {
     for (const key of active) {
       const c = providers[key].comparison;
-      expect(c.asset).toBeTruthy();
       expect(c.eta).toBeTruthy();
       expect(c.feeModel).toBeTruthy();
       expect(c.claim).toBeTruthy();
@@ -190,14 +191,15 @@ afterEach(() => vi.restoreAllMocks());
 
 describe("activity presentation", () => {
   it.each([
-    ["receive", "epoch", "USDC", "Receive 10 USDC on Miden", "4 min"],
-    ["send", "epoch", "USDC", "Send 10 USDC to Sepolia", "4 min"],
-    ["receive", "agglayer", "ETH", "Receive 10 ETH on Miden", "8 min"],
-    ["send", "agglayer", "ETH", "Send 10 ETH to Sepolia", "8 min"],
-  ] as const)("preserves the stored activity fields for %s via %s", (mode, provider, asset, summary, eta) => {
+    ["receive", "epoch", "USDC", "Receive 10 USDC on Miden", "4 min", "epoch-usdc-to-miden"],
+    ["send", "epoch", "USDC", "Send 10 USDC to Sepolia", "4 min", "epoch-usdc-to-sepolia"],
+    ["receive", "agglayer", "ETH", "Receive 10 ETH on Miden", "8 min", "agglayer-eth-to-miden"],
+    ["send", "agglayer", "ETH", "Send 10 ETH to Sepolia", "8 min", "agglayer-eth-to-sepolia"],
+  ] as const)("preserves the stored activity fields for %s via %s", (mode, provider, asset, summary, eta, routeId) => {
     vi.spyOn(Date, "now").mockReturnValue(1_700_000_000_000);
-    expect(createActivity(mode, provider, "10")).toEqual({
+    expect(createActivity(defaultBridgeRoute(provider, mode)!, "10")).toEqual({
       id: "act-loyw3v28",
+      routeId,
       mode,
       provider,
       amount: "10",
@@ -224,7 +226,7 @@ describe("activity presentation", () => {
       eta: "Waiting for settlement",
       txHash: "0x5c33…ba85",
     };
-    expect(createActivity("receive", "epoch", "10", overrides)).toMatchObject(overrides);
+    expect(createActivity(defaultBridgeRoute("epoch", "receive")!, "10", overrides)).toMatchObject(overrides);
   });
 });
 
@@ -240,4 +242,11 @@ describe("Epoch quote display", () => {
   ])("formats provider amount %s with %s decimals as %s", (amount, decimals, expected) => {
     expect(formatQuoteAmount(amount, decimals)).toBe(expected);
   });
+});
+
+// The output symbol belongs to the destination asset, even if the provider is unchanged.
+it("quotes the destination token independently of the provider and source token", () => {
+  const route = { ...defaultBridgeRoute("epoch", "receive")!, destination: MIDEN_ETH };
+  expect(quoteFor(route, "10").asset).toBe("ETH");
+  expect(createActivity(route, "10").asset).toBe("USDC");
 });

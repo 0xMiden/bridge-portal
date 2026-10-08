@@ -4,6 +4,8 @@ import { useAppKitAccount, useAppKitProvider } from "@reown/appkit/react";
 import { ArrowUpRight, Check, Droplets, Loader2 } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
 import { type EvmProvider } from "../../wallets/evm/evm-wallet";
+import { useBalanceStore } from "../../bridge/BalanceProvider";
+import { SEPOLIA_USDC } from "../../bridge/core/assets";
 import {
   FAUCET_MINT_AMOUNT,
   MIDEN_TESTNET_FAUCET_URL,
@@ -24,7 +26,8 @@ type MintStatus =
  * route); the non-mintable assets — gas ETH and the dashboard-only Miden faucets
  * — are external links.
  */
-export function FaucetMenu({ onMinted }: { onMinted?: () => void }) {
+export function FaucetMenu() {
+  const balances = useBalanceStore();
   const { address, isConnected } = useAppKitAccount();
   const { walletProvider } = useAppKitProvider<EvmProvider>("eip155");
   const [open, setOpen] = useState(false);
@@ -64,7 +67,7 @@ export function FaucetMenu({ onMinted }: { onMinted?: () => void }) {
         account: address,
       });
       setStatus({ kind: "done", hash });
-      onMinted?.();
+      void balances.invalidateSepolia(address, SEPOLIA_USDC);
     } catch (error) {
       const message =
         error instanceof Error ? error.message : "Mint failed. Try again.";

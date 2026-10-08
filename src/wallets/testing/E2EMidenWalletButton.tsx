@@ -4,8 +4,10 @@ import { useEffect, useState } from "react";
 import { createE2EMidenSigner } from "./miden-signer";
 import { publishE2E } from "./window-hook";
 import { shortAddress } from "../identity";
-import { MIDEN_NATIVE_FAUCET_ID } from "../../bridge/providers/epoch/config";
+import { MIDEN_USDC } from "../../bridge/core/assets";
+import { midenBalanceKey } from "../../bridge/miden-balances";
 import type { MidenWalletSnapshot } from "../miden/MidenWalletButton";
+import { useBalanceStore } from "../../bridge/BalanceProvider";
 
 // E2E stand-in for MidenWalletButton: builds a headless Miden signer (mock or
 // real-testnet per E2E_NETWORK), pushes the same MidenWalletSnapshot the app
@@ -17,6 +19,7 @@ export function E2EMidenWalletButton({
   onStateChange: (state: MidenWalletSnapshot) => void;
 }) {
   const [address, setAddress] = useState("");
+  const balances = useBalanceStore();
 
   useEffect(() => {
     let cancelled = false;
@@ -35,6 +38,11 @@ export function E2EMidenWalletButton({
       try {
         const signer = await createE2EMidenSigner();
         if (cancelled) return;
+        balances.setMidenSession({
+          account: signer.address,
+          network: "miden-testnet",
+          requestAssets: signer.requestAssets,
+        });
         setAddress(signer.address);
         onStateChange({
           address: signer.address,
@@ -48,7 +56,6 @@ export function E2EMidenWalletButton({
           requestSend: signer.requestSend,
           requestTransaction: signer.requestTransaction,
           waitForTransaction: signer.waitForTransaction,
-          requestAssets: signer.requestAssets,
           requestConsumableNotes: signer.requestConsumableNotes,
         });
         publishE2E({
@@ -61,18 +68,8 @@ export function E2EMidenWalletButton({
           },
           // Vault USDC balance — the signal for an auto-consumed Epoch receive.
           midenUsdcBalance: async () => {
-            const assets = (await signer.requestAssets()) as unknown as Array<{
-              faucetId?: string;
-              amount?: string | number;
-            }>;
-            const total = (Array.isArray(assets) ? assets : []).reduce(
-              (sum, a) =>
-                (a.faucetId ?? "").toLowerCase() === MIDEN_NATIVE_FAUCET_ID
-                  ? sum + BigInt(a.amount ?? 0)
-                  : sum,
-              0n,
-            );
-            return total.toString();
+            const snapshot = await balances.requestMiden(signer.address, "miden-testnet", true);
+            return snapshot[midenBalanceKey(signer.address, MIDEN_USDC)]?.amountRaw.toString() ?? "0";
           },
         });
       } catch (error) {
@@ -98,7 +95,7 @@ export function E2EMidenWalletButton({
     return () => {
       cancelled = true;
     };
-  }, [onStateChange]);
+  }, [balances, onStateChange]);
 
   return (
     <button

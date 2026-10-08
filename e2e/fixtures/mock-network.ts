@@ -1,4 +1,5 @@
 import type { Page } from "@playwright/test";
+import { parseUnits } from "viem";
 
 // Mock-tier network stubbing via Playwright route interception (no service
 // worker needed): fulfills the same-origin /api/* routes and aborts external
@@ -20,6 +21,7 @@ export async function stubNetwork(
     route.fulfill({
       json: {
         balance: usdcBalance,
+        balanceRaw: parseUnits(usdcBalance, 18).toString(),
         balanceWei: "1000000000000000000",
         balanceEth: "1",
       },

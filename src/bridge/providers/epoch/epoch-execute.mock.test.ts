@@ -1,3 +1,4 @@
+import { defaultBridgeRoute } from "../../core/routes";
 import { describe, expect, it, vi } from "vitest";
 
 vi.mock("../../../wallets/testing/env", () => ({
@@ -34,7 +35,7 @@ import { runEpochTransfer } from "./epoch-execute";
 describe("runEpochTransfer (mock E2E)", () => {
   it("returns a canned 32-byte hash without talking to Epoch", async () => {
     const result = await runEpochTransfer({
-      mode: "receive",
+      route: defaultBridgeRoute("epoch", "receive")!,
       amount: "0.01",
       midenAccount: "mtst1aqk5t00kapdcnq2yyf77dz6xcysswce0_qr7qqq9wr6w",
       evmAddress: "0x1111111111111111111111111111111111111111",

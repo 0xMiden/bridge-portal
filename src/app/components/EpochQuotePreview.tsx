@@ -2,7 +2,7 @@
 
 import { RefreshCcw } from "lucide-react";
 import { useEffect } from "react";
-import type { FlowMode } from "../../bridge/core/models";
+import type { BridgeRoute } from "../../bridge/core/routes";
 import { useEpochQuote } from "../lib/use-epoch-quote";
 
 /**
@@ -14,7 +14,7 @@ import { useEpochQuote } from "../lib/use-epoch-quote";
  * estimate while idle so the field is never empty.
  */
 export function EpochQuotePreview({
-  mode,
+  route,
   amount,
   midenAccount,
   evmAddress,
@@ -23,7 +23,7 @@ export function EpochQuotePreview({
   onAmount,
   onLoading,
 }: {
-  mode: FlowMode;
+  route: BridgeRoute;
   amount: string;
   midenAccount: string;
   evmAddress: string;
@@ -39,7 +39,7 @@ export function EpochQuotePreview({
   // rather than reading as ready-to-transfer while a quote recomputes.
   onLoading?: (loading: boolean) => void;
 }) {
-  const quote = useEpochQuote({ enabled: true, mode, amount, midenAccount, evmAddress });
+  const quote = useEpochQuote({ enabled: true, route, amount, midenAccount, evmAddress });
 
   useEffect(() => {
     onAmount?.(quote.amount);

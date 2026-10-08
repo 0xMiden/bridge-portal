@@ -1,21 +1,25 @@
+import type { BridgeRoute } from "../../core/routes";
 import { SEPOLIA_NETWORK } from "../../../config/sepolia";
 
 /** EVM destination chain for the Epoch route (Sepolia). */
 export const EPOCH_DESTINATION_CHAIN_ID = SEPOLIA_NETWORK.chainId;
 
-/** Sepolia USDC — the fixed EVM output token for the Epoch (Fast) route. */
-export const BRIDGEABLE_EVM_OUTPUT_TOKEN_ADDRESS: string = "0x2BB4FfD7E2c6D432b697554Efd77fA13bdbefd69";
-
-/** Output token symbol, shown in the quote preview. */
-export const BRIDGEABLE_EVM_OUTPUT_TOKEN_SYMBOL = "USDC";
-
-/** Decimals of the EVM output token (Epoch's amounts use an 18-decimal convention). */
-export const BRIDGEABLE_EVM_OUTPUT_TOKEN_DECIMALS = 18;
-
-/** Whether the Epoch (Fast) route is configured well enough to run. */
-export function isBridgeableEvmTokenConfigured(): boolean {
+function isBridgeableEvmTokenConfigured(address: string): boolean {
   return (
-    /^0x[0-9a-fA-F]{40}$/.test(BRIDGEABLE_EVM_OUTPUT_TOKEN_ADDRESS) &&
-    BRIDGEABLE_EVM_OUTPUT_TOKEN_ADDRESS !== "0x0000000000000000000000000000000000000000"
+    /^0x[0-9a-fA-F]{40}$/.test(address) &&
+    address !== "0x0000000000000000000000000000000000000000"
   );
+}
+
+/** Epoch currently connects a Sepolia ERC20 with a Miden faucet token. */
+export function epochRouteAssets(route: BridgeRoute) {
+  const miden = route.mode === "send" ? route.source : route.destination;
+  const evm = route.mode === "send" ? route.destination : route.source;
+  if (
+    route.provider !== "epoch" || miden.kind !== "miden" || evm.kind !== "erc20" ||
+    !isBridgeableEvmTokenConfigured(evm.address)
+  ) {
+    throw new Error("The Epoch route is not configured yet.");
+  }
+  return { miden, evm };
 }

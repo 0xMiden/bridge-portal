@@ -1,17 +1,10 @@
+import type { BridgeRoute } from "../../core/routes";
 import {
-  BRIDGEABLE_EVM_OUTPUT_TOKEN_ADDRESS,
-  BRIDGEABLE_EVM_OUTPUT_TOKEN_DECIMALS,
-  BRIDGEABLE_EVM_OUTPUT_TOKEN_SYMBOL,
   EPOCH_DESTINATION_CHAIN_ID,
-  isBridgeableEvmTokenConfigured,
+  epochRouteAssets,
 } from "./bridgeable-token";
 import { getCrossChainQuote, getEVMToMidenQuote } from "./bridge";
-import {
-  MIDEN_DESTINATION_CHAIN_ID,
-  MIDEN_NATIVE_FAUCET_ID,
-  MIDEN_NATIVE_TOKEN_DECIMALS,
-  MIDEN_NATIVE_TOKEN_SYMBOL,
-} from "./config";
+import { MIDEN_DESTINATION_CHAIN_ID } from "./config";
 import { getEpochReadOnlySdk, getEpochSdk } from "./sdk";
 import type { CrossChainIntentParams, EVMToMidenIntentParams } from "./types";
 
@@ -25,12 +18,13 @@ export interface EpochQuoteOutput {
 }
 
 /**
- * Forward-quote the EVM output (USDC) for a Miden→EVM send WITHOUT executing.
+ * Forward-quote the EVM output token for a Miden→EVM send WITHOUT executing.
  * Uses the read-only SDK — no connected EVM wallet needed, only the recipient
  * address (which doubles as the intent sponsor). `minTokenOut: "0"` = no
  * slippage floor (testnet); the backend derives the output from `amount`.
  */
 export async function quoteEpochSend(args: {
+  route: BridgeRoute;
   /** Miden faucet token amount, base units. */
   amount: bigint;
   /** EVM recipient (0x) — also the sponsor. */
@@ -38,18 +32,16 @@ export async function quoteEpochSend(args: {
   /** Sender's Miden account (bech32 or hex). */
   senderPublicKey: string;
 }): Promise<EpochQuoteOutput> {
-  if (!isBridgeableEvmTokenConfigured()) {
-    throw new Error("The Epoch route is not configured yet.");
-  }
+  const { miden, evm } = epochRouteAssets(args.route);
   const sdk = await getEpochReadOnlySdk(args.destinationAddress);
   const params: CrossChainIntentParams = {
     midenAccountId: args.senderPublicKey,
-    midenFaucetId: MIDEN_NATIVE_FAUCET_ID,
+    midenFaucetId: miden.faucetId,
     midenAmount: args.amount.toString(),
     evmRecipient: args.destinationAddress,
     destinationChainId: EPOCH_DESTINATION_CHAIN_ID,
-    outputTokenAddress: BRIDGEABLE_EVM_OUTPUT_TOKEN_ADDRESS,
-    outputTokenDecimals: BRIDGEABLE_EVM_OUTPUT_TOKEN_DECIMALS,
+    outputTokenAddress: evm.address,
+    outputTokenDecimals: evm.decimals,
     minTokenOut: "0",
   };
   const quote = await getCrossChainQuote(sdk, params, args.destinationAddress);
@@ -59,8 +51,8 @@ export async function quoteEpochSend(args: {
       : "0";
   return {
     amount: raw,
-    decimals: BRIDGEABLE_EVM_OUTPUT_TOKEN_DECIMALS,
-    symbol: BRIDGEABLE_EVM_OUTPUT_TOKEN_SYMBOL,
+    decimals: evm.decimals,
+    symbol: evm.symbol,
   };
 }
 
@@ -70,6 +62,7 @@ export async function quoteEpochSend(args: {
  * resolves the default SDK keyed on the connected account.
  */
 export async function quoteEpochReceive(args: {
+  route: BridgeRoute;
   /** EVM input amount, human-readable (parsed at the SDK boundary). */
   evmAmount: string;
   /** Connected EVM source (0x) — also the intent sponsor. */
@@ -77,9 +70,7 @@ export async function quoteEpochReceive(args: {
   /** Miden recipient account (bech32 or hex). */
   midenRecipientId: string;
 }): Promise<EpochQuoteOutput> {
-  if (!isBridgeableEvmTokenConfigured()) {
-    throw new Error("The Epoch route is not configured yet.");
-  }
+  const { miden, evm } = epochRouteAssets(args.route);
   const sdk = await getEpochSdk();
   if (!sdk) {
     throw new Error("Connect a Sepolia wallet to quote the Epoch route.");
@@ -88,11 +79,11 @@ export async function quoteEpochReceive(args: {
     sourceChainId: EPOCH_DESTINATION_CHAIN_ID,
     destinationChainId: MIDEN_DESTINATION_CHAIN_ID,
     evmSourceAddress: args.evmSourceAddress,
-    evmTokenAddress: BRIDGEABLE_EVM_OUTPUT_TOKEN_ADDRESS,
+    evmTokenAddress: evm.address,
     evmAmount: args.evmAmount,
-    evmTokenDecimals: BRIDGEABLE_EVM_OUTPUT_TOKEN_DECIMALS,
+    evmTokenDecimals: evm.decimals,
     midenRecipientId: args.midenRecipientId,
-    midenFaucetId: MIDEN_NATIVE_FAUCET_ID,
+    midenFaucetId: miden.faucetId,
     minTokenOut: "0",
   };
   const quote = await getEVMToMidenQuote(sdk, params, args.evmSourceAddress);
@@ -102,7 +93,7 @@ export async function quoteEpochReceive(args: {
       : "0";
   return {
     amount: raw,
-    decimals: MIDEN_NATIVE_TOKEN_DECIMALS,
-    symbol: MIDEN_NATIVE_TOKEN_SYMBOL,
+    decimals: miden.decimals,
+    symbol: miden.symbol,
   };
 }
