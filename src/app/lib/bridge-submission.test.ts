@@ -4,10 +4,14 @@ import { SEPOLIA_NETWORK } from "../../config/sepolia";
 import { AGGLAYER_BALI } from "../../bridge/providers/agglayer/agglayer";
 import { runAgglayerSend } from "../../bridge/providers/agglayer/agglayer-execute";
 import { runEpochTransfer, type EpochExecuteResult } from "../../bridge/providers/epoch/epoch-execute";
+import { captureSourceTransaction } from "../../bridge/evm/source-transaction";
+import { depositOnArc } from "../../bridge/providers/xreserve/deposit";
 import { loadStoredActivities, saveActivities } from "./bridge-persistence";
 import type { Activity } from "./bridge-presentation";
 import { submitBridgeTransfer, type TransferSubmission } from "./bridge-submission";
 
+vi.mock("../../bridge/evm/source-transaction", () => ({ captureSourceTransaction: vi.fn().mockResolvedValue(undefined) }));
+vi.mock("../../bridge/providers/xreserve/deposit", () => ({ depositOnArc: vi.fn() }));
 vi.mock("../../bridge/providers/agglayer/agglayer-execute", () => ({ runAgglayerSend: vi.fn() }));
 vi.mock("../../bridge/providers/epoch/epoch-execute", () => ({ runEpochTransfer: vi.fn() }));
 
@@ -29,6 +33,7 @@ const history: Activity = {
 
 beforeEach(() => {
   vi.resetAllMocks();
+  vi.mocked(captureSourceTransaction).mockResolvedValue(undefined);
   const storage = new Map<string, string>();
   vi.stubGlobal("window", {
     localStorage: {
@@ -247,5 +252,52 @@ describe("Epoch activity lifecycle", () => {
     expect(effects.onError).toHaveBeenCalledWith("Solver unavailable");
     expect(effects.onSubmittingChange).toHaveBeenLastCalledWith(false);
     expect(effects.onPhaseChange).toHaveBeenLastCalledWith("");
+  });
+});
+
+describe("USDCx submission", () => {
+  it("saves the actual source nonce after broadcast without overwriting a concurrent activity update", async () => {
+    const { input, effects } = setup({ routeId: "xreserve-usdc-to-miden", amount: "1" });
+    const transaction = { hash: TX_HASH, from: EVM_ADDRESS, nonce: 7, to: EVM_ADDRESS, input: "0x1234", value: "0" };
+    let resolve!: (value: typeof transaction) => void;
+    vi.mocked(captureSourceTransaction).mockReturnValue(new Promise((done) => { resolve = done; }));
+    vi.mocked(depositOnArc).mockImplementation(async ({ onBroadcast }) => {
+      onBroadcast(TX_HASH as `0x${string}`);
+      return TX_HASH as `0x${string}`;
+    });
+    await submitBridgeTransfer(input, effects);
+    expect(effects.navigate).toHaveBeenCalledOnce();
+    const stored = loadStoredActivities();
+    saveActivities([{ ...stored[0], xreserveStatus: "confirmed" }, history]);
+    resolve(transaction);
+    await vi.waitFor(() => expect(loadStoredActivities()[0]).toMatchObject({
+      sourceTransaction: transaction, xreserveStatus: "confirmed", sourceTxHash: TX_HASH,
+    }));
+    expect(loadStoredActivities()[1]).toEqual(history);
+  });
+
+  it("persists the broadcast before navigating and retains it after a later failure", async () => {
+    const { input, effects } = setup({ routeId: "xreserve-usdc-to-miden", amount: "1.000001" });
+    vi.mocked(depositOnArc).mockImplementation(async ({ onBroadcast }) => {
+      expect(loadStoredActivities()).toEqual([history]);
+      onBroadcast(TX_HASH as `0x${string}`);
+      throw new Error("connection lost after broadcast");
+    });
+    effects.navigate.mockImplementation(async () => {
+      expect(loadStoredActivities()[0]).toMatchObject({ provider: "xreserve", status: "source_finality", sourceTxHash: TX_HASH, receivedAmount: "1.000001", evmAddress: EVM_ADDRESS });
+    });
+    await submitBridgeTransfer(input, effects);
+    expect(loadStoredActivities()).toHaveLength(2);
+    expect(loadStoredActivities()[0].status).toBe("source_finality");
+    expect(effects.navigate).toHaveBeenCalledOnce();
+    expect(effects.onError).toHaveBeenCalledWith(expect.stringContaining("do not deposit again"));
+  });
+  it("creates no activity for a rejected approval", async () => {
+    const { input, effects } = setup({ routeId: "xreserve-usdc-to-miden", amount: "1" });
+    vi.mocked(depositOnArc).mockRejectedValue(new Error("User rejected request"));
+    await submitBridgeTransfer(input, effects);
+    expect(loadStoredActivities()).toEqual([history]);
+    expect(effects.navigate).not.toHaveBeenCalled();
+    expect(effects.onSubmittingChange).toHaveBeenLastCalledWith(false);
   });
 });

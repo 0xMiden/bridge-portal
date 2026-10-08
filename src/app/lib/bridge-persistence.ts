@@ -1,3 +1,4 @@
+import { findBridgeRoute } from "../../bridge/core/routes";
 import type { BridgeProvider, FlowMode } from "../../bridge/core/models";
 import { type Activity, providers } from "./bridge-presentation";
 
@@ -18,9 +19,14 @@ export function loadStoredRoute(): BridgeProvider | null {
   return null;
 }
 
-export function saveStoredRoute(provider: BridgeProvider) {
+export function loadStoredRouteId() {
+  try { return findBridgeRoute(window.localStorage.getItem(`${routeStorageKey}.id`) ?? ""); } catch { return undefined; }
+}
+
+export function saveStoredRoute(provider: BridgeProvider, routeId?: string) {
   try {
     window.localStorage.setItem(routeStorageKey, provider);
+    if (routeId) window.localStorage.setItem(`${routeStorageKey}.id`, routeId);
   } catch {
     // ignore storage write failures
   }

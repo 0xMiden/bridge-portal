@@ -172,7 +172,7 @@ describe("route comparison metadata", () => {
       expect(c.feeModel).toBeTruthy();
       expect(c.claim).toBeTruthy();
       expect(c.trust).toBeTruthy();
-      expect(c.availability).toBe("Available");
+      expect(c.availability).toBe(key === "xreserve" ? "Deposits only" : "Available");
     }
   });
 

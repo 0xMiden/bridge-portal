@@ -3,7 +3,7 @@
 import { Check, ChevronDown } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { bridgeRoutes, type BridgeRoute } from "../../bridge/core/routes";
-import { providers, tokenNames } from "../lib/bridge-presentation";
+import { networkLabels, providers, tokenNames } from "../lib/bridge-presentation";
 
 function TokenIcon({ symbol, size = 22 }: { symbol: string; size?: number }) {
   if (symbol === "ETH") {
@@ -53,8 +53,7 @@ function TokenIcon({ symbol, size = 22 }: { symbol: string; size?: number }) {
 }
 
 /**
- * Uniswap-style token picker. The visible token follows the active route; the
- * menu lists every bridgeable token and selecting one switches to its route.
+ * Select a bridgeable token while keeping the chosen external chain.
  */
 export function TokenSelect({
   route,
@@ -68,7 +67,9 @@ export function TokenSelect({
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
   const active = route[side];
-  const options = bridgeRoutes.filter((option) => option.mode === route.mode);
+  const externalSide = route.mode === "receive" ? "source" : "destination";
+  const options = bridgeRoutes.filter((option) => option.mode === route.mode &&
+    option[externalSide].network === route[externalSide].network);
 
   useEffect(() => {
     if (!open) return;
@@ -85,6 +86,17 @@ export function TokenSelect({
       document.removeEventListener("keydown", onKey);
     };
   }, [open]);
+
+  if (options.length < 2) {
+    return (
+      <div className="token-select" ref={rootRef}>
+        <span className="token-select-value">
+          <TokenIcon symbol={active.symbol} />
+          <span className="token-select-symbol">{active.symbol}</span>
+        </span>
+      </div>
+    );
+  }
 
   return (
     <div className="token-select" ref={rootRef}>
@@ -121,7 +133,7 @@ export function TokenSelect({
                 <span className="token-option-text">
                   <strong>{token.symbol}</strong>
                   <small>
-                    {tokenNames[token.symbol] ?? token.symbol} · via{" "}
+                    {networkLabels[token.network]} · {option.provider === "xreserve" && token.kind !== "miden" ? "Circle USDC" : tokenNames[token.symbol] ?? token.symbol} · via{" "}
                     {providers[option.provider].label}
                   </small>
                 </span>

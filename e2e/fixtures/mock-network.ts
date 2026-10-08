@@ -11,24 +11,20 @@ export async function stubNetwork(
 ): Promise<void> {
   const usdcBalance = opts.usdcBalance ?? "1";
 
-  await page.route("**/api/sepolia/gas**", (route) =>
+  await page.route("**/api/evm/sepolia/gas**", (route) =>
     route.fulfill({
       json: { gasPriceWei: "1200000000", gwei: "1.2" },
     }),
   );
 
-  await page.route("**/api/sepolia/balance**", (route) =>
-    route.fulfill({
-      json: {
-        balance: usdcBalance,
-        balanceRaw: parseUnits(usdcBalance, 18).toString(),
-        balanceWei: "1000000000000000000",
-        balanceEth: "1",
-      },
-    }),
-  );
+  await page.route("**/api/evm/*/balance**", (route) => {
+    const params = new URL(route.request().url()).searchParams;
+    const balance = params.has("token") ? usdcBalance : "1";
+    const decimals = Number(params.get("decimals") ?? 18);
+    return route.fulfill({ json: { balance, balanceRaw: parseUnits(balance, decimals).toString() } });
+  });
 
-  await page.route("**/api/sepolia/transaction**", (route) =>
+  await page.route("**/api/evm/sepolia/transaction**", (route) =>
     route.fulfill({
       json: { hash: `0x${"ab".repeat(32)}`, status: "confirmed", success: true },
     }),

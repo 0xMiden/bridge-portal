@@ -1,4 +1,4 @@
-import { MIDEN_ETH, MIDEN_USDC, SEPOLIA_ETH, SEPOLIA_USDC, sameAsset, type BridgeAsset } from "./assets";
+import { CIRCLE_SEPOLIA_USDC, BASE_SEPOLIA_USDC, ARBITRUM_SEPOLIA_USDC, ARC_USDC, MIDEN_USDCX, MIDEN_ETH, MIDEN_USDC, SEPOLIA_ETH, SEPOLIA_USDC, sameAsset, type BridgeAsset } from "./assets";
 import type { BridgeActivity, BridgeProvider, FlowMode } from "./models";
 
 export type BridgeRoute = {
@@ -15,6 +15,10 @@ export const bridgeRoutes: readonly BridgeRoute[] = [
   { id: "epoch-usdc-to-sepolia", provider: "epoch", mode: "send", source: MIDEN_USDC, destination: SEPOLIA_USDC },
   { id: "agglayer-eth-to-miden", provider: "agglayer", mode: "receive", source: SEPOLIA_ETH, destination: MIDEN_ETH },
   { id: "agglayer-eth-to-sepolia", provider: "agglayer", mode: "send", source: MIDEN_ETH, destination: SEPOLIA_ETH },
+  { id: "xreserve-usdc-to-miden", provider: "xreserve", mode: "receive", source: ARC_USDC, destination: MIDEN_USDCX },
+  { id: "xreserve-sepolia-usdc-to-miden", provider: "xreserve", mode: "receive", source: CIRCLE_SEPOLIA_USDC, destination: MIDEN_USDCX },
+  { id: "xreserve-base-usdc-to-miden", provider: "xreserve", mode: "receive", source: BASE_SEPOLIA_USDC, destination: MIDEN_USDCX },
+  { id: "xreserve-arbitrum-usdc-to-miden", provider: "xreserve", mode: "receive", source: ARBITRUM_SEPOLIA_USDC, destination: MIDEN_USDCX },
 ];
 
 export function findBridgeRoute(id: string): BridgeRoute | undefined {

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
-import { sepoliaRpc } from "../../../lib/sepolia-rpc";
+import { evmRpc } from "../../../../../bridge/evm/rpc.server";
+import { isEvmNetwork } from "../../../../../config/evm-networks";
 
 type TransactionReceipt = {
   blockNumber: `0x${string}`;
@@ -10,7 +11,9 @@ type TransactionReceipt = {
 
 export const dynamic = "force-dynamic";
 
-export async function GET(request: Request) {
+export async function GET(request: Request, context: { params: Promise<{ network: string }> }) {
+  const { network } = await context.params;
+  if (!isEvmNetwork(network)) return NextResponse.json({ error: "Unsupported EVM network." }, { status: 400 });
   const { searchParams } = new URL(request.url);
   const hash = searchParams.get("hash") ?? "";
 
@@ -19,8 +22,8 @@ export async function GET(request: Request) {
   }
 
   try {
-    const receipt = await sepoliaRpc<TransactionReceipt | null>(
-      "eth_getTransactionReceipt",
+    const receipt = await evmRpc<TransactionReceipt | null>(
+      network, "eth_getTransactionReceipt",
       [hash],
     );
     if (!receipt) {
@@ -31,7 +34,7 @@ export async function GET(request: Request) {
       });
     }
 
-    const latestBlockHex = await sepoliaRpc<`0x${string}`>("eth_blockNumber", []);
+    const latestBlockHex = await evmRpc<`0x${string}`>(network, "eth_blockNumber", []);
     const latestBlock = BigInt(latestBlockHex ?? "0x0");
     const receiptBlock = BigInt(receipt.blockNumber);
     const confirmations = latestBlock >= receiptBlock ? Number(latestBlock - receiptBlock + 1n) : 0;
@@ -45,7 +48,7 @@ export async function GET(request: Request) {
     });
   } catch (error) {
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Unable to read Sepolia transaction status." },
+      { error: error instanceof Error ? error.message : "Unable to read transaction status." },
       { status: 502 },
     );
   }

@@ -62,7 +62,14 @@ function milestonesFor(activity: Activity) {
   };
 
   let steps: Step[];
-  if (isEpoch) {
+  if (activity.provider === "xreserve") {
+    steps = [
+      { status: "signature", label: "Sign USDC deposit", detail: "Approve USDC and confirm the deposit in your origin wallet." },
+      { status: "source_finality", label: "Circle confirmation and attestation", detail: "Circle forwards your USDC to xReserve and attests the Miden deposit." },
+      { status: "message_observed", label: "Delivering USDCx on Miden", detail: "Circle attested the deposit. The relayer is creating your USDCx note." },
+      { status: "complete", label: "USDCx note delivered", detail: "The exact note is included on Miden. Consume it in Bread to update your balance." },
+    ];
+  } else if (isEpoch) {
     steps = isReceive
       ? [
           signReceive,
@@ -167,6 +174,28 @@ function milestonesFor(activity: Activity) {
  * that becomes the dominant element on the page (not a muted footnote).
  */
 function nextActionFor(activity: Activity): { headline: string; body: string } {
+  if (activity.provider === "xreserve" && activity.status !== "complete") {
+    if (activity.xreserveStatus === "cancelled") return {
+      headline: "Deposit cancelled in your wallet",
+      body: "A cancellation replaced this deposit on the source chain. No USDC was bridged by this deposit; the cancellation transaction fee may still apply.",
+    };
+    if (activity.xreserveStatus === "replaced") return {
+      headline: "Deposit replaced by another transaction",
+      body: "Your wallet replaced this deposit with a different operation. Check the replacement transaction in the explorer before starting another transfer.",
+    };
+    if (activity.status === "failed") return {
+      headline: "Deposit reverted",
+      body: "The source deposit reverted. No USDC was bridged; the network transaction fee may still apply.",
+    };
+    if (activity.xreserveStatus === "attested") return {
+      headline: "Circle attested — waiting for Miden delivery",
+      body: "The USDCx note has not been confirmed on Miden yet. Tracking will continue; do not submit this deposit again.",
+    };
+    return {
+      headline: activity.xreserveStatus === "confirmed" ? "Waiting for Circle attestation" : activity.xreserveForwarding ? "Circle is forwarding your USDC" : "Waiting for deposit confirmation",
+      body: "Your deposit is saved. You can leave and return to this receipt to resume tracking.",
+    };
+  }
   const asset = destinationAssetSymbol(activity);
   const isReceive = activity.mode === "receive";
   const isEpoch = activity.provider === "epoch";
@@ -261,6 +290,10 @@ type Guidance = {
  * Returns null for plain in-flight states, where the hero already says enough.
  */
 function guidanceFor(activity: Activity): Guidance | null {
+  // The replacement's outcome is explained above; do not suggest blindly
+  // repeating a transfer when the wallet submitted a different operation.
+  if (activity.provider === "xreserve" &&
+      (activity.xreserveStatus === "cancelled" || activity.xreserveStatus === "replaced")) return null;
   if (activity.status === "failed") {
     return {
       tone: "danger",
@@ -279,7 +312,7 @@ function guidanceFor(activity: Activity): Guidance | null {
     // is intent-based: the solver delivers the output token directly, nothing to claim.
     const delivered =
       activity.status === "complete" || activity.status === "claim_available";
-    if (delivered && activity.provider === "agglayer") {
+    if (delivered && (activity.provider === "agglayer" || activity.provider === "xreserve")) {
       return {
         tone: "success",
         icon: "wallet",
@@ -309,7 +342,7 @@ function guidanceFor(activity: Activity): Guidance | null {
 }
 
 export function ActivityDetail({ id }: { id: string }) {
-  const { activity, monitorError, lastCheckedAt } = useActivityTracking(id);
+  const { activity, monitorError, lastCheckedAt, refresh } = useActivityTracking(id);
   const [copied, setCopied] = useState(false);
   const [now, setNow] = useState(() => Date.now());
   const quote = useMemo(
@@ -351,7 +384,7 @@ export function ActivityDetail({ id }: { id: string }) {
     : undefined;
   const destinationHash = activity
     ? activity.mode === "receive"
-      ? activity.midenTxId ?? activity.destinationTxHash
+      ? activity.xreserveNoteId ?? activity.midenTxId ?? activity.destinationTxHash
       : activity.claimTxHash ?? activity.destinationTxHash
     : undefined;
   // Per-leg transaction times. Source is the transfer's start — for legacy rows
@@ -363,7 +396,7 @@ export function ActivityDetail({ id }: { id: string }) {
   const sourceTxAt = activity ? activityStartedAt(activity) : undefined;
   const destinationTxAt =
     activity?.destinationTxAt ??
-    (destinationHash ? activity?.updatedAt : undefined);
+    (destinationHash && activity?.provider !== "xreserve" ? activity?.updatedAt : undefined);
 
   const isActive =
     !activity ||
@@ -505,7 +538,7 @@ export function ActivityDetail({ id }: { id: string }) {
               {/* Agglayer receive delivers a Miden note that isn't a balance
                   change until consumed in the wallet — kept as a distinct step.
                   Epoch's solver delivers the output token directly, so no consume step. */}
-              {activity.mode === "receive" && activity.provider === "agglayer" ? (
+              {activity.mode === "receive" && (activity.provider === "agglayer" || activity.provider === "xreserve") ? (
                 <li
                   className={`milestone consume ${
                     isComplete || activity.status === "claim_available"
@@ -536,6 +569,14 @@ export function ActivityDetail({ id }: { id: string }) {
               </p>
             ) : null}
           </div>
+
+          {activity.provider === "xreserve" ? (
+            <div className="support-row">
+              {isActive ? <button type="button" className="secondary-button" onClick={refresh}>Refresh status</button> : null}
+              {activity.xreserveMidenBlock !== undefined ? <p>USDCx note included in Miden block {activity.xreserveMidenBlock}.</p> : null}
+              {isActive && now - activityStartedAt(activity) > 15 * 60_000 ? <p>Still waiting for delivery. Keep this transaction hash; do not deposit again.</p> : null}
+            </div>
+          ) : null}
 
           {/* Recovery / follow-up, in the same restrained card language. */}
           {guidance ? (

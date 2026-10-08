@@ -17,7 +17,7 @@ import {
 import dynamic from "next/dynamic";
 import Image from "next/image";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams, type ReadonlyURLSearchParams } from "next/navigation";
 import {
   type KeyboardEvent as ReactKeyboardEvent,
   useCallback,
@@ -27,7 +27,12 @@ import {
   useState,
   useSyncExternalStore,
 } from "react";
-import { SEPOLIA_NETWORK } from "../../config/sepolia";
+import { formatUnits } from "viem";
+import { evmNetworks } from "../../config/evm-networks";
+import { ensureEvmNetwork } from "../../wallets/evm/ensure-network";
+import { isCctpNetwork } from "../../bridge/providers/xreserve/cctp-config";
+import type { CctpQuote } from "../../bridge/providers/xreserve/cctp-quote";
+import { useCctpQuote } from "../lib/use-cctp-quote";
 import {
   type WalletIdentity,
   evmWalletIdentity,
@@ -35,7 +40,7 @@ import {
   shortAddress,
   walletGradient,
 } from "../../wallets/identity";
-import { AGGLAYER_BALI } from "../../bridge/providers/agglayer/agglayer";
+import { parseArcAmount } from "../../bridge/providers/xreserve/deposit";
 import {
   type Activity,
   deriveCtaState,
@@ -54,6 +59,7 @@ import {
   loadStoredActivities,
   loadStoredMode,
   loadStoredRoute,
+  loadStoredRouteId,
   saveActivities,
   saveStoredMode,
   saveStoredRoute,
@@ -65,19 +71,19 @@ import { ActivityStack } from "./ActivityStack";
 import { InfoTip } from "./InfoTip";
 import { RelativeTime } from "./RelativeTime";
 import { TokenSelect } from "./TokenSelect";
+import { ChainSelect } from "./ChainSelect";
 import { WalletMenu } from "../../wallets/WalletMenu";
 import { FaucetMenu } from "./FaucetMenu";
 import { ThemeToggle } from "./ThemeToggle";
-import { useMidenBalance, useSepoliaBalance } from "../../bridge/BalanceProvider";
+import { useMidenBalance, useEvmBalance } from "../../bridge/BalanceProvider";
 import {
   useAppKit,
   useAppKitAccount,
-  useAppKitNetwork,
   useAppKitProvider,
   useDisconnect,
   useWalletInfo,
 } from "@reown/appkit/react";
-import { type EvmProvider, ensureSepolia } from "../../wallets/evm/evm-wallet";
+import { type EvmProvider } from "../../wallets/evm/evm-wallet";
 import { gsap, useGSAP } from "../lib/gsap";
 import { EASE, motionMM } from "../lib/motion";
 // Type-only import — erased at build, so the eager-WASM adapter never reaches SSR.
@@ -137,7 +143,7 @@ const emptyMidenWallet: MidenWalletSnapshot = {
 };
 
 function providerFromParam(value: string | null): BridgeProvider | null {
-  if (value === "near-intents" || value === "agglayer" || value === "epoch")
+  if (value === "near-intents" || value === "agglayer" || value === "epoch" || value === "xreserve")
     return value;
   return null;
 }
@@ -146,6 +152,21 @@ function modeFromIntent(value: string | null): FlowMode | null {
   if (value === "receive" || value === "deposit") return "receive";
   if (value === "send" || value === "withdraw") return "send";
   return null;
+}
+
+function initialBridgeForm(params: ReadonlyURLSearchParams) {
+  // Providers mounts this form inside the client-only Miden wallet provider.
+  // Resolve the launch URL and saved selection before its first render.
+  const requestedProvider = providerFromParam(params.get("provider") ?? params.get("route"));
+  const provider = requestedProvider && !providers[requestedProvider].disabled
+    ? requestedProvider
+    : loadStoredRoute() ?? "epoch";
+  const mode = modeFromIntent(params.get("intent") ?? params.get("mode")) ?? loadStoredMode() ?? "receive";
+  const saved = loadStoredRouteId();
+  const route = (saved?.provider === provider && saved.mode === mode ? saved : undefined) ?? defaultBridgeRoute(provider, mode) ?? defaultBridgeRoute(provider, "receive") ?? bridgeRoutes[0];
+  const midenAccount = params.get("midenAccount") ?? params.get("miden_account") ?? params.get("account") ?? "";
+  const evmAddress = params.get("evmAddress") ?? params.get("evm_address") ?? params.get("recipient") ?? "";
+  return { route, midenAccount, destination: route.mode === "receive" ? midenAccount : evmAddress };
 }
 
 const MidenWalletButton = dynamic(
@@ -204,28 +225,26 @@ export function BridgeExperience() {
     getServerMobileRouteSnapshot,
   );
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { open } = useAppKit();
   const { address, isConnected } = useAppKitAccount();
-  const { chainId } = useAppKitNetwork();
   const { walletProvider } = useAppKitProvider<EvmProvider>("eip155");
   const { disconnect } = useDisconnect();
   const { walletInfo } = useWalletInfo();
   const evmIcon = walletInfo?.icon;
-  const [route, setRoute] = useState<BridgeRoute>(bridgeRoutes[0]);
+  const [initialForm] = useState(() => initialBridgeForm(searchParams));
+  const [route, setRoute] = useState<BridgeRoute>(initialForm.route);
   const { provider, mode } = route;
   const [amount, setAmount] = useState("");
-  const [destination, setDestination] = useState("");
+  const [destination, setDestination] = useState(initialForm.destination);
   const walletAccount = address ?? "";
   const walletConnected = isConnected && Boolean(address);
-  // Connected but the wallet is pointed at a chain other than Sepolia — surfaced
-  // inline (pill + panel) with a switch action. Unknown chainId isn't "wrong".
-  const wrongNetwork =
-    walletConnected &&
-    chainId != null &&
-    Number(chainId) !== SEPOLIA_NETWORK.chainId;
+  const externalAsset = route.source.kind === "miden" ? route.destination : route.source;
+  const evmNetwork = evmNetworks[externalAsset.network === "miden-testnet" ? "sepolia" : externalAsset.network];
+  const cctpNetwork = provider === "xreserve" && isCctpNetwork(route.source.network) ? route.source.network : null;
   const [midenWallet, setMidenWallet] =
     useState<MidenWalletSnapshot>(emptyMidenWallet);
-  const [launchMidenAccount, setLaunchMidenAccount] = useState("");
+  const launchMidenAccount = initialForm.midenAccount;
   const [walletError, setWalletError] = useState("");
   const [bridgeError, setBridgeError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -235,6 +254,7 @@ export function BridgeExperience() {
   // straight off the primary CTA. Cancelling just closes it (form state is
   // untouched, so all entered data is preserved).
   const [showPreflight, setShowPreflight] = useState(false);
+  const [reviewedCctpQuote, setReviewedCctpQuote] = useState<CctpQuote>();
   // Reveals the full destination value in the preflight (a long Miden id / 0x
   // address is shortened by default, with an affordance to inspect it in full).
   const [showFullDestination, setShowFullDestination] = useState(false);
@@ -345,17 +365,20 @@ export function BridgeExperience() {
       : walletAccount;
   const epochMidenAccount =
     mode === "send" ? midenAddress : destination.trim() || midenAddress;
-  const evmWalletLabel = walletInfo?.name ?? "Sepolia";
+  const cctpQuery = useCctpQuote(cctpNetwork ? { network: cctpNetwork, amount, sender: walletAccount as `0x${string}`, recipient: epochMidenAccount } : null, showPreflight || isSubmitting);
+  const cctpQuote = showPreflight ? reviewedCctpQuote : cctpQuery.data;
+  const circleFeeDisplay = cctpQuote ? `${formatUnits(BigInt(cctpQuote.fee), 6)} USDC` : cctpQuery.isFetching ? "Fetching quote…" : "—";
+  const evmWalletLabel = walletInfo?.name ?? evmNetwork.name;
   const midenRouteToken = [route.source, route.destination].find((asset) => asset.kind === "miden");
-  const evmRouteToken = [route.source, route.destination].find((asset) => asset.network === "sepolia");
+  const evmRouteToken = [route.source, route.destination].find((asset) => asset.kind !== "miden");
   const midenBalance = useMidenBalance(midenWallet.connected ? midenAddress : "", midenRouteToken);
-  const sepoliaBalance = useSepoliaBalance(walletConnected ? walletAccount : "", evmRouteToken);
+  const evmTokenBalance = useEvmBalance(walletConnected ? walletAccount : "", evmRouteToken);
   const midenTokenBalance = midenBalance.balance;
-  const evmBalance = sepoliaBalance.balance
-    ? `${compactTokenAmount(sepoliaBalance.balance.balance)} ${sepoliaBalance.balance.symbol}`
+  const evmBalance = evmTokenBalance.balance
+    ? `${compactTokenAmount(evmTokenBalance.balance.balance)} ${evmTokenBalance.balance.symbol}`
     : "";
-  const evmBalanceValue = sepoliaBalance.balance ? Number(sepoliaBalance.balance.balance) : null;
-  const evmBalanceUnavailable = Boolean(sepoliaBalance.error) && !sepoliaBalance.loading;
+  const evmBalanceValue = evmTokenBalance.balance ? Number(evmTokenBalance.balance.balance) : null;
+  const evmBalanceUnavailable = Boolean(evmTokenBalance.error) && !evmTokenBalance.loading;
   const evmBalanceText = walletConnected
     ? evmBalance || (evmBalanceUnavailable ? "Balance unavailable" : "Loading balance…")
     : "Not connected";
@@ -373,7 +396,7 @@ export function BridgeExperience() {
   // each side explicitly names its wallet and shows its connection state.
   const evmIdentity = evmWalletIdentity({
     connected: walletConnected,
-    wrongNetwork,
+    networkLabel: evmNetwork.name,
     address: walletAccount,
   });
   const midenIdentity = midenWalletIdentity({
@@ -399,7 +422,7 @@ export function BridgeExperience() {
     walletConnected &&
     evmBalanceValue != null &&
     Number(amount) > 0 &&
-    Number(amount) > evmBalanceValue;
+    Number(amount) + (cctpQuote && cctpNetwork ? Number(formatUnits(BigInt(cctpQuote.fee), 6)) : 0) > evmBalanceValue;
   const routeTone = providers[provider].disabled
     ? "disabled"
     : provider === "near-intents"
@@ -408,6 +431,8 @@ export function BridgeExperience() {
   const routeNote =
     provider === "near-intents"
       ? "NEAR Intents is paused in this build while Agglayer and Epoch are the active testnet routes."
+      : provider === "xreserve"
+        ? providers.xreserve.disclosure
       : provider === "agglayer"
         ? mode === "receive"
           ? "Your Sepolia wallet sends to Miden through Agglayer with no provider bridge fee (~10-20 min)."
@@ -434,19 +459,20 @@ export function BridgeExperience() {
     amount,
     sourceTokenSymbol,
     insufficientBalance,
-    quoteLoading: provider === "epoch" && epochQuoteLoading,
+    quoteLoading: (provider === "epoch" && epochQuoteLoading) || (Boolean(cctpNetwork) && cctpQuery.isFetching && !cctpQuote),
     isSubmitting,
     submitPhase,
+    evmNetworkLabel: evmNetwork.name,
   });
   // Destination help is route-agnostic: it depends only on direction (receive =
   // Miden account, send = Sepolia address) and shows consistently on every route.
   const destinationHelp =
     mode === "receive"
       ? midenWallet.connected
-        ? `Defaults to your connected Bread wallet ${shortAddress(midenAddress)}. Paste a different Miden account (mcst1…/30-hex) to override.`
+        ? `Defaults to your connected Bread wallet ${shortAddress(midenAddress)}. Paste a different Miden account (mtst1…/30-hex) to override.`
         : launchMidenAccount
           ? `Preloaded from wallet launch: ${shortAddress(launchMidenAccount)}. Connect Bread before signing Miden-side actions.`
-          : "Connect your Bread wallet, or paste a Miden account (mcst1…/30-hex)."
+          : "Connect your Bread wallet, or paste a Miden account (mtst1…/30-hex)."
       : walletConnected
         ? `Defaults to your connected Sepolia wallet ${shortAddress(walletAccount)}. Paste a different 0x address to override.`
         : "Connect your Sepolia wallet, or paste a 0x destination address.";
@@ -471,44 +497,9 @@ export function BridgeExperience() {
   }, []);
 
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const nextMode = modeFromIntent(params.get("intent") ?? params.get("mode"));
-    const nextProvider = providerFromParam(
-      params.get("provider") ?? params.get("route"),
-    );
-    const nextMidenAccount =
-      params.get("midenAccount") ??
-      params.get("miden_account") ??
-      params.get("account");
-    const nextEvmAddress =
-      params.get("evmAddress") ??
-      params.get("evm_address") ??
-      params.get("recipient");
-    // No URL intent → fall back to the last tab the user was on (then Receive).
-    const storedMode = nextMode ? null : loadStoredMode();
-    const resolvedMode = nextMode ?? storedMode ?? "receive";
-
-    queueMicrotask(() => {
-      const resolvedProvider = nextProvider && !providers[nextProvider].disabled
-        ? nextProvider
-        : loadStoredRoute() ?? "epoch";
-      const restoredRoute = defaultBridgeRoute(resolvedProvider, resolvedMode);
-      if (restoredRoute) setRoute(restoredRoute);
-      if (nextProvider && !providers[nextProvider].disabled) saveStoredRoute(nextProvider);
-      if (nextMode) saveStoredMode(nextMode);
-
-      if (nextMidenAccount) {
-        setLaunchMidenAccount(nextMidenAccount);
-        if (resolvedMode === "receive") {
-          setDestination(nextMidenAccount);
-        }
-      }
-
-      if (nextEvmAddress && resolvedMode === "send") {
-        setDestination(nextEvmAddress);
-      }
-    });
-  }, []);
+    saveStoredRoute(initialForm.route.provider, initialForm.route.id);
+    saveStoredMode(initialForm.route.mode);
+  }, [initialForm]);
 
   useEffect(() => {
     if (!hydrated) return;
@@ -689,41 +680,30 @@ export function BridgeExperience() {
     const nextRoute = nextMode === mode ? route : reverseBridgeRoute(route);
     if (!nextRoute) return;
     setRoute(nextRoute);
-    // Remember the tab so a refresh keeps this direction.
+    // Remember the tab and route so a refresh keeps this direction.
     saveStoredMode(nextMode);
+    saveStoredRoute(nextRoute.provider, nextRoute.id);
     setAmount("");
     setDestination("");
     destinationPrefilledRef.current = false;
     setBridgeError("");
   }
 
-  // The chain-specific wallet identity line for a From/To panel: names the
-  // wallet and shows its live connection state (address / not connected /
-  // connecting / wrong network / not installed). Connection itself stays with
-  // the header pills + primary CTA; the panel only exposes state, plus an inline
-  // switch when the connected Sepolia wallet is on the wrong network.
+  // Connection status belongs in the panel; choosing an asset never requires
+  // a wallet network change. Submission switches to the source chain if needed.
   function renderWalletChip(identity: WalletIdentity) {
     return (
       <span className={`wallet-chip ${identity.state}`}>
         <span className="wallet-chip-state">{identity.stateText}</span>
-        {identity.state === "wrong-network" ? (
-          <button
-            type="button"
-            className="wallet-chip-switch"
-            onClick={switchToSepolia}
-          >
-            Switch to Sepolia
-          </button>
-        ) : null}
       </span>
     );
   }
 
   // The Sepolia balance line — shown only once the wallet is connected (the chip
-  // above owns the disconnected/connecting/wrong-network states).
+  // above owns the disconnected/connecting states).
   function renderEvmBalance() {
     if (!walletConnected) return null;
-    if (sepoliaBalance.balance) return <>Available {evmBalanceText}</>;
+    if (evmTokenBalance.balance) return <>Available {evmBalanceText}</>;
     if (evmBalanceUnavailable) return <>Balance unavailable</>;
     return (
       <>
@@ -798,8 +778,7 @@ export function BridgeExperience() {
       setEpochQuoteAmount(undefined);
     }
     setRoute(nextRoute);
-    // Keep the existing provider preference format.
-    saveStoredRoute(nextRoute.provider);
+    saveStoredRoute(nextRoute.provider, nextRoute.id);
     setBridgeError("");
     // Destination is route-agnostic: the connected Miden wallet address (bech32)
     // prefills for both routes and the Agglayer submit normalizes it to hex — so
@@ -844,7 +823,7 @@ export function BridgeExperience() {
       setEvmCopied(true);
       window.setTimeout(() => setEvmCopied(false), 1400);
     } catch {
-      setWalletError("Could not copy the Sepolia address from this browser.");
+      setWalletError("Could not copy the wallet address from this browser.");
     }
   }
 
@@ -858,19 +837,15 @@ export function BridgeExperience() {
     }
   }
 
-  async function switchToSepolia() {
+  async function switchEvmFromMenu() {
+    setEvmMenuOpen(false);
     setWalletError("");
     try {
-      if (!walletProvider) throw new Error("Connect your Sepolia wallet first.");
-      await ensureSepolia(walletProvider);
+      if (!walletProvider) throw new Error(`Connect your ${evmNetwork.name} wallet first.`);
+      await ensureEvmNetwork(walletProvider, evmNetwork);
     } catch (error) {
       setWalletError(errorMessage(error));
     }
-  }
-
-  async function switchSepoliaFromMenu() {
-    setEvmMenuOpen(false);
-    await switchToSepolia();
   }
 
   async function handleEvmWalletClick() {
@@ -916,6 +891,18 @@ export function BridgeExperience() {
         return;
       case "review":
         setBridgeError("");
+        if (provider === "xreserve") {
+          try { parseArcAmount(amount); }
+          catch (error) { setBridgeError(errorMessage(error)); return; }
+        }
+        if (cctpNetwork) {
+          if (!cctpQuery.data || cctpQuery.data.expiresAt <= Date.now()) {
+            setBridgeError(cctpQuery.error?.message ?? "Refresh the Circle fee before reviewing.");
+            void cctpQuery.refetch();
+            return;
+          }
+          setReviewedCctpQuote(cctpQuery.data);
+        }
         setShowFullDestination(false);
         setPreflightDestinationCopied(false);
         preflightPreviousFocusRef.current =
@@ -997,6 +984,7 @@ export function BridgeExperience() {
     return submitBridgeTransfer(
       {
         routeId: route.id,
+        cctpQuote: cctpNetwork ? reviewedCctpQuote : undefined,
         amount,
         destination,
         activities,
@@ -1054,7 +1042,7 @@ export function BridgeExperience() {
           >
           <div className="wallet-menu-root" ref={evmMenuRef}>
             <button
-              className={`wallet-button wallet-pill ${walletConnected ? "connected" : ""} ${wrongNetwork ? "wrong-network" : ""}`}
+              className={`wallet-button wallet-pill ${walletConnected ? "connected" : ""}`}
               type="button"
               onClick={handleEvmWalletClick}
               aria-expanded={walletConnected ? evmMenuOpen : undefined}
@@ -1114,10 +1102,10 @@ export function BridgeExperience() {
                   type="button"
                   role="menuitem"
                   className="wallet-menu-item"
-                  onClick={switchSepoliaFromMenu}
+                  onClick={switchEvmFromMenu}
                 >
                   <RefreshCcw size={15} aria-hidden="true" />
-                  <span>Switch to Sepolia</span>
+                  <span>Switch to {evmNetwork.name}</span>
                 </button>
                 <button
                   type="button"
@@ -1131,12 +1119,12 @@ export function BridgeExperience() {
                 <a
                   role="menuitem"
                   className="wallet-menu-item"
-                  href={`${AGGLAYER_BALI.sepoliaExplorer}/address/${walletAccount}`}
+                  href={`${evmNetwork.blockExplorers.default.url}/address/${walletAccount}`}
                   target="_blank"
                   rel="noreferrer"
                 >
                   <ExternalLink size={15} aria-hidden="true" />
-                  <span>View on Etherscan</span>
+                  <span>View on {evmNetwork.blockExplorers.default.name}</span>
                 </a>
                 <span className="wallet-menu-separator" />
                 <button
@@ -1162,7 +1150,7 @@ export function BridgeExperience() {
 
       <section className="swap-stage">
         <div className="swap-group">
-        <section className="swap-card" aria-label="Miden bridge" ref={swapCardRef}>
+        <section className="swap-card" data-provider={provider} aria-label="Miden bridge" ref={swapCardRef}>
           <div className="swap-card-top">
             <h1>Bridge</h1>
             <div
@@ -1208,7 +1196,8 @@ export function BridgeExperience() {
                     >
                   {(Object.keys(providers) as BridgeProvider[]).flatMap((key) => {
                     const routes = bridgeRoutes.filter((option) => option.provider === key && option.mode === mode);
-                    return (routes.length ? routes : [undefined]).map((optionRoute) => {
+                    const preferred = routes.find((option) => option.id === route.id) ?? routes.find((option) => option.source.network === route.source.network) ?? routes[0];
+                    return [preferred].map((optionRoute) => {
                       const option = providers[key];
                       const c = option.comparison;
                       const selected = optionRoute?.id === route.id;
@@ -1238,7 +1227,7 @@ export function BridgeExperience() {
                             ) : null}
                           </span>
                           <span className="route-option-sub">
-                            {disabled ? "Paused for this build" : `${optionRoute?.source.symbol ?? "—"} · ${c.eta}`}
+                            {disabled ? c.unavailableReason ?? "Unavailable in this direction" : `${optionRoute?.source.symbol ?? "—"} · ${networkLabels[optionRoute!.source.network]}${key === "xreserve" ? "" : ` · ${c.eta}`}`}
                           </span>
                         </button>
                       );
@@ -1257,8 +1246,8 @@ export function BridgeExperience() {
             <span className={`route-pill ${routeTone}`}>
               {providerCopy.badge}
             </span>
-            <span className="route-pill">{quote.eta}</span>
-            <InfoTip label={routeNote} />
+            {provider !== "xreserve" ? <span className="route-pill">{quote.eta}</span> : null}
+            {provider !== "xreserve" ? <InfoTip label={routeNote} /> : null}
           </div>
 
           {walletError ? (
@@ -1276,6 +1265,8 @@ export function BridgeExperience() {
                 key={item}
                 type="button"
                 aria-pressed={item === mode}
+                disabled={item !== mode && !reverseBridgeRoute(route)}
+                title={item !== mode && !reverseBridgeRoute(route) ? "USDCx withdrawals are not available yet" : undefined}
                 onClick={() => selectMode(item)}
               >
                 {modes[item].label}
@@ -1286,11 +1277,11 @@ export function BridgeExperience() {
           <div className="swap-box">
             <div className="swap-box-head">
               <span>From</span>
-              <strong>{copy.from}</strong>
+              <ChainSelect route={route} side="source" onSelectRoute={selectRoute} />
               {/* The Miden account is already in the field below, and a connected
                   Sepolia address is already in the header — so a chip here only
-                  earns its space for an actionable/unconnected state (connect,
-                  connecting, wrong network). Once connected, the balance row is
+                  earns its space for an unconnected state (connect or
+                  connecting). Once connected, the balance row is
                   all that's needed. */}
               {sourceIdentity === evmIdentity &&
               sourceIdentity.state !== "connected"
@@ -1331,7 +1322,7 @@ export function BridgeExperience() {
           <div className="swap-box">
             <div className="swap-box-head">
               <span>To</span>
-              <strong>{copy.to}</strong>
+              <ChainSelect route={route} side="destination" onSelectRoute={selectRoute} />
               {destinationIdentity === evmIdentity &&
               destinationIdentity.state !== "connected"
                 ? renderWalletChip(destinationIdentity)
@@ -1384,13 +1375,14 @@ export function BridgeExperience() {
             />
             {showDestinationHelp ? <small>{destinationHelp}</small> : null}
           </label>
-          {bridgeError ? <p className="form-error">{bridgeError}</p> : null}
+          {bridgeError ? <p className="form-error">{bridgeError}</p> : cctpNetwork && cctpQuery.error ? <p className="form-error">{cctpQuery.error.message}</p> : null}
 
           <div className="quote-summary" aria-label="Route quote">
-            <div>
+            {cctpNetwork ? <div><span>Circle fee</span><strong>{circleFeeDisplay}</strong></div> : null}
+            {provider !== "xreserve" ? <div>
               <span>ETA</span>
               <strong>{quote.eta}</strong>
-            </div>
+            </div> : null}
             <div>
               <span>Min received</span>
               <strong>{displayMinReceived}</strong>
@@ -1522,18 +1514,19 @@ export function BridgeExperience() {
                     <dt>Route</dt>
                     <dd>{providerCopy.label}</dd>
                   </div>
-                  <div>
+                  {provider !== "xreserve" ? <div>
                     <dt>ETA</dt>
                     <dd>{quote.eta}</dd>
-                  </div>
+                  </div> : null}
                   <div>
                     <dt>Network fee</dt>
                     <dd>{networkFeeDisplay}</dd>
                   </div>
                   <div>
-                    <dt>Provider fee</dt>
-                    <dd>{quote.bridgeFee}</dd>
+                    <dt>{cctpNetwork ? "Circle fee" : "Provider fee"}</dt>
+                    <dd>{cctpNetwork ? circleFeeDisplay : quote.bridgeFee}</dd>
                   </div>
+                  {cctpNetwork && cctpQuote ? <div><dt>Total USDC</dt><dd>{formatUnits(parseArcAmount(amount) + BigInt(cctpQuote.fee), 6)} USDC</dd></div> : null}
                   </dl>
 
                   <p className="preflight-note">{routeNote}</p>

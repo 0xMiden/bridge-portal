@@ -8,13 +8,13 @@ test("switching tokens shows loading until the balance resolves, and only failur
   const requested = Promise.withResolvers<void>();
   const release = Promise.withResolvers<void>();
   let fail = false;
-  await page.route("**/api/sepolia/balance**", async (route) => {
+  await page.route("**/api/evm/sepolia/balance**", async (route) => {
     if (new URL(route.request().url()).searchParams.has("token")) return route.fallback();
     requested.resolve();
     await release.promise;
     await route.fulfill(fail
       ? { status: 502, json: { error: "RPC unavailable" } }
-      : { json: { balanceWei: "750000000000000000" } });
+      : { json: { balanceRaw: "750000000000000000" } });
   });
 
   await bridge.setRoute("AggLayer");

@@ -2,9 +2,9 @@
 
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { createContext, useContext, useState, type ReactNode } from "react";
-import { BalanceStore, type SepoliaAsset } from "./balance-store";
+import { BalanceStore } from "./balance-store";
 import { midenBalanceKey } from "./miden-balances";
-import { SEPOLIA_ETH, type MidenAsset } from "./core/assets";
+import { SEPOLIA_ETH, type EvmAsset, type MidenAsset } from "./core/assets";
 
 const BalanceContext = createContext<BalanceStore | null>(null);
 
@@ -38,9 +38,9 @@ export function useMidenBalance(account: string, asset: MidenAsset | undefined) 
   return { ...result, balance: asset ? result.balances?.[midenBalanceKey(account, asset)] : undefined };
 }
 
-export function useSepoliaBalance(account: string, asset: SepoliaAsset | undefined) {
+export function useEvmBalance(account: string, asset: EvmAsset | undefined) {
   const store = useBalanceStore();
-  const query = useQuery(store.sepoliaQuery(asset ? account : "", asset ?? SEPOLIA_ETH));
+  const query = useQuery(store.evmQuery(asset ? account : "", asset ?? SEPOLIA_ETH));
   return {
     balance: query.isError || !account || !asset ? undefined : query.data,
     loading: query.isFetching,

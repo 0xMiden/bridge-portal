@@ -1,7 +1,7 @@
 import { AGGLAYER_BALI } from "../../bridge/providers/agglayer/agglayer";
 import { EPOCH_ALLOCATOR_URL } from "../../bridge/providers/epoch/config";
 import { SEPOLIA_NETWORK } from "../../config/sepolia";
-import { sepoliaRpc } from "./sepolia-rpc";
+import { evmRpc } from "../../bridge/evm/rpc.server";
 
 export const MIDEN_RPC_URL =
   process.env.NEXT_PUBLIC_MIDEN_RPC_URL ?? "https://rpc.testnet.miden.io";
@@ -34,7 +34,7 @@ async function timedFetch(
 
 async function checkSepolia(fetchImpl: typeof fetch): Promise<UpstreamCheck> {
   try {
-    const chainId = await sepoliaRpc<string>("eth_chainId", [], fetchImpl);
+    const chainId = await evmRpc<string>("sepolia", "eth_chainId", [], fetchImpl);
     const ok = chainId === SEPOLIA_NETWORK.chainHex;
     return {
       ok,

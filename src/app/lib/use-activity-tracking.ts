@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { shortAddress } from "../../wallets/identity";
 import { SEPOLIA_NETWORK } from "../../config/sepolia";
 import { stampLegTimes } from "../../bridge/core/rules";
 import type { AgglayerDepositStatus } from "../../bridge/providers/agglayer/agglayer";
@@ -60,7 +61,7 @@ function matchingDeposit(status: AgglayerDepositStatus, sourceTxHash?: string) {
 }
 
 async function fetchSepoliaTx(hash: string): Promise<ChainTxObservation> {
-  const response = await fetch(`/api/sepolia/transaction?hash=${hash}`, {
+  const response = await fetch(`/api/evm/sepolia/transaction?hash=${hash}`, {
     cache: "no-store",
   });
   const payload = (await response.json()) as
@@ -81,6 +82,7 @@ export function useActivityTracking(id: string) {
   const [activities, setActivities] = useState<Activity[]>([]);
   const [monitorError, setMonitorError] = useState("");
   const [lastCheckedAt, setLastCheckedAt] = useState(0);
+  const [refreshVersion, setRefreshVersion] = useState(0);
   const activity = DEMO_ACTIVITIES[id] ?? activities.find((item) => item.id === id);
 
   const observeActivity = useCallback(
@@ -120,6 +122,36 @@ export function useActivityTracking(id: string) {
   const isActive =
     !activity ||
     (activity.status !== "complete" && activity.status !== "failed");
+
+  useEffect(() => {
+    if (activity?.provider !== "xreserve" || !activity.sourceTxHash || !isActive) return;
+    const controller = new AbortController();
+    const activityId = activity.id;
+    let timer: ReturnType<typeof setTimeout>;
+    async function poll() {
+      try {
+        const { observeXreserveDeposit } = await import("../../bridge/providers/xreserve/status");
+        const current = loadStoredActivities().find((item) => item.id === activityId);
+        if (!current || controller.signal.aborted) return;
+        const { patch, warning } = await observeXreserveDeposit(current, controller.signal);
+        if (controller.signal.aborted) return;
+        // Merge into the latest storage snapshot, preserving other transfers' updates.
+        const updated = loadStoredActivities().map((item) => item.id === activityId
+          ? { ...item, ...patch, ...(patch.sourceTxHash ? { txHash: shortAddress(patch.sourceTxHash) } : {}), updatedAt: Date.now() }
+          : item);
+        saveActivities(updated);
+        setActivities(updated);
+        setLastCheckedAt(Date.now());
+        setMonitorError(warning ?? "");
+      } catch (error) {
+        if (!controller.signal.aborted) setMonitorError(errorMessage(error));
+      } finally {
+        if (!controller.signal.aborted) timer = setTimeout(poll, 12_000);
+      }
+    }
+    void poll();
+    return () => { controller.abort(); clearTimeout(timer); };
+  }, [activity?.id, activity?.provider, activity?.sourceTxHash, isActive, refreshVersion]);
 
   // Epoch: poll getIntentStatus and advance the activity state machine until terminal.
   useEffect(() => {
@@ -383,5 +415,5 @@ export function useActivityTracking(id: string) {
     activity?.status,
   ]);
 
-  return { activity, monitorError, lastCheckedAt };
+  return { activity, monitorError, lastCheckedAt, refresh: () => setRefreshVersion((value) => value + 1) };
 }

@@ -17,7 +17,6 @@ export type WalletControlState =
   | "idle"
   | "connecting"
   | "connected"
-  | "wrong-network"
   | "unavailable";
 
 export type WalletIdentity = {
@@ -35,42 +34,35 @@ export type WalletIdentity = {
 export type EvmWalletView = {
   connected: boolean;
   connecting?: boolean;
-  wrongNetwork: boolean;
   address: string;
+  networkLabel?: string;
 };
 
 export function evmWalletIdentity(view: EvmWalletView): WalletIdentity {
+  const network = view.networkLabel ?? "Sepolia";
+  const name = `${network} wallet`;
   if (view.connecting) {
     return {
-      name: SEPOLIA_WALLET_NAME,
+      name,
       pillLabel: "Connecting",
-      actionLabel: "Connecting Sepolia wallet",
+      actionLabel: `Connecting ${name}`,
       stateText: "Connecting…",
       state: "connecting",
     };
   }
   if (!view.connected) {
     return {
-      name: SEPOLIA_WALLET_NAME,
-      pillLabel: SEPOLIA_WALLET_NAME,
-      actionLabel: "Connect Sepolia wallet",
+      name,
+      pillLabel: name,
+      actionLabel: `Connect ${name}`,
       stateText: "Not connected",
       state: "idle",
     };
   }
-  if (view.wrongNetwork) {
-    return {
-      name: SEPOLIA_WALLET_NAME,
-      pillLabel: "Wrong network",
-      actionLabel: "Sepolia wallet menu (wrong network)",
-      stateText: "Wrong network",
-      state: "wrong-network",
-    };
-  }
   return {
-    name: SEPOLIA_WALLET_NAME,
+    name,
     pillLabel: shortAddress(view.address),
-    actionLabel: "Sepolia wallet menu",
+    actionLabel: `${name} menu`,
     stateText: shortAddress(view.address),
     state: "connected",
   };

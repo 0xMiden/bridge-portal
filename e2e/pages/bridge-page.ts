@@ -2,7 +2,7 @@ import { expect, type Page } from "@playwright/test";
 
 // Capability interface (§4): the same specs drive the bridge through this
 // page-object regardless of target (local dev server vs preview deploy).
-export type Route = "AggLayer" | "Epoch";
+export type Route = "AggLayer" | "Epoch" | "USDCx";
 export type Mode = "Receive" | "Send";
 
 export class BridgePage {

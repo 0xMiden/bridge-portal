@@ -1,19 +1,24 @@
 "use client";
 
 import Image from "next/image";
+import { formatUnits } from "viem";
 import { ArrowRight } from "lucide-react";
 import { shortAddress } from "../../wallets/identity";
 import {
   type Activity,
   destinationAssetSymbol,
   modes,
+  networkLabels,
   providers,
 } from "../lib/bridge-presentation";
+
+import { activityRoute } from "../../bridge/core/routes";
 
 type Link = { available: boolean; href?: string; label?: string } | null;
 
 const TOKEN_DOT: Record<string, string> = {
   USDC: "#2775CA",
+  USDCx: "#2775CA",
   ETH: "#627EEA",
 };
 
@@ -101,7 +106,8 @@ export function TempoReceipt({
   pending?: boolean;
 }) {
   const route = providers[activity.provider]?.label ?? activity.provider;
-  const mode = modes[activity.mode];
+  const definition = activityRoute(activity);
+  const mode = definition ? { from: networkLabels[definition.source.network], to: networkLabels[definition.destination.network] } : modes[activity.mode];
   const destinationAsset = destinationAssetSymbol(activity);
   // Real duration between the legs. Strict `>`: if the two times collapse to the
   // same value (a legacy row with no distinct per-leg data) we show "—", not a
@@ -153,7 +159,7 @@ export function TempoReceipt({
             <dd>{timeCell(sourceTxAt)}</dd>
           </div>
           <div>
-            <dt>{mode.to} tx</dt>
+            <dt>{mode.to} {activity.provider === "xreserve" ? "note" : "tx"}</dt>
             <dd className="rcpt-hash">{hashCell(destinationHash)}</dd>
           </div>
           <div>
@@ -205,6 +211,7 @@ export function TempoReceipt({
           <dt>Network fee</dt>
           <dd>{networkFee}</dd>
         </div>
+        {activity.xreserveFee && /^\d+$/.test(activity.xreserveFee) ? <div><dt>Circle fee</dt><dd>{formatUnits(BigInt(activity.xreserveFee), 6)} USDC</dd></div> : null}
       </dl>
 
       {sourceLink || destinationLink ? (

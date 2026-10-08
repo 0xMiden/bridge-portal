@@ -27,6 +27,7 @@ jobs:
       - run: npm run typecheck
       - run: npm run lint
       - run: npm run check:wasm-size
+      - run: npm run check:usdcx-note
       - run: npm test -- --coverage
 
   mock:

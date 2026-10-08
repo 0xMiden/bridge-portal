@@ -1,4 +1,5 @@
-export type BridgeNetwork = "sepolia" | "miden-testnet";
+export type EvmNetwork = "sepolia" | "arc-testnet" | "base-sepolia" | "arbitrum-sepolia";
+export type BridgeNetwork = EvmNetwork | "miden-testnet";
 
 type TokenMetadata = {
   symbol: string;
@@ -7,12 +8,38 @@ type TokenMetadata = {
 
 /** Token identity includes its network and contract/faucet, never just a symbol. */
 export type BridgeAsset = TokenMetadata & (
-  | { network: "sepolia"; kind: "native" }
-  | { network: "sepolia"; kind: "erc20"; address: `0x${string}` }
+  | { network: EvmNetwork; kind: "native" }
+  | { network: EvmNetwork; kind: "erc20"; address: `0x${string}` }
   | { network: "miden-testnet"; kind: "miden"; faucetId: string }
 );
 
 export type MidenAsset = Extract<BridgeAsset, { kind: "miden" }>;
+export type EvmAsset = Exclude<BridgeAsset, MidenAsset>;
+
+// Native Circle USDC. Epoch's existing Sepolia test token is a different asset.
+export const CIRCLE_SEPOLIA_USDC = {
+  network: "sepolia", kind: "erc20", symbol: "USDC", decimals: 6,
+  address: "0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238",
+} as const satisfies BridgeAsset;
+export const BASE_SEPOLIA_USDC = {
+  network: "base-sepolia", kind: "erc20", symbol: "USDC", decimals: 6,
+  address: "0x036CbD53842c5426634e7929541eC2318f3dCF7e",
+} as const satisfies BridgeAsset;
+export const ARBITRUM_SEPOLIA_USDC = {
+  network: "arbitrum-sepolia", kind: "erc20", symbol: "USDC", decimals: 6,
+  address: "0x75faf114eafb1BDbe2F0316DF893fd58CE46AA4d",
+} as const satisfies BridgeAsset;
+
+export const ARC_USDC = {
+  network: "arc-testnet", kind: "erc20", symbol: "USDC", decimals: 6,
+  address: "0x3600000000000000000000000000000000000000",
+} as const satisfies BridgeAsset;
+
+// v0.17 testnet genesis faucet, confirmed by the deployed USDCx service.
+export const MIDEN_USDCX = {
+  network: "miden-testnet", kind: "miden", symbol: "USDCx", decimals: 6,
+  faucetId: "0x4cbdcaffe75f0a317482224dae6436",
+} as const satisfies BridgeAsset;
 
 export const SEPOLIA_ETH = {
   network: "sepolia", kind: "native", symbol: "ETH", decimals: 18,

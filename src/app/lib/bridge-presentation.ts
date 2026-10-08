@@ -1,7 +1,9 @@
+import { evmNetworks } from "../../config/evm-networks";
 import type { BridgeAsset, BridgeNetwork } from "../../bridge/core/assets";
 import { activityRoute, type BridgeRoute } from "../../bridge/core/routes";
 import { formatUnits } from "viem";
 import { SEPOLIA_NETWORK } from "../../config/sepolia";
+import { arcTestnet } from "../../config/arc";
 import { activitySteps, type ActivityStatus } from "../../bridge/core/activity-status";
 import type { BridgeActivity, BridgeProvider, BridgeQuote, FlowMode } from "../../bridge/core/models";
 import {
@@ -64,6 +66,20 @@ export const providers: Record<
     disabled?: boolean;
   }
 > = {
+  xreserve: {
+    label: "USDCx",
+    badge: "Testnet",
+    route: "Circle xReserve · USDC to Miden",
+    disclosure: "Deposit USDC through Circle xReserve to receive a USDCx note on Miden. Consume the delivered note in Bread. Withdrawals are not available yet.",
+    comparison: {
+      eta: "Delivery time varies",
+      feeModel: "Circle forwarding fee where applicable; origin gas applies",
+      trust: "Circle xReserve and Miden relayer",
+      claim: "Consume the delivered USDCx note in Bread",
+      availability: "Deposits only",
+      unavailableReason: "USDCx withdrawals are not available yet",
+    },
+  },
   "near-intents": {
     label: "NEAR Intents",
     badge: "Paused",
@@ -128,7 +144,7 @@ export const modes: Record<
     from: "Sepolia",
     to: "Miden",
     destinationLabel: "Miden account",
-    destinationPlaceholder: "mcst1... or 0x account id",
+    destinationPlaceholder: "mtst1... or 0x account id",
   },
   send: {
     label: "Send",
@@ -173,22 +189,28 @@ export const timeline = activitySteps.map((status) => ({
 
 export const explorerUrls = {
   sepolia: SEPOLIA_NETWORK.explorerUrl,
+  arc: arcTestnet.blockExplorers.default.url,
   miden: "https://testnet.midenscan.com",
 };
 
 export const networkLabels: Record<BridgeNetwork, string> = {
   sepolia: "Sepolia",
+  "arc-testnet": "Arc Testnet",
+  "base-sepolia": "Base Sepolia",
+  "arbitrum-sepolia": "Arbitrum Sepolia",
   "miden-testnet": "Miden",
 };
 
-export const tokenNames: Record<string, string> = { USDC: "USD Coin", ETH: "Ether" };
+export const tokenNames: Record<string, string> = { USDC: "USD Coin", USDCx: "USDC-backed token", ETH: "Ether" };
 
 export function sourceAssetLabel(asset: BridgeAsset): string {
   return asset.network === "miden-testnet" && asset.symbol === "ETH" ? "Miden ETH" : asset.symbol;
 }
 
 export function quoteFor(route: BridgeRoute, amount: string): Quote {
-  return quoteForTransfer(route.mode, route.provider, amount, route.destination.symbol);
+  const quote = quoteForTransfer(route.mode, route.provider, amount, route.destination.symbol);
+  return route.provider === "xreserve" && route.source.network !== "arc-testnet"
+    ? { ...quote, networkFee: "Gas in ETH", sourceGas: "ETH", warning: "Consume the delivered USDCx note in Bread." } : quote;
 }
 
 export function destinationAssetSymbol(activity: Activity): string {
@@ -197,15 +219,26 @@ export function destinationAssetSymbol(activity: Activity): string {
 
 export function quoteForActivity(activity: Activity): Quote {
   const route = activityRoute(activity);
+  if (route) return quoteFor(route, activity.amount);
   return quoteForTransfer(
-    route?.mode ?? activity.mode,
-    route?.provider ?? activity.provider,
+    activity.mode,
+    activity.provider,
     activity.amount,
-    route?.destination.symbol ?? activity.asset,
+    activity.asset,
   );
 }
 
 function quoteForTransfer(mode: FlowMode, provider: BridgeProvider, amount: string, asset: string): Quote {
+  if (provider === "xreserve") return {
+    ...quoteAmounts(provider, amount, asset),
+    eta: "Delivery time varies",
+    networkFee: "Arc gas (USDC)",
+    bridgeFee: "Maximum 0 USDC",
+    relayerFee: "Included in maximum fee",
+    sourceGas: "Arc USDC",
+    destinationGas: "Miden USDCx to consume the note",
+    warning: "Deposits only. Keep some USDC on Arc for gas. Consume the delivered USDCx note in Bread.",
+  };
   const routeName = providers[provider].label;
   // Epoch's quote API returns only the net output amount (no fee breakdown), so
   // don't fabricate specific fees — the cost is baked into the quoted rate.
@@ -270,6 +303,7 @@ export interface CtaInputs extends TransferInputs {
   mode: FlowMode;
   sourceTokenSymbol: string;
   submitPhase: string;
+  evmNetworkLabel?: string;
 }
 
 /** Add button copy and interaction state to the core transfer decision. */
@@ -278,7 +312,7 @@ export function deriveCtaState(input: CtaInputs): CtaState {
   const labels: Record<TransferAction, string> = {
     submitting: input.submitPhase || "Preparing…",
     "enter-amount": "Enter amount",
-    "connect-source": input.mode === "receive" ? "Connect Sepolia wallet" : "Connect Bread wallet",
+    "connect-source": input.mode === "receive" ? `Connect ${input.evmNetworkLabel ?? "Sepolia"} wallet` : "Connect Bread wallet",
     "add-destination": input.mode === "receive" ? "Add Miden account" : "Add Sepolia address",
     insufficient: `Not enough ${input.sourceTokenSymbol}`,
     "quote-loading": "Fetching quote…",
@@ -323,9 +357,9 @@ export function createActivity(
   return {
     ...activity,
     summary: mode === "receive"
-      ? `Receive ${activity.amount} ${activity.asset} on ${destination}`
+      ? `Receive ${activity.amount} ${route.destination.symbol} on ${destination}`
       : `Send ${activity.amount} ${activity.asset} to ${destination}`,
-    eta: provider === "agglayer" ? "8 min" : "4 min",
+    eta: provider === "xreserve" ? "Delivery time varies" : provider === "agglayer" ? "8 min" : "4 min",
     txHash: "0xpending",
     ...overrides,
   };
@@ -355,11 +389,12 @@ export interface ExplorerLink {
 
 export function sourceExplorer(activity: BridgeActivity): ExplorerLink {
   if (activity.mode === "receive") {
-    // Source = the Sepolia deposit the user signed.
     const tx = fullHash(activity.sourceTxHash);
+    const source = activityRoute(activity)?.source;
+    const explorer = source && source.kind !== "miden" ? evmNetworks[source.network].blockExplorers.default : evmNetworks.sepolia.blockExplorers.default;
     return {
-      label: "View on Etherscan",
-      href: tx ? `${explorerUrls.sepolia}/tx/${tx}` : undefined,
+      label: `View on ${explorer.name}`,
+      href: tx ? `${explorer.url}/tx/${tx}` : undefined,
       available: !!tx,
     };
   }
@@ -465,6 +500,14 @@ export function buildDiagnostics(
       claimTxHash: activity.claimTxHash,
       depositCount: activity.depositCount,
       epochIntentNonce: activity.epochIntentNonce,
+      sourceOriginalTxHash: activity.sourceOriginalTxHash,
+      sourceTransaction: activity.sourceTransaction,
+      xreserveStatus: activity.xreserveStatus,
+      xreserveNoteId: activity.xreserveNoteId,
+      xreserveArcTxHash: activity.xreserveArcTxHash,
+      xreserveFee: activity.xreserveFee,
+      xreserveForwarding: activity.xreserveForwarding,
+      xreserveMidenBlock: activity.xreserveMidenBlock,
     }),
     lastMonitorError: extra.monitorError || undefined,
   };

@@ -4,7 +4,7 @@ import { SEPOLIA_NETWORK } from "../../config/sepolia";
 import { checkDeepHealth } from "./health";
 
 function jsonRpc(result: string, status = 200): Response {
-  return new Response(JSON.stringify({ result }), { status });
+  return new Response(JSON.stringify({ jsonrpc: "2.0", id: 1, result }), { status });
 }
 
 function http(status: number): Response {
