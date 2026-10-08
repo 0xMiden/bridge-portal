@@ -147,7 +147,7 @@ describe("activity persistence", () => {
 
 describe("route and direction preferences", () => {
   it("keeps the existing keys and unencoded preference values", () => {
-    for (const route of ["agglayer", "epoch"] as const) {
+    for (const route of ["xreserve"] as const) {
       saveStoredRoute(route);
       expect(storage.get("miden.bridge.ui.route")).toBe(route);
       expect(loadStoredRoute()).toBe(route);
@@ -159,7 +159,7 @@ describe("route and direction preferences", () => {
     }
   });
 
-  it.each([null, "", "near-intents", "unknown"])("ignores an absent, disabled, or unknown route: %s", (route) => {
+  it.each([null, "", "near-intents", "agglayer", "epoch", "unknown"])("ignores an absent, disabled, or unknown route: %s", (route) => {
     if (route !== null) storage.set("miden.bridge.ui.route", route);
     expect(loadStoredRoute()).toBeNull();
   });

@@ -160,10 +160,10 @@ function initialBridgeForm(params: ReadonlyURLSearchParams) {
   const requestedProvider = providerFromParam(params.get("provider") ?? params.get("route"));
   const provider = requestedProvider && !providers[requestedProvider].disabled
     ? requestedProvider
-    : loadStoredRoute() ?? "epoch";
+    : loadStoredRoute() ?? "xreserve";
   const mode = modeFromIntent(params.get("intent") ?? params.get("mode")) ?? loadStoredMode() ?? "receive";
   const saved = loadStoredRouteId();
-  const route = (saved?.provider === provider && saved.mode === mode ? saved : undefined) ?? defaultBridgeRoute(provider, mode) ?? defaultBridgeRoute(provider, "receive") ?? bridgeRoutes[0];
+  const route = (saved?.provider === provider && saved.mode === mode ? saved : undefined) ?? defaultBridgeRoute(provider, mode) ?? defaultBridgeRoute(provider, "receive") ?? bridgeRoutes.find((option) => !providers[option.provider].disabled)!;
   const midenAccount = params.get("midenAccount") ?? params.get("miden_account") ?? params.get("account") ?? "";
   const evmAddress = params.get("evmAddress") ?? params.get("evm_address") ?? params.get("recipient") ?? "";
   return { route, midenAccount, destination: route.mode === "receive" ? midenAccount : evmAddress };
@@ -430,7 +430,7 @@ export function BridgeExperience() {
       : "testnet";
   const routeNote =
     provider === "near-intents"
-      ? "NEAR Intents is paused in this build while Agglayer and Epoch are the active testnet routes."
+      ? "NEAR Intents is paused in this build."
       : provider === "xreserve"
         ? providers.xreserve.disclosure
       : provider === "agglayer"
@@ -772,7 +772,7 @@ export function BridgeExperience() {
     .slice(0, 12);
 
   function selectRoute(nextRoute: BridgeRoute) {
-    if (nextRoute.id === route.id) return;
+    if (providers[nextRoute.provider].disabled || nextRoute.id === route.id) return;
     if (routeSwitchChangesAsset(route, nextRoute)) {
       setAmount("");
       setEpochQuoteAmount(undefined);
@@ -1201,7 +1201,7 @@ export function BridgeExperience() {
                       const option = providers[key];
                       const c = option.comparison;
                       const selected = optionRoute?.id === route.id;
-                      const disabled = !optionRoute;
+                      const disabled = Boolean(option.disabled) || !optionRoute;
                       return (
                         <button
                           className={`route-option ${selected ? "selected" : ""} ${disabled ? "disabled" : ""}`}
