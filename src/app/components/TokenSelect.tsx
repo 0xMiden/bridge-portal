@@ -2,20 +2,8 @@
 
 import { Check, ChevronDown } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import type { BridgeProvider } from "../../bridge/core/models";
-
-// Each bridgeable token maps 1:1 to the route that carries it (Epoch = USDC,
-// Agglayer = ETH). Structured as a list so more tokens/routes drop in later.
-type Token = {
-  symbol: string;
-  name: string;
-  provider: BridgeProvider;
-};
-
-const TOKENS: Token[] = [
-  { symbol: "USDC", name: "USD Coin", provider: "epoch" },
-  { symbol: "ETH", name: "Ether", provider: "agglayer" },
-];
+import { bridgeRoutes, type BridgeRoute } from "../../bridge/core/routes";
+import { providers, tokenNames } from "../lib/bridge-presentation";
 
 function TokenIcon({ symbol, size = 22 }: { symbol: string; size?: number }) {
   if (symbol === "ETH") {
@@ -69,15 +57,18 @@ function TokenIcon({ symbol, size = 22 }: { symbol: string; size?: number }) {
  * menu lists every bridgeable token and selecting one switches to its route.
  */
 export function TokenSelect({
-  provider,
-  onSelectProvider,
+  route,
+  side,
+  onSelectRoute,
 }: {
-  provider: BridgeProvider;
-  onSelectProvider: (provider: BridgeProvider) => void;
+  route: BridgeRoute;
+  side: "source" | "destination";
+  onSelectRoute: (route: BridgeRoute) => void;
 }) {
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
-  const active = TOKENS.find((t) => t.provider === provider) ?? TOKENS[0];
+  const active = route[side];
+  const options = bridgeRoutes.filter((option) => option.mode === route.mode);
 
   useEffect(() => {
     if (!open) return;
@@ -111,17 +102,18 @@ export function TokenSelect({
       </button>
       {open ? (
         <div className="token-select-menu" role="listbox" aria-label="Token">
-          {TOKENS.map((token) => {
-            const selected = token.provider === provider;
+          {options.map((option) => {
+            const token = option[side];
+            const selected = option.id === route.id;
             return (
               <button
-                key={token.symbol}
+                key={option.id}
                 type="button"
                 role="option"
                 aria-selected={selected}
                 className={`token-option ${selected ? "selected" : ""}`}
                 onClick={() => {
-                  onSelectProvider(token.provider);
+                  onSelectRoute(option);
                   setOpen(false);
                 }}
               >
@@ -129,8 +121,8 @@ export function TokenSelect({
                 <span className="token-option-text">
                   <strong>{token.symbol}</strong>
                   <small>
-                    {token.name} · via{" "}
-                    {token.provider === "epoch" ? "Epoch" : "Agglayer"}
+                    {tokenNames[token.symbol] ?? token.symbol} · via{" "}
+                    {providers[option.provider].label}
                   </small>
                 </span>
                 {selected ? (

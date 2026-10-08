@@ -1,6 +1,7 @@
+import { findBridgeRoute } from "../../bridge/core/routes";
 import { parseUnits } from "viem";
 import type { MidenFiWalletContextState } from "@miden-sdk/miden-wallet-adapter-react";
-import type { BridgeProvider, FlowMode } from "../../bridge/core/models";
+import type { BridgeProvider } from "../../bridge/core/models";
 import type { ResolvedEthAsset } from "../../bridge/miden-route-balances";
 import {
   AGGLAYER_BALI,
@@ -9,18 +10,16 @@ import {
 } from "../../bridge/providers/agglayer/agglayer";
 import { type EvmProvider, ensureSepolia } from "../../wallets/evm/evm-wallet";
 import { shortAddress } from "../../wallets/identity";
-import { type Activity, createActivity, providers } from "./bridge-presentation";
+import { type Activity, createActivity } from "./bridge-presentation";
 import { loadStoredActivities, patchStoredActivity, saveActivities } from "./bridge-persistence";
 import { errorMessage, isUserRejection } from "./wallet-errors";
 
 export interface TransferSubmission {
-  provider: BridgeProvider;
-  mode: FlowMode;
+  routeId: string;
   amount: string;
   destination: string;
   activities: Activity[];
   insufficientBalance: boolean;
-  sourceTokenSymbol: string;
   evmBalance: string;
   evmWallet: {
     connected: boolean;
@@ -104,13 +103,10 @@ export async function submitBridgeTransfer(
   effects: SubmissionEffects,
 ): Promise<void> {
   const {
-    provider,
-    mode,
     amount,
     destination,
     activities,
     insufficientBalance,
-    sourceTokenSymbol,
     evmBalance,
     midenWallet,
     agglayerEth,
@@ -132,10 +128,13 @@ export async function submitBridgeTransfer(
     navigate,
   } = effects;
 
-  if (providers[provider].disabled) {
+  const route = findBridgeRoute(input.routeId);
+  if (!route) {
     onError("This route isn't available in this build.");
     return;
   }
+  const { provider, mode } = route;
+  const sourceTokenSymbol = route.source.symbol;
   // Guard the deposit before opening the wallet: a request above the Sepolia
   // balance reverts on-chain (MetaMask "likely to fail").
   if (insufficientBalance) {
@@ -215,7 +214,7 @@ export async function submitBridgeTransfer(
         waitForTransaction: midenWallet.waitForTransaction,
       });
       // Note submitted on Miden; Agglayer hasn't observed the exit yet.
-      const activity = createActivity(mode, provider, amount, {
+      const activity = createActivity(route, amount, {
         status: "source_finality",
         eta: "10-20 min",
         destination: destinationAddress,
@@ -285,7 +284,7 @@ export async function submitBridgeTransfer(
         ],
       });
       onPhaseChange("Submitting…");
-      const activity = createActivity(mode, provider, amount, {
+      const activity = createActivity(route, amount, {
         status: "source_finality",
         eta: "10-20 min",
         destination: destinationAccount,
@@ -370,7 +369,7 @@ export async function submitBridgeTransfer(
       // load client-side at click time, never in the server render.
       const { runEpochTransfer } = await import("../../bridge/providers/epoch/epoch-execute");
 
-      const optimistic = createActivity(mode, "epoch", amount, {
+      const optimistic = createActivity(route, amount, {
         status: "source_finality",
         eta:
           mode === "receive"
@@ -388,7 +387,7 @@ export async function submitBridgeTransfer(
       navigate(`/activity/${optimistic.id}`);
 
       const result = await runEpochTransfer({
-        mode,
+        route,
         amount,
         midenAccount: epochMidenAccount,
         evmAddress: epochEvmAddress,
@@ -451,14 +450,4 @@ export async function submitBridgeTransfer(
     }
     return;
   }
-
-  const resolvedDestination =
-    destination.trim() || (mode === "receive" ? midenAddress : walletAccount);
-  const next = createActivity(mode, provider, amount, {
-    destination: resolvedDestination,
-  });
-  const updated = [next, ...activities];
-  onActivitiesChange(updated);
-  saveActivities(updated);
-  navigate(`/activity/${next.id}`);
 }

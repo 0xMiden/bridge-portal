@@ -8,12 +8,13 @@ const cells: Array<{
   route: Route;
   mode: Mode;
   provider: "agglayer" | "epoch";
+  routeId: string;
   showBalance: boolean;
 }> = [
-  { route: "Epoch", mode: "Receive", provider: "epoch", showBalance: false },
-  { route: "Epoch", mode: "Send", provider: "epoch", showBalance: false },
-  { route: "AggLayer", mode: "Receive", provider: "agglayer", showBalance: false },
-  { route: "AggLayer", mode: "Send", provider: "agglayer", showBalance: true },
+  { route: "Epoch", mode: "Receive", provider: "epoch", routeId: "epoch-usdc-to-miden", showBalance: false },
+  { route: "Epoch", mode: "Send", provider: "epoch", routeId: "epoch-usdc-to-sepolia", showBalance: false },
+  { route: "AggLayer", mode: "Receive", provider: "agglayer", routeId: "agglayer-eth-to-miden", showBalance: false },
+  { route: "AggLayer", mode: "Send", provider: "agglayer", routeId: "agglayer-eth-to-sepolia", showBalance: true },
 ];
 
 function activityHash(row: Record<string, unknown>): string {
@@ -47,6 +48,7 @@ for (const cell of cells) {
       expect(activities.length).toBeGreaterThan(0);
       const row = activities[0]!;
       expect(row.provider).toBe(cell.provider);
+      expect(row.routeId).toBe(cell.routeId);
       expect(row.mode).toBe(cell.mode.toLowerCase());
       const hash = activityHash(row);
       expect(hash).toMatch(TX_HASH);

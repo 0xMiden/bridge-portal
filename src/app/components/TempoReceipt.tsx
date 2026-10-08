@@ -5,6 +5,7 @@ import { ArrowRight } from "lucide-react";
 import { shortAddress } from "../../wallets/identity";
 import {
   type Activity,
+  destinationAssetSymbol,
   modes,
   providers,
 } from "../lib/bridge-presentation";
@@ -101,6 +102,7 @@ export function TempoReceipt({
 }) {
   const route = providers[activity.provider]?.label ?? activity.provider;
   const mode = modes[activity.mode];
+  const destinationAsset = destinationAssetSymbol(activity);
   // Real duration between the legs. Strict `>`: if the two times collapse to the
   // same value (a legacy row with no distinct per-leg data) we show "—", not a
   // misleading "0s".
@@ -171,7 +173,7 @@ export function TempoReceipt({
           </span>
           <ArrowRight className="rcpt-arrow" size={14} aria-hidden="true" />
           <span className="rcpt-amt">
-            {receivedAmount} <Token symbol={activity.asset} />
+            {receivedAmount} <Token symbol={destinationAsset} />
           </span>
         </div>
         <div className="rcpt-item-sub">
@@ -197,7 +199,7 @@ export function TempoReceipt({
         </div>
         <div>
           <dt>{pending ? "Expected" : "Received"}</dt>
-          <dd>{receivedAmount} {activity.asset}</dd>
+          <dd>{receivedAmount} {destinationAsset}</dd>
         </div>
         <div>
           <dt>Network fee</dt>

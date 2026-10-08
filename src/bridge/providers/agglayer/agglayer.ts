@@ -1,3 +1,4 @@
+import { MIDEN_ETH } from "../../core/assets";
 import { encodeFunctionData, parseEther, toHex } from "viem";
 import { SEPOLIA_NETWORK } from "../../../config/sepolia";
 
@@ -23,8 +24,8 @@ export const AGGLAYER_BALI = {
   // Same account as midenEthFaucetId, hex form — this is the canonical Agglayer
   // ETH faucet on bali (gateway.fm PARAMETERS.md; also the bridge-out-tool's
   // --faucet-id). The Miden→Sepolia send must bridge THIS faucet's asset.
-  midenEthFaucetIdHex: "0x387149ae66116cf114eebd60bb7381",
-  midenEthDecimals: 8,
+  midenEthFaucetIdHex: MIDEN_ETH.faucetId,
+  midenEthDecimals: MIDEN_ETH.decimals,
 } as const;
 
 const bridgeAssetAbi = [

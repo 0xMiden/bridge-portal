@@ -14,6 +14,46 @@ const combos: Array<{ route: Route; mode: Mode; label: RegExp }> = [
   { route: "AggLayer", mode: "Send", label: /Review send/i },
 ];
 
+test("token selection resets the amount, reads the selected asset, and restores the route after reload", async ({ bridge, page }) => {
+  await bridge.setMode("Receive");
+  await bridge.fillAmount("0.05");
+  const source = page.locator(".token-select").first();
+  await source.getByRole("button", { name: "USDC — change token" }).click();
+  const ethBalance = page.waitForRequest((request) => {
+    const url = new URL(request.url());
+    return url.pathname === "/api/sepolia/balance" && !url.searchParams.has("token");
+  });
+  await source.getByRole("option", { name: /ETH/ }).click();
+  await ethBalance;
+  // Token selection must not run the route menu's deferred focus restoration.
+  await page.evaluate(() => new Promise<void>((resolve) => requestAnimationFrame(() => resolve())));
+  await expect(bridge.routeTrigger()).not.toBeFocused();
+  await expect(page.locator(".swap-box input[aria-label='Amount']")).toHaveValue("");
+  await expect(page.locator(".token-select-symbol")).toHaveText(["ETH", "ETH"]);
+  await expect(bridge.routeTrigger()).toContainText("Agglayer");
+
+  await bridge.setMode("Send");
+  await page.reload();
+  await bridge.waitForReady();
+  await expect(bridge.routeTrigger()).toContainText("Agglayer");
+  await expect(page.locator(".mode-switch button[aria-pressed='true']")).toHaveText("Send");
+  await expect(page.locator(".token-select-symbol")).toHaveText(["ETH", "ETH"]);
+
+  const usdcBalance = page.waitForRequest((request) => {
+    const url = new URL(request.url());
+    return url.pathname === "/api/sepolia/balance" && url.searchParams.has("token");
+  });
+  const destination = page.locator(".token-select").last();
+  await destination.getByRole("button", { name: "ETH — change token" }).click();
+  await destination.getByRole("option", { name: /USDC/ }).click();
+  const url = new URL((await usdcBalance).url());
+  expect(url.searchParams.get("token")).toBe("0x2BB4FfD7E2c6D432b697554Efd77fA13bdbefd69");
+  expect(url.searchParams.get("decimals")).toBe("18");
+  await page.evaluate(() => new Promise<void>((resolve) => requestAnimationFrame(() => resolve())));
+  await expect(bridge.routeTrigger()).not.toBeFocused();
+  await expect(page.locator(".token-select-symbol")).toHaveText(["USDC", "USDC"]);
+});
+
 for (const { route, mode, label } of combos) {
   test(`${route} ${mode}: CTA gates on a valid amount, then offers review`, async ({
     bridge,

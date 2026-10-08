@@ -1,3 +1,5 @@
+import type { BridgeAsset, BridgeNetwork } from "../../bridge/core/assets";
+import { activityRoute, type BridgeRoute } from "../../bridge/core/routes";
 import { formatUnits } from "viem";
 import { SEPOLIA_NETWORK } from "../../config/sepolia";
 import { activitySteps, type ActivityStatus } from "../../bridge/core/activity-status";
@@ -35,8 +37,6 @@ export type Quote = BridgeQuote & {
  * the menu and the selected-route summary read from one source of truth.
  */
 export type RouteComparison = {
-  /** Token the route moves — same symbol on both legs for the active routes. */
-  asset: string;
   /** Typical end-to-end ETA. */
   eta: string;
   /** How the route charges (short, comparison-friendly). */
@@ -72,7 +72,6 @@ export const providers: Record<
       "NEAR Intents is intentionally disabled in this build while Agglayer and Epoch are the active testnet routes.",
     disabled: true,
     comparison: {
-      asset: "—",
       eta: "—",
       feeModel: "—",
       trust: "NEAR Intents solver",
@@ -89,7 +88,6 @@ export const providers: Record<
     disclosure:
       "Agglayer bridges ETH in both directions through the canonical testnet bridge. Gateway auto-claims Miden→Sepolia exits; Sepolia→Miden recipients consume the delivered note in Bread.",
     comparison: {
-      asset: "ETH",
       eta: "10-20 min",
       feeModel: "No provider fee (canonical bridge)",
       trust: "Agglayer canonical bridge",
@@ -105,7 +103,6 @@ export const providers: Record<
     disclosure:
       "Epoch is represented as a testnet service path. Production assumptions should be revisited when the integration contract is fixed.",
     comparison: {
-      asset: "USDC",
       eta: "1-3 min",
       feeModel: "Included in quoted rate",
       trust: "Epoch solver network",
@@ -122,8 +119,6 @@ export const modes: Record<
     label: string;
     from: string;
     to: string;
-    assetIn: string;
-    assetOut: string;
     destinationLabel: string;
     destinationPlaceholder: string;
   }
@@ -132,8 +127,6 @@ export const modes: Record<
     label: "Receive",
     from: "Sepolia",
     to: "Miden",
-    assetIn: "ETH",
-    assetOut: "Miden ETH",
     destinationLabel: "Miden account",
     destinationPlaceholder: "mcst1... or 0x account id",
   },
@@ -141,8 +134,6 @@ export const modes: Record<
     label: "Send",
     from: "Miden",
     to: "Sepolia",
-    assetIn: "Miden ETH",
-    assetOut: "ETH",
     destinationLabel: "Sepolia address",
     destinationPlaceholder: "0x...",
   },
@@ -185,7 +176,36 @@ export const explorerUrls = {
   miden: "https://testnet.midenscan.com",
 };
 
-export function quoteFor(mode: FlowMode, provider: BridgeProvider, amount: string): Quote {
+export const networkLabels: Record<BridgeNetwork, string> = {
+  sepolia: "Sepolia",
+  "miden-testnet": "Miden",
+};
+
+export const tokenNames: Record<string, string> = { USDC: "USD Coin", ETH: "Ether" };
+
+export function sourceAssetLabel(asset: BridgeAsset): string {
+  return asset.network === "miden-testnet" && asset.symbol === "ETH" ? "Miden ETH" : asset.symbol;
+}
+
+export function quoteFor(route: BridgeRoute, amount: string): Quote {
+  return quoteForTransfer(route.mode, route.provider, amount, route.destination.symbol);
+}
+
+export function destinationAssetSymbol(activity: Activity): string {
+  return activityRoute(activity)?.destination.symbol ?? activity.asset;
+}
+
+export function quoteForActivity(activity: Activity): Quote {
+  const route = activityRoute(activity);
+  return quoteForTransfer(
+    route?.mode ?? activity.mode,
+    route?.provider ?? activity.provider,
+    activity.amount,
+    route?.destination.symbol ?? activity.asset,
+  );
+}
+
+function quoteForTransfer(mode: FlowMode, provider: BridgeProvider, amount: string, asset: string): Quote {
   const routeName = providers[provider].label;
   // Epoch's quote API returns only the net output amount (no fee breakdown), so
   // don't fabricate specific fees — the cost is baked into the quoted rate.
@@ -212,7 +232,7 @@ export function quoteFor(mode: FlowMode, provider: BridgeProvider, amount: strin
     networkFee,
     bridgeFee,
     relayerFee,
-    ...quoteAmounts(provider, amount),
+    ...quoteAmounts(provider, amount, asset),
     sourceGas: mode === "receive" ? "Sepolia ETH" : "Miden fee credit",
     destinationGas: mode === "receive" ? "Miden fee credit" : "Sepolia ETH",
     warning:
@@ -293,13 +313,13 @@ export function statusTone(status: ActivityStatus) {
 }
 
 export function createActivity(
-  mode: FlowMode,
-  provider: BridgeProvider,
+  route: BridgeRoute,
   amount: string,
   overrides: Partial<Activity> = {},
 ): Activity {
-  const activity = createBridgeActivity(mode, provider, amount);
-  const destination = mode === "receive" ? "Miden" : "Sepolia";
+  const { mode, provider } = route;
+  const activity = createBridgeActivity(route, amount);
+  const destination = networkLabels[route.destination.network];
   return {
     ...activity,
     summary: mode === "receive"

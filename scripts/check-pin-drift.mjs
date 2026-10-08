@@ -19,7 +19,9 @@ const portalPkg = JSON.parse(await readFile("package.json", "utf8"));
 const portalSdk = portalPkg.dependencies["@miden-sdk/miden-sdk"];
 const portalB2agg = await readFile("src/bridge/providers/agglayer/agglayer-b2agg.ts", "utf8");
 const portalBridge = pickConst(portalB2agg, "MIDEN_BRIDGE_ID");
-const portalFaucet = pickConst(portalB2agg, "MIDEN_AGGLAYER_FAUCET_ID");
+const portalAssets = await readFile("src/bridge/core/assets.ts", "utf8");
+const portalEthAsset = portalAssets.match(/export const MIDEN_ETH = \{([^}]+)\}/)?.[1] ?? "";
+const portalFaucet = portalEthAsset.match(/faucetId:\s*["']([^"']+)["']/)?.[1];
 
 const walletPkgRes = await fetch(WALLET_PKG);
 if (!walletPkgRes.ok) {

@@ -1,3 +1,4 @@
+import type { BridgeRoute } from "../../core/routes";
 import {
   CollateralType,
   type IntentTransactionStatus,
@@ -14,16 +15,10 @@ import {
   getEVMToMidenQuote,
 } from "./bridge";
 import {
-  BRIDGEABLE_EVM_OUTPUT_TOKEN_ADDRESS,
-  BRIDGEABLE_EVM_OUTPUT_TOKEN_DECIMALS,
   EPOCH_DESTINATION_CHAIN_ID,
-  isBridgeableEvmTokenConfigured,
+  epochRouteAssets,
 } from "./bridgeable-token";
-import {
-  MIDEN_DESTINATION_CHAIN_ID,
-  MIDEN_NATIVE_FAUCET_ID,
-  MIDEN_NATIVE_TOKEN_DECIMALS,
-} from "./config";
+import { MIDEN_DESTINATION_CHAIN_ID } from "./config";
 import { epochActivityStatus } from "./epoch-status";
 import type { CreateMidenP2IDENote, MidenNoteDeps } from "./miden-note";
 import { createBridgeP2IDENoteCallback } from "./miden-note";
@@ -46,17 +41,17 @@ import { e2eNetwork, isE2E } from "../../../wallets/testing/env";
  * Two directions:
  *  - send (Miden→EVM): mint a recallable P2IDE collateral note on Miden (the
  *    user's only signature) via the connected MidenFi adapter, then have the
- *    allocator/solver fulfil USDC on Sepolia. No EVM signature.
+ *    allocator/solver fulfil the destination token on Sepolia. No EVM signature.
  *  - receive (EVM→Miden): the connected Sepolia wallet signs a deposit into The
  *    Compact (handled inside the SDK's solveIntent), then the solver mints the
- *    Miden USDC output. No Miden signature.
+ *    Miden output token. No Miden signature.
  */
 
 const EVM_ADDRESS_RE = /^0x[0-9a-fA-F]{40}$/;
 
 export interface RunEpochTransferArgs {
-  mode: FlowMode;
-  /** Human-readable input amount as typed (USDC in either direction). */
+  route: BridgeRoute;
+  /** Human-readable amount in the route's source token. */
   amount: string;
   /** Miden account — sender (send) or recipient (receive). bech32 or 0x hex. */
   midenAccount: string;
@@ -83,7 +78,7 @@ export interface EpochExecuteResult {
   sourceTxHash?: string;
   /** Committed Miden P2IDE collateral note id (send only). */
   midenNoteId?: string;
-  /** Real quoted output amount (human USDC) from the Epoch API, if available. */
+  /** Real quoted output amount (human units) from the Epoch API, if available. */
   outputAmount?: string;
   /** Raw intent result for debugging / detail surfaces. */
   raw: IntentResult;
@@ -117,29 +112,27 @@ function extractNonce(solveResult: unknown): string | undefined {
 }
 
 function assertCommonArgs(args: RunEpochTransferArgs) {
-  if (!isBridgeableEvmTokenConfigured()) {
-    throw new Error("The Epoch route is not configured yet.");
-  }
+  epochRouteAssets(args.route);
   if (!isValidAmount(args.amount)) {
     throw new Error("Enter an amount greater than zero.");
   }
   if (!EVM_ADDRESS_RE.test(args.evmAddress.trim())) {
     throw new Error(
-      args.mode === "send"
+      args.route.mode === "send"
         ? "Add a valid 0x recipient address on Sepolia."
         : "Connect a Sepolia wallet before bridging.",
     );
   }
   if (!args.midenAccount.trim()) {
     throw new Error(
-      args.mode === "send"
+      args.route.mode === "send"
         ? "Connect your Miden wallet to send."
         : "Add the Miden account that should receive the funds.",
     );
   }
 }
 
-/** Miden→EVM: P2IDE collateral note + Epoch intent (USDC out on Sepolia). */
+/** Miden→EVM: P2IDE collateral note + Epoch intent. */
 async function runEpochSend(
   args: RunEpochTransferArgs,
 ): Promise<EpochExecuteResult> {
@@ -152,17 +145,18 @@ async function runEpochSend(
 
   const sdk = await getEpochReadOnlySdk(evmRecipient);
 
+  const { miden, evm } = epochRouteAssets(args.route);
   const params: CrossChainIntentParams = {
     midenAccountId: senderAddress,
-    midenFaucetId: MIDEN_NATIVE_FAUCET_ID,
+    midenFaucetId: miden.faucetId,
     midenAmount: parseUnits(
       args.amount,
-      MIDEN_NATIVE_TOKEN_DECIMALS,
+      miden.decimals,
     ).toString(),
     evmRecipient,
     destinationChainId: EPOCH_DESTINATION_CHAIN_ID,
-    outputTokenAddress: BRIDGEABLE_EVM_OUTPUT_TOKEN_ADDRESS,
-    outputTokenDecimals: BRIDGEABLE_EVM_OUTPUT_TOKEN_DECIMALS,
+    outputTokenAddress: evm.address,
+    outputTokenDecimals: evm.decimals,
     minTokenOut: "0",
   };
 
@@ -196,13 +190,12 @@ async function runEpochSend(
     sponsorAddress: evmRecipient,
     sourceTxHash: noteOutcome?.txHash,
     midenNoteId: noteOutcome?.noteId,
-    // Send (Miden→EVM) outputs USDC on Sepolia (18-dp mock test token).
-    outputAmount: epochOutputAmount(quote, BRIDGEABLE_EVM_OUTPUT_TOKEN_DECIMALS),
+    outputAmount: epochOutputAmount(quote, evm.decimals),
     raw: result,
   };
 }
 
-/** EVM→Miden: Compact deposit (user signs) + Epoch intent (native MIDEN out). */
+/** EVM→Miden: Compact deposit (user signs) + Epoch intent. */
 async function runEpochReceive(
   args: RunEpochTransferArgs,
 ): Promise<EpochExecuteResult> {
@@ -212,15 +205,16 @@ async function runEpochReceive(
   const sdk = await getEpochSdk();
   if (!sdk) throw new Error("Connect a Sepolia wallet to bridge via Epoch.");
 
+  const { miden, evm } = epochRouteAssets(args.route);
   const params: EVMToMidenIntentParams = {
     sourceChainId: EPOCH_DESTINATION_CHAIN_ID,
     destinationChainId: MIDEN_DESTINATION_CHAIN_ID,
     evmSourceAddress: evmSource,
-    evmTokenAddress: BRIDGEABLE_EVM_OUTPUT_TOKEN_ADDRESS,
+    evmTokenAddress: evm.address,
     evmAmount: args.amount,
-    evmTokenDecimals: BRIDGEABLE_EVM_OUTPUT_TOKEN_DECIMALS,
+    evmTokenDecimals: evm.decimals,
     midenRecipientId: midenRecipient,
-    midenFaucetId: MIDEN_NATIVE_FAUCET_ID,
+    midenFaucetId: miden.faucetId,
     minTokenOut: "0",
   };
 
@@ -240,8 +234,7 @@ async function runEpochReceive(
     intentNonce: extractNonce(result.solveResult),
     sponsorAddress: evmSource,
     sourceTxHash: result.solveResult?.depositResult?.transactionHash,
-    // Receive (EVM→Miden) outputs USDC on Miden (6-dp).
-    outputAmount: epochOutputAmount(quote, MIDEN_NATIVE_TOKEN_DECIMALS),
+    outputAmount: epochOutputAmount(quote, miden.decimals),
     raw: result,
   };
 }
@@ -254,16 +247,16 @@ export async function runEpochTransfer(
   if (isE2E() && e2eNetwork() === "mock") {
     const sourceTxHash = `0x${"ab".repeat(32)}`;
     return {
-      direction: args.mode,
+      direction: args.route.mode,
       intentNonce: "42",
       sponsorAddress: args.evmAddress.trim(),
       sourceTxHash,
-      midenNoteId: args.mode === "send" ? `0x${"cd".repeat(32)}` : undefined,
+      midenNoteId: args.route.mode === "send" ? `0x${"cd".repeat(32)}` : undefined,
       outputAmount: "0.99",
       raw: {} as IntentResult,
     };
   }
-  return args.mode === "send" ? runEpochSend(args) : runEpochReceive(args);
+  return args.route.mode === "send" ? runEpochSend(args) : runEpochReceive(args);
 }
 
 export interface PollEpochStatusOpts {

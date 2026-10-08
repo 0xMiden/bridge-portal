@@ -27,7 +27,7 @@ import {
   useState,
   useSyncExternalStore,
 } from "react";
-import { formatEther } from "viem";
+import { formatUnits } from "viem";
 import { SEPOLIA_NETWORK } from "../../config/sepolia";
 import {
   type WalletIdentity,
@@ -43,9 +43,12 @@ import {
   modes,
   providers,
   quoteFor,
+  networkLabels,
+  sourceAssetLabel,
   statusLabel,
   statusTone,
 } from "../lib/bridge-presentation";
+import { bridgeRoutes, defaultBridgeRoute, reverseBridgeRoute, type BridgeRoute } from "../../bridge/core/routes";
 import type { BridgeProvider, FlowMode } from "../../bridge/core/models";
 import { activityStartedAt, routeSwitchChangesAsset } from "../../bridge/core/rules";
 import {
@@ -99,21 +102,6 @@ function getMobileRouteSnapshot() {
 function getServerMobileRouteSnapshot() {
   return false;
 }
-
-// Sepolia USDC for the Epoch route (Epoch's SIO route is USDC<->USDC). This test
-// token reports 18 decimals (not the usual 6). Mint it on the Epoch dashboard.
-const EPOCH_SEPOLIA_USDC = {
-  address: "0x2BB4FfD7E2c6D432b697554Efd77fA13bdbefd69",
-  decimals: 18,
-} as const;
-
-// The Miden-side token each route moves, for the destination balance readout.
-const MIDEN_ROUTE_TOKEN: Partial<
-  Record<BridgeProvider, { faucetId: string; decimals: number; symbol: string }>
-> = {
-  epoch: { faucetId: "0x537c15a622074e91188aa894456c52", decimals: 6, symbol: "USDC" },
-  agglayer: { faucetId: "0x387149ae66116cf114eebd60bb7381", decimals: 8, symbol: "ETH" },
-};
 
 /** The connected wallet's own brand logo, or a neutral wallet fallback. */
 function WalletBrandIcon({ src, size }: { src?: string; size: number }) {
@@ -228,8 +216,8 @@ export function BridgeExperience() {
   const { disconnect } = useDisconnect();
   const { walletInfo } = useWalletInfo();
   const evmIcon = walletInfo?.icon;
-  const [provider, setProvider] = useState<BridgeProvider>("epoch");
-  const [mode, setMode] = useState<FlowMode>("receive");
+  const [route, setRoute] = useState<BridgeRoute>(bridgeRoutes[0]);
+  const { provider, mode } = route;
   const [amount, setAmount] = useState("");
   const [destination, setDestination] = useState("");
   const walletAccount = address ?? "";
@@ -338,14 +326,18 @@ export function BridgeExperience() {
         );
       });
     },
-    { dependencies: [mode, provider], scope: swapCardRef },
+    { dependencies: [route.id], scope: swapCardRef },
   );
 
-  const copy = modes[mode];
+  const copy = {
+    ...modes[mode],
+    from: networkLabels[route.source.network],
+    to: networkLabels[route.destination.network],
+  };
   const providerCopy = providers[provider];
   const quote = useMemo(
-    () => quoteFor(mode, provider, amount),
-    [amount, mode, provider],
+    () => quoteFor(route, amount),
+    [amount, route],
   );
   const destinationSymbol = quote.asset;
   const expectedReceivedAmount = quote.expectedReceived;
@@ -389,7 +381,8 @@ export function BridgeExperience() {
   const evmBalanceText = walletConnected
     ? evmBalance || "Balance unavailable"
     : "Not connected";
-  const midenRouteToken = MIDEN_ROUTE_TOKEN[provider];
+  const midenRouteToken = [route.source, route.destination].find((asset) => asset.kind === "miden");
+  const evmRouteToken = [route.source, route.destination].find((asset) => asset.network === "sepolia");
   const midenBalanceText = midenWallet.connected
     ? midenBalances && midenRouteToken
       ? `${compactTokenAmount(midenBalances[provider] ?? "0")} ${midenRouteToken.symbol}`
@@ -421,7 +414,7 @@ export function BridgeExperience() {
   // request above its balance would revert on-chain (MetaMask shows "likely to
   // fail"). Block it in-app before the wallet prompt. Send sources from the
   // (private) Miden balance, which we can't read here, so it isn't guarded.
-  const sourceTokenSymbol = provider === "epoch" ? "USDC" : "ETH";
+  const sourceTokenSymbol = route.source.symbol;
   const insufficientBalance =
     mode === "receive" &&
     walletConnected &&
@@ -517,22 +510,13 @@ export function BridgeExperience() {
     const resolvedMode = nextMode ?? storedMode ?? "receive";
 
     queueMicrotask(() => {
-      if (nextProvider && !providers[nextProvider].disabled) {
-        // An explicit ?route= / ?provider= wins and becomes the new sticky choice.
-        setProvider(nextProvider);
-        saveStoredRoute(nextProvider);
-      } else {
-        // No URL override: return to the last route the user picked.
-        const storedProvider = loadStoredRoute();
-        if (storedProvider) setProvider(storedProvider);
-      }
-      if (nextMode) {
-        // An explicit ?intent= / ?mode= wins and becomes the new sticky tab.
-        setMode(nextMode);
-        saveStoredMode(nextMode);
-      } else if (storedMode) {
-        setMode(storedMode);
-      }
+      const resolvedProvider = nextProvider && !providers[nextProvider].disabled
+        ? nextProvider
+        : loadStoredRoute() ?? "epoch";
+      const restoredRoute = defaultBridgeRoute(resolvedProvider, resolvedMode);
+      if (restoredRoute) setRoute(restoredRoute);
+      if (nextProvider && !providers[nextProvider].disabled) saveStoredRoute(nextProvider);
+      if (nextMode) saveStoredMode(nextMode);
 
       if (nextMidenAccount) {
         setLaunchMidenAccount(nextMidenAccount);
@@ -694,14 +678,11 @@ export function BridgeExperience() {
   }
 
   useEffect(() => {
-    if (!walletAccount) return;
+    if (!walletAccount || !evmRouteToken) return;
 
     let cancelled = false;
-    // Show the balance of the token this route actually moves on Sepolia:
-    // Epoch bridges USDC, Agglayer bridges native ETH.
-    const isEpoch = provider === "epoch";
-    const url = isEpoch
-      ? `/api/sepolia/balance?address=${walletAccount}&token=${EPOCH_SEPOLIA_USDC.address}&decimals=${EPOCH_SEPOLIA_USDC.decimals}`
+    const url = evmRouteToken.kind === "erc20"
+      ? `/api/sepolia/balance?address=${walletAccount}&token=${evmRouteToken.address}&decimals=${evmRouteToken.decimals}`
       : `/api/sepolia/balance?address=${walletAccount}`;
     fetch(url)
       .then((response) =>
@@ -711,14 +692,11 @@ export function BridgeExperience() {
       )
       .then((payload: { balanceWei?: string; balance?: string }) => {
         if (cancelled) return;
-        if (isEpoch) {
-          setEvmBalance(`${compactTokenAmount(payload.balance ?? "0")} USDC`);
-          setEvmBalanceValue(Number(payload.balance ?? "0"));
-        } else {
-          const eth = formatEther(BigInt(payload.balanceWei ?? "0"));
-          setEvmBalance(`${compactTokenAmount(eth)} ETH`);
-          setEvmBalanceValue(Number(eth));
-        }
+        const balance = evmRouteToken.kind === "erc20"
+          ? payload.balance ?? "0"
+          : formatUnits(BigInt(payload.balanceWei ?? "0"), evmRouteToken.decimals);
+        setEvmBalance(`${compactTokenAmount(balance)} ${evmRouteToken.symbol}`);
+        setEvmBalanceValue(Number(balance));
       })
       .catch(() => {
         if (!cancelled) {
@@ -730,7 +708,7 @@ export function BridgeExperience() {
     return () => {
       cancelled = true;
     };
-  }, [walletAccount, provider, evmBalanceNonce]);
+  }, [walletAccount, evmRouteToken, evmBalanceNonce]);
 
   // Default the destination input to the connected wallet on the relevant side
   // (Miden for receive, Sepolia for send). Runs once per direction; the user can
@@ -825,7 +803,9 @@ export function BridgeExperience() {
   ]);
 
   function selectMode(nextMode: FlowMode) {
-    setMode(nextMode);
+    const nextRoute = nextMode === mode ? route : reverseBridgeRoute(route);
+    if (!nextRoute) return;
+    setRoute(nextRoute);
     // Remember the tab so a refresh keeps this direction.
     saveStoredMode(nextMode);
     setAmount("");
@@ -932,29 +912,23 @@ export function BridgeExperience() {
     .filter((a) => a.status === "complete" || a.status === "failed")
     .slice(0, 12);
 
-  function selectProvider(nextProvider: BridgeProvider) {
-    if (providers[nextProvider].disabled) return;
-    if (nextProvider === provider) return;
-    // The routes move different assets (Epoch = USDC, Agglayer = ETH). When the
-    // asset changes, an amount entered for the old route must not carry over as
-    // the same number of a different token — clear it and drop any stale quote so
-    // no previous-route quote or token label survives the transition. Same-asset
-    // switches keep the amount.
-    if (routeSwitchChangesAsset(provider, nextProvider)) {
+  function selectRoute(nextRoute: BridgeRoute) {
+    if (nextRoute.id === route.id) return;
+    if (routeSwitchChangesAsset(route, nextRoute)) {
       setAmount("");
       setEpochQuoteAmount(undefined);
     }
-    setProvider(nextProvider);
-    // Remember the choice so a refresh comes back to this route.
-    saveStoredRoute(nextProvider);
+    setRoute(nextRoute);
+    // Keep the existing provider preference format.
+    saveStoredRoute(nextRoute.provider);
     setBridgeError("");
     // Destination is route-agnostic: the connected Miden wallet address (bech32)
     // prefills for both routes and the Agglayer submit normalizes it to hex — so
     // Agglayer behaves exactly like Epoch (no special clearing here).
   }
 
-  function selectRouteOption(nextProvider: BridgeProvider) {
-    selectProvider(nextProvider);
+  function selectRouteOption(nextRoute: BridgeRoute) {
+    selectRoute(nextRoute);
     closeRouteMenu();
   }
 
@@ -1144,13 +1118,11 @@ export function BridgeExperience() {
     setWalletError("");
     return submitBridgeTransfer(
       {
-        provider,
-        mode,
+        routeId: route.id,
         amount,
         destination,
         activities,
         insufficientBalance,
-        sourceTokenSymbol,
         evmBalance,
         evmWallet: {
           connected: walletConnected,
@@ -1356,40 +1328,43 @@ export function BridgeExperience() {
                       aria-label="Bridge route"
                       onKeyDown={handleRouteMenuKeyDown}
                     >
-                  {(Object.keys(providers) as BridgeProvider[]).map((key) => {
-                    const option = providers[key];
-                    const c = option.comparison;
-                    const selected = key === provider;
-                    const disabled = option.disabled === true;
-                    return (
-                      <button
-                        className={`route-option ${selected ? "selected" : ""} ${disabled ? "disabled" : ""}`}
-                        type="button"
-                        role="option"
-                        aria-selected={selected}
-                        aria-disabled={disabled}
-                        disabled={disabled}
-                        key={key}
-                        onClick={() => selectRouteOption(key)}
-                      >
-                        <span className="route-option-head">
-                          <strong>{option.label}</strong>
-                          <small className="route-tag testnet">
-                            {option.badge}
-                          </small>
-                          {selected ? (
-                            <Check
-                              className="route-check"
-                              size={15}
-                              aria-hidden="true"
-                            />
-                          ) : null}
-                        </span>
-                        <span className="route-option-sub">
-                          {disabled ? "Paused for this build" : `${c.asset} · ${c.eta}`}
-                        </span>
-                      </button>
-                    );
+                  {(Object.keys(providers) as BridgeProvider[]).flatMap((key) => {
+                    const routes = bridgeRoutes.filter((option) => option.provider === key && option.mode === mode);
+                    return (routes.length ? routes : [undefined]).map((optionRoute) => {
+                      const option = providers[key];
+                      const c = option.comparison;
+                      const selected = optionRoute?.id === route.id;
+                      const disabled = !optionRoute;
+                      return (
+                        <button
+                          className={`route-option ${selected ? "selected" : ""} ${disabled ? "disabled" : ""}`}
+                          type="button"
+                          role="option"
+                          aria-selected={selected}
+                          aria-disabled={disabled}
+                          disabled={disabled}
+                          key={optionRoute?.id ?? key}
+                          onClick={() => optionRoute && selectRouteOption(optionRoute)}
+                        >
+                          <span className="route-option-head">
+                            <strong>{option.label}</strong>
+                            <small className="route-tag testnet">
+                              {option.badge}
+                            </small>
+                            {selected ? (
+                              <Check
+                                className="route-check"
+                                size={15}
+                                aria-hidden="true"
+                              />
+                            ) : null}
+                          </span>
+                          <span className="route-option-sub">
+                            {disabled ? "Paused for this build" : `${optionRoute?.source.symbol ?? "—"} · ${c.eta}`}
+                          </span>
+                        </button>
+                      );
+                    });
                     })}
                     </div>
                   </div>
@@ -1464,8 +1439,9 @@ export function BridgeExperience() {
             </div>
             <div className="swap-box-token">
               <TokenSelect
-                provider={provider}
-                onSelectProvider={selectProvider}
+                route={route}
+                side="source"
+                onSelectRoute={selectRoute}
               />
             </div>
           </div>
@@ -1487,7 +1463,7 @@ export function BridgeExperience() {
               <strong>
                 {provider === "epoch" ? (
                   <EpochQuotePreview
-                    mode={mode}
+                    route={route}
                     amount={amount}
                     midenAccount={epochMidenAccount}
                     evmAddress={epochEvmAddress}
@@ -1512,8 +1488,9 @@ export function BridgeExperience() {
             </div>
             <div className="swap-box-token">
               <TokenSelect
-                provider={provider}
-                onSelectProvider={selectProvider}
+                route={route}
+                side="destination"
+                onSelectRoute={selectRoute}
               />
             </div>
           </div>
@@ -1606,7 +1583,7 @@ export function BridgeExperience() {
                   <div>
                     <dt>You send</dt>
                     <dd>
-                      {amount} {provider === "epoch" ? "USDC" : copy.assetIn}
+                      {amount} {sourceAssetLabel(route.source)}
                     </dd>
                   </div>
                   <div>

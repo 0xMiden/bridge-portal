@@ -1,41 +1,22 @@
 import { activitySteps, type ActivityStatus } from "./activity-status";
-import type { BridgeActivity, BridgeProvider, BridgeQuote, FlowMode } from "./models";
+import { sameAsset } from "./assets";
+import type { BridgeRoute } from "./routes";
+import type { BridgeActivity, BridgeProvider, BridgeQuote } from "./models";
 
-/**
- * The token symbol a route moves on its input side. Epoch's SIO route is
- * USDC↔USDC; every other active route moves ETH. This is the single fact that
- * decides whether switching routes changes the asset — and therefore whether a
- * numeric amount entered for the old route can carry over (it must not when the
- * asset changes, so an amount typed as USDC never becomes the same number of
- * ETH silently). Mode-independent: the input token is the same in both
- * directions for the active routes.
- */
-export function routeAsset(provider: BridgeProvider): string {
-  return provider === "epoch" ? "USDC" : "ETH";
-}
-
-/**
- * True when moving from one route to another changes the input asset — the
- * signal the form uses to clear the amount and any stale quote on a route
- * switch. Same-asset switches (or re-selecting the same route) return false so
- * the amount is preserved.
- */
-export function routeSwitchChangesAsset(
-  from: BridgeProvider,
-  to: BridgeProvider,
-): boolean {
-  return routeAsset(from) !== routeAsset(to);
+/** Clear the amount when the selected source network or token changes. */
+export function routeSwitchChangesAsset(from: BridgeRoute, to: BridgeRoute): boolean {
+  return !sameAsset(from.source, to.source);
 }
 
 /** Fallback quote amounts used until a live provider quote is available. */
-export function quoteAmounts(provider: BridgeProvider, amount: string): BridgeQuote {
+export function quoteAmounts(provider: BridgeProvider, amount: string, asset: string): BridgeQuote {
   const parsedAmount = Number(amount) || 0;
   // Agglayer is a canonical 1:1 bridge; other routes carry a small fee spread.
   const isOneToOne = provider === "agglayer";
   const expected = isOneToOne ? parsedAmount : Math.max(parsedAmount * 0.999, 0);
   const minMultiplier = isOneToOne ? 1 : 0.995;
   return {
-    asset: routeAsset(provider),
+    asset,
     expectedReceived: String(Number(expected.toFixed(6))),
     minReceived: String(Number((expected * minMultiplier).toFixed(6))),
   };
@@ -86,17 +67,17 @@ export function nextStatus(activity: BridgeActivity): ActivityStatus {
 }
 
 export function createActivity(
-  mode: FlowMode,
-  provider: BridgeProvider,
+  route: BridgeRoute,
   amount: string,
 ): BridgeActivity {
   const activity: BridgeActivity = {
     id: `act-${Date.now().toString(36)}`,
-    mode,
-    provider,
+    mode: route.mode,
+    provider: route.provider,
+    routeId: route.id,
     status: "signature",
     amount: amount || "0",
-    asset: routeAsset(provider),
+    asset: route.source.symbol,
     // Honest pending defaults — the real hashes are filled in by the submit flow
     // as the transfer progresses (no fabricated tx hashes on a pending activity).
     sourceTxHash: undefined,

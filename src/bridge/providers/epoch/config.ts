@@ -1,3 +1,5 @@
+import { MIDEN_USDC } from "../../core/assets";
+
 /**
  * Epoch Protocol integration config.
  *
@@ -30,6 +32,6 @@ export const MIDEN_DESTINATION_CHAIN_ID = 999999999;
  * NOTE: the `MIDEN_NATIVE_*` names are legacy; this is the USDC faucet, not the
  * chain-native asset.
  */
-export const MIDEN_NATIVE_TOKEN_SYMBOL = "USDC";
-export const MIDEN_NATIVE_TOKEN_DECIMALS = 6;
-export const MIDEN_NATIVE_FAUCET_ID = "0x537c15a622074e91188aa894456c52";
+export const MIDEN_NATIVE_TOKEN_SYMBOL = MIDEN_USDC.symbol;
+export const MIDEN_NATIVE_TOKEN_DECIMALS = MIDEN_USDC.decimals;
+export const MIDEN_NATIVE_FAUCET_ID = MIDEN_USDC.faucetId;

@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Activity } from "./bridge-presentation";
+import { activityRoute } from "../../bridge/core/routes";
 import {
   loadStoredActivities,
   loadStoredMode,
@@ -42,6 +43,21 @@ afterEach(() => {
 });
 
 describe("activity persistence", () => {
+  it("resolves explicit and legacy routes without rewriting saved history or guessing unknown tokens", () => {
+    const raw = JSON.stringify([
+      { ...activity, mode: "withdraw" },
+      { ...activity, routeId: "epoch-usdc-to-sepolia", provider: "epoch", asset: "USDC" },
+      { ...activity, provider: "epoch", asset: "DAI" },
+      { ...activity, routeId: "unknown-route" },
+    ]);
+    storage.set("miden.bridge.ui.activities", raw);
+
+    expect(loadStoredActivities().map((item) => activityRoute(item)?.id)).toEqual([
+      "agglayer-eth-to-sepolia", "epoch-usdc-to-sepolia", undefined, undefined,
+    ]);
+    expect(storage.get("miden.bridge.ui.activities")).toBe(raw);
+  });
+
   it("keeps the existing key and plain JSON array, including tracking fields", () => {
     const activities: Activity[] = [activity, {
       ...activity,

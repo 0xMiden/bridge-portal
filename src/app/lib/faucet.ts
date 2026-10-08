@@ -1,3 +1,4 @@
+import { SEPOLIA_USDC } from "../../bridge/core/assets";
 import { encodeFunctionData, parseUnits } from "viem";
 import { SEPOLIA_NETWORK } from "../../config/sepolia";
 import { type EvmProvider, ensureSepolia } from "../../wallets/evm/evm-wallet";
@@ -8,11 +9,7 @@ import { type EvmProvider, ensureSepolia } from "../../wallets/evm/evm-wallet";
 // for an Epoch send; bridge ETH in via Agglayer receive -> you hold Miden ETH.
 // The Miden-side faucets are dashboard-only (no public endpoint), so those are
 // link-outs, not one-click. https://docs.epochprotocol.xyz/supported-chains-and-tokens
-export const FAUCET_SEPOLIA_USDC = {
-  address: "0x2BB4FfD7E2c6D432b697554Efd77fA13bdbefd69" as `0x${string}`,
-  decimals: 18,
-  symbol: "USDC",
-} as const;
+export const FAUCET_SEPOLIA_USDC = SEPOLIA_USDC;
 
 /** Default one-click mint size. */
 export const FAUCET_MINT_AMOUNT = "10";
