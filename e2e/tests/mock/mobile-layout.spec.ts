@@ -222,14 +222,14 @@ test.describe("mobile bridge layout", () => {
     page,
   }) => {
     await bridge.waitForReady();
-    await bridge.setRoute("AggLayer");
-    await bridge.setMode("Send");
+    await bridge.setRoute("USDCx");
+    await bridge.setMode("Receive");
     await bridge.fillAmount("0.05");
-    await bridge.fillDestination("not-a-sepolia-address");
+    await bridge.fillDestination("not-a-miden-address");
     await bridge.openPreflight();
     await bridge.confirmPreflight();
     const formError = page.locator(".swap-card > .form-error");
-    await expect(formError).toContainText(/valid Sepolia/i);
+    await expect(formError).toContainText(/Miden/i);
 
     const dock = bridge.actionDock();
     await expect(dock).toBeVisible();

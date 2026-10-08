@@ -6,11 +6,11 @@ import type { BridgePage } from "../../pages/bridge-page";
 // rounding, which is compliant but trips a strict `>= 44`.
 const MIN_TAP_TARGET = 43.5;
 
-const destination = "0x00000000000000000000000000000000000000ab";
+const destination = "0x4e6fb40fd2f6a55140df2c42dfb5b7";
 
-async function openAgglayerReview(bridge: BridgePage) {
+async function openUsdcxReview(bridge: BridgePage) {
   await bridge.waitForReady();
-  await bridge.setRoute("AggLayer");
+  await bridge.setRoute("USDCx");
   await bridge.setMode("Receive");
   await bridge.fillAmount("0.07");
   await bridge.fillDestination(destination);
@@ -23,7 +23,7 @@ test(`mobile ${width}px review is a viewport bottom sheet with a contained keybo
   page,
 }) => {
   await page.setViewportSize({ width, height: 844 });
-  await openAgglayerReview(bridge);
+  await openUsdcxReview(bridge);
 
   const overlay = bridge.preflight();
   const panel = overlay.locator(".preflight-panel");
@@ -114,7 +114,7 @@ test(`mobile ${width}px review is a viewport bottom sheet with a contained keybo
 
 test("desktop review remains centered", async ({ bridge, page }) => {
   await page.setViewportSize({ width: 1024, height: 768 });
-  await openAgglayerReview(bridge);
+  await openUsdcxReview(bridge);
 
   const geometry = await bridge.preflight().evaluate((overlay) => {
     const panel = overlay.querySelector<HTMLElement>(".preflight-panel")!;

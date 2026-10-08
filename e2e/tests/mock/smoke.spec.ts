@@ -2,7 +2,7 @@ import { test, expect } from "../../fixtures/bridge";
 
 // The SUT boots, WASM hydrates, both injected wallets connect, and the core UI
 // (route switch + quote) works — no real network.
-test("bridge boots, wallets connect, routes switch", async ({ bridge, page }) => {
+test("bridge boots, wallets connect, paused routes are disabled", async ({ bridge, page }) => {
   await test.step("wallets ready", async () => {
     await bridge.waitForReady();
     const hook = await page.evaluate(() => ({
@@ -20,12 +20,15 @@ test("bridge boots, wallets connect, routes switch", async ({ bridge, page }) =>
     await expect(page.locator(".swap-card h1")).toHaveText("Bridge");
   });
 
-  await test.step("route switch AggLayer <-> Epoch", async () => {
-    await bridge.setRoute("Epoch");
-    await expect(page.locator(".route-trigger")).toContainText(/Epoch/i);
-    await bridge.setRoute("AggLayer");
-    // UI label is "Agglayer" (lowercase L) — match case-insensitively.
-    await expect(page.locator(".route-trigger")).toContainText(/AggLayer/i);
+  await test.step("USDCx is the default and paused routes cannot be selected", async () => {
+    await expect(bridge.routeTrigger()).toContainText("USDCx");
+    await bridge.routeTrigger().click();
+    for (const provider of ["Agglayer", "Epoch", "NEAR Intents"]) {
+      const option = bridge.routeListbox().getByRole("option", { name: new RegExp(`^${provider}`) });
+      await expect(option).toBeDisabled();
+      await expect(option).toContainText("Paused");
+    }
+    await page.keyboard.press("Escape");
   });
 
   await test.step("quote summary shows a network fee", async () => {

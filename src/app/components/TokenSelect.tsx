@@ -68,7 +68,7 @@ export function TokenSelect({
   const rootRef = useRef<HTMLDivElement>(null);
   const active = route[side];
   const externalSide = route.mode === "receive" ? "source" : "destination";
-  const options = bridgeRoutes.filter((option) => option.mode === route.mode &&
+  const options = bridgeRoutes.filter((option) => !providers[option.provider].disabled && option.mode === route.mode &&
     option[externalSide].network === route[externalSide].network);
 
   useEffect(() => {

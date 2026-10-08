@@ -5,8 +5,8 @@ import { test, expect } from "../../fixtures/bridge";
 test("receive above balance disables the CTA", async ({ bridge }) => {
   await test.step("wallets ready", () => bridge.waitForReady());
 
-  await test.step("Epoch receive, amount over balance", async () => {
-    await bridge.setRoute("Epoch");
+  await test.step("USDCx receive, amount over balance", async () => {
+    await bridge.setRoute("USDCx");
     await bridge.setMode("Receive");
     await bridge.fillAmount("100"); // stubbed balance is 1 USDC
   });

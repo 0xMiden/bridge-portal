@@ -61,15 +61,9 @@ test("USDCx joins the shared form with Arc balances, exact amounts and deposit-o
   await expect(page.getByRole("textbox", { name: "Amount", exact: true })).toHaveValue("");
   await expect(page.getByRole("button", { name: "Sepolia wallet menu", exact: true })).toBeVisible();
   await expect(page.locator(".token-select-symbol")).toHaveText(["USDC", "USDCx"]);
-  await page.locator(".token-select").first().getByRole("button").click();
-  const tokens = page.getByRole("listbox", { name: "Token", exact: true });
-  await expect(tokens).toBeVisible();
-  await expect(tokens.getByRole("option").filter({ hasText: "Arc" })).toHaveCount(0);
-  await tokens.getByRole("option").filter({ hasText: "via Epoch" }).click();
-  await bridge.setMode("Send");
-  await expect(page.locator(".swap-box").first().locator(".swap-box-head strong")).toHaveText("Miden");
-  await expect(page.locator(".swap-box").first().getByRole("combobox")).toHaveCount(0);
-  await bridge.setMode("Receive");
+  // Paused providers must not appear as selectable tokens on Sepolia.
+  await expect(page.locator(".token-select").getByRole("button")).toHaveCount(0);
+  await expect(page.locator(".mode-switch").getByRole("button", { name: "Send", exact: true })).toBeDisabled();
   await origin.selectOption("arc-testnet");
   await expect(page.locator(".token-select-symbol")).toHaveText(["USDC", "USDCx"]);
   await expect(page.getByRole("button", { name: "Arc Testnet wallet menu", exact: true })).toBeVisible();
