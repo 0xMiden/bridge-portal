@@ -85,7 +85,7 @@ export const providers: Record<
     badge: "Paused",
     route: "Paused in this UI",
     disclosure:
-      "NEAR Intents is intentionally disabled in this build while Agglayer and Epoch are the active testnet routes.",
+      "NEAR Intents is paused in this build.",
     disabled: true,
     comparison: {
       eta: "—",
@@ -94,12 +94,13 @@ export const providers: Record<
       claim: "—",
       availability: "Unavailable",
       unavailableReason:
-        "Paused in this build while Agglayer and Epoch are the active testnet routes.",
+        "Paused in this build.",
     },
   },
   agglayer: {
     label: "Agglayer",
-    badge: "Testnet",
+    badge: "Paused",
+    disabled: true,
     route: "Agglayer testnet route",
     disclosure:
       "Agglayer bridges ETH in both directions through the canonical testnet bridge. Gateway auto-claims Miden→Sepolia exits; Sepolia→Miden recipients consume the delivered note in Bread.",
@@ -108,13 +109,15 @@ export const providers: Record<
       feeModel: "No provider fee (canonical bridge)",
       trust: "Agglayer canonical bridge",
       claim: "Gateway auto-claims on Sepolia; user consumes the Miden note",
-      availability: "Available",
+      availability: "Unavailable",
+      unavailableReason: "Paused in this build.",
       differentiator: "Canonical ETH route",
     },
   },
   epoch: {
     label: "Epoch",
-    badge: "Testnet",
+    badge: "Paused",
+    disabled: true,
     route: "Epoch testnet route",
     disclosure:
       "Epoch is represented as a testnet service path. Production assumptions should be revisited when the integration contract is fixed.",
@@ -123,7 +126,8 @@ export const providers: Record<
       feeModel: "Included in quoted rate",
       trust: "Epoch solver network",
       claim: "Solver delivers the Miden note automatically",
-      availability: "Available",
+      availability: "Unavailable",
+      unavailableReason: "Paused in this build.",
       differentiator: "Fastest for USDC",
     },
   },

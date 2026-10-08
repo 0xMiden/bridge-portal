@@ -13,8 +13,8 @@ test("cancelled wallet prompt: friendly message, no blank page", async ({
     page.evaluate(() => window.localStorage.setItem("e2e-signer-mode", "reject")),
   );
 
-  await test.step("AggLayer receive, small amount", async () => {
-    await bridge.setRoute("AggLayer");
+  await test.step("USDCx receive, small amount", async () => {
+    await bridge.setRoute("USDCx");
     await bridge.setMode("Receive");
     await bridge.fillAmount("0.01");
   });

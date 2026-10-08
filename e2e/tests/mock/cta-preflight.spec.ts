@@ -8,70 +8,21 @@ import type { Route, Mode } from "../../pages/bridge-page";
 //   empty amount → disabled "Enter amount"  →  valid amount → "Review <dir>".
 
 const combos: Array<{ route: Route; mode: Mode; label: RegExp }> = [
-  { route: "Epoch", mode: "Receive", label: /Review receive/i },
-  { route: "Epoch", mode: "Send", label: /Review send/i },
-  { route: "AggLayer", mode: "Receive", label: /Review receive/i },
-  { route: "AggLayer", mode: "Send", label: /Review send/i },
+  { route: "USDCx", mode: "Receive", label: /Review receive/i },
 ];
 
-test("Miden balances are opt-in and follow the token across route and direction changes", async ({ bridge, page }) => {
+test("Miden balances are opt-in, stay revealed across origins, and reset after reload", async ({ bridge, page }) => {
   await expect(page.getByRole("button", { name: "Show balance", exact: true })).toBeVisible();
   await bridge.showMidenBalance();
-  const midenBalance = page.locator(".swap-box").filter({ has: page.getByRole("button", { name: "Refresh Miden balance" }) });
-  await expect(midenBalance).toContainText("Available 1 USDC");
-
-  await bridge.setRoute("AggLayer");
-  await expect(midenBalance).toContainText("Available 1 ETH");
-  await bridge.setMode("Send");
-  await expect(midenBalance).toContainText("Available 1 ETH");
+  const midenBalance = page.locator(".swap-box").last();
+  await expect(midenBalance).toContainText("Available 0 USDCx");
+  await page.getByRole("combobox", { name: "Origin chain", exact: true }).selectOption("sepolia");
+  await expect(midenBalance).toContainText("Available 0 USDCx");
   await page.getByRole("button", { name: "Refresh Miden balance" }).click();
-  await expect(midenBalance).toContainText("Available 1 ETH");
-  await bridge.setRoute("Epoch");
-  await expect(midenBalance).toContainText("Available 1 USDC");
-
+  await expect(midenBalance).toContainText("Available 0 USDCx");
   await page.reload();
   await bridge.waitForReady();
   await expect(page.getByRole("button", { name: "Show balance", exact: true })).toBeVisible();
-});
-
-test("token selection resets the amount, reads the selected asset, and restores the route after reload", async ({ bridge, page }) => {
-  await bridge.setMode("Receive");
-  await bridge.fillAmount("0.05");
-  const source = page.locator(".token-select").first();
-  await source.getByRole("button", { name: "USDC — change token" }).click();
-  const ethBalance = page.waitForRequest((request) => {
-    const url = new URL(request.url());
-    return url.pathname === "/api/evm/sepolia/balance" && !url.searchParams.has("token");
-  });
-  await source.getByRole("option", { name: /ETH/ }).click();
-  await ethBalance;
-  // Token selection must not run the route menu's deferred focus restoration.
-  await page.evaluate(() => new Promise<void>((resolve) => requestAnimationFrame(() => resolve())));
-  await expect(bridge.routeTrigger()).not.toBeFocused();
-  await expect(page.locator(".swap-box input[aria-label='Amount']")).toHaveValue("");
-  await expect(page.locator(".token-select-symbol")).toHaveText(["ETH", "ETH"]);
-  await expect(bridge.routeTrigger()).toContainText("Agglayer");
-
-  await bridge.setMode("Send");
-  await page.reload();
-  await bridge.waitForReady();
-  await expect(bridge.routeTrigger()).toContainText("Agglayer");
-  await expect(page.locator(".mode-switch button[aria-pressed='true']")).toHaveText("Send");
-  await expect(page.locator(".token-select-symbol")).toHaveText(["ETH", "ETH"]);
-
-  const usdcBalance = page.waitForRequest((request) => {
-    const url = new URL(request.url());
-    return url.pathname === "/api/evm/sepolia/balance" && url.searchParams.has("token");
-  });
-  const destination = page.locator(".token-select").last();
-  await destination.getByRole("button", { name: "ETH — change token" }).click();
-  await destination.getByRole("option", { name: /USDC/ }).click();
-  const url = new URL((await usdcBalance).url());
-  expect(url.searchParams.get("token")).toBe("0x2BB4FfD7E2c6D432b697554Efd77fA13bdbefd69");
-  expect(url.searchParams.get("decimals")).toBe("18");
-  await page.evaluate(() => new Promise<void>((resolve) => requestAnimationFrame(() => resolve())));
-  await expect(bridge.routeTrigger()).not.toBeFocused();
-  await expect(page.locator(".token-select-symbol")).toHaveText(["USDC", "USDC"]);
 });
 
 for (const { route, mode, label } of combos) {
@@ -104,7 +55,7 @@ test("invalid amounts never open the preflight or call a wallet", async ({
   bridge,
 }) => {
   await test.step("wallets ready", () => bridge.waitForReady());
-  await bridge.setRoute("AggLayer");
+  await bridge.setRoute("USDCx");
   await bridge.setMode("Receive");
 
   for (const bad of ["0", "-1", "abc"]) {
@@ -126,11 +77,11 @@ test("cancelling the preflight preserves entered data and calls no wallet", asyn
 }) => {
   await test.step("wallets ready", () => bridge.waitForReady());
 
-  await test.step("AggLayer receive with a valid amount", async () => {
-    await bridge.setRoute("AggLayer");
+  await test.step("USDCx receive with a valid amount", async () => {
+    await bridge.setRoute("USDCx");
     await bridge.setMode("Receive");
     await bridge.fillAmount("0.07");
-    await bridge.fillDestination("0x00000000000000000000000000000000000000ab");
+    await bridge.fillDestination("0x4e6fb40fd2f6a55140df2c42dfb5b7");
   });
 
   await test.step("open the preflight review", async () => {
@@ -146,7 +97,7 @@ test("cancelling the preflight preserves entered data and calls no wallet", asyn
       page.locator(".swap-box input[aria-label='Amount']"),
     ).toHaveValue("0.07");
     await expect(page.locator(".destination-input input")).toHaveValue(
-      "0x00000000000000000000000000000000000000ab",
+      "0x4e6fb40fd2f6a55140df2c42dfb5b7",
     );
     expect((await bridge.readActivities()).length).toBe(0);
   });

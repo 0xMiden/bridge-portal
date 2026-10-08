@@ -68,7 +68,7 @@ test("dark route and status states use semantic contrast", async ({
   await page.locator(".route-trigger").click();
 
   const testnetTag = page.locator(".route-tag.testnet").first();
-  const disabledTag = page.locator(".route-option.disabled");
+  const disabledTag = page.locator(".route-option.disabled").first();
 
   await expect(testnetTag).toBeVisible();
   await expect(disabledTag).toBeVisible();

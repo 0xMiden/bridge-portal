@@ -9,7 +9,7 @@ export type BridgeRoute = {
   destination: BridgeAsset;
 };
 
-// Only the currently supported testnet routes. Paused providers have no route.
+// Known testnet routes, including paused providers needed for activity tracking.
 export const bridgeRoutes: readonly BridgeRoute[] = [
   { id: "epoch-usdc-to-miden", provider: "epoch", mode: "receive", source: SEPOLIA_USDC, destination: MIDEN_USDC },
   { id: "epoch-usdc-to-sepolia", provider: "epoch", mode: "send", source: MIDEN_USDC, destination: SEPOLIA_USDC },
