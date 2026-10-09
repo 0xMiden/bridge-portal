@@ -86,7 +86,11 @@ describe("submission validation", () => {
     ["disabled route", { routeId: "near-intents" }, /isn't available/],
     ["insufficient balance", { insufficientBalance: true }, /Not enough USDC/],
     ["disconnected Miden source", { routeId: "epoch-usdc-to-sepolia", midenWallet: { connected: false, address: "" } }, /Connect your Bread wallet/],
-    ["paused Agglayer withdrawal", { routeId: "agglayer-eth-to-sepolia", destination: EVM_ADDRESS }, /isn't available/],
+    ["missing Miden signing methods", { routeId: "agglayer-eth-to-sepolia", midenWallet: { connected: true, address: MIDEN_ACCOUNT } }, /Connect your Bread wallet/],
+    ["invalid Agglayer recipient", { routeId: "agglayer-eth-to-sepolia", destination: "invalid" }, /valid Sepolia/],
+    ["unresolved Agglayer asset", { routeId: "agglayer-eth-to-sepolia", agglayerEth: null }, /Show balance/],
+    ["malformed Agglayer amount", { routeId: "agglayer-eth-to-sepolia", amount: "1.2.3" }, /valid amount/],
+    ["zero Agglayer amount", { routeId: "agglayer-eth-to-sepolia", amount: "0" }, /greater than zero/],
     ["missing Agglayer recipient", { routeId: "agglayer-eth-to-miden", midenWallet: { connected: false, address: "" } }, /paste a Miden account/],
     ["missing Epoch recipient", { epochMidenAccount: "" }, /paste a Miden account/],
     ["invalid Epoch recipient", { routeId: "epoch-usdc-to-sepolia", epochEvmAddress: "invalid" }, /valid Sepolia/],
@@ -115,6 +119,21 @@ describe("submission validation", () => {
 });
 
 describe("Agglayer submission", () => {
+  it.each([
+    [{ code: 4001 }, "You cancelled the request in your wallet."],
+    [new Error("Bridge note proving failed"), "Bridge note proving failed"],
+  ])("preserves history and clears progress when a withdrawal fails (%s)", async (error, message) => {
+    const { input, effects } = setup({ routeId: "agglayer-eth-to-sepolia" });
+    vi.mocked(runAgglayerSend).mockRejectedValue(error);
+    await submitBridgeTransfer(input, effects);
+
+    expect(loadStoredActivities()).toEqual([history]);
+    expect(effects.navigate).not.toHaveBeenCalled();
+    expect(effects.onError).toHaveBeenCalledWith(message);
+    expect(effects.onSubmittingChange).toHaveBeenLastCalledWith(false);
+    expect(effects.onPhaseChange).toHaveBeenLastCalledWith("");
+  });
+
   it("preserves history and clears progress when the Sepolia deposit is rejected", async () => {
     const { input, effects, evmRequest } = setup({ routeId: "agglayer-eth-to-miden" });
     evmRequest.mockResolvedValueOnce(SEPOLIA_NETWORK.chainHex).mockRejectedValueOnce({ code: 4001 });

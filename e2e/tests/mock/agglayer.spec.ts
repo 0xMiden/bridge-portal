@@ -27,25 +27,36 @@ test("Agglayer receive: select, restore and submit a deposit", async ({ bridge, 
     .toMatch(/^0x[0-9a-fA-F]{64}$/);
 });
 
-test("Agglayer withdrawals stay disabled for saved selections and launch links", async ({ bridge, page }) => {
-  await page.evaluate(() => {
-    localStorage.setItem("miden.bridge.ui.route", "agglayer");
-    localStorage.setItem("miden.bridge.ui.mode", "send");
-    localStorage.setItem("miden.bridge.ui.route.id", "agglayer-eth-to-sepolia");
-  });
+test("Agglayer send: select, restore, launch and submit a withdrawal", async ({ bridge, page }) => {
+  await bridge.setRoute("AggLayer");
+  await bridge.setMode("Send");
   await page.reload();
   await bridge.waitForReady();
   await expect(bridge.routeTrigger()).toContainText("Agglayer");
-  await expect(page.locator(".mode-switch button[aria-pressed='true']")).toHaveText("Receive");
+  await expect(page.locator(".mode-switch button[aria-pressed='true']")).toHaveText("Send");
 
   for (const query of ["mode=send", "intent=withdraw"]) {
+    await bridge.setMode("Receive");
     await page.goto(`/?provider=agglayer&${query}`);
     await bridge.waitForReady();
     await expect(bridge.routeTrigger()).toContainText("Agglayer");
-    await expect(page.locator(".mode-switch button[aria-pressed='true']")).toHaveText("Receive");
-    const send = page.locator(".mode-switch").getByRole("button", { name: "Send", exact: true });
-    await expect(send).toBeDisabled();
-    await expect(send).toHaveAttribute("title", "Agglayer withdrawals are not available yet");
+    await expect(page.locator(".mode-switch button[aria-pressed='true']")).toHaveText("Send");
   }
   expect(await bridge.readActivities()).toEqual([]);
+
+  await bridge.showMidenBalance();
+  await bridge.fillAmount("0.01");
+  await bridge.submit();
+  await bridge.waitForActivityPage();
+
+  const [activity] = await bridge.readActivities();
+  expect(activity).toMatchObject({
+    provider: "agglayer",
+    routeId: "agglayer-eth-to-sepolia",
+    mode: "send",
+    amount: "0.01",
+    sourceNetworkId: 73,
+    destinationNetworkId: 0,
+    midenTxId: `0x${"cd".repeat(32)}`,
+  });
 });

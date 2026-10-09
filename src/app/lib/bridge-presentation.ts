@@ -102,14 +102,13 @@ export const providers: Record<
     badge: "Testnet",
     route: "Agglayer testnet route",
     disclosure:
-      "Deposit ETH from Sepolia through the canonical testnet bridge. Consume the delivered ETH note in Bread. Withdrawals are not available yet.",
+      "Bridge ETH between Sepolia and Miden through the canonical testnet bridge. Consume deposited ETH notes in Bread. Gateway auto-claims withdrawals on Sepolia.",
     comparison: {
       eta: "10-20 min",
       feeModel: "No provider fee (canonical bridge)",
       trust: "Agglayer canonical bridge",
-      claim: "Consume the delivered ETH note in Bread",
-      availability: "Deposits only",
-      unavailableReason: "Agglayer withdrawals are not available yet",
+      claim: "Consume deposited notes in Bread; Gateway auto-claims withdrawals on Sepolia",
+      availability: "Available",
       differentiator: "Canonical ETH route",
     },
   },

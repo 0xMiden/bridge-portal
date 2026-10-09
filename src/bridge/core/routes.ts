@@ -16,7 +16,7 @@ export const bridgeRoutes: readonly BridgeRoute[] = [
   { id: "epoch-usdc-to-miden", provider: "epoch", mode: "receive", source: SEPOLIA_USDC, destination: MIDEN_USDC },
   { id: "epoch-usdc-to-sepolia", provider: "epoch", mode: "send", source: MIDEN_USDC, destination: SEPOLIA_USDC },
   { id: "agglayer-eth-to-miden", provider: "agglayer", mode: "receive", source: SEPOLIA_ETH, destination: MIDEN_ETH },
-  { id: "agglayer-eth-to-sepolia", provider: "agglayer", mode: "send", source: MIDEN_ETH, destination: SEPOLIA_ETH, disabled: true },
+  { id: "agglayer-eth-to-sepolia", provider: "agglayer", mode: "send", source: MIDEN_ETH, destination: SEPOLIA_ETH },
   { id: "xreserve-usdc-to-miden", provider: "xreserve", mode: "receive", source: ARC_USDC, destination: MIDEN_USDCX },
   { id: "xreserve-sepolia-usdc-to-miden", provider: "xreserve", mode: "receive", source: CIRCLE_SEPOLIA_USDC, destination: MIDEN_USDCX },
   { id: "xreserve-base-usdc-to-miden", provider: "xreserve", mode: "receive", source: BASE_SEPOLIA_USDC, destination: MIDEN_USDCX },
