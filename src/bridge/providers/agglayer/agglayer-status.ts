@@ -1,4 +1,4 @@
-import { AGGLAYER_BALI } from "./agglayer";
+import { AGGLAYER_TESTNET } from "./agglayer";
 
 // Ported from 0xMiden/wallet@utk-bridge-integration (src/lib/agglayer/status.ts).
 // Talks to the public gateway.fm bridge indexer directly — no local Rust
@@ -6,7 +6,7 @@ import { AGGLAYER_BALI } from "./agglayer";
 
 // `${bridgeServiceApi}/bridges` is the deposit indexer; the service root (with
 // `/merkle-proof`) is one level up.
-const BRIDGES_API = `${AGGLAYER_BALI.bridgeServiceApi}/bridges`;
+const BRIDGES_API = `${AGGLAYER_TESTNET.bridgeServiceApi}/bridges`;
 
 // One row from the bridge indexer's `deposits` array.
 export interface AgglayerDeposit {
@@ -50,10 +50,9 @@ export async function fetchDeposits(
 
 // The Miden→EVM (L2→L1) exit to `l1Dest` through its whole lifecycle. Gateway's
 // `bridge-autoclaim` claims ready exits on Sepolia automatically (no manual
-// claim in this UI); when it does, `ready_for_claim` flips back to false but
-// `claim_tx_hash` is populated — so we track the exit regardless of readiness
-// to detect that auto-claim and settle. The indexer uses its local L2 network
-// id, not the Agglayer rollup ID used by bridgeAsset.
+// claim in this UI); when it does, `claim_tx_hash` is populated. Track the exit
+// regardless of readiness to detect settlement. The Cardona indexer uses network 73
+// for Miden exits, matching the rollup ID used by bridgeAsset.
 // Matches a known `deposit_cnt` when provided (the exact exit we're tracking),
 // else the latest L2→L1 exit to this address.
 export async function findMidenToEvmDeposit(
@@ -62,8 +61,8 @@ export async function findMidenToEvmDeposit(
 ): Promise<AgglayerDeposit | null> {
   const deposits = await fetchDeposits(l1Dest);
   const matching = deposits.filter(
-    (d) => d.network_id === AGGLAYER_BALI.midenIndexerNetworkId &&
-      d.dest_net === AGGLAYER_BALI.sourceNetworkId,
+    (d) => d.network_id === AGGLAYER_TESTNET.midenIndexerNetworkId &&
+      d.dest_net === AGGLAYER_TESTNET.sourceNetworkId,
   );
   if (depositCnt !== undefined) {
     const exact = matching.find(

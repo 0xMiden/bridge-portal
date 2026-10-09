@@ -8,7 +8,7 @@ import type { MidenFiWalletContextState } from "@miden-sdk/miden-wallet-adapter-
 import type { BridgeProvider } from "../../bridge/core/models";
 import type { ResolvedMidenAsset } from "../../bridge/miden-balances";
 import {
-  AGGLAYER_BALI,
+  AGGLAYER_TESTNET,
   buildSepoliaDepositTransaction,
   normalizeMidenAccountHex,
 } from "../../bridge/providers/agglayer/agglayer";
@@ -137,7 +137,7 @@ export async function submitBridgeTransfer(
   } = effects;
 
   const route = findBridgeRoute(input.routeId);
-  if (!route) {
+  if (!route || route.disabled) {
     onError("This route isn't available in this build.");
     return;
   }
@@ -297,8 +297,8 @@ export async function submitBridgeTransfer(
         eta: "10-20 min",
         destination: destinationAddress,
         // origin = configured Miden rollup, destination = Ethereum L1 (0)
-        sourceNetworkId: AGGLAYER_BALI.destinationNetworkId,
-        destinationNetworkId: AGGLAYER_BALI.sourceNetworkId,
+        sourceNetworkId: AGGLAYER_TESTNET.destinationNetworkId,
+        destinationNetworkId: AGGLAYER_TESTNET.sourceNetworkId,
         // The real on-chain Miden tx hash (not the wallet request UUID) — this
         // feeds the Midenscan /tx/ deep link on the send detail page.
         midenTxId: txHash,
@@ -371,8 +371,8 @@ export async function submitBridgeTransfer(
         // midenTxId is left unset until the bridge creates the note on Miden;
         // the monitor fills it with the real claim_tx_hash (the destination
         // address is not a transaction and must not seed the Midenscan link).
-        sourceNetworkId: AGGLAYER_BALI.sourceNetworkId,
-        destinationNetworkId: AGGLAYER_BALI.destinationNetworkId,
+        sourceNetworkId: AGGLAYER_TESTNET.sourceNetworkId,
+        destinationNetworkId: AGGLAYER_TESTNET.destinationNetworkId,
         txHash: shortAddress(txHash),
         sourceTxHash: txHash,
       });

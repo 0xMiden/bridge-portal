@@ -163,7 +163,7 @@ function initialBridgeForm(params: ReadonlyURLSearchParams) {
     : loadStoredRoute() ?? "xreserve";
   const mode = modeFromIntent(params.get("intent") ?? params.get("mode")) ?? loadStoredMode() ?? "receive";
   const saved = loadStoredRouteId();
-  const route = (saved?.provider === provider && saved.mode === mode ? saved : undefined) ?? defaultBridgeRoute(provider, mode) ?? defaultBridgeRoute(provider, "receive") ?? bridgeRoutes.find((option) => !providers[option.provider].disabled)!;
+  const route = (saved?.provider === provider && saved.mode === mode && !saved.disabled ? saved : undefined) ?? defaultBridgeRoute(provider, mode) ?? defaultBridgeRoute(provider, "receive") ?? bridgeRoutes.find((option) => !option.disabled && !providers[option.provider].disabled)!;
   const midenAccount = params.get("midenAccount") ?? params.get("miden_account") ?? params.get("account") ?? "";
   const evmAddress = params.get("evmAddress") ?? params.get("evm_address") ?? params.get("recipient") ?? "";
   return { route, midenAccount, destination: route.mode === "receive" ? midenAccount : evmAddress };
@@ -772,7 +772,7 @@ export function BridgeExperience() {
     .slice(0, 12);
 
   function selectRoute(nextRoute: BridgeRoute) {
-    if (providers[nextRoute.provider].disabled || nextRoute.id === route.id) return;
+    if (nextRoute.disabled || providers[nextRoute.provider].disabled || nextRoute.id === route.id) return;
     if (routeSwitchChangesAsset(route, nextRoute)) {
       setAmount("");
       setEpochQuoteAmount(undefined);
@@ -1195,7 +1195,7 @@ export function BridgeExperience() {
                       onKeyDown={handleRouteMenuKeyDown}
                     >
                   {(Object.keys(providers) as BridgeProvider[]).flatMap((key) => {
-                    const routes = bridgeRoutes.filter((option) => option.provider === key && option.mode === mode);
+                    const routes = bridgeRoutes.filter((option) => !option.disabled && option.provider === key && option.mode === mode);
                     const preferred = routes.find((option) => option.id === route.id) ?? routes.find((option) => option.source.network === route.source.network) ?? routes[0];
                     return [preferred].map((optionRoute) => {
                       const option = providers[key];
@@ -1266,7 +1266,7 @@ export function BridgeExperience() {
                 type="button"
                 aria-pressed={item === mode}
                 disabled={item !== mode && !reverseBridgeRoute(route)}
-                title={item !== mode && !reverseBridgeRoute(route) ? "USDCx withdrawals are not available yet" : undefined}
+                title={item !== mode && !reverseBridgeRoute(route) ? providerCopy.comparison.unavailableReason : undefined}
                 onClick={() => selectMode(item)}
               >
                 {modes[item].label}

@@ -1,4 +1,4 @@
-import { AGGLAYER_BALI } from "../../bridge/providers/agglayer/agglayer";
+import { AGGLAYER_TESTNET, bridgeStatusUrl } from "../../bridge/providers/agglayer/agglayer";
 import { EPOCH_ALLOCATOR_URL } from "../../bridge/providers/epoch/config";
 import { SEPOLIA_NETWORK } from "../../config/sepolia";
 import { evmRpc } from "../../bridge/evm/rpc.server";
@@ -74,7 +74,7 @@ export async function checkDeepHealth(
     checkSepolia(fetchImpl),
     checkHttpUp(MIDEN_RPC_URL, fetchImpl),
     checkHttpUp(EPOCH_ALLOCATOR_URL, fetchImpl),
-    checkHttpUp(`${AGGLAYER_BALI.bridgeServiceApi}/bridges?limit=1`, fetchImpl),
+    checkHttpUp(bridgeStatusUrl(AGGLAYER_TESTNET.nativeTokenAddress), fetchImpl),
   ]);
   const checks = { sepolia, miden, epoch, agglayer };
   return {

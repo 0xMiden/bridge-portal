@@ -12,8 +12,8 @@ vi.mock("@miden-sdk/miden-sdk", () => ({
   AccountId: {
     fromHex: (hex: string) => ({ toString: () => hex }),
     fromBech32: (bech32: string) => {
-      if (bech32 !== "mcst1aqu8zjdwvcgkeug5a67kpwmnsym6qdsd") throw new Error("Invalid account ID");
-      return { toString: () => "0x387149ae66116cf114eebd60bb7381" };
+      if (bech32 !== "mtst1ap7x68w8ldcytyfa2f9mauqh75qhs3hh_qr7qqq9wr6w") throw new Error("Invalid account ID");
+      return { toString: () => "0x7c6d1dc7fb7045913d524bbef017f5" };
     },
   },
   Endpoint: { testnet: () => ({}) },
@@ -28,7 +28,7 @@ describe("Miden asset resolution", () => {
     sdk.getAccountDetails.mockResolvedValue({ account: () => ({}) });
     sdk.fromAccount.mockReturnValue({ decimals: () => 6, symbol: () => ({ toString: () => "WETH" }) });
     const requestAssets = vi.fn(async () => [
-      { faucetId: "mcst1aqu8zjdwvcgkeug5a67kpwmnsym6qdsd", amount: "1200000" },
+      { faucetId: "mtst1ap7x68w8ldcytyfa2f9mauqh75qhs3hh_qr7qqq9wr6w", amount: "1200000" },
       { faucetId: MIDEN_ETH.faucetId, amount: "345678" },
       { faucetId: "0x1234", amount: "999999999" },
     ]);

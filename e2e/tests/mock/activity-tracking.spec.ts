@@ -127,9 +127,9 @@ test("Agglayer send follows the stored exit through automatic settlement", async
   let claimed = false;
   await page.route("**/api/bridges/**", (route) => route.fulfill({ json: {
     deposits: [
-      { network_id: 1, dest_net: 0, deposit_cnt: 99, claim_tx_hash: SOURCE_TX },
+      { network_id: 73, dest_net: 0, deposit_cnt: 99, claim_tx_hash: SOURCE_TX },
       {
-        network_id: 1,
+        network_id: 73,
         dest_net: 0,
         deposit_cnt: 42,
         ready_for_claim: !claimed,
@@ -158,7 +158,7 @@ for (const provider of ["epoch", "agglayer"] as const) {
       await pending;
       await route.fulfill({ json: provider === "epoch"
         ? [{ chainId: 999999999, status: "success", transactionHash: SOURCE_TX }]
-        : { deposits: [{ network_id: 1, dest_net: 0, deposit_cnt: 42, ready_for_claim: true }] },
+        : { deposits: [{ network_id: 73, dest_net: 0, deposit_cnt: 42, ready_for_claim: true }] },
       });
     });
     await openActivity(page, {

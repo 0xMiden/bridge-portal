@@ -1,3 +1,4 @@
+import { MIDEN_ETH, MIDEN_USDC } from "../../bridge/core/assets";
 import type { MidenFiWalletContextState } from "@miden-sdk/miden-wallet-adapter-react";
 import { E2E_MIDEN_SEED, UserRejectedError, e2eNetwork, e2eSignerMode } from "./env";
 
@@ -47,8 +48,8 @@ function createMockMidenSigner(): E2EMidenSigner {
     // Canonical testnet faucets so "Show balance" and AggLayer send can resolve
     // assets without hitting the Miden RPC.
     requestAssets: (async () => [
-      { faucetId: "0x387149ae66116cf114eebd60bb7381", amount: "100000000" },
-      { faucetId: "0x537c15a622074e91188aa894456c52", amount: "1000000" },
+      { faucetId: MIDEN_ETH.faucetId, amount: "100000000" },
+      { faucetId: MIDEN_USDC.faucetId, amount: "1000000" },
     ]) as unknown as E2EMidenSigner["requestAssets"],
     requestConsumableNotes: (async () =>
       []) as unknown as E2EMidenSigner["requestConsumableNotes"],

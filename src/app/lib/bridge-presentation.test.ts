@@ -1,5 +1,5 @@
 import { MIDEN_ETH } from "../../bridge/core/assets";
-import { defaultBridgeRoute } from "../../bridge/core/routes";
+import { defaultBridgeRoute, findBridgeRoute } from "../../bridge/core/routes";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   type Activity,
@@ -142,7 +142,7 @@ describe("quoteFor refreshes fully on a route switch", () => {
     });
 
     it(`Agglayer quote reports ETH + 10-20 min ETA (${mode})`, () => {
-      const quote = quoteFor(defaultBridgeRoute("agglayer", mode)!, "100");
+      const quote = quoteFor(findBridgeRoute(`agglayer-eth-to-${mode === "receive" ? "miden" : "sepolia"}`)!, "100");
       expect(quote.asset).toBe("ETH");
       expect(Number(quote.expectedReceived)).toBe(100);
       expect(Number(quote.minReceived)).toBe(100);
@@ -151,7 +151,7 @@ describe("quoteFor refreshes fully on a route switch", () => {
 
     it(`a USDC→ETH switch changes the quoted token label (${mode})`, () => {
       const before = quoteFor(defaultBridgeRoute("epoch", mode)!, "100");
-      const after = quoteFor(defaultBridgeRoute("agglayer", mode)!, "100");
+      const after = quoteFor(findBridgeRoute(`agglayer-eth-to-${mode === "receive" ? "miden" : "sepolia"}`)!, "100");
       expect(before.expectedReceived).not.toBe(after.expectedReceived);
       expect(after.asset).toBe("ETH");
     });
@@ -172,7 +172,7 @@ describe("route comparison metadata", () => {
       expect(c.feeModel).toBeTruthy();
       expect(c.claim).toBeTruthy();
       expect(c.trust).toBeTruthy();
-      expect(c.availability).toBe(key === "xreserve" ? "Deposits only" : "Available");
+      expect(c.availability).toBe(key === "xreserve" || key === "agglayer" ? "Deposits only" : "Available");
     }
   });
 
@@ -197,7 +197,7 @@ describe("activity presentation", () => {
     ["send", "agglayer", "ETH", "Send 10 ETH to Sepolia", "8 min", "agglayer-eth-to-sepolia"],
   ] as const)("preserves the stored activity fields for %s via %s", (mode, provider, asset, summary, eta, routeId) => {
     vi.spyOn(Date, "now").mockReturnValue(1_700_000_000_000);
-    expect(createActivity(defaultBridgeRoute(provider, mode)!, "10")).toEqual({
+    expect(createActivity(findBridgeRoute(routeId)!, "10")).toEqual({
       id: "act-loyw3v28",
       routeId,
       mode,

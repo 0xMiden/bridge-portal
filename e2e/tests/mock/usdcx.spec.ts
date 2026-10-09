@@ -61,8 +61,12 @@ test("USDCx joins the shared form with Arc balances, exact amounts and deposit-o
   await expect(page.getByRole("textbox", { name: "Amount", exact: true })).toHaveValue("");
   await expect(page.getByRole("button", { name: "Sepolia wallet menu", exact: true })).toBeVisible();
   await expect(page.locator(".token-select-symbol")).toHaveText(["USDC", "USDCx"]);
-  // Paused providers must not appear as selectable tokens on Sepolia.
-  await expect(page.locator(".token-select").getByRole("button")).toHaveCount(0);
+  // Sepolia also offers Agglayer ETH; the selected USDCx route stays deposit-only.
+  await page.getByRole("button", { name: "USDC — change token", exact: true }).click();
+  const tokens = page.getByRole("listbox", { name: "Token", exact: true });
+  await expect(tokens.getByRole("option", { name: /ETH.*Agglayer/ })).toBeEnabled();
+  await expect(tokens.getByRole("option", { name: /Epoch/ })).toHaveCount(0);
+  await page.keyboard.press("Escape");
   await expect(page.locator(".mode-switch").getByRole("button", { name: "Send", exact: true })).toBeDisabled();
   await origin.selectOption("arc-testnet");
   await expect(page.locator(".token-select-symbol")).toHaveText(["USDC", "USDCx"]);

@@ -2,9 +2,9 @@ import { MIDEN_ETH } from "../../core/assets";
 
 // Outbound Miden→Sepolia (B2AGG) bridge-out constants.
 //
-// Current rollup-86 deployment, verified against 0xMiden/wallet
-// src/lib/agglayer/b2agg/constant.ts. The SDK builds the B2AGG note.
-export const MIDEN_BRIDGE_ID = "0x3b66e20b5088f25133b69216484652";
+// Cardona rollup-73 deployment confirmed by Gateway on 2026-10-09.
+// See docs/agglayer-testnet.md for the deployment source. The SDK builds the B2AGG note.
+export const MIDEN_BRIDGE_ID = "0x187cabbc404359d16be94954ca9879";
 export const MIDEN_AGGLAYER_FAUCET_ID = MIDEN_ETH.faucetId;
 
 // Agglayer network id of the EVM destination (Ethereum L1 / Sepolia) — used as

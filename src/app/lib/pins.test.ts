@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { describe, expect, it } from "vitest";
 
-import { AGGLAYER_BALI } from "../../bridge/providers/agglayer/agglayer";
+import { AGGLAYER_TESTNET, normalizeMidenAccountHex } from "../../bridge/providers/agglayer/agglayer";
 import {
   EVM_AGGLAYER_NETWORK_ID,
   MIDEN_AGGLAYER_FAUCET_ID,
@@ -18,16 +18,19 @@ import {
 // add a CHANGELOG line and check 0xMiden/wallet's matching constants.
 
 describe("testnet pin freeze", () => {
-  it("keeps the AggLayer bali ids", () => {
-    expect(MIDEN_BRIDGE_ID).toBe("0x3b66e20b5088f25133b69216484652");
-    expect(MIDEN_AGGLAYER_FAUCET_ID).toBe("0x387149ae66116cf114eebd60bb7381");
+  it("keeps the confirmed Cardona testnet deployment", () => {
+    expect(MIDEN_BRIDGE_ID).toBe("0x187cabbc404359d16be94954ca9879");
+    expect(MIDEN_AGGLAYER_FAUCET_ID).toBe("0x7c6d1dc7fb7045913d524bbef017f5");
     expect(EVM_AGGLAYER_NETWORK_ID).toBe(0);
-    expect(AGGLAYER_BALI.destinationNetworkId).toBe(86);
-    expect(AGGLAYER_BALI.sepoliaChainId).toBe(11155111);
-    expect(AGGLAYER_BALI.sepoliaBridgeAddress).toBe(
-      "0x1348947e282138d8f377b467f7d9c2eb0f335d1f",
+    expect(AGGLAYER_TESTNET.destinationNetworkId).toBe(73);
+    expect(AGGLAYER_TESTNET.sepoliaChainId).toBe(11155111);
+    expect(AGGLAYER_TESTNET.sepoliaBridgeAddress).toBe(
+      "0x528e26b25a34a4a5d0dbda1d57d318153d2ed582",
     );
-    expect(AGGLAYER_BALI.midenEthFaucetIdHex).toBe(MIDEN_AGGLAYER_FAUCET_ID);
+    expect(AGGLAYER_TESTNET.bridgeServiceApi).toBe("https://bridge.miden-testnet.gateway.fm/api");
+    expect(AGGLAYER_TESTNET.midenEthDecimals).toBe(8);
+    expect(AGGLAYER_TESTNET.midenEthFaucetIdHex).toBe(MIDEN_AGGLAYER_FAUCET_ID);
+    expect(`0x${normalizeMidenAccountHex(AGGLAYER_TESTNET.midenEthFaucetId)}`).toBe(MIDEN_AGGLAYER_FAUCET_ID);
   });
 
   it("keeps the Epoch USDC faucet (not the MIDEN token)", () => {

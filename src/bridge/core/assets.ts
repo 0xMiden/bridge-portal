@@ -53,7 +53,7 @@ export const SEPOLIA_USDC = {
 
 export const MIDEN_ETH = {
   network: "miden-testnet", kind: "miden", symbol: "ETH", decimals: 8,
-  faucetId: "0x387149ae66116cf114eebd60bb7381",
+  faucetId: "0x7c6d1dc7fb7045913d524bbef017f5",
 } as const satisfies BridgeAsset;
 
 export const MIDEN_USDC = {

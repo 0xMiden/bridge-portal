@@ -2,28 +2,25 @@ import { MIDEN_ETH } from "../../core/assets";
 import { encodeFunctionData, parseEther, toHex } from "viem";
 import { SEPOLIA_NETWORK } from "../../../config/sepolia";
 
-export const AGGLAYER_BALI = {
+export const AGGLAYER_TESTNET = {
   sepoliaChainId: SEPOLIA_NETWORK.chainId,
   sepoliaChainHex: SEPOLIA_NETWORK.chainHex,
-  sepoliaBridgeAddress: "0x1348947e282138d8f377b467f7d9c2eb0f335d1f",
-  // Agglayer rollup ID, not the synthetic EVM chain ID (402699011).
-  // Verified against 0xMiden/wallet src/lib/agglayer/constant.ts.
-  destinationNetworkId: 86,
-  // The bridge-service uses a local L2 index, distinct from the rollup ID.
-  // See 0xMiden/wallet src/lib/agglayer/status.ts.
-  midenIndexerNetworkId: 1,
+  sepoliaBridgeAddress: "0x528e26b25a34a4a5d0dbda1d57d318153d2ed582",
+  // Cardona deployment confirmed by Gateway on 2026-10-09 (see docs/agglayer-testnet.md).
+  // This is the rollup ID, not the synthetic EVM chain ID (604208969).
+  destinationNetworkId: 73,
+  // The Cardona bridge indexer reports Miden exits under the rollup ID too.
+  midenIndexerNetworkId: 73,
   sourceNetworkId: 0,
   nativeTokenAddress: "0x0000000000000000000000000000000000000000",
   gasLimit: BigInt(300000),
-  bridgeServiceApi: "https://miden-testnet-bridge.dev.eu-north-3.gateway.fm/api",
-  monitorUrl: "https://gateway-fm.github.io/miden-agglayer/bridge-monitor/bali/",
+  bridgeServiceApi: "https://bridge.miden-testnet.gateway.fm/api",
   sepoliaRpcUrl: SEPOLIA_NETWORK.rpcUrl,
   sepoliaExplorer: SEPOLIA_NETWORK.explorerUrl,
   midenExplorer: "https://testnet.midenscan.com",
-  midenEthFaucetId: "mcst1aqu8zjdwvcgkeug5a67kpwmnsym6qdsd",
+  midenEthFaucetId: "mtst1ap7x68w8ldcytyfa2f9mauqh75qhs3hh_qr7qqq9wr6w",
   // Same account as midenEthFaucetId, hex form — this is the canonical Agglayer
-  // ETH faucet on bali (gateway.fm PARAMETERS.md; also the bridge-out-tool's
-  // --faucet-id). The Miden→Sepolia send must bridge THIS faucet's asset.
+  // ETH faucet on Cardona. The Miden→Sepolia send must bridge this asset.
   midenEthFaucetIdHex: MIDEN_ETH.faucetId,
   midenEthDecimals: MIDEN_ETH.decimals,
 } as const;
@@ -201,24 +198,24 @@ export function buildSepoliaDepositTransaction({
     abi: bridgeAssetAbi,
     functionName: "bridgeAsset",
     args: [
-      AGGLAYER_BALI.destinationNetworkId,
+      AGGLAYER_TESTNET.destinationNetworkId,
       destinationAddress,
       amountWei,
-      AGGLAYER_BALI.nativeTokenAddress,
+      AGGLAYER_TESTNET.nativeTokenAddress,
       true,
       "0x",
     ],
   });
 
   return {
-    to: AGGLAYER_BALI.sepoliaBridgeAddress,
+    to: AGGLAYER_TESTNET.sepoliaBridgeAddress,
     data,
     value: toHex(amountWei),
-    gas: toHex(AGGLAYER_BALI.gasLimit),
+    gas: toHex(AGGLAYER_TESTNET.gasLimit),
     destinationAddress,
   };
 }
 
 export function bridgeStatusUrl(destinationAddress: string) {
-  return `${AGGLAYER_BALI.bridgeServiceApi}/bridges/${destinationAddress}?limit=1&offset=0`;
+  return `${AGGLAYER_TESTNET.bridgeServiceApi}/bridges/${destinationAddress}?limit=1&offset=0`;
 }
