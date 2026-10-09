@@ -161,7 +161,7 @@ client bundle.
 
 ## AggLayer testnet path
 
-See [docs/agglayer-bali.md](docs/agglayer-bali.md) for the current Sepolia to
+See [docs/agglayer-testnet.md](docs/agglayer-testnet.md) for the current Sepolia to
 Miden testnet integration boundary.
 
 ### EVM reads and bridge providers

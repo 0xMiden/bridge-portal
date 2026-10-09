@@ -16,7 +16,7 @@ export function ChainSelect({
   onSelectRoute: (route: BridgeRoute) => void;
 }) {
   const asset = route[side];
-  const routes = bridgeRoutes.filter((option) => option.mode === route.mode && !providers[option.provider].disabled);
+  const routes = bridgeRoutes.filter((option) => !option.disabled && option.mode === route.mode && !providers[option.provider].disabled);
   const networks = [...new Set(routes.map((option) => option[side].network))];
   const label = networkLabels[asset.network];
 

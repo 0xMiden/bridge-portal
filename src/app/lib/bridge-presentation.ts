@@ -99,18 +99,17 @@ export const providers: Record<
   },
   agglayer: {
     label: "Agglayer",
-    badge: "Paused",
-    disabled: true,
+    badge: "Testnet",
     route: "Agglayer testnet route",
     disclosure:
-      "Agglayer bridges ETH in both directions through the canonical testnet bridge. Gateway auto-claims Miden→Sepolia exits; Sepolia→Miden recipients consume the delivered note in Bread.",
+      "Deposit ETH from Sepolia through the canonical testnet bridge. Consume the delivered ETH note in Bread. Withdrawals are not available yet.",
     comparison: {
       eta: "10-20 min",
       feeModel: "No provider fee (canonical bridge)",
       trust: "Agglayer canonical bridge",
-      claim: "Gateway auto-claims on Sepolia; user consumes the Miden note",
-      availability: "Unavailable",
-      unavailableReason: "Paused in this build.",
+      claim: "Consume the delivered ETH note in Bread",
+      availability: "Deposits only",
+      unavailableReason: "Agglayer withdrawals are not available yet",
       differentiator: "Canonical ETH route",
     },
   },

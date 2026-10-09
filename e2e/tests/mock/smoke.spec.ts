@@ -23,7 +23,7 @@ test("bridge boots, wallets connect, paused routes are disabled", async ({ bridg
   await test.step("USDCx is the default and paused routes cannot be selected", async () => {
     await expect(bridge.routeTrigger()).toContainText("USDCx");
     await bridge.routeTrigger().click();
-    for (const provider of ["Agglayer", "Epoch", "NEAR Intents"]) {
+    for (const provider of ["Epoch", "NEAR Intents"]) {
       const option = bridge.routeListbox().getByRole("option", { name: new RegExp(`^${provider}`) });
       await expect(option).toBeDisabled();
       await expect(option).toContainText("Paused");

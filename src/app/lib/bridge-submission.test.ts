@@ -1,7 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { EvmProvider } from "../../wallets/evm/evm-wallet";
 import { SEPOLIA_NETWORK } from "../../config/sepolia";
-import { AGGLAYER_BALI } from "../../bridge/providers/agglayer/agglayer";
 import { runAgglayerSend } from "../../bridge/providers/agglayer/agglayer-execute";
 import { runEpochTransfer, type EpochExecuteResult } from "../../bridge/providers/epoch/epoch-execute";
 import { captureSourceTransaction } from "../../bridge/evm/source-transaction";
@@ -87,11 +86,7 @@ describe("submission validation", () => {
     ["disabled route", { routeId: "near-intents" }, /isn't available/],
     ["insufficient balance", { insufficientBalance: true }, /Not enough USDC/],
     ["disconnected Miden source", { routeId: "epoch-usdc-to-sepolia", midenWallet: { connected: false, address: "" } }, /Connect your Bread wallet/],
-    ["missing Miden signing methods", { routeId: "agglayer-eth-to-sepolia", midenWallet: { connected: true, address: MIDEN_ACCOUNT } }, /Connect your Bread wallet/],
-    ["invalid Agglayer recipient", { routeId: "agglayer-eth-to-sepolia", destination: "invalid" }, /valid Sepolia/],
-    ["unresolved Agglayer asset", { routeId: "agglayer-eth-to-sepolia", agglayerEth: null }, /Show balance/],
-    ["malformed Agglayer amount", { routeId: "agglayer-eth-to-sepolia", amount: "1.2.3" }, /valid amount/],
-    ["zero Agglayer amount", { routeId: "agglayer-eth-to-sepolia", amount: "0" }, /greater than zero/],
+    ["paused Agglayer withdrawal", { routeId: "agglayer-eth-to-sepolia", destination: EVM_ADDRESS }, /isn't available/],
     ["missing Agglayer recipient", { routeId: "agglayer-eth-to-miden", midenWallet: { connected: false, address: "" } }, /paste a Miden account/],
     ["missing Epoch recipient", { epochMidenAccount: "" }, /paste a Miden account/],
     ["invalid Epoch recipient", { routeId: "epoch-usdc-to-sepolia", epochEvmAddress: "invalid" }, /valid Sepolia/],
@@ -120,47 +115,6 @@ describe("submission validation", () => {
 });
 
 describe("Agglayer submission", () => {
-  it("converts the resolved asset's amount and records the on-chain hash only after the send succeeds", async () => {
-    const started = Promise.withResolvers<void>();
-    const execution = Promise.withResolvers<{ txId: string; txHash: string }>();
-    vi.mocked(runAgglayerSend).mockImplementation(() => {
-      started.resolve();
-      return execution.promise;
-    });
-    const { input, effects } = setup({
-      routeId: "agglayer-eth-to-sepolia",
-      amount: "0.123456",
-      agglayerEth: { faucetId: MIDEN_ACCOUNT, decimals: 6, amountRaw: 1_000_000n, symbol: "ETH" },
-    });
-    const submission = submitBridgeTransfer(input, effects);
-    await started.promise;
-
-    expect(loadStoredActivities()).toEqual([history]);
-    expect(effects.navigate).not.toHaveBeenCalled();
-    expect(runAgglayerSend).toHaveBeenCalledWith(expect.objectContaining({
-      amount: 123_456n,
-      faucetId: MIDEN_ACCOUNT,
-      destinationAddress: EVM_ADDRESS,
-      senderAddress: MIDEN_ACCOUNT,
-    }));
-    expect(effects.onPhaseChange).toHaveBeenLastCalledWith("Confirm in your wallet…");
-
-    execution.resolve({ txId: "wallet-request-uuid", txHash: TX_HASH });
-    await submission;
-
-    const [activity, older] = loadStoredActivities();
-    expect(activity).toMatchObject({
-      provider: "agglayer", mode: "send", status: "source_finality",
-      destination: EVM_ADDRESS, midenTxId: TX_HASH,
-      sourceNetworkId: AGGLAYER_BALI.destinationNetworkId,
-      destinationNetworkId: AGGLAYER_BALI.sourceNetworkId,
-    });
-    expect(older).toEqual(history);
-    expect(effects.navigate).toHaveBeenCalledWith(`/activity/${activity.id}`);
-    expect(effects.onSubmittingChange).toHaveBeenLastCalledWith(false);
-    expect(effects.onPhaseChange).toHaveBeenLastCalledWith("");
-  });
-
   it("preserves history and clears progress when the Sepolia deposit is rejected", async () => {
     const { input, effects, evmRequest } = setup({ routeId: "agglayer-eth-to-miden" });
     evmRequest.mockResolvedValueOnce(SEPOLIA_NETWORK.chainHex).mockRejectedValueOnce({ code: 4001 });

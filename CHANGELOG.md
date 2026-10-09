@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Agglayer bridge
+
+- Re-enable ETH deposits only; keep Agglayer withdrawals disabled like USDCx, including saved selections and launch links. Use Gateway's confirmed 2026-10-09 Cardona deployment: rollup 73, Sepolia bridge `0x528e26b25a34a4a5d0dbda1d57d318153d2ed582`, Miden bridge `0x187cabbc404359d16be94954ca9879`, wrapped ETH faucet `0x7c6d1dc7fb7045913d524bbef017f5`, and `https://bridge.miden-testnet.gateway.fm/api`. Track withdrawals under indexer network 73. Epoch remains paused.
+
 ### USDCx bridge
 
 - Unify all EVM reads under `/api/evm/[network]` and USDCx quotes/tracking under `/api/xreserve`; remove the separate Arc, CCTP and Sepolia API implementations.

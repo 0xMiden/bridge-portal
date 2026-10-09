@@ -7,8 +7,8 @@ import { createFeeConversionSalt } from "../../../wallets/miden/miden-transactio
 // with `Note.createB2AggNote` and submits it through the MidenFi wallet's
 // `requestTransaction`.
 //
-// On 0.16 the asset callback flag is intrinsic to the faucet account id. The
-// bali ETH faucet id already encodes Enabled-callback assets, so constructing
+// On 0.17 the asset callback flag is intrinsic to the faucet account id. The
+// Cardona ETH faucet id already encodes Enabled-callback assets, so constructing
 // `new FungibleAsset(faucet, amount)` is enough. Do not call withCallbacks.
 //
 // Loaded via dynamic import at click time — it pulls the eager-WASM SDK + the
@@ -41,8 +41,8 @@ export async function runAgglayerSend({
   /** Bridge-out amount in the Agglayer ETH faucet's base units. */
   amount: bigint;
   /**
-   * The Agglayer ETH faucet the sender holds (the canonical bali faucet,
-   * `AGGLAYER_BALI.midenEthFaucetIdHex`).
+   * The Agglayer ETH faucet the sender holds (the canonical Cardona faucet,
+   * `AGGLAYER_TESTNET.midenEthFaucetIdHex`).
    */
   faucetId: string;
   /** Sepolia recipient, 0x-prefixed 20-byte EVM address. */
@@ -67,8 +67,8 @@ export async function runAgglayerSend({
     ? AccountId.fromHex(faucetId)
     : AccountId.fromBech32(faucetId);
 
-  // 0.16: the callback flag is intrinsic to the faucet account id. Do not call
-  // withCallbacks (removed). The bali ETH faucet id already encodes Enabled.
+  // 0.17: the callback flag is intrinsic to the faucet account id. Do not call
+  // withCallbacks (removed). The Cardona ETH faucet id already encodes Enabled.
   const asset = new FungibleAsset(faucet, amount);
 
   const note = Note.createB2AggNote(
