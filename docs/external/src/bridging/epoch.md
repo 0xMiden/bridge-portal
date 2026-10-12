@@ -418,7 +418,7 @@ The workflow has distinct completion boundaries:
 
 A quote, collateral-note submission, or provider acceptance alone is not proof of a completed position. When a collateral note is recallable, reclaim timing derives from the actual note/request parameters. A precomputed witness estimate is not permission to replace the note's enforced conditions with a wall-clock timer.
 
-The deposit implementation can use a read-only provider SDK with a typed EVM owner address; it does not require a connected external EVM wallet for that deposit construction. The address nevertheless identifies who owns the resulting EVM position. It is not interchangeable with the Miden account ID.
+To withdraw through Bread, use the active Miden account’s wallet-derived EVM address as the deposit’s position owner. Depositing requires no external EVM wallet connection.
 
 ### Read positions with the correct units
 
