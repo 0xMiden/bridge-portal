@@ -152,6 +152,7 @@ for (const provider of ["epoch", "agglayer"] as const) {
     let reads = 0;
     let release!: () => void;
     const pending = new Promise<void>((resolve) => { release = resolve; });
+    const handled = Promise.withResolvers<void>();
     const pattern = provider === "epoch" ? "**/intentStatus/**" : "**/api/bridges/**";
     await page.route(pattern, async (route) => {
       reads++;
@@ -160,6 +161,7 @@ for (const provider of ["epoch", "agglayer"] as const) {
         ? [{ chainId: 999999999, status: "success", transactionHash: SOURCE_TX }]
         : { deposits: [{ network_id: 73, dest_net: 0, deposit_cnt: 42, ready_for_claim: true }] },
       });
+      handled.resolve();
     });
     await openActivity(page, {
       provider,
@@ -170,12 +172,41 @@ for (const provider of ["epoch", "agglayer"] as const) {
     const before = await storedActivity(page);
     await page.getByRole("link", { name: "New transfer", exact: true }).click();
     await expect(page).toHaveURL(/\/$/);
-    const response = page.waitForResponse(pattern);
     release();
-    await response;
+    // Aborted fetches emit no response. Wait for the mock handler instead;
+    // the SDK path can still deliver a late response after navigation.
+    await handled.promise;
     const readsAfterLeaving = reads;
     await page.clock.runFor(20_000);
     expect(await storedActivity(page)).toEqual(before);
     expect(reads).toBe(readsAfterLeaving);
   });
 }
+
+test("activity history is loading before storage is read, then resolves missing", async ({ page }) => {
+  await page.addInitScript((key) => {
+    const getItem = Storage.prototype.getItem;
+    Storage.prototype.getItem = function (name) {
+      if (name === key && !getItem.call(sessionStorage, "before-history-read")) {
+        const initialState = document.querySelector(".detail-empty")?.textContent;
+        if (initialState) sessionStorage.setItem("before-history-read", initialState);
+      }
+      return getItem.call(this, name);
+    };
+  }, STORAGE_KEY);
+  await page.goto("/activity/unknown-activity");
+  await expect(page.getByRole("heading", { name: "Activity not found" })).toBeVisible();
+  expect(await page.evaluate(() => sessionStorage.getItem("before-history-read")))
+    .toBe("Loading activity…");
+});
+
+test("diagnostics copies the displayed activity and resets its confirmation", async ({ context, page }) => {
+  await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+  await page.goto("/activity/demo-failed");
+  await page.getByRole("button", { name: "Copy diagnostics" }).click();
+  await expect(page.getByRole("button", { name: "Diagnostics copied" })).toBeVisible();
+  const bundle = await page.evaluate(async () => JSON.parse(await navigator.clipboard.readText()));
+  expect(bundle.activityId).toBe("demo-failed");
+  expect(bundle.status).toBe("failed");
+  await expect(page.getByRole("button", { name: "Copy diagnostics" })).toBeVisible();
+});

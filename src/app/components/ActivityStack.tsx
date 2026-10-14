@@ -1,11 +1,12 @@
 "use client";
 
+import { bridgeProviders } from "../../bridge/providers/registry";
+
 import Link from "next/link";
 import { ChevronDown, ChevronRight } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import {
   type Activity,
-  providers,
   statusLabel,
   statusTone,
 } from "../lib/bridge-presentation";
@@ -17,11 +18,11 @@ import { EASE } from "../lib/motion";
 function Row({ activity }: { activity: Activity }) {
   return (
     <>
-      <span className={`status-dot ${(activity.provider === "xreserve" && activity.mode === "send" && activity.status !== "failed" && activity.status !== "complete" ? "" : statusTone(activity.status))}`} />
+      <span className={`status-dot ${statusTone(activity.status, activity)}`} />
       <span className="activity-copy">
         <strong>{activity.summary}</strong>
         <small>
-          {providers[activity.provider].label} - {statusLabel(activity.status, activity)}
+          {bridgeProviders[activity.provider].label} - {statusLabel(activity.status, activity)}
         </small>
       </span>
       <span className="activity-meta">

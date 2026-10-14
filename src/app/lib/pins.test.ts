@@ -1,3 +1,4 @@
+import { MIDEN_USDC } from "../../bridge/core/assets";
 import { createHash } from "node:crypto";
 import { describe, expect, it } from "vitest";
 
@@ -9,9 +10,6 @@ import {
 } from "../../bridge/providers/agglayer/agglayer-b2agg";
 import {
   MIDEN_DESTINATION_CHAIN_ID,
-  MIDEN_NATIVE_FAUCET_ID,
-  MIDEN_NATIVE_TOKEN_DECIMALS,
-  MIDEN_NATIVE_TOKEN_SYMBOL,
 } from "../../bridge/providers/epoch/config";
 
 // Frozen testnet pins. Changing a value here is a protocol/deploy event:
@@ -34,9 +32,9 @@ describe("testnet pin freeze", () => {
   });
 
   it("keeps the Epoch USDC faucet (not the MIDEN token)", () => {
-    expect(MIDEN_NATIVE_FAUCET_ID).toBe("0x537c15a622074e91188aa894456c52");
-    expect(MIDEN_NATIVE_TOKEN_SYMBOL).toBe("USDC");
-    expect(MIDEN_NATIVE_TOKEN_DECIMALS).toBe(6);
+    expect(MIDEN_USDC.faucetId).toBe("0x537c15a622074e91188aa894456c52");
+    expect(MIDEN_USDC.symbol).toBe("USDC");
+    expect(MIDEN_USDC.decimals).toBe(6);
     expect(MIDEN_DESTINATION_CHAIN_ID).toBe(999999999);
   });
 

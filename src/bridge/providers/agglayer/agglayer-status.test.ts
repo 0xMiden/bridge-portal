@@ -1,9 +1,28 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { findMidenToEvmDeposit } from "./agglayer-status";
+import { observeActivity } from "../../tracking";
+import { applyActivityPatch } from "../../activity";
+import type { Activity } from "../../core/models";
 
 afterEach(() => vi.unstubAllGlobals());
 
 describe("withdrawal indexer routing", () => {
+  it("keeps a known withdrawal pending when the indexer only returns someone else's claimed exit", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(Response.json({ deposits: [
+      { network_id: 73, dest_net: 0, deposit_cnt: 99, claim_tx_hash: `0x${"ab".repeat(32)}` },
+    ] })));
+    const activity: Activity = {
+      id: "known-exit", provider: "agglayer", mode: "send", amount: "1", asset: "ETH",
+      status: "source_finality", destination: "0x1111111111111111111111111111111111111111",
+      depositCount: "42", updatedAt: 1, summary: "", eta: "Waiting", txHash: "",
+    };
+    const observation = await observeActivity(activity, new AbortController().signal);
+    const next = applyActivityPatch(activity, observation!.patch);
+    expect(next.status).toBe("source_finality");
+    expect(next.depositCount).toBe("42");
+    expect(next.destinationTxHash).toBeUndefined();
+  });
+
   it("tracks Cardona network 73, excluding retired networks and other destinations", async () => {
     const exit = { network_id: 73, dest_net: 0, deposit_cnt: 3, claim_tx_hash: "0xabc" };
     vi.stubGlobal("fetch", vi.fn().mockImplementation(async () => Response.json({ deposits: [

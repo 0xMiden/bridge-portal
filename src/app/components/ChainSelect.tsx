@@ -1,9 +1,11 @@
 "use client";
 
+import { bridgeProviders } from "../../bridge/providers/registry";
+
 import { ChevronDown } from "lucide-react";
 import { sameAsset } from "../../bridge/core/assets";
 import { bridgeRoutes, type BridgeRoute } from "../../bridge/core/routes";
-import { networkLabels, providers } from "../lib/bridge-presentation";
+import { networkLabels } from "../lib/bridge-presentation";
 
 /** Miden stays fixed; the external chain only offers enabled bridge routes. */
 export function ChainSelect({
@@ -16,7 +18,7 @@ export function ChainSelect({
   onSelectRoute: (route: BridgeRoute) => void;
 }) {
   const asset = route[side];
-  const routes = bridgeRoutes.filter((option) => !option.disabled && option.mode === route.mode && !providers[option.provider].disabled);
+  const routes = bridgeRoutes.filter((option) => !option.disabled && option.mode === route.mode && !bridgeProviders[option.provider].disabled);
   const networks = [...new Set(routes.map((option) => option[side].network))];
   const label = networkLabels[asset.network];
 

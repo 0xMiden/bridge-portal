@@ -1,7 +1,8 @@
 "use client";
 
+import { bridgeProviders } from "../../bridge/providers/registry";
+
 import Image from "next/image";
-import { formatUnits } from "viem";
 import { ArrowRight } from "lucide-react";
 import { shortAddress } from "../../wallets/identity";
 import {
@@ -9,7 +10,6 @@ import {
   destinationAssetSymbol,
   modes,
   networkLabels,
-  providers,
 } from "../lib/bridge-presentation";
 
 import { activityRoute } from "../../bridge/core/routes";
@@ -83,11 +83,15 @@ function ExplorerAction({ link }: { link: Link }) {
 export function TempoReceipt({
   activity,
   receivedAmount,
+  receivedLabel,
+  fee,
+  tracked,
   networkFee,
   sourceLink,
   destinationLink,
   sourceHash,
   destinationHash,
+  destinationKind,
   sourceTxAt,
   destinationTxAt,
   status,
@@ -95,18 +99,21 @@ export function TempoReceipt({
 }: {
   activity: Activity;
   receivedAmount: string;
+  receivedLabel: string;
+  fee?: { label: string; value: string };
+  tracked: boolean;
   networkFee: string;
   sourceLink: Link;
   destinationLink: Link;
   sourceHash?: string;
   destinationHash?: string;
+  destinationKind: "tx" | "note";
   sourceTxAt?: number;
   destinationTxAt?: number;
   status?: { label: string; tone: string };
   pending?: boolean;
 }) {
-  const isWithdrawal = activity.provider === "xreserve" && activity.mode === "send";
-  const route = providers[activity.provider]?.label ?? activity.provider;
+  const route = bridgeProviders[activity.provider].label;
   const definition = activityRoute(activity);
   const mode = definition ? { from: networkLabels[definition.source.network], to: networkLabels[definition.destination.network] } : modes[activity.mode];
   const destinationAsset = destinationAssetSymbol(activity);
@@ -159,8 +166,8 @@ export function TempoReceipt({
             <dt>{mode.from} time</dt>
             <dd>{timeCell(sourceTxAt)}</dd>
           </div>
-          {!isWithdrawal || destinationHash ? <><div>
-            <dt>{mode.to} {activity.provider === "xreserve" && activity.mode === "receive" ? "note" : "tx"}</dt>
+          {tracked || destinationHash ? <><div>
+            <dt>{mode.to} {destinationKind}</dt>
             <dd className="rcpt-hash">{hashCell(destinationHash)}</dd>
           </div>
           <div>
@@ -198,22 +205,21 @@ export function TempoReceipt({
       <div className="rcpt-tear" aria-hidden="true" />
 
       <dl className="rcpt-totals">
-        {!isWithdrawal ? <div>
+        {tracked ? <div>
           {/* Settled → the real duration ("—" if it can't be determined);
               still in flight → the ETA estimate. */}
           <dt>{pending ? "ETA" : "Time it took"}</dt>
           <dd>{pending ? activity.eta : (timeTook ?? "—")}</dd>
         </div> : null}
         <div>
-          <dt>{pending ? activity.xreserveWithdrawalReceivedEstimate ? "Estimated received" : "Expected" : "Received"}</dt>
+          <dt>{receivedLabel}</dt>
           <dd>{receivedAmount} {destinationAsset}</dd>
         </div>
         <div>
           <dt>Network fee</dt>
           <dd>{networkFee}</dd>
         </div>
-        {activity.xreserveWithdrawalFeeEstimate ? <div><dt>Estimated Circle fee</dt><dd>{formatUnits(BigInt(activity.xreserveWithdrawalFeeEstimate), 6)} USDC</dd></div> : null}
-        {activity.xreserveFee && /^\d+$/.test(activity.xreserveFee) ? <div><dt>Circle fee</dt><dd>{formatUnits(BigInt(activity.xreserveFee), 6)} USDC</dd></div> : null}
+        {fee ? <div><dt>{fee.label}</dt><dd>{fee.value}</dd></div> : null}
       </dl>
 
       {sourceLink || destinationLink ? (
@@ -223,7 +229,7 @@ export function TempoReceipt({
               otherwise it's disabled, so we never send the user to an unrelated
               account page for a transfer that hasn't landed on that chain yet. */}
           <ExplorerAction link={sourceLink} />
-          {!isWithdrawal || destinationLink?.available ? <ExplorerAction link={destinationLink} /> : null}
+          {tracked || destinationLink?.available ? <ExplorerAction link={destinationLink} /> : null}
         </div>
       ) : null}
     </article>

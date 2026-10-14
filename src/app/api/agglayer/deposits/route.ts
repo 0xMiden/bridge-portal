@@ -3,25 +3,13 @@ import {
   type AgglayerDeposit,
   type AgglayerDepositStatus,
   bridgeStatusUrl,
-  midenAccountToBridgeDestination,
-} from "@/bridge/providers/agglayer/agglayer";
+} from "../../../../bridge/providers/agglayer/agglayer";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
-  const rawDestinationAddress = searchParams.get("destinationAddress");
-  const rawMidenAccountId = searchParams.get("midenAccountId");
-
-  let destinationAddress: string;
-  try {
-    destinationAddress = rawDestinationAddress ?? midenAccountToBridgeDestination(rawMidenAccountId ?? "");
-  } catch (error) {
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Invalid Miden account ID." },
-      { status: 400 },
-    );
-  }
+  const destinationAddress = searchParams.get("destinationAddress") ?? "";
 
   if (!/^0x[0-9a-fA-F]{40}$/.test(destinationAddress)) {
     return NextResponse.json({ error: "destinationAddress must be a 20-byte hex address." }, { status: 400 });

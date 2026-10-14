@@ -1,31 +1,10 @@
-import { activitySteps, type ActivityStatus } from "./activity-status";
 import { sameAsset } from "./assets";
 import type { BridgeRoute } from "./routes";
-import type { BridgeActivity, BridgeProvider, BridgeQuote } from "./models";
+import type { BridgeActivity } from "./models";
 
 /** Clear the amount when the selected source network or token changes. */
 export function routeSwitchChangesAsset(from: BridgeRoute, to: BridgeRoute): boolean {
   return !sameAsset(from.source, to.source);
-}
-
-/** Fallback quote amounts used until a live provider quote is available. */
-export function quoteAmounts(provider: BridgeProvider, amount: string, asset: string): BridgeQuote {
-  // With maxFee=0, xReserve must deliver the full amount or reject the deposit.
-  // Preserve decimal text: converting via Number loses micro-USDC above 2^53.
-  if (provider === "xreserve") {
-    const value = /^(?:0|[1-9]\d*)(?:\.\d{1,6})?$/.test(amount.trim()) ? amount.trim() : "0";
-    return { asset, expectedReceived: value, minReceived: value };
-  }
-  const parsedAmount = Number(amount) || 0;
-  // Agglayer is a canonical 1:1 bridge; other routes carry a small fee spread.
-  const isOneToOne = provider === "agglayer";
-  const expected = isOneToOne ? parsedAmount : Math.max(parsedAmount * 0.999, 0);
-  const minMultiplier = isOneToOne ? 1 : 0.995;
-  return {
-    asset,
-    expectedReceived: String(Number(expected.toFixed(6))),
-    minReceived: String(Number((expected * minMultiplier).toFixed(6))),
-  };
 }
 
 // A finite, strictly-positive amount is the floor for any wallet prompt: empty,
@@ -34,6 +13,14 @@ export function quoteAmounts(provider: BridgeProvider, amount: string, asset: st
 export function isValidAmount(amount: string): boolean {
   const parsed = Number(amount);
   return Number.isFinite(parsed) && parsed > 0;
+}
+
+export function validateTransferAmount(route: BridgeRoute, amount: string): void {
+  const value = amount.trim();
+  const decimals = value.split(".")[1]?.length ?? 0;
+  if (!/^(?:0|[1-9]\d*)(?:\.\d+)?$/.test(value) || !isValidAmount(value) || decimals > route.source.decimals) {
+    throw new Error(`Enter a positive ${route.source.symbol} amount with at most ${route.source.decimals} decimal places.`);
+  }
 }
 
 export type TransferAction =
@@ -63,13 +50,6 @@ export function deriveTransferAction(input: TransferInputs): TransferAction {
   if (input.insufficientBalance) return "insufficient";
   if (input.quoteLoading) return "quote-loading";
   return "review";
-}
-
-export function nextStatus(activity: BridgeActivity): ActivityStatus {
-  if (activity.status === "failed") return "claim_available";
-  const index = activitySteps.findIndex((status) => status === activity.status);
-  if (index === -1) return "signature";
-  return activitySteps[Math.min(index + 1, activitySteps.length - 1)];
 }
 
 export function createActivity(
@@ -127,7 +107,7 @@ export function stampLegTimes<T extends BridgeActivity>(activity: T): T {
     next = { ...next, sourceTxAt: activityStartedAt(next) };
   }
   const hasDestinationTx = Boolean(
-    next.destinationTxHash || next.midenTxId || next.claimTxHash,
+    next.destinationTxHash || (next.mode === "receive" && next.midenTxId) || next.claimTxHash,
   );
   if (hasDestinationTx && !next.destinationTxAt) {
     next = { ...next, destinationTxAt: now };

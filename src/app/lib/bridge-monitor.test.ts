@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 import type { Activity } from "./bridge-presentation";
-import { deriveMonitoredActivity } from "./bridge-monitor";
+import { agglayerPatch } from "../../bridge/providers/agglayer/activity-observation";
 
 const baseReceive: Activity = {
   id: "act-receive-live",
@@ -33,36 +33,33 @@ const baseSend: Activity = {
   updatedAt: 0,
 };
 
-describe("deriveMonitoredActivity", () => {
+describe("agglayerPatch", () => {
   test("keeps Agglayer receive waiting for bridge observation after Sepolia source confirmation", () => {
-    const next = deriveMonitoredActivity(baseReceive, {
-      checkedAt: "Just now",
+    const next = agglayerPatch(baseReceive, {
+
       sourceTx: {
         hash: baseReceive.sourceTxHash!,
         status: "confirmed",
         confirmations: 3,
         success: true,
       },
-      agglayerDeposit: null,
+      deposit: null,
     });
 
     expect(next.status).toBe("source_finality");
     expect(next.eta).toBe("Sepolia confirmed, waiting for Agglayer");
-    // updatedAt is stamped with the current time (epoch ms), not the input 0.
-    expect(typeof next.updatedAt).toBe("number");
-    expect(next.updatedAt).toBeGreaterThan(0);
   });
 
   test("moves Agglayer receive to message observed when Gateway FM has a non-ready bridge row", () => {
-    const next = deriveMonitoredActivity(baseReceive, {
-      checkedAt: "Just now",
+    const next = agglayerPatch(baseReceive, {
+
       sourceTx: {
         hash: baseReceive.sourceTxHash!,
         status: "confirmed",
         confirmations: 5,
         success: true,
       },
-      agglayerDeposit: {
+      deposit: {
         ready_for_claim: false,
         tx_hash: baseReceive.sourceTxHash,
         deposit_cnt: 42,
@@ -75,15 +72,15 @@ describe("deriveMonitoredActivity", () => {
   });
 
   test("marks Agglayer receive complete on delivery — the note is created on Miden and the user claims it in-wallet", () => {
-    const next = deriveMonitoredActivity(baseReceive, {
-      checkedAt: "Just now",
+    const next = agglayerPatch(baseReceive, {
+
       sourceTx: {
         hash: baseReceive.sourceTxHash!,
         status: "confirmed",
         confirmations: 10,
         success: true,
       },
-      agglayerDeposit: {
+      deposit: {
         ready_for_claim: true,
         tx_hash: baseReceive.sourceTxHash,
         deposit_cnt: 43,
@@ -97,15 +94,15 @@ describe("deriveMonitoredActivity", () => {
 
   test("captures the Miden note-creation tx (claim_tx_hash) as the destination claim, not the balance-reflecting consume", () => {
     const claimTx = "0x5f4201533ad8c79ec0786f7d455b6dfe06af897e6b063677cbb3217cd248fd38";
-    const next = deriveMonitoredActivity(baseReceive, {
-      checkedAt: "Just now",
+    const next = agglayerPatch(baseReceive, {
+
       sourceTx: {
         hash: baseReceive.sourceTxHash!,
         status: "confirmed",
         confirmations: 10,
         success: true,
       },
-      agglayerDeposit: {
+      deposit: {
         ready_for_claim: true,
         tx_hash: baseReceive.sourceTxHash,
         claim_tx_hash: claimTx,
@@ -127,15 +124,15 @@ describe("deriveMonitoredActivity", () => {
 
   test("advances to note-created via claim_tx_hash even if ready_for_claim lags", () => {
     const claimTx = "0xabc0000000000000000000000000000000000000000000000000000000000001";
-    const next = deriveMonitoredActivity(baseReceive, {
-      checkedAt: "Just now",
+    const next = agglayerPatch(baseReceive, {
+
       sourceTx: {
         hash: baseReceive.sourceTxHash!,
         status: "confirmed",
         confirmations: 10,
         success: true,
       },
-      agglayerDeposit: {
+      deposit: {
         ready_for_claim: false,
         tx_hash: baseReceive.sourceTxHash,
         claim_tx_hash: claimTx,
@@ -148,11 +145,11 @@ describe("deriveMonitoredActivity", () => {
   });
 
   test("moves Agglayer send to claim available when a filtered claim plan is ready", () => {
-    const next = deriveMonitoredActivity(baseSend, {
-      checkedAt: "Just now",
-      claimPlan: {
-        readyForClaim: true,
-        depositCount: 7,
+    const next = agglayerPatch(baseSend, {
+
+      deposit: {
+        ready_for_claim: true,
+        deposit_cnt: 7,
       },
     });
 
@@ -164,11 +161,11 @@ describe("deriveMonitoredActivity", () => {
   test("auto-completes an Agglayer send when the exit is claimed on Sepolia (claim tx present, ready flipped false)", () => {
     const claimTx =
       "0x3333333333333333333333333333333333333333333333333333333333333333";
-    const next = deriveMonitoredActivity(
+    const next = agglayerPatch(
       { ...baseSend, status: "claim_available", depositCount: "7" },
       {
-        checkedAt: "Just now",
-        claimPlan: { readyForClaim: false, depositCount: 7, claimTxHash: claimTx },
+
+        deposit: { ready_for_claim: false, deposit_cnt: 7, claim_tx_hash: claimTx },
       },
     );
 
@@ -178,14 +175,14 @@ describe("deriveMonitoredActivity", () => {
   });
 
   test("marks submitted Sepolia claim complete only after the claim transaction confirms successfully", () => {
-    const next = deriveMonitoredActivity(
+    const next = agglayerPatch(
       {
         ...baseSend,
         status: "claim_submitted",
         claimTxHash: "0x2222222222222222222222222222222222222222222222222222222222222222",
       },
       {
-        checkedAt: "Just now",
+
         destinationTx: {
           hash: "0x2222222222222222222222222222222222222222222222222222222222222222",
           status: "confirmed",
@@ -200,8 +197,8 @@ describe("deriveMonitoredActivity", () => {
   });
 
   test("marks failed chain transactions as failed instead of advancing locally", () => {
-    const next = deriveMonitoredActivity(baseReceive, {
-      checkedAt: "Just now",
+    const next = agglayerPatch(baseReceive, {
+
       sourceTx: {
         hash: baseReceive.sourceTxHash!,
         status: "confirmed",

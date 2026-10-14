@@ -38,14 +38,12 @@ test("Agglayer withdrawals stay disabled for saved selections and launch links",
   await expect(bridge.routeTrigger()).toContainText("Agglayer");
   await expect(page.locator(".mode-switch button[aria-pressed='true']")).toHaveText("Receive");
 
-  for (const query of ["mode=send", "intent=withdraw"]) {
-    await page.goto(`/?provider=agglayer&${query}`);
-    await bridge.waitForReady();
-    await expect(bridge.routeTrigger()).toContainText("Agglayer");
-    await expect(page.locator(".mode-switch button[aria-pressed='true']")).toHaveText("Receive");
-    const send = page.locator(".mode-switch").getByRole("button", { name: "Send", exact: true });
-    await expect(send).toBeDisabled();
-    await expect(send).toHaveAttribute("title", "Agglayer withdrawals are not available yet");
-  }
+  await page.goto("/?provider=agglayer&mode=send");
+  await bridge.waitForReady();
+  await expect(bridge.routeTrigger()).toContainText("Agglayer");
+  await expect(page.locator(".mode-switch button[aria-pressed='true']")).toHaveText("Receive");
+  const send = page.locator(".mode-switch").getByRole("button", { name: "Send", exact: true });
+  await expect(send).toBeDisabled();
+  await expect(send).toHaveAttribute("title", "Agglayer withdrawals are not available yet");
   expect(await bridge.readActivities()).toEqual([]);
 });

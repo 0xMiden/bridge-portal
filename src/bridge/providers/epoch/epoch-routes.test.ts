@@ -3,6 +3,7 @@ import { defaultBridgeRoute, type BridgeRoute } from "../../core/routes";
 import type { BridgeAsset } from "../../core/assets";
 import { runEpochTransfer } from "./epoch-execute";
 import { quoteEpochReceive, quoteEpochSend } from "./epoch-quote";
+import { createBridgeP2IDENoteCallback } from "./miden-note";
 import { buildCrossChainIntent, buildEVMToMidenIntent, getCrossChainQuote, getEVMToMidenQuote } from "./bridge";
 
 vi.mock("../../../wallets/testing/env", () => ({ isE2E: () => false }));
@@ -58,7 +59,7 @@ describe.each([
 
   it("uses the same source faucet and destination ERC20 for send quotes and execution", async () => {
     const selected = route("send");
-    const preview = await quoteEpochSend({ route: selected, amount: expected.sendUnits, destinationAddress: account, senderPublicKey: midenAccount });
+    const preview = await quoteEpochSend({ route: selected, amount: "1.25", evmAddress: account, midenAccount });
     const result = await runEpochTransfer({
       route: selected, amount: "1.25", evmAddress: account, midenAccount,
       requestTransaction: vi.fn(), waitForTransaction: vi.fn(),
@@ -68,26 +69,27 @@ describe.each([
       expect(params).toMatchObject({
         midenFaucetId: expected.faucet, midenAmount: expected.sendUnits.toString(),
         destinationChainId: 11155111, outputTokenAddress: expected.evm,
-        outputTokenDecimals: expected.evmDecimals,
       });
     }
-    expect(preview).toEqual({ amount: "125000000", decimals: expected.evmDecimals, symbol: expected.symbol });
+    expect(preview.received).toBe(expected.sendOutput);
     expect(result.outputAmount).toBe(expected.sendOutput);
+    expect(result.intentNonce).toBe("42");
   });
 
   it("uses the same source ERC20 and destination faucet for receive quotes and execution", async () => {
     const selected = route("receive");
-    const preview = await quoteEpochReceive({ route: selected, evmAmount: "1.25", evmSourceAddress: account, midenRecipientId: midenAccount });
+    const preview = await quoteEpochReceive({ route: selected, amount: "1.25", evmAddress: account, midenAccount });
     const result = await runEpochTransfer({ route: selected, amount: "1.25", evmAddress: account, midenAccount });
     expect(getEVMToMidenQuote).toHaveBeenCalledTimes(2);
     for (const [, params] of vi.mocked(getEVMToMidenQuote).mock.calls) {
       expect(params).toMatchObject({
         evmTokenAddress: expected.evm, evmTokenDecimals: expected.evmDecimals, evmAmount: "1.25",
-        sourceChainId: 11155111, destinationChainId: 999999999, midenFaucetId: expected.faucet,
+        destinationChainId: 999999999, midenFaucetId: expected.faucet,
       });
     }
-    expect(preview).toEqual({ amount: "125000000", decimals: expected.midenDecimals, symbol: expected.midenSymbol });
+    expect(preview.received).toBe(expected.receiveOutput);
     expect(result.outputAmount).toBe(expected.receiveOutput);
+    expect(result.intentNonce).toBe("42");
   });
 });
 
@@ -98,4 +100,22 @@ it.each(["0x0000000000000000000000000000000000000000", "0x1234"])("rejects an un
     amount: "1.25", evmAddress: account, midenAccount,
   })).rejects.toThrow("not configured");
   expect(buildEVMToMidenIntent).not.toHaveBeenCalled();
+});
+
+it("publishes the committed Miden source before an allocator failure", async () => {
+  const source = { noteId: `0x${"cd".repeat(32)}`, txHash: `0x${"ab".repeat(32)}` };
+  const onSubmitted = vi.fn();
+  vi.mocked(createBridgeP2IDENoteCallback).mockImplementation((deps) => async () => {
+    deps.onNoteCreated!(source);
+    return { success: true, noteId: source.noteId };
+  });
+  vi.mocked(buildCrossChainIntent).mockImplementation(async (_sdk, params) => {
+    await params.createMidenP2IDENote(params.midenFaucetId, params.midenAmount, midenAccount, 100, [1n]);
+    expect(onSubmitted).toHaveBeenCalledWith({ sourceTxHash: source.txHash, midenNoteId: source.noteId });
+    throw new Error("Allocator unavailable");
+  });
+  await expect(runEpochTransfer({
+    route: defaultBridgeRoute("epoch", "send")!, amount: "1.25", evmAddress: account, midenAccount,
+    requestTransaction: vi.fn(), waitForTransaction: vi.fn(), onSubmitted,
+  })).rejects.toThrow("Allocator unavailable");
 });

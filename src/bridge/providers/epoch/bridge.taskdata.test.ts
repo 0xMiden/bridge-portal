@@ -7,7 +7,7 @@ vi.mock("@miden-sdk/miden-sdk", () => ({
   AccountId: { fromHex: (value: string) => ({ toString: () => value }) },
 }));
 
-import { MIDEN_NATIVE_FAUCET_ID } from "./config";
+import { MIDEN_USDC } from "../../core/assets";
 import { buildEpochTaskDataParams, buildEVMToMidenTaskDataParams } from "./bridge";
 
 const SPONSOR = "0x1111111111111111111111111111111111111111";
@@ -21,7 +21,7 @@ const sdk = new EpochIntentSDK({
 describe("Epoch SDK task data compatibility", () => {
   it("builds a Miden send accepted by the real SDK using its canonical witness", async () => {
     const params = buildEpochTaskDataParams({
-      midenAccountId: ACCOUNT, midenFaucetId: MIDEN_NATIVE_FAUCET_ID,
+      midenAccountId: ACCOUNT, midenFaucetId: MIDEN_USDC.faucetId,
       midenAmount: "1000000", evmRecipient: SPONSOR,
       destinationChainId: 11155111, outputTokenAddress: TOKEN, minTokenOut: "0",
     });
@@ -34,10 +34,10 @@ describe("Epoch SDK task data compatibility", () => {
 
   it("builds a Sepolia receive with the current USDC faucet and atomic input amount", async () => {
     const params = buildEVMToMidenTaskDataParams({
-      sourceChainId: 11155111, destinationChainId: 999999999,
+      destinationChainId: 999999999,
       evmSourceAddress: SPONSOR, evmTokenAddress: TOKEN, evmAmount: "1.25",
       evmTokenDecimals: 18, midenRecipientId: ACCOUNT,
-      midenFaucetId: MIDEN_NATIVE_FAUCET_ID, minTokenOut: "0",
+      midenFaucetId: MIDEN_USDC.faucetId, minTokenOut: "0",
     });
     expect(params.extraDataTypestring).toBe(EVM_TO_MIDEN_EXTRA_TYPESTRING);
     const task = await sdk.getTaskData(params);

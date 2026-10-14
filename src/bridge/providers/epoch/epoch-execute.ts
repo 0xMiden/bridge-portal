@@ -1,7 +1,5 @@
 import type { BridgeRoute } from "../../core/routes";
 import {
-  CollateralType,
-  type IntentTransactionStatus,
   type TransactionExecutionStatus,
 } from "@epoch-protocol/epoch-intents-sdk";
 import { formatUnits, parseUnits } from "viem";
@@ -19,7 +17,6 @@ import {
   epochRouteAssets,
 } from "./bridgeable-token";
 import { MIDEN_DESTINATION_CHAIN_ID } from "./config";
-import { epochActivityStatus } from "./epoch-status";
 import type { CreateMidenP2IDENote, MidenNoteDeps } from "./miden-note";
 import { createBridgeP2IDENoteCallback } from "./miden-note";
 import { getEpochReadOnlySdk, getEpochSdk } from "./sdk";
@@ -60,6 +57,8 @@ export interface RunEpochTransferArgs {
   /** Miden write primitives from the connected MidenFi adapter. REQUIRED for send. */
   requestTransaction?: MidenNoteDeps["requestTransaction"];
   waitForTransaction?: MidenNoteDeps["waitForTransaction"];
+  /** Publish the source evidence immediately, before awaiting the solver. */
+  onSubmitted?: (source: { sourceTxHash: string; midenNoteId?: string }) => void;
   /**
    * Live execution status (phase + the deposit tx hash once broadcast) for UI
    * progress on receive. The caller uses the hash to jump to the detail page as
@@ -96,19 +95,6 @@ function epochOutputAmount(
   } catch {
     return undefined;
   }
-}
-
-/** Best-effort nonce extraction — the SDK's solveIntent return is untyped (`any`). */
-function extractNonce(solveResult: unknown): string | undefined {
-  if (!solveResult || typeof solveResult !== "object") return undefined;
-  const r = solveResult as Record<string, unknown>;
-  const compact = r.compact as Record<string, unknown> | undefined;
-  const allocation = r.allocationResponse as
-    | Record<string, unknown>
-    | undefined;
-  const candidate =
-    r.nonce ?? r.intentNonce ?? compact?.nonce ?? allocation?.nonce;
-  return typeof candidate === "string" && candidate ? candidate : undefined;
 }
 
 function assertCommonArgs(args: RunEpochTransferArgs) {
@@ -156,7 +142,6 @@ async function runEpochSend(
     evmRecipient,
     destinationChainId: EPOCH_DESTINATION_CHAIN_ID,
     outputTokenAddress: evm.address,
-    outputTokenDecimals: evm.decimals,
     minTokenOut: "0",
   };
 
@@ -169,6 +154,7 @@ async function runEpochSend(
       senderAddress,
       onNoteCreated: (info) => {
         noteOutcome = info;
+        args.onSubmitted?.({ sourceTxHash: info.txHash, midenNoteId: info.noteId });
       },
     },
   );
@@ -176,8 +162,6 @@ async function runEpochSend(
   const quote = await getCrossChainQuote(sdk, params, evmRecipient);
   const result = await buildCrossChainIntent(sdk, {
     ...params,
-    collateralType: CollateralType.Miden,
-    midenSourceAccount: senderAddress,
     createMidenP2IDENote,
     preFetchedQuote: quote,
   });
@@ -186,7 +170,7 @@ async function runEpochSend(
 
   return {
     direction: "send",
-    intentNonce: extractNonce(result.solveResult),
+    intentNonce: result.solveResult?.nonce,
     sponsorAddress: evmRecipient,
     sourceTxHash: noteOutcome?.txHash,
     midenNoteId: noteOutcome?.noteId,
@@ -207,7 +191,6 @@ async function runEpochReceive(
 
   const { miden, evm } = epochRouteAssets(args.route);
   const params: EVMToMidenIntentParams = {
-    sourceChainId: EPOCH_DESTINATION_CHAIN_ID,
     destinationChainId: MIDEN_DESTINATION_CHAIN_ID,
     evmSourceAddress: evmSource,
     evmTokenAddress: evm.address,
@@ -222,16 +205,20 @@ async function runEpochReceive(
   const result = await buildEVMToMidenIntent(sdk, {
     ...params,
     preFetchedQuote: quote,
-    onExecutionStatus: args.onStatus
-      ? (status) => args.onStatus?.(status)
-      : undefined,
+    onExecutionStatus: (status) => {
+      args.onStatus?.(status);
+      if (status.phase === "sent" && status.transactionIndex === status.totalTransactions - 1 &&
+          status.transactionHash && /^0x[\da-f]{64}$/i.test(status.transactionHash)) {
+        args.onSubmitted?.({ sourceTxHash: status.transactionHash });
+      }
+    },
   });
 
   if (result.error) throw new Error(result.error);
 
   return {
     direction: "receive",
-    intentNonce: extractNonce(result.solveResult),
+    intentNonce: result.solveResult?.nonce,
     sponsorAddress: evmSource,
     sourceTxHash: result.solveResult?.depositResult?.transactionHash,
     outputAmount: epochOutputAmount(quote, miden.decimals),
@@ -246,6 +233,7 @@ export async function runEpochTransfer(
   assertCommonArgs(args);
   if (isE2E() && e2eNetwork() === "mock") {
     const sourceTxHash = `0x${"ab".repeat(32)}`;
+    args.onSubmitted?.({ sourceTxHash });
     return {
       direction: args.route.mode,
       intentNonce: "42",
@@ -257,84 +245,4 @@ export async function runEpochTransfer(
     };
   }
   return args.route.mode === "send" ? runEpochSend(args) : runEpochReceive(args);
-}
-
-export interface PollEpochStatusOpts {
-  /** EVM sponsor/user address the intent is keyed on. */
-  sponsorAddress: string;
-  /** Intent nonce returned by runEpochTransfer. */
-  intentNonce: string;
-  intervalMs?: number;
-  timeoutMs?: number;
-  signal?: AbortSignal;
-  onUpdate?: (statuses: IntentTransactionStatus[]) => void;
-  /**
-   * When set, the poll stops only once the *activity* is terminal for this
-   * destination chain (Sepolia for a send, Miden for a receive) — not merely
-   * when any leg reports terminal. A send's Miden source leg settles first, so
-   * the generic check would stop the poll while the Sepolia payout is still
-   * pending, freezing the page at "message observed" until a manual refresh.
-   */
-  destinationChainId?: number;
-}
-
-const TERMINAL_OK = /complete|success|fulfil|settled|claimed|done/i;
-const TERMINAL_FAIL = /fail|error|expire|reclaim|revert|cancel/i;
-
-/** True once any leg reports a terminal status. */
-export function isTerminalStatus(statuses: IntentTransactionStatus[]): boolean {
-  return statuses.some(
-    (s) => TERMINAL_OK.test(s.status) || TERMINAL_FAIL.test(s.status),
-  );
-}
-
-/**
- * Poll the allocator for an intent's transaction status until terminal or
- * timeout. `getIntentStatus` is a plain allocator query, so a read-only SDK
- * keyed on the sponsor is enough — no live wallet connection required.
- * The activity-detail surface drives this poll and persists each update.
- */
-export async function pollEpochIntentStatus(
-  opts: PollEpochStatusOpts,
-): Promise<IntentTransactionStatus[]> {
-  if (!EVM_ADDRESS_RE.test(opts.sponsorAddress)) {
-    throw new Error("pollEpochIntentStatus needs a 0x sponsor address.");
-  }
-  const intervalMs = opts.intervalMs ?? 5_000;
-  const timeoutMs = opts.timeoutMs ?? 10 * 60_000;
-  const sdk = await getEpochReadOnlySdk(opts.sponsorAddress as `0x${string}`);
-
-  const startedAt = performance.now();
-  let last: IntentTransactionStatus[] = [];
-  for (;;) {
-    if (opts.signal?.aborted) return last;
-    try {
-      last = await sdk.getIntentStatus(opts.sponsorAddress, opts.intentNonce);
-      opts.onUpdate?.(last);
-      // Stop on the activity-level terminal state (destination-aware) when the
-      // caller provides a destination chain; otherwise fall back to the generic
-      // "any leg terminal" check.
-      if (opts.destinationChainId !== undefined) {
-        const activityStatus = epochActivityStatus(last, opts.destinationChainId);
-        if (activityStatus === "complete" || activityStatus === "failed")
-          return last;
-      } else if (isTerminalStatus(last)) {
-        return last;
-      }
-    } catch (err) {
-      console.warn("[epoch] getIntentStatus poll failed", err);
-    }
-    if (performance.now() - startedAt > timeoutMs) return last;
-    await new Promise<void>((resolve) => {
-      const id = setTimeout(resolve, intervalMs);
-      opts.signal?.addEventListener(
-        "abort",
-        () => {
-          clearTimeout(id);
-          resolve();
-        },
-        { once: true },
-      );
-    });
-  }
 }

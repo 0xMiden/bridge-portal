@@ -45,7 +45,7 @@ afterEach(() => {
 describe("activity persistence", () => {
   it("resolves explicit and legacy routes without rewriting saved history or guessing unknown tokens", () => {
     const raw = JSON.stringify([
-      { ...activity, mode: "withdraw" },
+      activity,
       { ...activity, routeId: "epoch-usdc-to-sepolia", provider: "epoch", asset: "USDC" },
       { ...activity, provider: "epoch", asset: "DAI" },
       { ...activity, routeId: "unknown-route" },
@@ -77,25 +77,48 @@ describe("activity persistence", () => {
     expect(loadStoredActivities()).toEqual(activities);
   });
 
-  it("normalizes legacy directions, summaries, and timestamps on read only", () => {
+  it("recovers timestamps written before numeric dates without rewriting saved history", () => {
     const createdAt = 1_700_000_000_000;
     const raw = JSON.stringify([
-      { ...activity, id: `act-${createdAt.toString(36)}`, mode: "deposit", summary: "Deposit 1 ETH to Miden", updatedAt: "Just now" },
-      { ...activity, mode: "withdraw", summary: "Withdraw 1 ETH to Sepolia" },
-      { ...activity, mode: "receive", summary: "Receive 1 ETH to Miden", updatedAt: "Just now" },
+      { ...activity, id: `act-${createdAt.toString(36)}`, updatedAt: "Just now" },
       { ...activity, id: `act-${createdAt.toString(36)}`, updatedAt: 0 },
       { ...activity, id: "remote-transfer", updatedAt: "Just now" },
     ]);
     storage.set("miden.bridge.ui.activities", raw);
 
-    expect(loadStoredActivities().map(({ mode, summary, updatedAt }) => ({ mode, summary, updatedAt }))).toEqual([
-      { mode: "receive", summary: "Receive 1 ETH on Miden", updatedAt: createdAt },
-      { mode: "send", summary: "Send 1 ETH to Sepolia", updatedAt: createdAt },
-      { mode: "receive", summary: "Receive 1 ETH on Miden", updatedAt: 0 },
-      { mode: "send", summary: "Send 1 ETH to Sepolia", updatedAt: createdAt },
-      { mode: "send", summary: "Send 1 ETH to Sepolia", updatedAt: 0 },
-    ]);
+    expect(loadStoredActivities().map(({ updatedAt }) => updatedAt)).toEqual([createdAt, createdAt, 0]);
     expect(storage.get("miden.bridge.ui.activities")).toBe(raw);
+  });
+
+  it("ignores unsupported provider and direction names without rewriting stored data", () => {
+    const raw = JSON.stringify([
+      { ...activity, mode: "deposit" },
+      { ...activity, mode: "withdraw" },
+      { ...activity, provider: "near-intents" },
+      { ...activity, provider: "constructor" },
+      activity,
+    ]);
+    storage.set("miden.bridge.ui.activities", raw);
+    expect(loadStoredActivities()).toEqual([activity]);
+    expect(storage.get("miden.bridge.ui.activities")).toBe(raw);
+  });
+
+  it("recovers the failure leg recorded by older monitors at the storage boundary", () => {
+    storage.set("miden.bridge.ui.activities", JSON.stringify([
+      { ...activity, status: "failed", eta: "Destination transaction failed" },
+      { ...activity, status: "failed", failureLeg: "source", eta: "Destination transaction failed" },
+    ]));
+    expect(loadStoredActivities().map(({ failureLeg }) => failureLeg)).toEqual(["destination", "source"]);
+  });
+
+  it("recovers an older Agglayer recipient without replacing an explicitly recorded account", () => {
+    const account = "0x387149ae66116cf114eebd60bb7381";
+    const bridgeDestinationAddress = `0x00000000${account.slice(2)}00`;
+    storage.set("miden.bridge.ui.activities", JSON.stringify([
+      { ...activity, mode: "receive", bridgeDestinationAddress },
+      { ...activity, mode: "receive", bridgeDestinationAddress, midenAccountHex: "0xexplicit" },
+    ]));
+    expect(loadStoredActivities().map(({ midenAccountHex }) => midenAccountHex)).toEqual([account, "0xexplicit"]);
   });
 
   it("loads legacy received amounts without changing their value or token", () => {
@@ -131,7 +154,7 @@ describe("activity persistence", () => {
     patchStoredActivity("missing", { status: "failed" });
 
     expect(JSON.parse(storage.get("miden.bridge.ui.activities")!)).toEqual([
-      { ...activity, status: "complete", claimTxHash: "0xclaim", updatedAt: now },
+      { ...activity, status: "complete", claimTxHash: "0xclaim", destinationTxAt: now, updatedAt: now },
       other,
     ]);
   });
@@ -142,6 +165,37 @@ describe("activity persistence", () => {
     expect(() => loadStoredActivities()).toThrow(SyntaxError);
     expect(() => patchStoredActivity(activity.id, { status: "complete" })).not.toThrow();
     expect(storage.get("miden.bridge.ui.activities")).toBe("{broken");
+  });
+
+  it("keeps the latest provider phase when an older observation arrives, while accepting late metadata", () => {
+    saveActivities([{ ...activity, provider: "xreserve", mode: "receive", xreserveStatus: "confirmed" }]);
+    patchStoredActivity(activity.id, { xreserveStatus: "submitted", xreserveForwarding: true, sourceTxHash: "0xsource" });
+    expect(loadStoredActivities()[0]).toMatchObject({ status: "source_finality", xreserveStatus: "confirmed", sourceTxHash: "0xsource" });
+
+    patchStoredActivity(activity.id, { xreserveStatus: "attested" });
+    patchStoredActivity(activity.id, { status: "complete", xreserveStatus: "delivered" });
+    patchStoredActivity(activity.id, { status: "failed", xreserveStatus: "reverted", xreserveNoteId: "delivered-note" });
+    expect(loadStoredActivities()[0]).toMatchObject({ status: "complete", xreserveStatus: "delivered", xreserveNoteId: "delivered-note" });
+  });
+
+  it("keeps the acknowledged source when a later solver response omits it", () => {
+    saveActivities([{ ...activity, provider: "epoch", asset: "USDC", sourceTxHash: "0xsource", midenTxId: "collateral-note" }]);
+    patchStoredActivity(activity.id, { status: "message_observed", epochIntentNonce: "42", sourceTxHash: undefined, midenTxId: undefined });
+    expect(loadStoredActivities()[0]).toMatchObject({
+      status: "message_observed", epochIntentNonce: "42", sourceTxHash: "0xsource", midenTxId: "collateral-note",
+    });
+  });
+
+  it("does not stamp arrival when a Miden send records its source transaction", () => {
+    saveActivities([activity]);
+    patchStoredActivity(activity.id, { midenTxId: "0xmiden-source" });
+    expect(loadStoredActivities()[0].destinationTxAt).toBeUndefined();
+    vi.spyOn(Date, "now").mockReturnValue(1_700_000_100_000);
+    patchStoredActivity(activity.id, { destinationTxHash: "0xevm-destination", status: "complete" });
+    expect(loadStoredActivities()[0].destinationTxAt).toBe(1_700_000_100_000);
+    vi.spyOn(Date, "now").mockReturnValue(1_700_000_200_000);
+    patchStoredActivity(activity.id, { status: "source_finality" });
+    expect(loadStoredActivities()[0]).toMatchObject({ status: "complete", destinationTxAt: 1_700_000_100_000 });
   });
 });
 
@@ -159,7 +213,7 @@ describe("route and direction preferences", () => {
     }
   });
 
-  it.each([null, "", "near-intents", "epoch", "unknown"])("ignores an absent, disabled, or unknown route: %s", (route) => {
+  it.each([null, "", "near-intents", "epoch", "unknown", "constructor", "__proto__"])("ignores an absent, disabled, or unknown route: %s", (route) => {
     if (route !== null) storage.set("miden.bridge.ui.route", route);
     expect(loadStoredRoute()).toBeNull();
   });

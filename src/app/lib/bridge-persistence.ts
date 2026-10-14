@@ -1,18 +1,21 @@
+import { bridgeProviders } from "../../bridge/providers/registry";
+import { applyActivityPatch, normalizeActivityState } from "../../bridge/activity";
+import { shortAddress } from "../../wallets/identity";
 import { findBridgeRoute } from "../../bridge/core/routes";
-import type { BridgeProvider, FlowMode } from "../../bridge/core/models";
-import { type Activity, providers } from "./bridge-presentation";
+import { isFlowMode, type BridgeProvider, type FlowMode } from "../../bridge/core/models";
+import { isBridgeProvider } from "../../bridge/providers/registry";
+import { type Activity } from "./bridge-presentation";
 
 export const activityStorageKey = "miden.bridge.ui.activities";
 
 // Persist the last-selected route so a refresh returns to it (e.g. Agglayer)
-// instead of snapping back to the Epoch default every time.
+// instead of snapping back to the default every time.
 const routeStorageKey = "miden.bridge.ui.route";
 
 export function loadStoredRoute(): BridgeProvider | null {
   try {
     const value = window.localStorage.getItem(routeStorageKey);
-    if (value && value in providers && !providers[value as BridgeProvider].disabled)
-      return value as BridgeProvider;
+    if (isBridgeProvider(value) && !bridgeProviders[value].disabled) return value;
   } catch {
     // ignore storage access failures (SSR / privacy mode)
   }
@@ -39,7 +42,7 @@ const modeStorageKey = "miden.bridge.ui.mode";
 export function loadStoredMode(): FlowMode | null {
   try {
     const value = window.localStorage.getItem(modeStorageKey);
-    if (value === "receive" || value === "send") return value;
+    return isFlowMode(value) ? value : null;
   } catch {
     // ignore storage access failures (SSR / privacy mode)
   }
@@ -55,12 +58,14 @@ export function saveStoredMode(mode: FlowMode) {
 }
 
 function normalizeActivity(activity: Activity): Activity {
-  const legacyMode = activity.mode as FlowMode | "deposit" | "withdraw";
-  const mode: FlowMode = legacyMode === "deposit" ? "receive" : legacyMode === "withdraw" ? "send" : legacyMode;
-  const summary = activity.summary
-    .replace(/^Deposit\b/, "Receive")
-    .replace(/^Withdraw\b/, "Send")
-    .replace(/^Receive (.+) to Miden$/, "Receive $1 on Miden");
+  // Agglayer receipts predating midenAccountHex stored its encoded bridge address.
+  const encodedAccount = /^0x0{8}([0-9a-fA-F]{30})00$/.exec(activity.bridgeDestinationAddress ?? "");
+  const midenAccountHex = activity.midenAccountHex ??
+    (encodedAccount ? `0x${encodedAccount[1].toLowerCase()}` : undefined);
+  // Before failureLeg was persisted, the monitor stored this information in eta.
+  const failureLeg = activity.failureLeg ?? (activity.status === "failed"
+    ? (/destination/i.test(activity.eta) ? "destination" : "source")
+    : undefined);
   // Migrate pre-timestamp rows: `updatedAt` used to be a display string ("Just
   // now"). Coerce any non-number to 0, then backfill from the id — createActivity
   // stamps `act-<base36 creation-ms>`, so old rows can still show a real time
@@ -79,14 +84,17 @@ function normalizeActivity(activity: Activity): Activity {
   const receivedAmount = activity.receivedAmount?.endsWith(suffix)
     ? activity.receivedAmount.slice(0, -suffix.length)
     : activity.receivedAmount;
-  return { ...activity, mode, summary, updatedAt, receivedAmount };
+  return normalizeActivityState({ ...activity, midenAccountHex, failureLeg, updatedAt, receivedAmount });
 }
 
 export function loadStoredActivities(): Activity[] {
   const raw = window.localStorage.getItem(activityStorageKey);
   if (!raw) return [];
   const parsed = JSON.parse(raw) as Activity[];
-  return Array.isArray(parsed) ? parsed.map(normalizeActivity) : [];
+  if (!Array.isArray(parsed)) return [];
+  return parsed
+    .filter((activity) => activity && isBridgeProvider(activity.provider) && isFlowMode(activity.mode))
+    .map(normalizeActivity);
 }
 
 export function saveActivities(activities: Activity[]) {
@@ -103,7 +111,7 @@ export function patchStoredActivity(id: string, patch: Partial<Activity>) {
     const activities = loadStoredActivities();
     saveActivities(
       activities.map((item) =>
-        item.id === id ? { ...item, ...patch, updatedAt: Date.now() } : item,
+        item.id === id ? applyActivityPatch(item, { ...patch, ...(patch.sourceTxHash ? { txHash: shortAddress(patch.sourceTxHash) } : {}) }) : item,
       ),
     );
   } catch {
