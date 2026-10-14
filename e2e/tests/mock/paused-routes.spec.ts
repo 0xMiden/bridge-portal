@@ -17,8 +17,8 @@ for (const provider of ["epoch"] as const) {
       await page.goto(`/?provider=${provider}&mode=${mode}`);
       await bridge.waitForReady();
       await expect(bridge.routeTrigger()).toContainText("USDCx");
-      await expect(page.locator(".mode-switch button[aria-pressed='true']")).toHaveText("Receive");
-      await expect(page.locator(".mode-switch").getByRole("button", { name: "Send", exact: true })).toBeDisabled();
+      await expect(page.locator(".mode-switch button[aria-pressed='true']")).toHaveText(mode === "send" ? "Send" : "Receive");
+      await expect(page.locator(".mode-switch").getByRole("button", { name: "Send", exact: true })).toBeEnabled();
       expect(await bridge.readActivities()).toEqual([]);
     });
   }

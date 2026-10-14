@@ -1,5 +1,7 @@
 "use client";
 
+import { shortAddress } from "../../wallets/identity";
+
 import {
   AlertTriangle,
   ArrowLeft,
@@ -63,7 +65,7 @@ function milestonesFor(activity: Activity) {
 
   let steps: Step[];
   if (activity.provider === "xreserve") {
-    steps = [
+    steps = activity.mode === "send" ? [] : [
       { status: "signature", label: "Sign USDC deposit", detail: "Approve USDC and confirm the deposit in your origin wallet." },
       { status: "source_finality", label: "Circle confirmation and attestation", detail: "Circle forwards your USDC to xReserve and attests the Miden deposit." },
       { status: "message_observed", label: "Delivering USDCx on Miden", detail: "Circle attested the deposit. The relayer is creating your USDCx note." },
@@ -174,6 +176,18 @@ function milestonesFor(activity: Activity) {
  * that becomes the dominant element on the page (not a muted footnote).
  */
 function nextActionFor(activity: Activity): { headline: string; body: string } {
+  if (activity.provider === "xreserve" && activity.mode === "send") {
+    if (activity.xreserveBurnStatus === "discarded") return {
+      headline: "Withdrawal note needs attention", body: "Miden discarded the burn note. Copy diagnostics and contact support before retrying.",
+    };
+    if (activity.status === "failed") return {
+      headline: "Withdrawal needs attention", body: "Check your wallet for the transaction details before trying again.",
+    };
+    return {
+      headline: activity.xreserveNoteId || activity.sourceTxHash ? "Withdrawal submitted" : "Confirm in your wallet",
+      body: "Check your destination wallet for the USDC payout. Automatic withdrawal tracking is not available yet.",
+    };
+  }
   if (activity.provider === "xreserve" && activity.status !== "complete") {
     if (activity.xreserveStatus === "cancelled") return {
       headline: "Deposit cancelled in your wallet",
@@ -294,6 +308,7 @@ function guidanceFor(activity: Activity): Guidance | null {
   // repeating a transfer when the wallet submitted a different operation.
   if (activity.provider === "xreserve" &&
       (activity.xreserveStatus === "cancelled" || activity.xreserveStatus === "replaced")) return null;
+  if (activity.provider === "xreserve" && activity.mode === "send") return null;
   if (activity.status === "failed") {
     return {
       tone: "danger",
@@ -369,6 +384,7 @@ export function ActivityDetail({ id }: { id: string }) {
   const currentIndex = activity
     ? timeline.findIndex((step) => step.status === activity.status)
     : -1;
+  const isWithdrawal = activity?.provider === "xreserve" && activity.mode === "send";
   const isComplete = activity?.status === "complete";
   const isFailed = activity?.status === "failed";
   const nextAction = activity ? nextActionFor(activity) : null;
@@ -405,10 +421,10 @@ export function ActivityDetail({ id }: { id: string }) {
   // Tick a 1s clock while the transfer is live so the "updated Ns ago" label
   // advances in real time — a visible signal that monitoring is current.
   useEffect(() => {
-    if (!isActive) return;
+    if (!isActive || isWithdrawal) return;
     const id = window.setInterval(() => setNow(Date.now()), 1_000);
     return () => window.clearInterval(id);
-  }, [isActive]);
+  }, [isActive, isWithdrawal]);
 
   const lastCheckedLabel =
     lastCheckedAt && now ? formatAgo(Math.max(0, now - lastCheckedAt)) : "";
@@ -469,7 +485,7 @@ export function ActivityDetail({ id }: { id: string }) {
               aria-live="polite"
               aria-atomic="true"
             >
-              {statusLabel(activity.status)}. {nextAction.headline}
+              {isWithdrawal ? nextAction.headline : `${statusLabel(activity.status)}. ${nextAction.headline}`}
             </p>
           ) : null}
 
@@ -489,7 +505,7 @@ export function ActivityDetail({ id }: { id: string }) {
               isComplete
                 ? undefined
                 : {
-                    label: statusLabel(activity.status),
+                    label: isWithdrawal ? nextAction!.headline : statusLabel(activity.status),
                     tone: statusTone(activity.status),
                   }
             }
@@ -498,7 +514,11 @@ export function ActivityDetail({ id }: { id: string }) {
 
           {/* Bridge steps — a compact confirmed checklist once settled, the full
               live timeline (with per-step detail) while in flight or failed. */}
-          <div className={`steps-card ${isComplete ? "compact" : ""}`}>
+          {isWithdrawal ? (
+            <div className="steps-card">
+              <p className="steps-note">{nextAction?.body}</p>
+            </div>
+          ) : <div className={`steps-card ${isComplete ? "compact" : ""}`}>
             <p className="steps-card-title">Bridge steps</p>
             <ol className="milestone-list">
               {milestones.map((milestone) => {
@@ -568,13 +588,14 @@ export function ActivityDetail({ id }: { id: string }) {
                 {lastCheckedLabel ? ` Updated ${lastCheckedLabel}.` : ""}
               </p>
             ) : null}
-          </div>
+          </div>}
 
-          {activity.provider === "xreserve" ? (
+          {activity.provider === "xreserve" && !isWithdrawal ? (
             <div className="support-row">
               {isActive ? <button type="button" className="secondary-button" onClick={refresh}>Refresh status</button> : null}
+              {activity.mode === "send" && activity.xreserveNoteId ? <p>Burn note ID: <code title={activity.xreserveNoteId}>{shortAddress(activity.xreserveNoteId)}</code></p> : null}
               {activity.xreserveMidenBlock !== undefined ? <p>USDCx note included in Miden block {activity.xreserveMidenBlock}.</p> : null}
-              {isActive && now - activityStartedAt(activity) > 15 * 60_000 ? <p>Still waiting for delivery. Keep this transaction hash; do not deposit again.</p> : null}
+              {isActive && now - activityStartedAt(activity) > 15 * 60_000 ? <p>Still waiting for delivery. Keep this transaction hash and note ID; do not submit again.</p> : null}
             </div>
           ) : null}
 
@@ -606,7 +627,7 @@ export function ActivityDetail({ id }: { id: string }) {
             </div>
           ) : null}
 
-          {monitorError ? (
+          {monitorError && !isWithdrawal ? (
             <p className="form-error compact">{monitorError}</p>
           ) : null}
 

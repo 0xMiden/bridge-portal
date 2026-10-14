@@ -124,7 +124,7 @@ export function useActivityTracking(id: string) {
     (activity.status !== "complete" && activity.status !== "failed");
 
   useEffect(() => {
-    if (activity?.provider !== "xreserve" || !activity.sourceTxHash || !isActive) return;
+    if (activity?.provider !== "xreserve" || activity.mode === "send" || !activity.sourceTxHash || !isActive) return;
     const controller = new AbortController();
     const activityId = activity.id;
     let timer: ReturnType<typeof setTimeout>;
@@ -151,7 +151,7 @@ export function useActivityTracking(id: string) {
     }
     void poll();
     return () => { controller.abort(); clearTimeout(timer); };
-  }, [activity?.id, activity?.provider, activity?.sourceTxHash, isActive, refreshVersion]);
+  }, [activity?.id, activity?.provider, activity?.mode, activity?.sourceTxHash, isActive, refreshVersion]);
 
   // Epoch: poll getIntentStatus and advance the activity state machine until terminal.
   useEffect(() => {

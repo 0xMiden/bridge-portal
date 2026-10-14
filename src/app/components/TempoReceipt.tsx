@@ -105,6 +105,7 @@ export function TempoReceipt({
   status?: { label: string; tone: string };
   pending?: boolean;
 }) {
+  const isWithdrawal = activity.provider === "xreserve" && activity.mode === "send";
   const route = providers[activity.provider]?.label ?? activity.provider;
   const definition = activityRoute(activity);
   const mode = definition ? { from: networkLabels[definition.source.network], to: networkLabels[definition.destination.network] } : modes[activity.mode];
@@ -158,14 +159,14 @@ export function TempoReceipt({
             <dt>{mode.from} time</dt>
             <dd>{timeCell(sourceTxAt)}</dd>
           </div>
-          <div>
-            <dt>{mode.to} {activity.provider === "xreserve" ? "note" : "tx"}</dt>
+          {!isWithdrawal || destinationHash ? <><div>
+            <dt>{mode.to} {activity.provider === "xreserve" && activity.mode === "receive" ? "note" : "tx"}</dt>
             <dd className="rcpt-hash">{hashCell(destinationHash)}</dd>
           </div>
           <div>
             <dt>{mode.to} time</dt>
             <dd>{timeCell(destinationTxAt)}</dd>
-          </div>
+          </div></> : null}
         </dl>
       </header>
 
@@ -197,20 +198,21 @@ export function TempoReceipt({
       <div className="rcpt-tear" aria-hidden="true" />
 
       <dl className="rcpt-totals">
-        <div>
+        {!isWithdrawal ? <div>
           {/* Settled → the real duration ("—" if it can't be determined);
               still in flight → the ETA estimate. */}
           <dt>{pending ? "ETA" : "Time it took"}</dt>
           <dd>{pending ? activity.eta : (timeTook ?? "—")}</dd>
-        </div>
+        </div> : null}
         <div>
-          <dt>{pending ? "Expected" : "Received"}</dt>
+          <dt>{pending ? activity.xreserveWithdrawalReceivedEstimate ? "Estimated received" : "Expected" : "Received"}</dt>
           <dd>{receivedAmount} {destinationAsset}</dd>
         </div>
         <div>
           <dt>Network fee</dt>
           <dd>{networkFee}</dd>
         </div>
+        {activity.xreserveWithdrawalFeeEstimate ? <div><dt>Estimated Circle fee</dt><dd>{formatUnits(BigInt(activity.xreserveWithdrawalFeeEstimate), 6)} USDC</dd></div> : null}
         {activity.xreserveFee && /^\d+$/.test(activity.xreserveFee) ? <div><dt>Circle fee</dt><dd>{formatUnits(BigInt(activity.xreserveFee), 6)} USDC</dd></div> : null}
       </dl>
 
@@ -221,7 +223,7 @@ export function TempoReceipt({
               otherwise it's disabled, so we never send the user to an unrelated
               account page for a transfer that hasn't landed on that chain yet. */}
           <ExplorerAction link={sourceLink} />
-          <ExplorerAction link={destinationLink} />
+          {!isWithdrawal || destinationLink?.available ? <ExplorerAction link={destinationLink} /> : null}
         </div>
       ) : null}
     </article>

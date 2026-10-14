@@ -70,14 +70,13 @@ export const providers: Record<
     label: "USDCx",
     badge: "Testnet",
     route: "Circle xReserve · USDC to Miden",
-    disclosure: "Deposit USDC through Circle xReserve to receive a USDCx note on Miden. Consume the delivered note in Bread. Withdrawals are not available yet.",
+    disclosure: "Deposit USDC through Circle xReserve to receive a USDCx note on Miden. Consume the delivered note in Bread. Withdraw USDCx to receive USDC on an EVM testnet. Circle deducts payout fees.",
     comparison: {
       eta: "Delivery time varies",
       feeModel: "Circle forwarding fee where applicable; origin gas applies",
       trust: "Circle xReserve and Miden relayer",
       claim: "Consume the delivered USDCx note in Bread",
-      availability: "Deposits only",
-      unavailableReason: "USDCx withdrawals are not available yet",
+      availability: "Available",
     },
   },
   "near-intents": {
@@ -212,6 +211,12 @@ export function sourceAssetLabel(asset: BridgeAsset): string {
 
 export function quoteFor(route: BridgeRoute, amount: string): Quote {
   const quote = quoteForTransfer(route.mode, route.provider, amount, route.destination.symbol);
+  if (route.provider === "xreserve" && route.mode === "send") return {
+    ...quote, expectedReceived: "—", minReceived: "Not quoted",
+    networkFee: "Miden fee (USDCx)", bridgeFee: "Deducted from payout by Circle",
+    relayerFee: "Included in Circle payout fee", sourceGas: "Miden USDCx", destinationGas: "None required to receive",
+    warning: "Burning USDCx is irreversible. The estimated payout uses Circle’s current fee; the final fee can change after the burn. Keep USDCx for the Miden network fee. Check your destination wallet for the USDC payout.",
+  };
   return route.provider === "xreserve" && route.source.network !== "arc-testnet"
     ? { ...quote, networkFee: "Gas in ETH", sourceGas: "ETH", warning: "Consume the delivered USDCx note in Bread." } : quote;
 }
@@ -222,7 +227,11 @@ export function destinationAssetSymbol(activity: Activity): string {
 
 export function quoteForActivity(activity: Activity): Quote {
   const route = activityRoute(activity);
-  if (route) return quoteFor(route, activity.amount);
+  if (route) {
+    const quote = quoteFor(route, activity.amount);
+    return activity.mode === "send" && activity.xreserveWithdrawalReceivedEstimate
+      ? { ...quote, expectedReceived: formatUnits(BigInt(activity.xreserveWithdrawalReceivedEstimate), 6) } : quote;
+  }
   return quoteForTransfer(
     activity.mode,
     activity.provider,
@@ -316,7 +325,7 @@ export function deriveCtaState(input: CtaInputs): CtaState {
     submitting: input.submitPhase || "Preparing…",
     "enter-amount": "Enter amount",
     "connect-source": input.mode === "receive" ? `Connect ${input.evmNetworkLabel ?? "Sepolia"} wallet` : "Connect Bread wallet",
-    "add-destination": input.mode === "receive" ? "Add Miden account" : "Add Sepolia address",
+    "add-destination": input.mode === "receive" ? "Add Miden account" : `Add ${input.evmNetworkLabel ?? "Sepolia"} address`,
     insufficient: `Not enough ${input.sourceTokenSymbol}`,
     "quote-loading": "Fetching quote…",
     review: input.mode === "receive" ? "Review receive" : "Review send",
@@ -329,7 +338,10 @@ export function deriveCtaState(input: CtaInputs): CtaState {
   };
 }
 
-export function statusLabel(status: ActivityStatus) {
+export function statusLabel(status: ActivityStatus, activity?: Activity) {
+  if (activity?.provider === "xreserve" && activity.mode === "send" &&
+      status !== "failed" && status !== "complete" &&
+      (activity.xreserveNoteId || activity.sourceTxHash)) return "Withdrawal submitted";
   const labels: Record<ActivityStatus, string> = {
     signature: "Needs signature",
     source_finality: "Confirming",
@@ -446,9 +458,11 @@ export function destinationExplorer(activity: BridgeActivity): ExplorerLink {
   // fulfils and the tx hash is captured — never a broken/list URL.
   const sepoliaTx =
     fullHash(activity.claimTxHash) ?? fullHash(activity.destinationTxHash);
+  const destination = activityRoute(activity)?.destination;
+  const explorer = destination && destination.kind !== "miden" ? evmNetworks[destination.network].blockExplorers.default : evmNetworks.sepolia.blockExplorers.default;
   return {
-    label: "View on Etherscan",
-    href: sepoliaTx ? `${explorerUrls.sepolia}/tx/${sepoliaTx}` : undefined,
+    label: `View on ${explorer.name}`,
+    href: sepoliaTx ? `${explorer.url}/tx/${sepoliaTx}` : undefined,
     available: !!sepoliaTx,
   };
 }
@@ -506,6 +520,8 @@ export function buildDiagnostics(
       sourceOriginalTxHash: activity.sourceOriginalTxHash,
       sourceTransaction: activity.sourceTransaction,
       xreserveStatus: activity.xreserveStatus,
+      xreserveBurnStatus: activity.xreserveBurnStatus,
+      xreserveWalletRequestId: activity.xreserveWalletRequestId,
       xreserveNoteId: activity.xreserveNoteId,
       xreserveArcTxHash: activity.xreserveArcTxHash,
       xreserveFee: activity.xreserveFee,
