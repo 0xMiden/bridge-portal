@@ -31,20 +31,21 @@ async function bridgeFrames(page: Page) {
 
 test.beforeEach(async ({ page }) => {
   await stubNetwork(page);
+  await page.route("**/api/xreserve/withdrawal-quote", (route) => route.fulfill({ json: { ...route.request().postDataJSON(), fee: "16400", received: "1983601", expiresAt: Date.now() + 60000 } }));
   await page.route("**/api/xreserve/quote", (route) => route.fulfill({ json: { ...route.request().postDataJSON(), signedQuote: "0x1234", fee: "250000", expiresAt: Date.now() + 120000 } }));
   await page.route("**/api/evm/*/balance**", (route) => route.fulfill({
     json: { balance: "10.123456", balanceRaw: "10123456" },
   }));
 });
 
-test("USDCx joins the shared form with Arc balances, exact amounts and deposit-only review", async ({ page }, info) => {
+test("USDCx joins the shared form with Arc balances, exact amounts and deposit review", async ({ page }, info) => {
   await recordBridgeFrames(page);
   await page.goto("/arc");
   await expect(page).toHaveURL(/provider=xreserve/);
   const bridge = new BridgePage(page);
   await bridge.waitForReady();
   await expect(bridge.routeTrigger()).toContainText("USDCx");
-  await expect(page.locator(".mode-switch").getByRole("button", { name: "Send", exact: true })).toBeDisabled();
+  await expect(page.locator(".mode-switch").getByRole("button", { name: "Send", exact: true })).toBeEnabled();
   await expect(page.locator(".token-select-symbol")).toHaveText(["USDC", "USDCx"]);
   await expect(page.locator(".swap-box").first()).toContainText("Arc Testnet");
   await expect(page.locator(".swap-box").first()).toContainText("10.1234 USDC");
@@ -61,13 +62,13 @@ test("USDCx joins the shared form with Arc balances, exact amounts and deposit-o
   await expect(page.getByRole("textbox", { name: "Amount", exact: true })).toHaveValue("");
   await expect(page.getByRole("button", { name: "Sepolia wallet menu", exact: true })).toBeVisible();
   await expect(page.locator(".token-select-symbol")).toHaveText(["USDC", "USDCx"]);
-  // Sepolia also offers Agglayer ETH; the selected USDCx route stays deposit-only.
+  // Sepolia also offers Agglayer ETH; the selected USDCx route retains its token.
   await page.getByRole("button", { name: "USDC — change token", exact: true }).click();
   const tokens = page.getByRole("listbox", { name: "Token", exact: true });
   await expect(tokens.getByRole("option", { name: /ETH.*Agglayer/ })).toBeEnabled();
   await expect(tokens.getByRole("option", { name: /Epoch/ })).toHaveCount(0);
   await page.keyboard.press("Escape");
-  await expect(page.locator(".mode-switch").getByRole("button", { name: "Send", exact: true })).toBeDisabled();
+  await expect(page.locator(".mode-switch").getByRole("button", { name: "Send", exact: true })).toBeEnabled();
   await origin.selectOption("arc-testnet");
   await expect(page.locator(".token-select-symbol")).toHaveText(["USDC", "USDCx"]);
   await expect(page.getByRole("button", { name: "Arc Testnet wallet menu", exact: true })).toBeVisible();
@@ -216,4 +217,24 @@ test("browsing routes leaves the wallet alone; confirming switches chains and a 
   await bridge.confirmPreflight();
   await expect(page.locator(".form-error")).toContainText("Miden deposits are not registered");
   expect(arcReads).toBeGreaterThan(0);
+});
+
+
+test("USDCx withdrawals restore the destination and show the net payout estimate and Circle fee", async ({ page }) => {
+  await page.goto("/?provider=xreserve&mode=send");
+  const bridge = new BridgePage(page);
+  await bridge.waitForReady();
+  await expect(page.locator(".token-select-symbol")).toHaveText(["USDCx", "USDC"]);
+  const destinationChain = page.getByRole("combobox", { name: "Destination chain", exact: true });
+  await destinationChain.selectOption("base-sepolia");
+  await page.reload();
+  await bridge.waitForReady();
+  await expect(destinationChain).toHaveValue("base-sepolia");
+  await bridge.fillAmount("2.000001");
+  await bridge.openPreflight();
+  await expect(bridge.preflight()).toContainText("2.000001 USDCx");
+  await expect(bridge.preflight()).toContainText("1.983601 USDC");
+  await expect(bridge.preflight()).toContainText("0.0164 USDC (estimated)");
+  await expect(bridge.preflight()).toContainText("Not quoted");
+  await expect(bridge.preflight()).toContainText("Burning USDCx is irreversible");
 });

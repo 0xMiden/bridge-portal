@@ -1,3 +1,4 @@
+import { fetchWithdrawalQuote, type WithdrawalQuote } from "../../bridge/providers/xreserve/withdrawal-quote";
 import { captureSourceTransaction } from "../../bridge/evm/source-transaction";
 import type { CctpQuote } from "../../bridge/providers/xreserve/cctp-quote";
 import { isCctpNetwork } from "../../bridge/providers/xreserve/cctp-config";
@@ -21,6 +22,7 @@ import { errorMessage, isUserRejection } from "./wallet-errors";
 export interface TransferSubmission {
   routeId: string;
   cctpQuote?: CctpQuote;
+  withdrawalQuote?: WithdrawalQuote;
   amount: string;
   destination: string;
   activities: Activity[];
@@ -155,6 +157,57 @@ export async function submitBridgeTransfer(
   // MidenFi wallet up front so the CTA and error are clear (not a late throw).
   if (mode === "send" && !midenWallet.connected) {
     onError("Connect your Bread wallet to sign the send.");
+    return;
+  }
+
+  if (provider === "xreserve" && mode === "send") {
+    const recipient = destination.trim() || walletAccount;
+    if (!midenWallet.requestTransaction || !midenWallet.waitForTransaction || !midenAddress) {
+      onError("Connect your Bread wallet to sign the withdrawal.");
+      return;
+    }
+    onSubmittingChange(true);
+    let activityId: string | undefined;
+    try {
+      onPhaseChange("Checking withdrawal and preparing burn note…");
+      const reviewed = input.withdrawalQuote;
+      if (!reviewed || reviewed.network !== route.destination.network || reviewed.amount !== amount ||
+          reviewed.sender !== midenAddress || reviewed.recipient.toLowerCase() !== recipient.toLowerCase() || reviewed.expiresAt <= Date.now()) {
+        throw new Error("Refresh and review the withdrawal estimate before sending.");
+      }
+      const fresh = await fetchWithdrawalQuote({ network: route.destination.network, amount, sender: midenAddress, recipient });
+      if (BigInt(fresh.fee) > BigInt(reviewed.fee)) throw new Error("Circle's estimated withdrawal fee increased. Review the updated estimate before sending.");
+      const { withdrawUsdcx } = await import("../../bridge/providers/xreserve/withdrawal-execute");
+      const result = await withdrawUsdcx({
+        amount, network: route.destination.network, destination: recipient, sender: midenAddress,
+        requestTransaction: midenWallet.requestTransaction,
+        waitForTransaction: midenWallet.waitForTransaction,
+        onSubmitted: (noteId, requestId) => {
+          const activity = createActivity(route, amount, {
+            status: "source_finality", xreserveBurnStatus: "pending", xreserveNoteId: noteId,
+            xreserveWalletRequestId: requestId, destination: recipient,
+            evmAddress: recipient, midenAccount: midenAddress,
+            xreserveWithdrawalFeeEstimate: fresh.fee, xreserveWithdrawalReceivedEstimate: fresh.received,
+          });
+          activityId = activity.id;
+          const updated = [activity, ...loadStoredActivities()];
+          saveActivities(updated);
+          onActivitiesChange(updated);
+          navigate(`/activity/${activity.id}`);
+        },
+      });
+      if (activityId) {
+        patchStoredActivity(activityId, { sourceTxHash: result.txHash });
+        onActivitiesChange(loadStoredActivities());
+      }
+    } catch (error) {
+      onError(activityId
+        ? `Withdrawal submitted. Keep the burn note ID in activity history; do not submit again. ${errorMessage(error)}`
+        : errorMessage(error));
+    } finally {
+      onSubmittingChange(false);
+      onPhaseChange("");
+    }
     return;
   }
 

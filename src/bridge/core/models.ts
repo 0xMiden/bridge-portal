@@ -36,6 +36,10 @@ export type BridgeActivity = {
   /** Circle attestation is separate from inclusion of the recipient's Miden note. */
   xreserveStatus?: "submitted" | "confirmed" | "attested" | "delivered" | "reverted" | "cancelled" | "replaced";
   xreserveNoteId?: string;
+  xreserveBurnStatus?: "pending" | "consuming" | "confirmed" | "discarded";
+  xreserveWalletRequestId?: string;
+  xreserveWithdrawalFeeEstimate?: string;
+  xreserveWithdrawalReceivedEstimate?: string;
   xreserveArcTxHash?: string;
   /** Circle forwarding fee in source USDC minor units, paid separately. */
   xreserveFee?: string;

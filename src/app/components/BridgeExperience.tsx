@@ -1,5 +1,7 @@
 "use client";
 
+import { validateWithdrawal, withdrawalPayload, withdrawalDomains } from "../../bridge/providers/xreserve/withdrawal";
+
 import {
   ArrowDown,
   ArrowRight,
@@ -32,6 +34,8 @@ import { evmNetworks } from "../../config/evm-networks";
 import { ensureEvmNetwork } from "../../wallets/evm/ensure-network";
 import { isCctpNetwork } from "../../bridge/providers/xreserve/cctp-config";
 import type { CctpQuote } from "../../bridge/providers/xreserve/cctp-quote";
+import { useWithdrawalQuote } from "../lib/use-withdrawal-quote";
+import type { WithdrawalQuote } from "../../bridge/providers/xreserve/withdrawal-quote";
 import { useCctpQuote } from "../lib/use-cctp-quote";
 import {
   type WalletIdentity,
@@ -255,6 +259,7 @@ export function BridgeExperience() {
   // untouched, so all entered data is preserved).
   const [showPreflight, setShowPreflight] = useState(false);
   const [reviewedCctpQuote, setReviewedCctpQuote] = useState<CctpQuote>();
+  const [reviewedWithdrawalQuote, setReviewedWithdrawalQuote] = useState<WithdrawalQuote>();
   // Reveals the full destination value in the preflight (a long Miden id / 0x
   // address is shortened by default, with an affordance to inspect it in full).
   const [showFullDestination, setShowFullDestination] = useState(false);
@@ -321,6 +326,7 @@ export function BridgeExperience() {
     ...modes[mode],
     from: networkLabels[route.source.network],
     to: networkLabels[route.destination.network],
+    destinationLabel: mode === "send" ? `${networkLabels[route.destination.network]} address` : modes.receive.destinationLabel,
   };
   const providerCopy = providers[provider];
   const quote = useMemo(
@@ -328,12 +334,12 @@ export function BridgeExperience() {
     [amount, route],
   );
   const destinationSymbol = quote.asset;
-  const expectedReceivedAmount = quote.expectedReceived;
+
   // Min received: for Epoch use the live API quote; otherwise the route quote.
   const displayMinReceived =
     provider === "epoch" && epochQuoteAmount
       ? `${epochQuoteAmount} ${destinationSymbol}`
-      : `${quote.minReceived} ${destinationSymbol}`;
+      : provider === "xreserve" && mode === "send" ? "Not quoted" : `${quote.minReceived} ${destinationSymbol}`;
   // Live Sepolia gas estimate for the network-fee line (real gasPrice * gas
   // limit) where the fee is Sepolia-side; falls back to the route label
   // (e.g. "Miden fee") when the leg's fee isn't on Sepolia.
@@ -368,6 +374,15 @@ export function BridgeExperience() {
   const cctpQuery = useCctpQuote(cctpNetwork ? { network: cctpNetwork, amount, sender: walletAccount as `0x${string}`, recipient: epochMidenAccount } : null, showPreflight || isSubmitting);
   const cctpQuote = showPreflight ? reviewedCctpQuote : cctpQuery.data;
   const circleFeeDisplay = cctpQuote ? `${formatUnits(BigInt(cctpQuote.fee), 6)} USDC` : cctpQuery.isFetching ? "Fetching quote…" : "—";
+  const isWithdrawal = provider === "xreserve" && mode === "send";
+  const withdrawalQuery = useWithdrawalQuote(isWithdrawal ? {
+    network: route.destination.network, amount, sender: midenAddress, recipient: destination.trim() || walletAccount,
+  } : null, showPreflight || isSubmitting);
+  const withdrawalQuote = showPreflight ? reviewedWithdrawalQuote : withdrawalQuery.data;
+  const expectedReceivedAmount = isWithdrawal
+    ? withdrawalQuote ? formatUnits(BigInt(withdrawalQuote.received), 6) : withdrawalQuery.isFetching ? "…" : "—"
+    : quote.expectedReceived;
+  const withdrawalFeeDisplay = withdrawalQuote ? `${formatUnits(BigInt(withdrawalQuote.fee), 6)} USDC (estimated)` : "Estimate unavailable";
   const evmWalletLabel = walletInfo?.name ?? evmNetwork.name;
   const midenRouteToken = [route.source, route.destination].find((asset) => asset.kind === "miden");
   const evmRouteToken = [route.source, route.destination].find((asset) => asset.kind !== "miden");
@@ -432,7 +447,7 @@ export function BridgeExperience() {
     provider === "near-intents"
       ? "NEAR Intents is paused in this build."
       : provider === "xreserve"
-        ? providers.xreserve.disclosure
+        ? mode === "send" ? quote.warning : providers.xreserve.disclosure
       : provider === "agglayer"
         ? mode === "receive"
           ? "Your Sepolia wallet sends to Miden through Agglayer with no provider bridge fee (~10-20 min)."
@@ -459,7 +474,7 @@ export function BridgeExperience() {
     amount,
     sourceTokenSymbol,
     insufficientBalance,
-    quoteLoading: (provider === "epoch" && epochQuoteLoading) || (Boolean(cctpNetwork) && cctpQuery.isFetching && !cctpQuote),
+    quoteLoading: (isWithdrawal && withdrawalQuery.isFetching && !withdrawalQuote) || (provider === "epoch" && epochQuoteLoading) || (Boolean(cctpNetwork) && cctpQuery.isFetching && !cctpQuote),
     isSubmitting,
     submitPhase,
     evmNetworkLabel: evmNetwork.name,
@@ -892,8 +907,21 @@ export function BridgeExperience() {
       case "review":
         setBridgeError("");
         if (provider === "xreserve") {
-          try { parseArcAmount(amount); }
+          try {
+            if (mode === "send") {
+              validateWithdrawal(amount, route.destination.network);
+              withdrawalPayload(destination.trim() || walletAccount, withdrawalDomains[route.destination.network]!);
+            } else parseArcAmount(amount);
+          }
           catch (error) { setBridgeError(errorMessage(error)); return; }
+        }
+        if (isWithdrawal) {
+          if (!withdrawalQuery.data || withdrawalQuery.data.expiresAt <= Date.now()) {
+            setBridgeError(withdrawalQuery.error?.message ?? "Refresh the withdrawal estimate before reviewing.");
+            void withdrawalQuery.refetch();
+            return;
+          }
+          setReviewedWithdrawalQuote(withdrawalQuery.data);
         }
         if (cctpNetwork) {
           if (!cctpQuery.data || cctpQuery.data.expiresAt <= Date.now()) {
@@ -985,6 +1013,7 @@ export function BridgeExperience() {
       {
         routeId: route.id,
         cctpQuote: cctpNetwork ? reviewedCctpQuote : undefined,
+        withdrawalQuote: isWithdrawal ? reviewedWithdrawalQuote : undefined,
         amount,
         destination,
         activities,
@@ -1375,10 +1404,10 @@ export function BridgeExperience() {
             />
             {showDestinationHelp ? <small>{destinationHelp}</small> : null}
           </label>
-          {bridgeError ? <p className="form-error">{bridgeError}</p> : cctpNetwork && cctpQuery.error ? <p className="form-error">{cctpQuery.error.message}</p> : null}
+          {bridgeError ? <p className="form-error">{bridgeError}</p> : cctpNetwork && cctpQuery.error ? <p className="form-error">{cctpQuery.error.message}</p> : isWithdrawal && withdrawalQuery.error ? <p className="form-error">{withdrawalQuery.error.message}</p> : null}
 
           <div className="quote-summary" aria-label="Route quote">
-            {cctpNetwork ? <div><span>Circle fee</span><strong>{circleFeeDisplay}</strong></div> : null}
+            {cctpNetwork ? <div><span>Circle fee</span><strong>{circleFeeDisplay}</strong></div> : isWithdrawal ? <div><span>Estimated Circle fee</span><strong>{withdrawalFeeDisplay}</strong></div> : null}
             {provider !== "xreserve" ? <div>
               <span>ETA</span>
               <strong>{quote.eta}</strong>
@@ -1457,7 +1486,7 @@ export function BridgeExperience() {
                     </dd>
                   </div>
                   <div>
-                    <dt>Expected received</dt>
+                    <dt>{isWithdrawal ? "Estimated received" : "Expected received"}</dt>
                     <dd>
                       {expectedReceivedAmount} {destinationSymbol}
                     </dd>
@@ -1523,8 +1552,8 @@ export function BridgeExperience() {
                     <dd>{networkFeeDisplay}</dd>
                   </div>
                   <div>
-                    <dt>{cctpNetwork ? "Circle fee" : "Provider fee"}</dt>
-                    <dd>{cctpNetwork ? circleFeeDisplay : quote.bridgeFee}</dd>
+                    <dt>{isWithdrawal ? "Estimated Circle fee" : cctpNetwork ? "Circle fee" : "Provider fee"}</dt>
+                    <dd>{isWithdrawal ? withdrawalFeeDisplay : cctpNetwork ? circleFeeDisplay : quote.bridgeFee}</dd>
                   </div>
                   {cctpNetwork && cctpQuote ? <div><dt>Total USDC</dt><dd>{formatUnits(parseArcAmount(amount) + BigInt(cctpQuote.fee), 6)} USDC</dd></div> : null}
                   </dl>
@@ -1572,13 +1601,13 @@ export function BridgeExperience() {
                       key={activity.id}
                     >
                       <span
-                        className={`status-dot ${statusTone(activity.status)}`}
+                        className={`status-dot ${(activity.provider === "xreserve" && activity.mode === "send" && activity.status !== "failed" && activity.status !== "complete" ? "" : statusTone(activity.status))}`}
                       />
                       <span className="activity-copy">
                         <strong>{activity.summary}</strong>
                         <small>
                           {providers[activity.provider].label} -{" "}
-                          {statusLabel(activity.status)}
+                          {statusLabel(activity.status, activity)}
                         </small>
                       </span>
                       <span className="activity-meta">

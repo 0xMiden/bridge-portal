@@ -8,6 +8,8 @@
 
 ### USDCx bridge
 
+- Enable testnet withdrawals to Arc, Sepolia, Base and Arbitrum using Bread-signed burn notes, live faucet checks and a saved submission receipt. Show live Circle fee and net-payout estimates before signing; final USDC payout requires verification in the destination wallet until the attester exposes its withdrawal mapping.
+
 - Unify all EVM reads under `/api/evm/[network]` and USDCx quotes/tracking under `/api/xreserve`; remove the separate Arc, CCTP and Sepolia API implementations.
 
 - Add Ethereum Sepolia, Base Sepolia and Arbitrum Sepolia origins via Circle CCTP forwarding through Arc Testnet into Miden Testnet. Show signed Circle fee quotes, approve the reviewed amount plus fee, and correlate the source burn with the Arc executor and Miden deposit. Persist the selected origin and keep source explorer links on the correct chain.

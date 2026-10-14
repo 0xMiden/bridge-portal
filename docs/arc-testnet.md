@@ -2,7 +2,7 @@
 
 Select **USDCx** in the main bridge route selector, or open
 `/?provider=xreserve&mode=receive`. The previous `/arc` URL redirects there.
-This is a deposit-only route; withdrawals are visibly disabled.
+Select **Send** to withdraw USDCx to Arc Testnet, Ethereum Sepolia, Base Sepolia or Arbitrum Sepolia.
 
 The origin selector supports Arc Testnet (direct xReserve), Ethereum Sepolia,
 Base Sepolia and Arbitrum Sepolia. The latter three use Circle CCTP forwarding
@@ -141,5 +141,39 @@ No real deposit is signed by automated validation. A funded wallet round trip
 (deposit → delivered note → consumed balance) still needs live confirmation.
 The existing Epoch and Agglayer deployments require independent v0.17
 verification; their addresses are not replaced with USDCx addresses.
-Withdrawals need a verified burn flow and a status API connecting the burn
-note to the Circle withdrawal and final payout before enabling a route.
+## Withdrawals
+
+The portal builds the v0.17.1 public BURN note with the network-account target
+and scheme-5 withdrawal attachment, following Bread's
+[burn implementation](https://github.com/0xMiden/wallet/blob/main/src/lib/usdcx/burn.ts).
+It checks the deployed faucet's allowed script and minimum burn before requesting
+Bread approval. The local floor is 1 USDCx; Sepolia requires more than 1.5 USDCx
+to leave room for Circle's payout fee. Keep additional USDCx for Miden fees.
+Circle deducts its fee from the payout. The portal calls Circle's read-only
+`POST /v1/prepare-withdrawal` through `/api/xreserve/withdrawal-quote` and displays
+the returned fee and net USDC as an estimate. Only matching direct-payout terms
+are accepted. The estimate refreshes while editing and is frozen for review;
+confirmation checks it again and requires a new review if the fee increased.
+The attester prepares the final intent after the burn, so this estimate is not
+a guaranteed minimum or a fee cap encoded in the burn note.
+
+The browser SDK returns `StorageView` and `StorageResult` JavaScript wrappers.
+Preflight accesses `StorageView.raw` and frees only the underlying WASM objects;
+the wrappers themselves have no `.free()` method.
+
+The note ID and wallet request ID are saved immediately after wallet submission.
+The settled Miden transaction hash is added separately. A later wallet timeout
+never discards the saved note or invites a duplicate withdrawal.
+
+Withdrawal receipts do not poll burn or payout status. They show “Withdrawal
+submitted”, the saved source transaction and the quoted payout estimate, without
+a live timeline or ETA. Check USDC in the destination wallet; submission is not
+payout confirmation. The attester may hold withdrawals at Circle limits.
+
+The [combined service](https://github.com/0xMiden/miden-usdcx/blob/next/crates/usdcx-bridge/README.md)
+exposes no inbound HTTP ports. Its SQLite submissions table maps the burn note to
+Circle's withdrawal ID, which is needed by `GET /v1/withdrawal/{id}`. A public,
+read-only mapping API is still needed for automatic end-to-end payout verification.
+Read-only verification on 2026-10-14 confirmed the pinned faucet accepts the SDK burn
+script and its minimum is 1,000,000 base units (1 USDCx). No funded withdrawal was
+signed while implementing this integration.

@@ -1,3 +1,5 @@
+import { fetchWithdrawalQuote } from "../../bridge/providers/xreserve/withdrawal-quote";
+import { withdrawUsdcx } from "../../bridge/providers/xreserve/withdrawal-execute";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { EvmProvider } from "../../wallets/evm/evm-wallet";
 import { SEPOLIA_NETWORK } from "../../config/sepolia";
@@ -9,6 +11,8 @@ import { loadStoredActivities, saveActivities } from "./bridge-persistence";
 import type { Activity } from "./bridge-presentation";
 import { submitBridgeTransfer, type TransferSubmission } from "./bridge-submission";
 
+vi.mock("../../bridge/providers/xreserve/withdrawal-quote", () => ({ fetchWithdrawalQuote: vi.fn() }));
+vi.mock("../../bridge/providers/xreserve/withdrawal-execute", () => ({ withdrawUsdcx: vi.fn() }));
 vi.mock("../../bridge/evm/source-transaction", () => ({ captureSourceTransaction: vi.fn().mockResolvedValue(undefined) }));
 vi.mock("../../bridge/providers/xreserve/deposit", () => ({ depositOnArc: vi.fn() }));
 vi.mock("../../bridge/providers/agglayer/agglayer-execute", () => ({ runAgglayerSend: vi.fn() }));
@@ -253,5 +257,49 @@ describe("USDCx submission", () => {
     expect(loadStoredActivities()).toEqual([history]);
     expect(effects.navigate).not.toHaveBeenCalled();
     expect(effects.onSubmittingChange).toHaveBeenLastCalledWith(false);
+  });
+});
+
+
+describe("USDCx withdrawal submission", () => {
+  const estimate = () => ({ network: "arc-testnet" as const, amount: "2", sender: MIDEN_ACCOUNT, recipient: EVM_ADDRESS, fee: "16400", received: "1983600", expiresAt: Date.now() + 60000 });
+  beforeEach(() => vi.mocked(fetchWithdrawalQuote).mockResolvedValue(estimate()));
+  it.each([false, true])("retains the burn note across wallet settlement (failure: %s)", async (fails) => {
+    const { input, effects, evmRequest } = setup({
+      routeId: "xreserve-usdc-to-arc", amount: "2", destination: EVM_ADDRESS, withdrawalQuote: estimate(),
+      evmWallet: { connected: false, address: "" },
+    });
+    const noteId = `0x${"cd".repeat(32)}`;
+    vi.mocked(withdrawUsdcx).mockImplementation(async ({ onSubmitted }) => {
+      onSubmitted(noteId, "wallet-request-id");
+      expect(loadStoredActivities()[0]).toMatchObject({ xreserveNoteId: noteId, status: "source_finality" });
+      if (fails) throw new Error("wallet settlement timed out");
+      return { noteId, txHash: TX_HASH };
+    });
+    await submitBridgeTransfer(input, effects);
+    expect(loadStoredActivities()[0]).toMatchObject({
+      mode: "send", xreserveNoteId: noteId, destination: EVM_ADDRESS,
+      xreserveWalletRequestId: "wallet-request-id", status: "source_finality",
+    });
+    expect(loadStoredActivities()[0].sourceTxHash).toBe(fails ? undefined : TX_HASH);
+    expect(effects.navigate).toHaveBeenCalledOnce();
+    expect(effects.openEvmWallet).not.toHaveBeenCalled();
+    expect(evmRequest).not.toHaveBeenCalled();
+    if (fails) expect(effects.onError).toHaveBeenCalledWith(expect.stringContaining("do not submit again"));
+  });
+  it("requires another review when Circle increases the fee before signing", async () => {
+    const { input, effects } = setup({ routeId: "xreserve-usdc-to-arc", amount: "2", withdrawalQuote: estimate() });
+    vi.mocked(fetchWithdrawalQuote).mockResolvedValue({ ...estimate(), fee: "20000", received: "1980000" });
+    await submitBridgeTransfer(input, effects);
+    expect(withdrawUsdcx).not.toHaveBeenCalled();
+    expect(loadStoredActivities()).toEqual([history]);
+    expect(effects.onError).toHaveBeenCalledWith(expect.stringContaining("fee increased"));
+  });
+  it("leaves no withdrawal activity after a rejected signature", async () => {
+    const { input, effects } = setup({ routeId: "xreserve-usdc-to-arc", amount: "2", withdrawalQuote: estimate() });
+    vi.mocked(withdrawUsdcx).mockRejectedValue(new Error("User rejected request"));
+    await submitBridgeTransfer(input, effects);
+    expect(loadStoredActivities()).toEqual([history]);
+    expect(effects.navigate).not.toHaveBeenCalled();
   });
 });
