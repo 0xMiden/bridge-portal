@@ -3,6 +3,7 @@ export type BridgeNetwork = EvmNetwork | "miden-testnet";
 
 type TokenMetadata = {
   symbol: string;
+  name?: string;
   decimals: number;
 };
 
@@ -18,19 +19,23 @@ export type EvmAsset = Exclude<BridgeAsset, MidenAsset>;
 
 // Native Circle USDC. Epoch's existing Sepolia test token is a different asset.
 export const CIRCLE_SEPOLIA_USDC = {
+  name: "Circle USDC",
   network: "sepolia", kind: "erc20", symbol: "USDC", decimals: 6,
   address: "0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238",
 } as const satisfies BridgeAsset;
 export const BASE_SEPOLIA_USDC = {
+  name: "Circle USDC",
   network: "base-sepolia", kind: "erc20", symbol: "USDC", decimals: 6,
   address: "0x036CbD53842c5426634e7929541eC2318f3dCF7e",
 } as const satisfies BridgeAsset;
 export const ARBITRUM_SEPOLIA_USDC = {
+  name: "Circle USDC",
   network: "arbitrum-sepolia", kind: "erc20", symbol: "USDC", decimals: 6,
   address: "0x75faf114eafb1BDbe2F0316DF893fd58CE46AA4d",
 } as const satisfies BridgeAsset;
 
 export const ARC_USDC = {
+  name: "Circle USDC",
   network: "arc-testnet", kind: "erc20", symbol: "USDC", decimals: 6,
   address: "0x3600000000000000000000000000000000000000",
 } as const satisfies BridgeAsset;

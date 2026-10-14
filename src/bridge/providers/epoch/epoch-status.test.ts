@@ -1,7 +1,11 @@
 import type { IntentTransactionStatus } from "@epoch-protocol/epoch-intents-sdk";
-import { describe, expect, test } from "vitest";
+import { describe, expect, test, vi } from "vitest";
+import { observeActivity } from "../../tracking";
+import { getEpochReadOnlySdk } from "./sdk";
 
-import { epochActivityStatus, epochDestinationTx } from "./epoch-status";
+vi.mock("./sdk", () => ({ getEpochReadOnlySdk: vi.fn() }));
+
+import { epochActivityState, epochDestinationTx } from "./epoch-status";
 
 // Destination chain ids used across the suite. Receive settles on Miden's
 // virtual chain id; Send settles on Sepolia. These mirror config.ts /
@@ -21,33 +25,39 @@ function row(
   return { status, chainId, transactionHash };
 }
 
-describe("epochActivityStatus", () => {
+test.each(["send", "receive"] as const)("%s tracking attributes a failed payout to the destination leg", async (mode) => {
+  const destination = mode === "send" ? SEPOLIA_DEST : MIDEN_DEST;
+  const sdk = { getIntentStatus: vi.fn().mockResolvedValue([row("reverted", destination)]) };
+  vi.mocked(getEpochReadOnlySdk).mockResolvedValue(sdk as unknown as Awaited<ReturnType<typeof getEpochReadOnlySdk>>);
+  const observation = await observeActivity({
+    id: "failed-payout", provider: "epoch", mode, asset: "USDC", amount: "1", status: "message_observed",
+    epochSponsor: "0x1111111111111111111111111111111111111111", epochIntentNonce: "42",
+    updatedAt: 1, summary: "", eta: "", txHash: "",
+  }, new AbortController().signal);
+  expect(observation?.patch).toMatchObject({ status: "failed", failureLeg: "destination" });
+});
+
+describe("epochActivityState", () => {
   test("undefined statuses map to source_finality (nothing observed yet)", () => {
-    expect(epochActivityStatus(undefined, SEPOLIA_DEST)).toBe("source_finality");
+    expect(epochActivityState(undefined, SEPOLIA_DEST)).toMatchObject({ status: "source_finality" });
   });
 
   test("empty statuses map to source_finality", () => {
-    expect(epochActivityStatus([], SEPOLIA_DEST)).toBe("source_finality");
+    expect(epochActivityState([], SEPOLIA_DEST)).toMatchObject({ status: "source_finality" });
   });
 
   test("any failed leg maps to failed", () => {
     const statuses = [row("pending", SEPOLIA_DEST), row("failed", SEPOLIA_DEST)];
-    expect(epochActivityStatus(statuses, SEPOLIA_DEST)).toBe("failed");
+    expect(epochActivityState(statuses, SEPOLIA_DEST)).toMatchObject({ status: "failed" });
   });
 
   test("a reverted leg also maps to failed", () => {
-    expect(epochActivityStatus([row("reverted", SEPOLIA_DEST)], SEPOLIA_DEST)).toBe(
-      "failed",
-    );
+    expect(epochActivityState([row("reverted", SEPOLIA_DEST)], SEPOLIA_DEST)).toMatchObject({ status: "failed" });
   });
 
   test("failure detection is case-insensitive", () => {
-    expect(epochActivityStatus([row("FAILED", SEPOLIA_DEST)], SEPOLIA_DEST)).toBe(
-      "failed",
-    );
-    expect(epochActivityStatus([row("Reverted", SEPOLIA_DEST)], SEPOLIA_DEST)).toBe(
-      "failed",
-    );
+    expect(epochActivityState([row("FAILED", SEPOLIA_DEST)], SEPOLIA_DEST)).toMatchObject({ status: "failed" });
+    expect(epochActivityState([row("Reverted", SEPOLIA_DEST)], SEPOLIA_DEST)).toMatchObject({ status: "failed" });
   });
 
   test("failure wins even when a destination leg has already settled", () => {
@@ -55,33 +65,33 @@ describe("epochActivityStatus", () => {
       row("success", SEPOLIA_DEST, TX),
       row("failed", MIDEN_SOURCE_ROW),
     ];
-    expect(epochActivityStatus(statuses, SEPOLIA_DEST)).toBe("failed");
+    expect(epochActivityState(statuses, SEPOLIA_DEST)).toMatchObject({ status: "failed" });
   });
 
   test("destination leg terminal-OK with a tx hash maps to complete", () => {
     expect(
-      epochActivityStatus([row("success", SEPOLIA_DEST, TX)], SEPOLIA_DEST),
-    ).toBe("complete");
+      epochActivityState([row("success", SEPOLIA_DEST, TX)], SEPOLIA_DEST),
+    ).toMatchObject({ status: "complete" });
   });
 
   test("'completed' is also treated as terminal-OK", () => {
     expect(
-      epochActivityStatus([row("completed", SEPOLIA_DEST, TX)], SEPOLIA_DEST),
-    ).toBe("complete");
+      epochActivityState([row("completed", SEPOLIA_DEST, TX)], SEPOLIA_DEST),
+    ).toMatchObject({ status: "complete" });
   });
 
   test("terminal-OK detection is case-insensitive", () => {
     expect(
-      epochActivityStatus([row("SUCCESS", SEPOLIA_DEST, TX)], SEPOLIA_DEST),
-    ).toBe("complete");
+      epochActivityState([row("SUCCESS", SEPOLIA_DEST, TX)], SEPOLIA_DEST),
+    ).toMatchObject({ status: "complete" });
   });
 
   test("destination terminal-OK without a tx hash is NOT complete", () => {
     // A terminal row that lacks a real tx hash can't be deep-linked, so the
     // activity stays in flight rather than falsely reporting settlement.
     expect(
-      epochActivityStatus([row("success", SEPOLIA_DEST, "")], SEPOLIA_DEST),
-    ).toBe("message_observed");
+      epochActivityState([row("success", SEPOLIA_DEST, "")], SEPOLIA_DEST),
+    ).toMatchObject({ status: "message_observed" });
   });
 
   test("a still-pending destination row blocks completion even if a sibling settled", () => {
@@ -89,7 +99,7 @@ describe("epochActivityStatus", () => {
       row("success", SEPOLIA_DEST, TX),
       row("pending", SEPOLIA_DEST),
     ];
-    expect(epochActivityStatus(statuses, SEPOLIA_DEST)).toBe("message_observed");
+    expect(epochActivityState(statuses, SEPOLIA_DEST)).toMatchObject({ status: "message_observed" });
   });
 
   test("destination-aware: a settled SOURCE leg does not complete the activity", () => {
@@ -97,22 +107,22 @@ describe("epochActivityStatus", () => {
     // chain-agnostic check would flip to complete while the Sepolia payout is
     // still pending. Only a terminal DESTINATION row may complete it.
     const statuses = [row("success", MIDEN_SOURCE_ROW, TX)];
-    expect(epochActivityStatus(statuses, SEPOLIA_DEST)).toBe("message_observed");
+    expect(epochActivityState(statuses, SEPOLIA_DEST)).toMatchObject({ status: "message_observed" });
   });
 
   test("observed but non-terminal rows map to message_observed", () => {
     const statuses = [row("pending", MIDEN_SOURCE_ROW), row("pending", SEPOLIA_DEST)];
-    expect(epochActivityStatus(statuses, SEPOLIA_DEST)).toBe("message_observed");
+    expect(epochActivityState(statuses, SEPOLIA_DEST)).toMatchObject({ status: "message_observed" });
   });
 
   test("Receive direction settles on the Miden destination chain id", () => {
     expect(
-      epochActivityStatus([row("success", MIDEN_DEST, TX)], MIDEN_DEST),
-    ).toBe("complete");
+      epochActivityState([row("success", MIDEN_DEST, TX)], MIDEN_DEST),
+    ).toMatchObject({ status: "complete" });
     // The same rows keyed to Sepolia (wrong destination) do not complete.
     expect(
-      epochActivityStatus([row("success", MIDEN_DEST, TX)], SEPOLIA_DEST),
-    ).toBe("message_observed");
+      epochActivityState([row("success", MIDEN_DEST, TX)], SEPOLIA_DEST),
+    ).toMatchObject({ status: "message_observed" });
   });
 
   test("string chainId values are coerced before comparison", () => {
@@ -122,7 +132,7 @@ describe("epochActivityStatus", () => {
     const statuses = [
       { status: "success", chainId: String(SEPOLIA_DEST), transactionHash: TX },
     ] as unknown as IntentTransactionStatus[];
-    expect(epochActivityStatus(statuses, SEPOLIA_DEST)).toBe("complete");
+    expect(epochActivityState(statuses, SEPOLIA_DEST)).toMatchObject({ status: "complete" });
   });
 });
 

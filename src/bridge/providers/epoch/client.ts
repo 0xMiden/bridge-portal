@@ -1,7 +1,7 @@
 "use client";
 
 import { getAccount, getWalletClient } from "@wagmi/core";
-import { type Chain, type EIP1193Provider, type WalletClient, createWalletClient, custom } from "viem";
+import { type EIP1193Provider, type WalletClient, createWalletClient, custom } from "viem";
 import { sepolia } from "viem/chains";
 
 import { wagmiAdapter } from "../../../wallets/evm/appkit-config";
@@ -29,29 +29,16 @@ export async function getEvmConnection(): Promise<EvmConnection> {
   return { address: account.address, chainId: account.chainId };
 }
 
-/**
- * Build a viem WalletClient backed by the connected AppKit/wagmi wallet.
- *
- * For Miden→EVM flows pass `{ chainOverride: MIDEN_DESTINATION_CHAIN_ID }` —
- * per Epoch's docs the walletClient's chain.id must be 999999999 before
- * solveIntent so the SDK routes the Miden input correctly. We build a fresh
- * walletClient with that chain id over the real wallet's EIP-1193 provider
- * rather than mutating a shared instance.
- */
+/** Build the connected Sepolia wallet client used for Epoch receives. */
 export async function buildEpochWalletClient(
   address: `0x${string}`,
-  opts?: { chainOverride?: number },
 ): Promise<WalletClient> {
-  const chain: Chain =
-    opts?.chainOverride !== undefined && opts.chainOverride !== sepolia.id
-      ? { ...sepolia, id: opts.chainOverride }
-      : sepolia;
   // wagmi's walletClient is EIP-1193 compliant (exposes `request`), so viem's
   // `custom()` transport adapts it without further plumbing.
   const walletClient = await getWalletClient(wagmiConfig);
   return createWalletClient({
     account: address,
-    chain,
+    chain: sepolia,
     transport: custom(walletClient as unknown as EIP1193Provider),
   });
 }
@@ -66,17 +53,10 @@ export async function buildEpochWalletClient(
  */
 export function buildEpochReadOnlyWalletClient(
   address: `0x${string}`,
-  opts?: { chainOverride?: number },
 ): WalletClient {
-  const chain: Chain =
-    opts?.chainOverride !== undefined && opts.chainOverride !== sepolia.id
-      ? { ...sepolia, id: opts.chainOverride }
-      : sepolia;
   return createWalletClient({
     account: address,
-    chain,
+    chain: { ...sepolia, id: MIDEN_DESTINATION_CHAIN_ID },
     transport: evmReadTransport("sepolia"),
   });
 }
-
-export { MIDEN_DESTINATION_CHAIN_ID };

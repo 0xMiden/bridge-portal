@@ -77,6 +77,49 @@ Miden account as launch context or prompt the user to connect MidenFi first.
 Do not preload placeholder accounts. Address preloading must come from a
 connected wallet session or explicit launch parameters.
 
+The launch URL accepts `provider`, `mode` (`receive` or `send`), `midenAccount`,
+and `evmAddress`. For example:
+`/?provider=xreserve&mode=receive&midenAccount=<account>`.
+These are the only parameter names; unknown names and direction values are ignored.
+A missing or invalid provider/direction uses the saved selection, then the default
+available route. A recipient parameter only prefills the form; the connected
+wallet still authorizes the transfer.
+
+Stored receipts retain conversions for formats actually written by earlier
+versions: text timestamps and encoded Agglayer recipient addresses from the
+initial frontend (`364638b`), quoted amounts with token symbols (`a1158b6`),
+and failure descriptions saved before `failureLeg`. Storage normalizes these
+fields before presentation. Route lookup also resolves receipts saved before
+explicit route IDs (`2a163d1`) by provider, direction, and token. An unknown
+delivery timestamp stays empty. Unsupported providers and directions are ignored
+rather than assigned another provider's behavior.
+
+### Provider contract
+
+Each provider owns two explicit directions in its existing folder:
+
+- `provider.ts`: phase tables, phase resolution, fees and receipt facts for
+  `receive` and `send`. This configuration has no React or wallet SDK runtime.
+- `flows.ts`: `quote`, `submit` and `monitor` for both directions. The registry
+  loads these operations on demand, so protocol SDKs stay out of server rendering.
+
+The shared pipeline resolves the route and accounts, obtains a quote when the
+fee policy requires one, freezes it for review, validates its expiry and request
+identity at submission, then persists source acknowledgement before navigation.
+Submission errors after that acknowledgement preserve the receipt. Polling
+returns patches rather than activity snapshots; the common merger owns phase
+ordering and timestamps.
+
+Fee policies declare whether a fee is absent, included in the rate, paid on top,
+or deducted from the payout. They also declare the label and whether amounts
+are estimates. The form and receipt render those facts without protocol checks.
+Provider-specific quote authorizations stay opaque to the UI.
+
+Paused directions keep their implementations and phase tables for saved
+receipts. xReserve `send` remains explicitly manual: a submitted or confirmed
+burn does not prove that Circle paid the destination. Agglayer claims match a
+known deposit ID exactly; another exit cannot complete the saved transfer.
+
 ### Cross-chain Receive
 
 1. Connect Sepolia wallet.

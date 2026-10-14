@@ -1,7 +1,8 @@
-import { pad, type Address, type Hex } from "viem";
+import type { QuoteRequest, QuoteResult } from "../../core/quote";
+import { formatUnits, pad, type Address, type Hex } from "viem";
 import { CCTP, cctpSources, type CctpNetwork } from "./cctp-config";
 import { cctpDepositHook } from "./cctp-hook";
-import { parseArcAmount } from "./deposit";
+import { arcRecipient, parseArcAmount } from "./deposit";
 
 export type CctpQuoteRequest = { network: CctpNetwork; sender: Address; recipient: string; amount: string };
 export type CctpQuote = CctpQuoteRequest & { signedQuote: Hex; fee: string; expiresAt: number };
@@ -35,4 +36,14 @@ export async function fetchCctpQuote(input: CctpQuoteRequest, signal?: AbortSign
   const body = await response.json();
   if (!response.ok) throw new Error(body.error ?? "Circle quote unavailable.");
   return body;
+}
+
+
+export async function quoteTransfer(input: QuoteRequest, signal: AbortSignal): Promise<QuoteResult> {
+  const network = input.route.source.network;
+  if (!(network in cctpSources) || !/^0x[\da-f]{40}$/i.test(input.evmAddress)) throw new Error("Enter a valid Circle deposit route and sender.");
+  parseArcAmount(input.amount);
+  arcRecipient(input.midenAccount);
+  const quote = await fetchCctpQuote({ network: network as CctpNetwork, amount: input.amount, sender: input.evmAddress as Address, recipient: input.midenAccount }, signal);
+  return { kind: "cctp", received: input.amount, fee: formatUnits(BigInt(quote.fee), 6), expiresAt: quote.expiresAt, authorization: quote };
 }

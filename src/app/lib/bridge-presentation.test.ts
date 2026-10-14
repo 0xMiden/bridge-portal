@@ -6,12 +6,10 @@ import {
   type CtaInputs,
   createActivity,
   deriveCtaState,
-  formatQuoteAmount,
-  providers,
   quoteFor,
   sourceExplorer,
 } from "./bridge-presentation";
-import type { BridgeProvider, FlowMode } from "../../bridge/core/models";
+import type { FlowMode } from "../../bridge/core/models";
 
 // Minimal Agglayer send activity; only the fields sourceExplorer reads matter.
 function agglayerSend(overrides: Partial<Activity>): Activity {
@@ -136,8 +134,8 @@ describe("quoteFor refreshes fully on a route switch", () => {
     it(`Epoch quote reports USDC + 1-3 min ETA (${mode})`, () => {
       const quote = quoteFor(defaultBridgeRoute("epoch", mode)!, "100");
       expect(quote.asset).toBe("USDC");
-      expect(Number(quote.expectedReceived)).toBe(99.9);
-      expect(Number(quote.minReceived)).toBe(99.4005);
+      expect(quote.expectedReceived).toBe("—");
+      expect(quote.minReceived).toBe("Not quoted");
       expect(quote.eta).toBe("1-3 min");
     });
 
@@ -158,43 +156,14 @@ describe("quoteFor refreshes fully on a route switch", () => {
   }
 });
 
-// Every active route must expose the comparison facts the selector renders, so a
-// route can be judged without selecting it first.
-describe("route comparison metadata", () => {
-  const active = (Object.keys(providers) as BridgeProvider[]).filter(
-    (key) => !providers[key].disabled,
-  );
-
-  it("exposes ETA, fee, claim, trust for each active route", () => {
-    for (const key of active) {
-      const c = providers[key].comparison;
-      expect(c.eta).toBeTruthy();
-      expect(c.feeModel).toBeTruthy();
-      expect(c.claim).toBeTruthy();
-      expect(c.trust).toBeTruthy();
-      expect(c.availability).toBe(key === "agglayer" ? "Deposits only" : "Available");
-    }
-  });
-
-  it("gives a disabled route a reason for being unavailable", () => {
-    const disabled = (Object.keys(providers) as BridgeProvider[]).filter(
-      (key) => providers[key].disabled,
-    );
-    for (const key of disabled) {
-      expect(providers[key].comparison.unavailableReason).toBeTruthy();
-    }
-  });
-});
-
-
 afterEach(() => vi.restoreAllMocks());
 
 describe("activity presentation", () => {
   it.each([
-    ["receive", "epoch", "USDC", "Receive 10 USDC on Miden", "4 min", "epoch-usdc-to-miden"],
-    ["send", "epoch", "USDC", "Send 10 USDC to Sepolia", "4 min", "epoch-usdc-to-sepolia"],
-    ["receive", "agglayer", "ETH", "Receive 10 ETH on Miden", "8 min", "agglayer-eth-to-miden"],
-    ["send", "agglayer", "ETH", "Send 10 ETH to Sepolia", "8 min", "agglayer-eth-to-sepolia"],
+    ["receive", "epoch", "USDC", "Receive 10 USDC on Miden", "1-3 min", "epoch-usdc-to-miden"],
+    ["send", "epoch", "USDC", "Send 10 USDC to Sepolia", "1-3 min", "epoch-usdc-to-sepolia"],
+    ["receive", "agglayer", "ETH", "Receive 10 ETH on Miden", "10-20 min", "agglayer-eth-to-miden"],
+    ["send", "agglayer", "ETH", "Send 10 ETH to Sepolia", "10-20 min", "agglayer-eth-to-sepolia"],
   ] as const)("preserves the stored activity fields for %s via %s", (mode, provider, asset, summary, eta, routeId) => {
     vi.spyOn(Date, "now").mockReturnValue(1_700_000_000_000);
     expect(createActivity(findBridgeRoute(routeId)!, "10")).toEqual({
@@ -227,20 +196,6 @@ describe("activity presentation", () => {
       txHash: "0x5c33…ba85",
     };
     expect(createActivity(defaultBridgeRoute("epoch", "receive")!, "10", overrides)).toMatchObject(overrides);
-  });
-});
-
-describe("Epoch quote display", () => {
-  it.each([
-    ["1234567", 6, "1.23"],
-    ["1239000000000000000", 18, "1.24"],
-    ["1.239", 6, "1.24"],
-    ["0", 6, "0.00"],
-    ["", 18, "0.00"],
-    ["1e2", 6, "1e2"],
-    ["invalid", 18, "invalid"],
-  ])("formats provider amount %s with %s decimals as %s", (amount, decimals, expected) => {
-    expect(formatQuoteAmount(amount, decimals)).toBe(expected);
   });
 });
 

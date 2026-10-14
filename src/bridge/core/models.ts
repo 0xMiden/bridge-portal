@@ -1,8 +1,13 @@
 import type { SourceTransaction } from "../evm/source-transaction";
 import type { ActivityStatus } from "./activity-status";
 
-export type BridgeProvider = "near-intents" | "agglayer" | "epoch" | "xreserve";
-export type FlowMode = "receive" | "send";
+export type BridgeProvider = "agglayer" | "epoch" | "xreserve";
+export const flowModes = ["receive", "send"] as const;
+export type FlowMode = (typeof flowModes)[number];
+
+export function isFlowMode(value: unknown): value is FlowMode {
+  return flowModes.some((mode) => mode === value);
+}
 
 export type BridgeActivity = {
   id: string;
@@ -11,6 +16,8 @@ export type BridgeActivity = {
   /** Explicit route for new transfers; absent on legacy saved activities. */
   routeId?: string;
   status: ActivityStatus;
+  /** Chain leg that failed; absent on legacy or provider-unspecified failures. */
+  failureLeg?: "source" | "destination";
   amount: string;
   asset: string;
   destination?: string;
@@ -59,6 +66,13 @@ export type BridgeActivity = {
    * `destinationTxAt` stays undefined until that leg's tx exists. */
   sourceTxAt?: number;
   destinationTxAt?: number;
+};
+
+/** Persisted activity data shared by execution, tracking and rendering. */
+export type Activity = BridgeActivity & {
+  summary: string;
+  eta: string;
+  txHash: string;
 };
 
 /** Decimal quote amounts without symbols or locale formatting. */

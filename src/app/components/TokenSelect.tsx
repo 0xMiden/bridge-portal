@@ -1,9 +1,11 @@
 "use client";
 
+import { bridgeProviders } from "../../bridge/providers/registry";
+
 import { Check, ChevronDown } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { bridgeRoutes, type BridgeRoute } from "../../bridge/core/routes";
-import { networkLabels, providers, tokenNames } from "../lib/bridge-presentation";
+import { networkLabels, tokenNames } from "../lib/bridge-presentation";
 
 function TokenIcon({ symbol, size = 22 }: { symbol: string; size?: number }) {
   if (symbol === "ETH") {
@@ -68,7 +70,7 @@ export function TokenSelect({
   const rootRef = useRef<HTMLDivElement>(null);
   const active = route[side];
   const externalSide = route.mode === "receive" ? "source" : "destination";
-  const options = bridgeRoutes.filter((option) => !option.disabled && !providers[option.provider].disabled && option.mode === route.mode &&
+  const options = bridgeRoutes.filter((option) => !option.disabled && !bridgeProviders[option.provider].disabled && option.mode === route.mode &&
     option[externalSide].network === route[externalSide].network);
 
   useEffect(() => {
@@ -133,8 +135,8 @@ export function TokenSelect({
                 <span className="token-option-text">
                   <strong>{token.symbol}</strong>
                   <small>
-                    {networkLabels[token.network]} · {option.provider === "xreserve" && token.kind !== "miden" ? "Circle USDC" : tokenNames[token.symbol] ?? token.symbol} · via{" "}
-                    {providers[option.provider].label}
+                    {networkLabels[token.network]} · {token.name ?? tokenNames[token.symbol] ?? token.symbol} · via{" "}
+                    {bridgeProviders[option.provider].label}
                   </small>
                 </span>
                 {selected ? (

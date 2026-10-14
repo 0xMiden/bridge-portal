@@ -1,3 +1,4 @@
+import type { QuoteRequest, QuoteResult } from "../../core/quote";
 import { formatUnits, padHex } from "viem";
 import type { BridgeNetwork } from "../../core/assets";
 import { bridgeRoutes } from "../../core/routes";
@@ -62,4 +63,11 @@ export async function fetchWithdrawalQuote(input: WithdrawalQuoteRequest, signal
   const body = await response.json();
   if (!response.ok) throw new Error(body.error ?? "Withdrawal estimate unavailable.");
   return body;
+}
+
+export async function quoteTransfer(input: QuoteRequest, signal: AbortSignal): Promise<QuoteResult> {
+  const request = { network: input.route.destination.network, amount: input.amount, sender: input.midenAccount, recipient: input.evmAddress };
+  validateWithdrawalQuoteRequest(request);
+  const quote = await fetchWithdrawalQuote(request, signal);
+  return { kind: "withdrawal", received: formatUnits(BigInt(quote.received), 6), fee: formatUnits(BigInt(quote.fee), 6), expiresAt: quote.expiresAt, authorization: quote };
 }

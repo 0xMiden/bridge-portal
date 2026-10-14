@@ -1,5 +1,3 @@
-import { MIDEN_USDC } from "../../core/assets";
-
 /**
  * Epoch Protocol integration config.
  *
@@ -20,18 +18,3 @@ export const EPOCH_ALLOCATOR_URL =
  * https://docs.epochprotocol.xyz/epoch-miden-integration/integration-guide
  */
 export const MIDEN_DESTINATION_CHAIN_ID = 999999999;
-
-/**
- * Miden-side token for the Epoch route = USDC (Epoch's SIO route is USDC<->USDC).
- *
- * Miden 0.16 testnet USDC faucet, verified against Epoch's live quote API.
- * Source: epochprotocol/epoch-user-dashboard, src/constants/miden-faucets.ts.
- * The supported-chains documentation still lists the retired faucet, which
- * causes NO_QUOTE_AVAILABLE. This asset uses 6 decimals.
- *
- * NOTE: the `MIDEN_NATIVE_*` names are legacy; this is the USDC faucet, not the
- * chain-native asset.
- */
-export const MIDEN_NATIVE_TOKEN_SYMBOL = MIDEN_USDC.symbol;
-export const MIDEN_NATIVE_TOKEN_DECIMALS = MIDEN_USDC.decimals;
-export const MIDEN_NATIVE_FAUCET_ID = MIDEN_USDC.faucetId;

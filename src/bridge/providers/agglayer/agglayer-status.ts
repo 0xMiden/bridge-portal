@@ -37,9 +37,10 @@ interface BridgesResponse {
 export async function fetchDeposits(
   destAddr: string,
   limit = 10,
+  signal?: AbortSignal,
 ): Promise<AgglayerDeposit[]> {
   const res = await fetch(`${BRIDGES_API}/${destAddr}?limit=${limit}&offset=0`, {
-    cache: "no-store",
+    cache: "no-store", signal,
   });
   if (!res.ok) {
     throw new Error(`Agglayer bridge status ${res.status}`);
@@ -58,17 +59,17 @@ export async function fetchDeposits(
 export async function findMidenToEvmDeposit(
   l1Dest: string,
   depositCnt?: string | number,
+  signal?: AbortSignal,
 ): Promise<AgglayerDeposit | null> {
-  const deposits = await fetchDeposits(l1Dest);
+  const deposits = await fetchDeposits(l1Dest, 10, signal);
   const matching = deposits.filter(
     (d) => d.network_id === AGGLAYER_TESTNET.midenIndexerNetworkId &&
       d.dest_net === AGGLAYER_TESTNET.sourceNetworkId,
   );
   if (depositCnt !== undefined) {
-    const exact = matching.find(
+    return matching.find(
       (d) => String(d.deposit_cnt) === String(depositCnt),
-    );
-    if (exact) return exact;
+    ) ?? null;
   }
   return matching.sort((a, b) => b.deposit_cnt - a.deposit_cnt)[0] ?? null;
 }

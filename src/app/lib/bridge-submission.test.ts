@@ -1,6 +1,7 @@
 import { fetchWithdrawalQuote } from "../../bridge/providers/xreserve/withdrawal-quote";
 import { withdrawUsdcx } from "../../bridge/providers/xreserve/withdrawal-execute";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { findBridgeRoute } from "../../bridge/core/routes";
 import type { EvmProvider } from "../../wallets/evm/evm-wallet";
 import { SEPOLIA_NETWORK } from "../../config/sepolia";
 import { runAgglayerSend } from "../../bridge/providers/agglayer/agglayer-execute";
@@ -53,9 +54,7 @@ function setup(overrides: Partial<TransferSubmission> = {}) {
   const evmRequest = vi.fn<EvmProvider["request"]>().mockResolvedValue(SEPOLIA_NETWORK.chainHex);
   const input: TransferSubmission = {
     routeId: "epoch-usdc-to-miden",
-    amount: "0.12345678",
-    destination: "",
-    activities: [history],
+    amount: "0.123456",
     insufficientBalance: false,
     evmBalance: "1 USDC",
     evmWallet: {
@@ -69,11 +68,17 @@ function setup(overrides: Partial<TransferSubmission> = {}) {
       requestTransaction: vi.fn(),
       waitForTransaction: vi.fn(),
     },
-    agglayerEth: { faucetId: MIDEN_ACCOUNT, decimals: 8, amountRaw: 100_000_000n, symbol: "ETH" },
-    epochEvmAddress: EVM_ADDRESS,
-    epochMidenAccount: MIDEN_ACCOUNT,
+    midenAsset: { faucetId: MIDEN_ACCOUNT, decimals: 8, amountRaw: 100_000_000n, symbol: "ETH" },
+    evmAddress: EVM_ADDRESS,
+    midenAccount: MIDEN_ACCOUNT,
     ...overrides,
   };
+  if (findBridgeRoute(input.routeId)?.provider === "epoch" && !("quote" in overrides)) {
+    input.quote = {
+      kind: "epoch", received: "0.12", expiresAt: Date.now() + 60_000,
+      request: { routeId: input.routeId, amount: input.amount, evmAddress: input.evmAddress, midenAccount: input.midenAccount },
+    };
+  }
   const effects = {
     openEvmWallet: vi.fn(async () => {}),
     onError: vi.fn(),
@@ -86,14 +91,27 @@ function setup(overrides: Partial<TransferSubmission> = {}) {
 }
 
 describe("submission validation", () => {
+  it.each(["missing", "expired", "amount", "routeId", "midenAccount", "evmAddress"] as const)(
+    "requires another review when the quote is %s", async (change) => {
+      const { input, effects } = setup();
+      if (change === "missing") input.quote = undefined;
+      else if (change === "expired") input.quote!.expiresAt = Date.now() - 1;
+      else input.quote!.request[change] = "changed";
+      await submitBridgeTransfer(input, effects);
+      expect(runEpochTransfer).not.toHaveBeenCalled();
+      expect(loadStoredActivities()).toEqual([history]);
+      expect(effects.onError).toHaveBeenCalledWith(expect.stringMatching(/review.*quote/i));
+    },
+  );
+
   it.each([
-    ["disabled route", { routeId: "near-intents" }, /isn't available/],
+    ["unknown route", { routeId: "unknown-route" }, /isn't available/],
     ["insufficient balance", { insufficientBalance: true }, /Not enough USDC/],
     ["disconnected Miden source", { routeId: "epoch-usdc-to-sepolia", midenWallet: { connected: false, address: "" } }, /Connect your Bread wallet/],
-    ["paused Agglayer withdrawal", { routeId: "agglayer-eth-to-sepolia", destination: EVM_ADDRESS }, /isn't available/],
-    ["missing Agglayer recipient", { routeId: "agglayer-eth-to-miden", midenWallet: { connected: false, address: "" } }, /paste a Miden account/],
-    ["missing Epoch recipient", { epochMidenAccount: "" }, /paste a Miden account/],
-    ["invalid Epoch recipient", { routeId: "epoch-usdc-to-sepolia", epochEvmAddress: "invalid" }, /valid Sepolia/],
+    ["paused Agglayer withdrawal", { routeId: "agglayer-eth-to-sepolia", evmAddress: EVM_ADDRESS }, /isn't available/],
+    ["missing Agglayer recipient", { routeId: "agglayer-eth-to-miden", midenAccount: "", midenWallet: { connected: false, address: "" } }, /paste a Miden account/],
+    ["missing Epoch recipient", { midenAccount: "" }, /paste a Miden account/],
+    ["invalid Epoch recipient", { routeId: "epoch-usdc-to-sepolia", evmAddress: "invalid" }, /valid Sepolia/],
   ] satisfies Array<[string, Partial<TransferSubmission>, RegExp]>)("rejects %s before signing or creating an activity", async (_name, overrides, message) => {
     const { input, effects, evmRequest } = setup(overrides);
     await submitBridgeTransfer(input, effects);
@@ -134,7 +152,7 @@ describe("Agglayer submission", () => {
 });
 
 describe("Epoch activity lifecycle", () => {
-  it("persists before navigation and execution, then saves progress and final tracking data", async () => {
+  it("persists the acknowledged submission before navigation, then saves solver tracking data", async () => {
     const started = Promise.withResolvers<void>();
     const execution = Promise.withResolvers<EpochExecuteResult>();
     const { input, effects } = setup();
@@ -142,25 +160,22 @@ describe("Epoch activity lifecycle", () => {
       expect(path).toBe(`/activity/${loadStoredActivities()[0].id}`);
     });
     vi.mocked(runEpochTransfer).mockImplementation(() => {
-      expect(effects.navigate).toHaveBeenCalledOnce();
+      expect(effects.navigate).not.toHaveBeenCalled();
       started.resolve();
       return execution.promise;
     });
     const submission = submitBridgeTransfer(input, effects);
     await started.promise;
 
-    const [optimistic] = loadStoredActivities();
-    expect(optimistic).toMatchObject({
-      provider: "epoch", status: "source_finality", destination: MIDEN_ACCOUNT,
-      midenAccountHex: MIDEN_ACCOUNT, epochSponsor: EVM_ADDRESS,
-    });
-    const { onStatus } = vi.mocked(runEpochTransfer).mock.calls[0][0];
+    expect(loadStoredActivities()).toEqual([history]);
+    const { onStatus, onSubmitted } = vi.mocked(runEpochTransfer).mock.calls[0][0];
     const progress = { transactionIndex: 0, totalTransactions: 1, chainId: SEPOLIA_NETWORK.chainId };
-    onStatus!({ ...progress, phase: "sending", transactionHash: "0xab…cd" });
-    expect(loadStoredActivities()[0]).toMatchObject({ status: "source_finality", eta: "Confirm the deposit in your wallet…" });
-    expect(loadStoredActivities()[0].sourceTxHash).toBeUndefined();
-    onStatus!({ ...progress, phase: "sent", transactionHash: TX_HASH });
-    expect(loadStoredActivities()[0]).toMatchObject({ status: "message_observed", sourceTxHash: TX_HASH });
+    onStatus!({ ...progress, phase: "sending" });
+    expect(loadStoredActivities()).toEqual([history]);
+    expect(effects.onPhaseChange).toHaveBeenLastCalledWith("Confirm the deposit in your wallet…");
+    onSubmitted!({ sourceTxHash: TX_HASH });
+    const [submitted] = loadStoredActivities();
+    expect(submitted).toMatchObject({ provider: "epoch", status: "source_finality", sourceTxHash: TX_HASH, destination: MIDEN_ACCOUNT });
 
     execution.resolve({
       direction: "receive", intentNonce: "42", sponsorAddress: EVM_ADDRESS,
@@ -170,7 +185,7 @@ describe("Epoch activity lifecycle", () => {
     await submission;
 
     expect(loadStoredActivities()[0]).toMatchObject({
-      id: optimistic.id, status: "message_observed", eta: "1-3 min",
+      id: submitted.id, status: "message_observed", eta: "1-3 min",
       epochIntentNonce: "42", epochSponsor: EVM_ADDRESS,
       sourceTxHash: TX_HASH, receivedAmount: "0.123456789012345678",
     });
@@ -179,7 +194,7 @@ describe("Epoch activity lifecycle", () => {
     expect(effects.onPhaseChange).toHaveBeenLastCalledWith("");
   });
 
-  it.each([{ code: 4001 }, new Error("ACTION_REJECTED"), new Error("User denied transaction")])("removes only its optimistic activity on wallet rejection (%s)", async (error) => {
+  it.each([{ code: 4001 }, new Error("ACTION_REJECTED"), new Error("User denied transaction")])("leaves history untouched on wallet rejection (%s)", async (error) => {
     const { input, effects } = setup();
     const other = { ...history, id: "created-while-submitting" };
     vi.mocked(runEpochTransfer).mockImplementation(async () => {
@@ -189,25 +204,25 @@ describe("Epoch activity lifecycle", () => {
     await submitBridgeTransfer(input, effects);
 
     expect(loadStoredActivities()).toEqual([history, other]);
-    expect(effects.navigate).toHaveBeenLastCalledWith("/");
+    expect(effects.navigate).not.toHaveBeenCalled();
     expect(effects.onError).toHaveBeenCalledWith("You cancelled the request in your wallet.");
     expect(effects.onSubmittingChange).toHaveBeenLastCalledWith(false);
     expect(effects.onPhaseChange).toHaveBeenLastCalledWith("");
   });
 
-  it("keeps a failed activity and its broadcast hash available for recovery", async () => {
+  it("keeps a broadcast transfer pending when the solver becomes unavailable", async () => {
     const { input, effects } = setup();
-    vi.mocked(runEpochTransfer).mockImplementation(async ({ onStatus }) => {
-      onStatus!({ phase: "sent", transactionIndex: 0, totalTransactions: 1, chainId: SEPOLIA_NETWORK.chainId, transactionHash: TX_HASH });
+    vi.mocked(runEpochTransfer).mockImplementation(async ({ onSubmitted }) => {
+      onSubmitted!({ sourceTxHash: TX_HASH });
       throw new Error("Solver unavailable");
     });
     await submitBridgeTransfer(input, effects);
 
     const [failed, older] = loadStoredActivities();
-    expect(failed).toMatchObject({ status: "failed", eta: "Transfer failed", sourceTxHash: TX_HASH, epochSponsor: EVM_ADDRESS });
+    expect(failed).toMatchObject({ status: "source_finality", sourceTxHash: TX_HASH, epochSponsor: EVM_ADDRESS });
     expect(older).toEqual(history);
     expect(effects.navigate).toHaveBeenCalledOnce();
-    expect(effects.onError).toHaveBeenCalledWith("Solver unavailable");
+    expect(effects.onError).toHaveBeenCalledWith(expect.stringContaining("do not submit again"));
     expect(effects.onSubmittingChange).toHaveBeenLastCalledWith(false);
     expect(effects.onPhaseChange).toHaveBeenLastCalledWith("");
   });
@@ -248,7 +263,7 @@ describe("USDCx submission", () => {
     expect(loadStoredActivities()).toHaveLength(2);
     expect(loadStoredActivities()[0].status).toBe("source_finality");
     expect(effects.navigate).toHaveBeenCalledOnce();
-    expect(effects.onError).toHaveBeenCalledWith(expect.stringContaining("do not deposit again"));
+    expect(effects.onError).toHaveBeenCalledWith(expect.stringContaining("do not submit again"));
   });
   it("creates no activity for a rejected approval", async () => {
     const { input, effects } = setup({ routeId: "xreserve-usdc-to-miden", amount: "1" });
@@ -263,10 +278,14 @@ describe("USDCx submission", () => {
 
 describe("USDCx withdrawal submission", () => {
   const estimate = () => ({ network: "arc-testnet" as const, amount: "2", sender: MIDEN_ACCOUNT, recipient: EVM_ADDRESS, fee: "16400", received: "1983600", expiresAt: Date.now() + 60000 });
+  const reviewedQuote = () => ({
+    kind: "withdrawal" as const, received: "1.9836", fee: "0.0164", expiresAt: Date.now() + 60_000, authorization: estimate(),
+    request: { routeId: "xreserve-usdc-to-arc", amount: "2", evmAddress: EVM_ADDRESS, midenAccount: MIDEN_ACCOUNT },
+  });
   beforeEach(() => vi.mocked(fetchWithdrawalQuote).mockResolvedValue(estimate()));
   it.each([false, true])("retains the burn note across wallet settlement (failure: %s)", async (fails) => {
     const { input, effects, evmRequest } = setup({
-      routeId: "xreserve-usdc-to-arc", amount: "2", destination: EVM_ADDRESS, withdrawalQuote: estimate(),
+      routeId: "xreserve-usdc-to-arc", amount: "2", evmAddress: EVM_ADDRESS, quote: reviewedQuote(),
       evmWallet: { connected: false, address: "" },
     });
     const noteId = `0x${"cd".repeat(32)}`;
@@ -288,7 +307,7 @@ describe("USDCx withdrawal submission", () => {
     if (fails) expect(effects.onError).toHaveBeenCalledWith(expect.stringContaining("do not submit again"));
   });
   it("requires another review when Circle increases the fee before signing", async () => {
-    const { input, effects } = setup({ routeId: "xreserve-usdc-to-arc", amount: "2", withdrawalQuote: estimate() });
+    const { input, effects } = setup({ routeId: "xreserve-usdc-to-arc", amount: "2", quote: reviewedQuote() });
     vi.mocked(fetchWithdrawalQuote).mockResolvedValue({ ...estimate(), fee: "20000", received: "1980000" });
     await submitBridgeTransfer(input, effects);
     expect(withdrawUsdcx).not.toHaveBeenCalled();
@@ -296,7 +315,7 @@ describe("USDCx withdrawal submission", () => {
     expect(effects.onError).toHaveBeenCalledWith(expect.stringContaining("fee increased"));
   });
   it("leaves no withdrawal activity after a rejected signature", async () => {
-    const { input, effects } = setup({ routeId: "xreserve-usdc-to-arc", amount: "2", withdrawalQuote: estimate() });
+    const { input, effects } = setup({ routeId: "xreserve-usdc-to-arc", amount: "2", quote: reviewedQuote() });
     vi.mocked(withdrawUsdcx).mockRejectedValue(new Error("User rejected request"));
     await submitBridgeTransfer(input, effects);
     expect(loadStoredActivities()).toEqual([history]);

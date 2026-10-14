@@ -12,14 +12,18 @@ import type { ActivityStatus } from "../../core/activity-status";
 const TERMINAL_OK = new Set(["success", "completed"]);
 const FAILED = new Set(["failed", "reverted"]);
 
-export function epochActivityStatus(
+export function epochActivityState(
   statuses: readonly IntentTransactionStatus[] | undefined,
   destinationChainId: number,
-): ActivityStatus {
-  if (!statuses || statuses.length === 0) return "source_finality";
+): { status: ActivityStatus; failureLeg?: "source" | "destination" } {
+  if (!statuses || statuses.length === 0) return { status: "source_finality" };
 
-  if (statuses.some((s) => FAILED.has(String(s.status).toLowerCase()))) {
-    return "failed";
+  const failed = statuses.find((s) => FAILED.has(String(s.status).toLowerCase()));
+  if (failed) {
+    return {
+      status: "failed",
+      failureLeg: Number(failed.chainId) === destinationChainId ? "destination" : "source",
+    };
   }
 
   // Destination-chain-aware: settled only when a destination row is terminal-OK
@@ -34,10 +38,10 @@ export function epochActivityStatus(
         typeof s.transactionHash === "string" &&
         s.transactionHash.length > 0,
     );
-  if (destSettled) return "complete";
+  if (destSettled) return { status: "complete" };
 
   // In flight with observed rows.
-  return "message_observed";
+  return { status: "message_observed" };
 }
 
 /**
