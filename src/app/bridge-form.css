@@ -93,7 +93,7 @@
 .bridge-portal .token-select-trigger.open { background: var(--surface-muted); border-color: var(--border-strong); }
 .bridge-portal .token-select-value { padding-right: 4px; border-color: transparent; background: transparent; }
 .bridge-portal .swap-box-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; grid-row: 3; grid-column: 1 / -1; min-height: 20px; }
-.bridge-portal .fiat-amount { font-size: 12px; color: var(--muted-foreground); white-space: nowrap; }
+.bridge-portal .fiat-amount { min-width: 0; overflow: hidden; text-overflow: ellipsis; font-size: 12px; color: var(--muted-foreground); white-space: nowrap; }
 .bridge-portal .balance-line { justify-content: flex-end; max-width: 75%; font-size: 12px; font-weight: 400; }
 .bridge-portal .balance-show { padding: 0; color: var(--muted-foreground); font-weight: 400; }
 .bridge-portal .swap-divider { position: absolute; left: 50%; bottom: -31px; transform: translateX(-50%); z-index: 2; display: grid; place-items: center; width: 44px; height: 44px; margin: 0; padding: 0; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); color: var(--foreground); cursor: pointer; }

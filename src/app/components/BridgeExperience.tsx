@@ -66,6 +66,7 @@ import { ActivityStack } from "./ActivityStack";
 import { InfoTip } from "./InfoTip";
 import { RelativeTime } from "./RelativeTime";
 import { TokenSelect } from "./TokenSelect";
+import { FiatAmount } from "./FiatAmount";
 import { ChainSelect } from "./ChainSelect";
 import { ProviderOptions } from "./ProviderOptions";
 import { WalletMenu } from "../../wallets/WalletMenu";
@@ -1035,7 +1036,7 @@ export function BridgeExperience() {
                     <TokenSelect route={route} side={side} onSelectRoute={selectRoute} />
                   </div>
                   <div className="swap-box-foot">
-                    <small className="fiat-amount" title="USD estimates are unavailable for these testnet assets">USD —</small>
+                    <FiatAmount amount={isSource ? amount : expectedReceivedAmount} symbol={route[side].symbol} />
                     <small className="balance-line">{isMiden ? renderMidenBalance() : renderEvmBalance()}</small>
                   </div>
                   {isSource ? (
