@@ -99,19 +99,10 @@
 .bridge-portal .swap-divider { position: absolute; left: 50%; bottom: -31px; transform: translateX(-50%); z-index: 2; display: grid; place-items: center; width: 44px; height: 44px; margin: 0; padding: 0; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); color: var(--foreground); cursor: pointer; }
 .bridge-portal .swap-divider:hover:not(:disabled) { color: var(--accent-foreground); border-color: var(--accent); }
 .bridge-portal .swap-divider:disabled { opacity: 1; color: var(--muted-foreground); cursor: not-allowed; }
-.bridge-portal .destination-row { display: flex; align-items: center; gap: 8px; margin-top: 12px; min-height: 32px; color: var(--muted-foreground); }
-.bridge-portal .destination-row > svg { flex: none; }
-.bridge-portal .destination-row .info-tip-bubble,
 .bridge-portal .route-context .info-tip-bubble { left: auto; right: 0; transform: translateY(-3px); }
-.bridge-portal .destination-row .info-tip-bubble::before,
 .bridge-portal .route-context .info-tip-bubble::before { left: auto; right: 3px; transform: none; }
-.bridge-portal .destination-row .info-tip:hover .info-tip-bubble,
-.bridge-portal .destination-row .info-tip:focus-within .info-tip-bubble,
 .bridge-portal .route-context .info-tip:hover .info-tip-bubble,
 .bridge-portal .route-context .info-tip:focus-within .info-tip-bubble { transform: translateY(0); }
-.bridge-portal .destination-input { flex: 1; min-width: 0; margin: 0; padding: 0; }
-.bridge-portal .destination-input input { min-height: 32px; padding: 0; border-radius: 4px; background: transparent; box-shadow: none; font-family: inherit; font-size: 12px; line-height: 1.5; color: var(--muted-foreground); text-overflow: ellipsis; }
-.bridge-portal .destination-input input:focus { color: var(--foreground); outline: 2px solid var(--accent); outline-offset: 3px; }
 .bridge-portal .transfer-route-card[data-has-amount="false"] { padding: 0; border: 0; }
 .bridge-portal .transfer-route-details > h2 { margin: 0; padding-bottom: 10px; border-bottom: 1px solid var(--border); font-size: 15px; font-weight: 500; }
 .bridge-portal .transfer-route-heading { margin: 0; gap: 8px; }
@@ -160,7 +151,6 @@
   .bridge-portal .token-select-trigger,
   .bridge-portal .token-select-value { min-height: 44px; padding-top: 6px; padding-bottom: 6px; }
   .bridge-portal .balance-show { min-height: 44px; }
-  .bridge-portal .destination-input input { min-height: 44px; font-size: 16px; }
   .bridge-portal .primary-action-dock { margin: 14px 0 0; padding: 0 0 env(safe-area-inset-bottom); }
 }
 @media (max-width: 380px) {

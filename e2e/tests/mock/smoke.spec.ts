@@ -35,21 +35,37 @@ test("bridge boots, wallets connect, only compatible providers are offered", asy
   });
 });
 
-test("launch links use canonical provider, mode and recipient parameters", async ({ bridge, page }) => {
+test("launch links select the route but connected wallets determine both recipients", async ({ bridge, page }) => {
   const midenAccount = "0x387149ae66116cf114eebd60bb7381";
   const evmAddress = `0x${"12".repeat(20)}`;
-  const destination = page.locator(".destination-input input");
+  const destination = page.locator("#preflight-destination-value");
+  await page.route("**/api/xreserve/withdrawal-quote", (route) => route.fulfill({
+    json: { ...route.request().postDataJSON(), received: "1983600", fee: "16400", expiresAt: Date.now() + 60_000 },
+  }));
 
   await page.goto(`/?provider=agglayer&mode=receive&midenAccount=${midenAccount}`);
   await bridge.waitForReady();
   await expect(bridge.selectedProvider()).toContainText("Agglayer");
-  await expect(destination).toHaveValue(midenAccount);
+  await expect(page.getByRole("textbox", { name: /Miden account|address/ })).toHaveCount(0);
+  await bridge.fillAmount("0.01");
+  await bridge.openPreflight();
+  const walletMiden = await page.evaluate(() => window.__E2E__!.midenAddress!);
+  expect(walletMiden).not.toBe(midenAccount);
+  await expect(destination).toHaveAttribute("title", walletMiden);
+  await bridge.cancelPreflight();
 
   await page.goto(`/?provider=xreserve&mode=send&evmAddress=${evmAddress}`);
   await bridge.waitForReady();
   await expect(bridge.selectedProvider()).toContainText("USDCx");
   await expect(page.locator(".mode-switch button[aria-pressed='true']")).toHaveText("Withdraw");
-  await expect(destination).toHaveValue(evmAddress);
+  const withdrawalRequest = page.waitForRequest("**/api/xreserve/withdrawal-quote", { timeout: 20_000 });
+  await bridge.fillAmount("2");
+  const walletEvm = await page.evaluate(() => window.__E2E__!.evmAddress!);
+  expect(walletEvm).not.toBe(evmAddress);
+  expect((await withdrawalRequest).postDataJSON()).toMatchObject({ recipient: walletEvm, sender: walletMiden });
+  await bridge.openPreflight();
+  await expect(destination).toHaveAttribute("title", walletEvm);
+  await bridge.cancelPreflight();
 
   await page.evaluate(() => {
     localStorage.removeItem("miden.bridge.ui.route");
@@ -60,19 +76,10 @@ test("launch links use canonical provider, mode and recipient parameters", async
   await bridge.waitForReady();
   await expect(bridge.selectedProvider()).toContainText("USDCx");
   await expect(page.locator(".mode-switch button[aria-pressed='true']")).toHaveText("Deposit");
-  const walletMiden = await page.evaluate(() => window.__E2E__!.midenAddress!);
-  await expect(destination).toHaveValue(walletMiden);
-
-  await page.goto(`/?mode=send&evm_address=${evmAddress}&recipient=${evmAddress}`);
-  await bridge.waitForReady();
-  const walletEvm = await page.evaluate(() => window.__E2E__!.evmAddress!);
-  await expect(destination).toHaveValue(walletEvm);
 });
 
 test("Activity navigation preserves the form and the reverse control swaps the wallet panels", async ({ bridge, page }) => {
   await bridge.fillAmount("2");
-  const destination = page.locator(".destination-input input");
-  const recipient = await destination.inputValue();
   await page.getByRole("tab", { name: "Bridge", exact: true }).focus();
   await page.keyboard.press("ArrowRight");
   await expect(page.getByRole("tab", { name: "Activity", exact: true })).toBeFocused();
@@ -80,16 +87,15 @@ test("Activity navigation preserves the form and the reverse control swaps the w
   await expect(page.getByRole("textbox", { name: "Amount", exact: true })).toBeHidden();
   await page.keyboard.press("ArrowLeft");
   await expect(page.getByRole("textbox", { name: "Amount", exact: true })).toHaveValue("2");
-  await expect(destination).toHaveValue(recipient);
   await page.getByRole("button", { name: "Reverse transfer direction" }).click();
   await expect(page.getByRole("button", { name: "Withdraw", exact: true })).toHaveAttribute("aria-pressed", "true");
   await expect(page.locator('.swap-box[data-side="source"] .panel-wallet')).toContainText(/mtst1/);
   await expect(page.getByRole("textbox", { name: "Amount", exact: true })).toHaveValue("");
   await expect(page.locator(".transfer-route-details")).toBeHidden();
-  await expect(destination).toHaveValue(await page.evaluate(() => window.__E2E__!.evmAddress!));
+  await expect(page.locator('.swap-box[data-side="destination"] .panel-wallet')).toHaveAttribute("data-wallet", "evm");
   await page.getByRole("button", { name: "Reverse transfer direction" }).click();
   await expect(page.getByRole("button", { name: "Deposit", exact: true })).toHaveAttribute("aria-pressed", "true");
-  await expect(destination).toHaveValue(recipient);
+  await expect(page.locator('.swap-box[data-side="destination"] .panel-wallet')).toHaveAttribute("data-wallet", "miden");
 });
 
 test("route stays hidden until a valid amount and expands only compatible providers", async ({ bridge, page }, info) => {

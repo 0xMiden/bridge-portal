@@ -4,7 +4,7 @@ import type { Route, Mode } from "../../pages/bridge-page";
 // Issue #55: the primary CTA is a deterministic progression (incomplete form →
 // ready-to-review), and a valid transfer opens a preflight review before any
 // wallet is invoked. In the mock tier both wallets are already connected and the
-// destination is prefilled, so the observable CTA sequence is:
+// destination comes from the receiving wallet, so the observable CTA sequence is:
 //   empty amount → disabled "Enter amount"  →  valid amount → "Review <dir>".
 
 const combos: Array<{ route: Route; mode: Mode; label: RegExp }> = [
@@ -81,7 +81,6 @@ test("cancelling the preflight preserves entered data and calls no wallet", asyn
     await bridge.setRoute("USDCx");
     await bridge.setMode("Receive");
     await bridge.fillAmount("0.07");
-    await bridge.fillDestination("0x4e6fb40fd2f6a55140df2c42dfb5b7");
   });
 
   await test.step("open the preflight review", async () => {
@@ -92,13 +91,14 @@ test("cancelling the preflight preserves entered data and calls no wallet", asyn
   await test.step("cancel → form intact, no activity", async () => {
     await bridge.cancelPreflight();
     await expect(bridge.preflight()).toBeHidden();
-    // Entered amount + destination survive the cancellation.
+    // The amount survives cancellation; the destination remains the wallet's account.
     await expect(
       page.locator(".swap-box input[aria-label='Amount']"),
     ).toHaveValue("0.07");
-    await expect(page.locator(".destination-input input")).toHaveValue(
-      "0x4e6fb40fd2f6a55140df2c42dfb5b7",
-    );
     expect((await bridge.readActivities()).length).toBe(0);
+    await bridge.openPreflight();
+    await expect(page.locator("#preflight-destination-value")).toHaveAttribute(
+      "title", await page.evaluate(() => window.__E2E__!.midenAddress!),
+    );
   });
 });

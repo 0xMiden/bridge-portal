@@ -572,8 +572,7 @@ a {
 .wallet-button,
 .back-link,
 .secondary-button,
-.route-trigger,
-.destination-input input {
+.route-trigger {
   border: 0;
   border-radius: var(--radius-md);
   background: var(--field);
@@ -612,7 +611,6 @@ a {
 .home-activity-item,
 .explorer-link,
 .mode-switch button,
-.destination-input input,
 .swap-box,
 .timeline-step {
   transition: var(--transition-interactive);
@@ -1073,7 +1071,6 @@ a {
 }
 
 .route-trigger:focus-visible,
-.destination-input input:focus,
 .swap-box:focus-within {
   border-color: var(--accent-border);
   box-shadow:
@@ -1082,7 +1079,6 @@ a {
 }
 
 .route-trigger span,
-.destination-input span,
 .swap-box > div > span,
 .quote-summary span,
 .metric span,
@@ -1779,26 +1775,6 @@ a {
   color: var(--on-accent);
   position: relative;
   z-index: 1;
-}
-
-.destination-input {
-  display: grid;
-  gap: 6px;
-  margin-top: 8px;
-  padding: 0 2px;
-}
-
-.destination-input input {
-  width: 100%;
-  min-height: 44px;
-  padding: 0 12px;
-  outline: 0;
-}
-
-.destination-input small {
-  color: var(--muted-foreground);
-  font-size: 12px;
-  line-height: 1.42;
 }
 
 .form-error {
@@ -3300,10 +3276,6 @@ a {
     min-height: 44px;
   }
 
-  .destination-input {
-    margin-top: 6px;
-  }
-
   .route-disclaimer {
     margin-top: 8px;
     padding: 8px 10px;
@@ -3670,14 +3642,6 @@ a {
   .swap-box input {
     min-width: 0;
     width: min(140px, 100%);
-  }
-
-  .destination-input input {
-    min-width: 0;
-    width: 100%;
-    font-family: var(--font-geist-mono), ui-monospace, monospace;
-    font-size: 16px;
-    font-variant-numeric: tabular-nums;
   }
 
 

@@ -104,12 +104,13 @@ test.describe("mobile bridge layout", () => {
     await bridge.waitForReady();
     await bridge.setRoute("USDCx");
     await bridge.setMode("Receive");
+    await bridge.setChain("Arc Testnet");
+    await page.evaluate(() => localStorage.setItem("e2e-signer-mode", "reject"));
     await bridge.fillAmount("0.05");
-    await bridge.fillDestination("not-a-miden-address");
     await bridge.openPreflight();
     await bridge.confirmPreflight();
     const formError = page.locator(".swap-card > .form-error");
-    await expect(formError).toContainText(/Miden/i);
+    await expect(formError).toContainText(/cancelled/i);
 
     const dock = bridge.actionDock();
     await expect(dock).toBeVisible();

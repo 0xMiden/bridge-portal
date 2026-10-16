@@ -162,7 +162,6 @@ test("Circle origins retain Miden USDCx, review the separate fee and restore the
     await expect(page.locator(".token-select-symbol")).toHaveText(["USDC", "USDCx"]);
     await expect(page.locator(".swap-box").last().locator(".swap-box-head strong")).toHaveText("Miden");
     await bridge.fillAmount("1");
-    await bridge.fillDestination("0x4e6fb40fd2f6a55140df2c42dfb5b7");
     await expect(page.locator(".quote-summary")).toContainText("0.25 USDC");
     await bridge.openPreflight();
     await expect(bridge.preflight()).toContainText(label);
@@ -179,7 +178,6 @@ test("Circle origins retain Miden USDCx, review the separate fee and restore the
   await expect(origin).toHaveText("Arbitrum Sepolia");
   expect((await bridgeFrames(page)).filter((frame) => frame.source !== "Arbitrum Sepolia" || !frame.route.includes("USDCx"))).toEqual([]);
   await bridge.fillAmount("1");
-  await bridge.fillDestination("0x4e6fb40fd2f6a55140df2c42dfb5b7");
   await expect(page.locator(".quote-summary")).toContainText("0.25 USDC");
   await page.screenshot({ path: info.outputPath("usdcx-origins-desktop.png"), fullPage: true, animations: "disabled" });
   await page.setViewportSize({ width: 390, height: 844 });
@@ -205,7 +203,6 @@ test("browsing routes leaves the wallet alone; confirming switches chains and a 
   await bridge.setChain("Sepolia");
   await bridge.setChain("Arc Testnet");
   await bridge.fillAmount("1.000001");
-  await bridge.fillDestination("0x4e6fb40fd2f6a55140df2c42dfb5b7");
   await expect(page.locator(".form-error")).toHaveCount(0);
   await bridge.openPreflight();
   expect(arcReads).toBe(0);

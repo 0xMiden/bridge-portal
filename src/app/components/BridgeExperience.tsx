@@ -11,7 +11,6 @@ import {
   LogOut,
   RefreshCcw,
   ShieldCheck,
-  Wallet,
   X,
 } from "lucide-react";
 import dynamic from "next/dynamic";
@@ -148,13 +147,7 @@ function initialBridgeForm(params: ReadonlyURLSearchParams) {
     defaultBridgeRoute(provider, mode) ??
     defaultBridgeRoute(provider, "receive") ??
     bridgeRoutes.find((option) => !option.disabled && !bridgeProviders[option.provider].disabled)!;
-  const midenAccount = params.get("midenAccount") ?? "";
-  const evmAddress = params.get("evmAddress") ?? "";
-  return {
-    route,
-    midenAccount,
-    destination: route.mode === "receive" ? midenAccount : evmAddress,
-  };
+  return { route };
 }
 
 const MidenWalletButton = dynamic(
@@ -210,14 +203,12 @@ export function BridgeExperience() {
   const [amount, setAmount] = useState("");
   const [activeTab, setActiveTab] = useState<"bridge" | "activity">("bridge");
   const [providerSelection, setProviderSelection] = useState<"automatic" | "manual">("automatic");
-  const [destination, setDestination] = useState(initialForm.destination);
   const walletAccount = address ?? "";
   const walletConnected = isConnected && Boolean(address);
   const externalAsset = route.source.kind === "miden" ? route.destination : route.source;
   const evmNetwork = evmNetworks[externalAsset.network === "miden-testnet" ? "sepolia" : externalAsset.network];
   const [midenWallet, setMidenWallet] =
     useState<MidenWalletSnapshot>(emptyMidenWallet);
-  const launchMidenAccount = initialForm.midenAccount;
   const [walletError, setWalletError] = useState("");
   const [bridgeError, setBridgeError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -228,19 +219,16 @@ export function BridgeExperience() {
   // untouched, so all entered data is preserved).
   const [showPreflight, setShowPreflight] = useState(false);
   const [reviewedQuote, setReviewedQuote] = useState<TransferQuote>();
+  const [reviewedAccounts, setReviewedAccounts] = useState<{ evmAddress: string; midenAccount: string }>();
   // Reveals the full destination value in the preflight (a long Miden id / 0x
   // address is shortened by default, with an affordance to inspect it in full).
   const [showFullDestination, setShowFullDestination] = useState(false);
   const [preflightDestinationCopied, setPreflightDestinationCopied] =
     useState(false);
-  const destinationInputRef = useRef<HTMLInputElement>(null);
   const walletPanelsRef = useRef<HTMLDivElement>(null);
   const preflightConfirmRef = useRef<HTMLButtonElement>(null);
   const primaryActionRef = useRef<HTMLButtonElement>(null);
   const preflightPreviousFocusRef = useRef<HTMLElement | null>(null);
-  // Prefill the destination input with the connected wallet once per direction;
-  // cleared in selectMode so switching modes re-prefills for the new side.
-  const destinationPrefilledRef = useRef(false);
   const [activities, setActivities] = useState<Activity[]>([]);
   const [evmMenuOpen, setEvmMenuOpen] = useState(false);
   const [evmCopied, setEvmCopied] = useState(false);
@@ -284,7 +272,6 @@ export function BridgeExperience() {
     ...modes[mode],
     from: networkLabels[route.source.network],
     to: networkLabels[route.destination.network],
-    destinationLabel: mode === "send" ? `${networkLabels[route.destination.network]} address` : modes.receive.destinationLabel,
   };
   const providerCopy = bridgeProviders[provider];
   const hasRouteAmount = useMemo(() => {
@@ -316,11 +303,10 @@ export function BridgeExperience() {
     if (!(Number(amount) > 0)) return;
     preloadBridgeSubmission(provider);
   }, [amount, provider]);
-  const midenAddress = midenWallet.address || launchMidenAccount;
-  // The typed recipient takes precedence; adapters validate it before signing.
-  const evmAddress = mode === "send" ? destination.trim() || walletAccount : walletAccount;
-  const midenAccount =
-    mode === "send" ? midenAddress : destination.trim() || midenAddress;
+  // Quotes and transfers always use the current connected wallet accounts.
+  const midenAddress = midenWallet.connected ? midenWallet.address : "";
+  const evmAddress = walletConnected ? walletAccount : "";
+  const midenAccount = midenAddress;
   const quoteQuery = useTransferQuote({ route, amount, midenAccount, evmAddress }, showPreflight || isSubmitting);
   const liveQuote = showPreflight || isSubmitting ? reviewedQuote : quoteQuery.data;
   const fees = quote.fees;
@@ -352,9 +338,7 @@ export function BridgeExperience() {
     ? midenTokenBalance && midenRouteToken
       ? `${compactTokenAmount(midenTokenBalance.balance)} ${midenRouteToken.symbol}`
       : "Syncing…"
-    : launchMidenAccount
-      ? "Launch account"
-      : "Not connected";
+    : "Not connected";
   // Chain-specific wallet identity for the header pill + the From/To panels, so
   // each side explicitly names its wallet and shows its connection state.
   const evmIdentity = evmWalletIdentity({
@@ -362,9 +346,7 @@ export function BridgeExperience() {
     networkLabel: evmNetwork.name,
     address: walletAccount,
   });
-  const hasDestination = Boolean(
-    destination.trim() || (mode === "receive" ? midenAddress : walletAccount),
-  );
+  const destinationConnected = mode === "receive" ? Boolean(midenAccount) : Boolean(evmAddress);
   // Receive deposits the source token from the connected Sepolia wallet, so a
   // request above its balance would revert on-chain (MetaMask shows "likely to
   // fail"). Block it in-app before the wallet prompt. Send sources from the
@@ -380,17 +362,18 @@ export function BridgeExperience() {
   // The connected wallet on the direction's source side — the guard for whether
   // the CTA should prompt a connection (receive sources from Sepolia, send from
   // the Miden wallet).
-  const sourceConnected = mode === "receive" ? walletConnected : midenWallet.connected;
-  // The resolved destination shown in the preflight: the typed value, else the
-  // connected wallet on the receiving side (Miden for receive, Sepolia for send).
+  const sourceConnected = mode === "receive" ? Boolean(evmAddress) : Boolean(midenAccount);
+  // Keep the reviewed accounts fixed if a wallet changes while review is open.
   const previewDestination =
     mode === "receive"
-      ? destination.trim() || midenAddress
-      : destination.trim() || walletAccount;
+      ? reviewedAccounts?.midenAccount ?? midenAccount
+      : reviewedAccounts?.evmAddress ?? evmAddress;
+  const reviewWalletsChanged = reviewedAccounts?.midenAccount !== midenAccount ||
+    reviewedAccounts?.evmAddress.toLowerCase() !== evmAddress.toLowerCase();
   const cta = deriveCtaState({
     mode,
     sourceConnected,
-    hasDestination,
+    destinationConnected,
     amount,
     sourceTokenSymbol,
     insufficientBalance,
@@ -399,20 +382,6 @@ export function BridgeExperience() {
     submitPhase,
     evmNetworkLabel: evmNetwork.name,
   });
-  // Destination help is route-agnostic: it depends only on direction (receive =
-  // Miden account, send = Sepolia address) and shows consistently on every route.
-  const destinationHelp =
-    mode === "receive"
-      ? midenWallet.connected
-        ? `Defaults to your connected Bread wallet ${shortAddress(midenAddress)}. Paste a different Miden account (mtst1…/30-hex) to override.`
-        : launchMidenAccount
-          ? `Preloaded from wallet launch: ${shortAddress(launchMidenAccount)}. Connect Bread before signing Miden-side actions.`
-          : "Connect your Bread wallet, or paste a Miden account (mtst1…/30-hex)."
-      : walletConnected
-        ? `Defaults to your connected Sepolia wallet ${shortAddress(walletAccount)}. Paste a different 0x address to override.`
-        : "Connect your Sepolia wallet, or paste a 0x destination address.";
-  const showDestinationHelp = true;
-  const destinationPlaceholder = copy.destinationPlaceholder;
   const handleMidenWalletState = useCallback(
     (next: MidenWalletSnapshot) => setMidenWallet(next),
     [],
@@ -489,35 +458,6 @@ export function BridgeExperience() {
     };
   }, [mobileRouteSheet, showPreflight]);
 
-  // Default the destination input to the connected wallet on the relevant side
-  // (Miden for receive, Sepolia for send). Runs once per direction; the user can
-  // freely edit or clear it afterward.
-  useEffect(() => {
-    if (destinationPrefilledRef.current) return;
-    const connected =
-      mode === "receive"
-        ? midenWallet.connected
-          ? midenAddress
-          : ""
-        : walletConnected
-          ? walletAccount
-          : "";
-    if (connected && !destination) {
-      // Syncing the input to an external event (wallet connect), guarded to run
-      // once per direction — not a render-derived cascade.
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setDestination(connected);
-      destinationPrefilledRef.current = true;
-    }
-  }, [
-    mode,
-    midenWallet.connected,
-    midenAddress,
-    walletConnected,
-    walletAccount,
-    destination,
-  ]);
-
   function selectMode(nextMode: FlowMode) {
     const nextRoute = nextMode === mode ? route : reverseBridgeRoute(route);
     if (!nextRoute) return;
@@ -528,8 +468,6 @@ export function BridgeExperience() {
     saveStoredMode(nextMode);
     saveStoredRoute(nextRoute.provider, nextRoute.id);
     setAmount("");
-    setDestination("");
-    destinationPrefilledRef.current = false;
     setBridgeError("");
   }
 
@@ -689,7 +627,7 @@ export function BridgeExperience() {
 
   // Focus the actual Miden control inside its panel; do not create a second
   // wallet adapter instance when the transfer direction changes.
-  function focusMidenWalletButton() {
+  function connectMidenWallet() {
     const midenPill = walletPanelsRef.current?.querySelector<HTMLButtonElement>(
       '[data-wallet="miden"] .wallet-pill',
     );
@@ -701,20 +639,21 @@ export function BridgeExperience() {
       behavior: reducedMotion ? "auto" : "smooth",
     });
     midenPill?.focus();
+    midenPill?.click();
   }
 
   // The CTA never submits directly: it either advances the form (connect the
-  // source wallet, focus the destination) or opens the preflight review. Only
+  // missing wallet) or opens the preflight review. Only
   // the review's confirm action reaches submitTransfer.
   function handlePrimaryAction() {
     switch (cta.action) {
       case "connect-source":
         if (mode === "receive") void openWalletModal();
-        else focusMidenWalletButton();
+        else connectMidenWallet();
         return;
-      case "add-destination":
-        destinationInputRef.current?.focus();
-        destinationInputRef.current?.scrollIntoView({ block: "center" });
+      case "connect-destination":
+        if (mode === "receive") connectMidenWallet();
+        else void openWalletModal();
         return;
       case "review":
         setBridgeError("");
@@ -728,6 +667,7 @@ export function BridgeExperience() {
           }
           setReviewedQuote(quoteQuery.data);
         } else setReviewedQuote(undefined);
+        setReviewedAccounts({ evmAddress, midenAccount });
         setShowFullDestination(false);
         setPreflightDestinationCopied(false);
         preflightPreviousFocusRef.current =
@@ -753,6 +693,10 @@ export function BridgeExperience() {
 
   function confirmPreflight() {
     setShowPreflight(false);
+    if (reviewWalletsChanged) {
+      setBridgeError("Your connected wallet changed. Review the transfer again.");
+      return;
+    }
     void submitTransfer();
   }
 
@@ -1053,20 +997,6 @@ export function BridgeExperience() {
 
           </div>
 
-          <div className="destination-row">
-            <Wallet size={15} aria-hidden="true" />
-            <label className="destination-input">
-            <span className="sr-only">{copy.destinationLabel}</span>
-            <input
-              ref={destinationInputRef}
-              value={destination}
-              onChange={(event) => setDestination(event.target.value)}
-              placeholder={destinationPlaceholder}
-              aria-label={copy.destinationLabel}
-            />
-            </label>
-            {showDestinationHelp ? <InfoTip label={destinationHelp} /> : null}
-          </div>
           {bridgeError || quoteQuery.error ? <p className="form-error">{bridgeError || quoteQuery.error?.message}</p> : null}
 
         </section>
@@ -1259,6 +1189,7 @@ export function BridgeExperience() {
                   </dl>
 
                   <p className="preflight-note">{routeNote}</p>
+                  {reviewWalletsChanged ? <p className="form-error" role="alert">Your connected wallet changed. Close this review and review the transfer again.</p> : null}
                 </div>
 
                 <div className="preflight-actions">
@@ -1273,6 +1204,7 @@ export function BridgeExperience() {
                     type="button"
                     className="primary-button preflight-confirm"
                     ref={preflightConfirmRef}
+                    disabled={reviewWalletsChanged}
                     onClick={confirmPreflight}
                   >
                     Confirm in wallet

@@ -27,14 +27,14 @@ export type TransferAction =
   | "submitting"
   | "enter-amount"
   | "connect-source"
-  | "add-destination"
+  | "connect-destination"
   | "insufficient"
   | "quote-loading"
   | "review";
 
 export interface TransferInputs {
   sourceConnected: boolean;
-  hasDestination: boolean;
+  destinationConnected: boolean;
   amount: string;
   insufficientBalance: boolean;
   quoteLoading: boolean;
@@ -46,7 +46,7 @@ export function deriveTransferAction(input: TransferInputs): TransferAction {
   if (input.isSubmitting) return "submitting";
   if (!isValidAmount(input.amount)) return "enter-amount";
   if (!input.sourceConnected) return "connect-source";
-  if (!input.hasDestination) return "add-destination";
+  if (!input.destinationConnected) return "connect-destination";
   if (input.insufficientBalance) return "insufficient";
   if (input.quoteLoading) return "quote-loading";
   return "review";

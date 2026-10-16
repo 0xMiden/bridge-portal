@@ -65,10 +65,6 @@ export class BridgePage {
       .waitFor({ state: "visible", timeout });
   }
 
-  async fillDestination(value: string): Promise<void> {
-    await this.page.locator(".destination-input input").fill(value);
-  }
-
   primaryButton() {
     return this.actionDock().locator(".primary-button");
   }

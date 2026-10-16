@@ -45,17 +45,17 @@ lives in activity details.
 
 ## Wallet-launched flows
 
-When the Bridge UI is opened from the Miden wallet, the wallet should pass the
-active Miden account to the Bridge UI or prompt the user to connect MidenFi.
+When the Bridge UI is opened from the Miden wallet, prompt the user to connect
+their Miden and EVM wallets. Both connections are required before a transfer.
 
 - Cross-chain Receive: Miden is the destination chain. The connected Miden
-  account should preload as the destination account.
+  account is always the destination account.
 - Cross-chain Send: Miden is the source chain. The connected Miden account
-  should appear as the source wallet, while the destination input resolves to
-  the connected Sepolia wallet or a pasted EVM address.
+  appears as the source wallet, while the destination is the connected EVM
+  wallet on the selected network.
 
-The app should not pre-fill arbitrary defaults. Preloading is only valid when it
-comes from a connected wallet session or explicit launch parameters.
+There is no manual recipient input. Launch parameters cannot override the
+connected accounts, and changing a wallet requires a fresh transfer review.
 
 ## Wallet-level Swap and Earn
 
