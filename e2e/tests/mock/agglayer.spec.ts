@@ -4,13 +4,13 @@ test("Agglayer receive: select, restore and submit a deposit", async ({ bridge, 
   await bridge.setRoute("AggLayer");
   await page.reload();
   await bridge.waitForReady();
-  await expect(bridge.routeTrigger()).toContainText("Agglayer");
+  await expect(bridge.selectedProvider()).toContainText("Agglayer");
   await expect(page.locator(".mode-switch button[aria-pressed='true']"))
-    .toHaveText("Receive");
+    .toHaveText("Deposit");
 
   await page.goto("/?provider=agglayer&mode=receive");
   await bridge.waitForReady();
-  await expect(bridge.routeTrigger()).toContainText("Agglayer");
+  await expect(bridge.selectedProvider()).toContainText("Agglayer");
   await bridge.fillAmount("0.01");
   await bridge.submit();
   await bridge.waitForActivityPage();
@@ -35,14 +35,14 @@ test("Agglayer withdrawals stay disabled for saved selections and launch links",
   });
   await page.reload();
   await bridge.waitForReady();
-  await expect(bridge.routeTrigger()).toContainText("Agglayer");
-  await expect(page.locator(".mode-switch button[aria-pressed='true']")).toHaveText("Receive");
+  await expect(bridge.selectedProvider()).toContainText("Agglayer");
+  await expect(page.locator(".mode-switch button[aria-pressed='true']")).toHaveText("Deposit");
 
   await page.goto("/?provider=agglayer&mode=send");
   await bridge.waitForReady();
-  await expect(bridge.routeTrigger()).toContainText("Agglayer");
-  await expect(page.locator(".mode-switch button[aria-pressed='true']")).toHaveText("Receive");
-  const send = page.locator(".mode-switch").getByRole("button", { name: "Send", exact: true });
+  await expect(bridge.selectedProvider()).toContainText("Agglayer");
+  await expect(page.locator(".mode-switch button[aria-pressed='true']")).toHaveText("Deposit");
+  const send = page.locator(".mode-switch").getByRole("button", { name: "Withdraw", exact: true });
   await expect(send).toBeDisabled();
   await expect(send).toHaveAttribute("title", "Agglayer withdrawals are not available yet");
   expect(await bridge.readActivities()).toEqual([]);

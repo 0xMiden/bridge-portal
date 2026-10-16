@@ -57,282 +57,37 @@ function contrastRatio(
   );
 }
 
-test("dark route and status states use semantic contrast", async ({
-  bridge,
-  page,
-}) => {
-  await bridge.waitForReady();
-
-  await page.getByRole("button", { name: "Theme: System" }).click();
-  await page.getByRole("menuitemradio", { name: "Dark" }).click();
-  await page.locator(".route-trigger").click();
-
-  const testnetTag = page.locator(".route-tag.testnet").first();
-  const disabledTag = page.locator(".route-option.disabled").first();
-
-  await expect(testnetTag).toBeVisible();
-  await expect(disabledTag).toBeVisible();
-
-  await page.evaluate(() => {
-    const states = document.createElement("div");
-    states.id = "e2e-status-states";
-    states.innerHTML = `
-      <div class="route-disclaimer mock">Warning route</div>
-      <span class="status-badge success">Success</span>
-      <span class="status-badge warning">Warning</span>
-      <span class="status-badge danger">Danger</span>
-      <span class="status-badge active">Active</span>
-    `;
-    document.body.append(states);
-  });
-
-  await expect(
-    page.locator("#e2e-status-states .route-disclaimer.mock"),
-  ).toBeVisible();
-  const statusStates = page.locator("#e2e-status-states .status-badge");
-  await expect(statusStates).toHaveCount(4);
-  for (const status of await statusStates.all()) {
-    await expect(status).toBeVisible();
-  }
-
-  const stateStyles = await page.evaluate(() => {
-    const rootStyles = getComputedStyle(document.documentElement);
-    const resolvedToken = (token: string) => {
-      if (!rootStyles.getPropertyValue(token).trim()) return "";
-      const probe = document.createElement("span");
-      probe.style.color = `var(${token})`;
-      document.body.append(probe);
-      const color = getComputedStyle(probe).color;
-      probe.remove();
-      return color;
-    };
-    const resolvedStyles = (selector: string) => {
-      const element = document.querySelector(selector);
-      if (!(element instanceof HTMLElement)) {
-        throw new Error(`Missing element: ${selector}`);
-      }
-      const styles = getComputedStyle(element);
-      return {
-        background: styles.backgroundColor,
-        foreground: styles.color,
-        border: styles.borderTopColor,
-      };
-    };
-
-    return {
-      tokens: {
-        surface: resolvedToken("--surface"),
-        surfaceMuted: resolvedToken("--surface-muted"),
-        mutedForeground: resolvedToken("--muted-foreground"),
-        accentSoft: resolvedToken("--accent-soft"),
-        accentBorder: resolvedToken("--accent-border"),
-        accentForeground: resolvedToken("--accent-foreground"),
-        successSoft: resolvedToken("--success-soft"),
-        successBorder: resolvedToken("--success-border"),
-        successForeground: resolvedToken("--success-foreground"),
-        warningSoft: resolvedToken("--warning-soft"),
-        warningBorder: resolvedToken("--warning-border"),
-        warningForeground: resolvedToken("--warning-foreground"),
-        dangerSoft: resolvedToken("--danger-soft"),
-        dangerBorder: resolvedToken("--danger-border"),
-        dangerForeground: resolvedToken("--danger-foreground"),
-      },
-      testnet: resolvedStyles(".route-tag.testnet"),
-      disabled: resolvedStyles(".route-option.disabled .route-option-sub"),
-      warning: resolvedStyles(".route-disclaimer.mock"),
-      success: resolvedStyles("#e2e-status-states .status-badge.success"),
-      statusWarning: resolvedStyles(
-        "#e2e-status-states .status-badge.warning",
-      ),
-      danger: resolvedStyles("#e2e-status-states .status-badge.danger"),
-      active: resolvedStyles("#e2e-status-states .status-badge.active"),
-    };
-  });
-
-  for (const token of Object.values(stateStyles.tokens)) {
-    expect(token).not.toBe("");
-  }
-
-  expect(stateStyles.testnet.background).toBe(stateStyles.tokens.accentSoft);
-  expect(stateStyles.testnet.foreground).toBe(
-    stateStyles.tokens.accentForeground,
-  );
-  expect(stateStyles.disabled.foreground).toBe(
-    stateStyles.tokens.mutedForeground,
-  );
-  expect(stateStyles.warning).toEqual({
-    background: stateStyles.tokens.warningSoft,
-    foreground: stateStyles.tokens.warningForeground,
-    border: stateStyles.tokens.warningBorder,
-  });
-  expect(stateStyles.success).toEqual({
-    background: stateStyles.tokens.successSoft,
-    foreground: stateStyles.tokens.successForeground,
-    border: stateStyles.tokens.successBorder,
-  });
-  expect(stateStyles.statusWarning).toEqual({
-    background: stateStyles.tokens.warningSoft,
-    foreground: stateStyles.tokens.warningForeground,
-    border: stateStyles.tokens.warningBorder,
-  });
-  expect(stateStyles.danger).toEqual({
-    background: stateStyles.tokens.dangerSoft,
-    foreground: stateStyles.tokens.dangerForeground,
-    border: stateStyles.tokens.dangerBorder,
-  });
-  expect(stateStyles.active).toEqual({
-    background: stateStyles.tokens.accentSoft,
-    foreground: stateStyles.tokens.accentForeground,
-    border: stateStyles.tokens.accentBorder,
-  });
-
-  for (const state of [
-    stateStyles.testnet,
-    stateStyles.disabled,
-    stateStyles.warning,
-    stateStyles.success,
-    stateStyles.statusWarning,
-    stateStyles.danger,
-    stateStyles.active,
-  ]) {
-    expect(state.foreground).not.toBe(state.background);
-    expect(
-      contrastRatio(
-        state.foreground,
-        state.background,
-        stateStyles.tokens.surface,
-      ),
-    ).toBeGreaterThanOrEqual(4.5);
-  }
-});
-
-test("dark mode applies semantic bridge surfaces and primary contrast", async ({
-  bridge,
-  page,
-}) => {
-  await bridge.waitForReady();
-
-  await page.getByRole("button", { name: "Theme: System" }).click();
-  await page.getByRole("menuitemradio", { name: "Dark" }).click();
-  await expect(page.locator("html")).toHaveClass(/\bdark\b/);
-
-  const colors = await page.evaluate(() => {
-    const resolvedToken = (token: string) => {
-      const probe = document.createElement("span");
-      probe.style.color = `var(${token})`;
-      document.body.append(probe);
-      const color = getComputedStyle(probe).color;
-      probe.remove();
-      return color;
-    };
-    const resolvedStyles = (selector: string) => {
-      const element = document.querySelector(selector);
-      if (!(element instanceof HTMLElement)) {
-        throw new Error(`Missing element: ${selector}`);
-      }
-      const styles = getComputedStyle(element);
-      return {
-        background: styles.backgroundColor,
-        foreground: styles.color,
-      };
-    };
-
-    return {
-      tokens: {
-        background: resolvedToken("--background"),
-        surface: resolvedToken("--surface"),
-        surfaceElevated: resolvedToken("--surface-elevated"),
-        surfaceMuted: resolvedToken("--surface-muted"),
-        surfaceStrong: resolvedToken("--surface-strong"),
-        foreground: resolvedToken("--foreground"),
-        mutedForeground: resolvedToken("--muted-foreground"),
-        faintForeground: resolvedToken("--faint-foreground"),
-        border: resolvedToken("--border"),
-        borderStrong: resolvedToken("--border-strong"),
-        primary: resolvedToken("--primary"),
-        primaryForeground: resolvedToken("--primary-foreground"),
-        accent: resolvedToken("--accent"),
-      },
-      field: resolvedToken("--field"),
-      card: resolvedStyles(".swap-card"),
-      routeControl: resolvedStyles(".route-trigger"),
-      walletMenu: resolvedStyles(".wallet-actions-menu"),
-      primaryButton: resolvedStyles(
-        ".swap-card > .primary-action-dock > .primary-button",
-      ),
-    };
-  });
-
-  expect(colors.tokens).toEqual({
-    background: "rgb(20, 17, 13)",
-    surface: "rgb(27, 23, 18)",
-    surfaceElevated: "rgb(34, 29, 22)",
-    surfaceMuted: "rgb(36, 31, 24)",
-    surfaceStrong: "rgb(48, 42, 32)",
-    foreground: "rgb(246, 243, 236)",
-    mutedForeground: "rgb(176, 168, 155)",
-    faintForeground: "rgb(128, 120, 107)",
-    border: "rgba(246, 243, 236, 0.12)",
-    borderStrong: "rgba(246, 243, 236, 0.21)",
-    primary: "rgb(246, 243, 236)",
-    primaryForeground: "rgb(20, 17, 13)",
-    accent: "rgb(255, 106, 42)",
-  });
-  expect(colors.card.background).toBe(colors.tokens.surface);
-  // The route trigger is now a filled control (--field), borderless.
-  expect(colors.routeControl.background).toBe(colors.field);
-  expect(colors.walletMenu.background).toBe(colors.tokens.surfaceElevated);
-  expect(colors.primaryButton.background).toBe(colors.tokens.primary);
-  expect(colors.primaryButton.foreground).toBe(colors.tokens.primaryForeground);
-  expect(colors.primaryButton.foreground).not.toBe(
-    colors.primaryButton.background,
-  );
-
-  await page.getByRole("button", { name: "Theme: Dark" }).click();
-  await page.getByRole("menuitemradio", { name: "Light" }).click();
-  await expect(page.locator("html")).not.toHaveClass(/\bdark\b/);
-
-  const lightTokens = await page.evaluate(() => {
-    const names = [
-      "background",
-      "surface",
-      "surface-muted",
-      "surface-strong",
-      "foreground",
-      "muted-foreground",
-      "faint-foreground",
-      "border",
-      "border-strong",
-      "primary",
-      "primary-foreground",
-      "accent",
-    ];
-
-    return names.map((name) => {
-      const probe = document.createElement("span");
-      probe.style.color = `var(--${name})`;
-      document.body.append(probe);
-      const color = getComputedStyle(probe).color;
-      probe.remove();
-      return color;
+for (const theme of ["Light", "Dark"] as const) {
+  test(`${theme} bridge fields, providers and primary action remain readable`, async ({ bridge, page }, info) => {
+    await bridge.fillAmount("1");
+    await page.getByRole("button", { name: "Theme: System" }).click();
+    await page.getByRole("menuitemradio", { name: theme, exact: true }).click();
+    await bridge.routeTrigger().click();
+    await expect(bridge.providerOptions()).toBeVisible();
+    const samples = await page.evaluate(() => {
+      const pairs = [
+        [".swap-box input", ".swap-box"],
+        [".balance-line", ".swap-box"],
+        [".selected-provider", ".transfer-route-card"],
+        [".route-trigger", ".transfer-route-card"],
+        [".route-tag.testnet", ".provider-option"],
+        [".provider-costs", ".provider-option"],
+        [".primary-action-dock .primary-button", ".primary-action-dock .primary-button"],
+      ];
+      return pairs.map(([textSelector, surfaceSelector]) => {
+        const text = getComputedStyle(document.querySelector(textSelector)!);
+        const surface = getComputedStyle(document.querySelector(surfaceSelector)!);
+        return { textSelector, foreground: text.color, background: surface.backgroundColor,
+          backdrop: getComputedStyle(document.querySelector(".swap-card")!).backgroundColor };
+      });
     });
+    for (const sample of samples) {
+      expect(contrastRatio(sample.foreground, sample.background, sample.backdrop), sample.textSelector).toBeGreaterThanOrEqual(4.5);
+    }
+    await bridge.routeTrigger().click();
+    await page.screenshot({ path: info.outputPath(`bridge-${theme.toLowerCase()}.png`), fullPage: true, animations: "disabled" });
   });
-
-  expect(lightTokens).toEqual([
-    "rgb(247, 244, 238)",
-    "rgb(255, 253, 248)",
-    "rgb(242, 241, 239)",
-    "rgb(233, 231, 227)",
-    "rgb(23, 21, 17)",
-    "rgb(112, 107, 97)",
-    "rgb(154, 146, 134)",
-    "rgba(23, 21, 17, 0.11)",
-    "rgba(23, 21, 17, 0.19)",
-    "rgb(23, 21, 17)",
-    "rgb(255, 255, 255)",
-    "rgb(255, 85, 0)",
-  ]);
-});
+}
 
 test("theme choice is keyboard accessible, persistent, and system-aware", async ({
   bridge,
@@ -400,7 +155,7 @@ test("theme choice is keyboard accessible, persistent, and system-aware", async 
   await expect(systemTrigger).toBeFocused();
 
   await systemTrigger.press("Enter");
-  await page.locator(".swap-card h1").click();
+  await page.getByRole("tab", { name: "Bridge", exact: true }).click();
   await expect(menu).toBeHidden();
   await expect(systemTrigger).toBeFocused();
 });

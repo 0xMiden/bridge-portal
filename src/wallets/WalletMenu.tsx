@@ -23,7 +23,13 @@ export function WalletMenu({
   children: ReactNode;
 }) {
   return (
-    <div className={`wallet-actions-menu ${open ? "open" : ""}`} role="menu">
+    <div
+      className={`wallet-actions-menu ${open ? "open" : ""}`}
+      role="menu"
+      aria-label={typeof name === "string" ? name : "Wallet"}
+      aria-hidden={!open}
+      inert={!open}
+    >
       <div className="wallet-menu-summary">
         {avatar}
         <span>

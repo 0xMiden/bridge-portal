@@ -13,7 +13,7 @@
   font-size: 36px;
 }
 @media (min-width: 641px) {
-  .swap-card[data-provider="xreserve"] .quote-summary:not(:has(> div:nth-child(3))) {
+  .transfer-route-card[data-provider="xreserve"] .quote-summary:not(:has(> div:nth-child(3))) {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
@@ -829,12 +829,13 @@ a {
   z-index: 4;
   display: grid;
   gap: 4px;
-  width: 268px;
+  width: 304px;
+  max-width: calc(100vw - 64px);
   padding: 8px;
   border: 0;
   border-radius: var(--radius-lg);
   background: var(--surface-elevated);
-  box-shadow: var(--shadow-raised);
+  box-shadow: 0 0 0 1px var(--border), var(--shadow-card);
   opacity: 0;
   pointer-events: none;
   transform: translateY(-4px) scale(0.98);
@@ -852,11 +853,17 @@ a {
 
 .wallet-menu-summary {
   display: grid;
-  grid-template-columns: 34px minmax(0, 1fr);
+  grid-template-columns: 40px minmax(0, 1fr);
   align-items: center;
-  gap: 10px;
-  padding: 8px 8px 10px;
+  gap: 12px;
+  padding: 8px 8px 14px;
   border-bottom: 1px solid var(--border);
+}
+
+.wallet-menu-summary .wallet-menu-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-md);
 }
 
 .wallet-menu-summary > span:last-child {
@@ -873,31 +880,36 @@ a {
   white-space: nowrap;
 }
 
-.wallet-menu-summary strong {
+.wallet-actions-menu .wallet-menu-summary strong {
+  margin: 0;
   font-size: 14px;
-  font-weight: 800;
+  font-weight: 600;
+  line-height: 1.5;
 }
 
 .wallet-menu-summary small {
   color: var(--muted-foreground);
   font-size: 12px;
-  font-weight: 700;
+  font-weight: 400;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+  white-space: normal;
 }
 
 .wallet-menu-note {
-  margin: 4px 4px 6px;
+  margin: 8px 8px 6px;
   color: var(--muted-foreground);
   font-size: 12px;
-  font-weight: 500;
-  line-height: 1.4;
+  font-weight: 400;
+  line-height: 1.5;
 }
 
 .wallet-menu-item {
   display: grid;
   grid-template-columns: 18px minmax(0, 1fr);
   align-items: center;
-  gap: 8px;
-  min-height: 40px;
+  gap: 10px;
+  min-height: 44px;
   width: 100%;
   border: 0;
   border-radius: var(--radius-md);
@@ -906,7 +918,7 @@ a {
   padding: 0 10px;
   text-align: left;
   font-size: 13px;
-  font-weight: 800;
+  font-weight: 500;
   transition: var(--transition-interactive);
 }
 
@@ -923,7 +935,29 @@ a {
 }
 
 .wallet-menu-item.danger {
-  color: var(--danger);
+  color: var(--danger-foreground);
+}
+
+.wallet-menu-item.danger svg {
+  color: currentColor;
+}
+
+.wallet-menu-item.danger:hover {
+  background: var(--danger-soft);
+}
+
+.wallet-pill:focus-visible,
+.wallet-menu-item:focus-visible,
+.token-select-trigger:focus-visible,
+.chain-select-trigger:focus-visible,
+.select-option:focus-visible {
+  outline: 2px solid var(--accent-foreground);
+  outline-offset: 3px;
+}
+
+.wallet-menu-item:focus-visible,
+.select-option:focus-visible {
+  outline-offset: -2px;
 }
 
 .wallet-menu-separator {
@@ -944,12 +978,9 @@ a {
   padding: 0 0 40px;
 }
 
-/* Card + its (collapsed) history are one group, centered together in the first
-   screen so the bridge sits at center with the history close beneath it. The
-   auto margins collapse when the group is taller than the viewport, so a tall
-   card just flows from the top and scrolls — no clipping. */
+/* Keep the form anchored while its route disclosure grows below it. */
 .swap-group {
-  margin: auto;
+  margin: 32px auto auto;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -1027,10 +1058,7 @@ a {
   letter-spacing: 0;
 }
 
-.route-menu-root {
-  position: relative;
-  min-width: 0;
-}
+
 
 .route-trigger {
   display: inline-grid;
@@ -1070,15 +1098,7 @@ a {
   letter-spacing: 0;
 }
 
-.route-trigger strong {
-  min-width: 0;
-  overflow: hidden;
-  color: var(--foreground);
-  font-size: 14px;
-  font-weight: 800;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
+
 
 .route-trigger svg {
   color: var(--accent);
@@ -1089,45 +1109,7 @@ a {
   transform: rotate(180deg);
 }
 
-.route-options-layer {
-  display: contents;
-}
 
-.route-sheet-backdrop {
-  display: none;
-}
-
-.route-options-menu {
-  position: absolute;
-  top: calc(100% + 8px);
-  right: 0;
-  z-index: 5;
-  display: grid;
-  gap: 6px;
-  width: 300px;
-  /* Fit within a 390px viewport without covering critical actions: cap the
-     height and scroll internally rather than clipping or overflowing the card. */
-  max-height: min(70vh, 460px);
-  overflow-y: auto;
-  padding: 6px;
-  border: 0;
-  border-radius: var(--radius-lg);
-  background: var(--surface-elevated);
-  box-shadow: var(--shadow-raised);
-  opacity: 0;
-  pointer-events: none;
-  transform: translateY(-4px) scale(0.98);
-  transform-origin: top right;
-  transition:
-    opacity var(--duration-base) var(--ease-standard),
-    transform var(--duration-base) var(--ease-standard);
-}
-
-.route-options-menu.open {
-  opacity: 1;
-  pointer-events: auto;
-  transform: translateY(0) scale(1);
-}
 
 .route-option {
   display: grid;
@@ -1217,16 +1199,6 @@ a {
 }
 
 
-.route-status-line {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin: -2px 8px 12px;
-  color: var(--muted-foreground);
-  font-size: 12px;
-  font-weight: 700;
-  line-height: 1.3;
-}
 
 /* "?" affordance that reveals a caveat bubble on hover/focus. */
 .info-tip {
@@ -1412,41 +1384,57 @@ a {
 
 .chain-select {
   position: relative;
-  display: flex;
-  align-items: center;
+  min-width: 0;
   width: fit-content;
   max-width: 100%;
-  margin-top: 5px;
-  border-radius: var(--radius-sm);
 }
 
-.chain-select > svg {
-  position: absolute;
-  right: 0;
-  pointer-events: none;
-  color: var(--muted-foreground);
-}
-
-.chain-select select {
-  appearance: none;
+.chain-select-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 36px;
   max-width: 100%;
-  padding: 0 21px 0 0;
-  border: 0;
-  border-radius: var(--radius-sm);
-  background: transparent;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  background: var(--surface);
   color: var(--foreground);
-  font-size: 22px;
-  font-weight: 700;
+  font-size: 13px;
+  font-weight: 500;
   cursor: pointer;
+  transition: var(--transition-interactive);
 }
 
-.chain-select select:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 4px;
+.chain-select-trigger:hover,
+.chain-select-trigger.open {
+  background: var(--surface-muted);
+  border-color: var(--border-strong);
 }
 
-.chain-select select:hover {
-  color: var(--accent-foreground);
+.chain-select-trigger:active {
+  transform: scale(0.997);
+}
+
+.chain-select-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.select-menu.chain-select-menu {
+  left: 0;
+  right: auto;
+  width: 288px;
+  max-width: calc(100vw - 80px);
+  transform-origin: top left;
+}
+
+.chain-select-menu .select-option {
+  min-height: 48px;
+  font-size: 13px;
+  font-weight: 500;
 }
 
 .swap-box-amount {
@@ -1472,9 +1460,9 @@ a {
   justify-self: end;
 }
 
-/* When a token menu is open, lift its box above the divider + sibling box so
+/* When a network or token menu opens, lift its box above the divider + sibling so
    the popover isn't painted under them. */
-.swap-box:has(.token-select-menu) {
+.swap-box:has(.select-menu) {
   z-index: 60;
 }
 
@@ -1634,47 +1622,65 @@ a {
 }
 
 .token-select-trigger:active {
-  transform: scale(0.97);
-}
-
-.token-icon {
-  display: block;
-  flex: 0 0 auto;
-  border-radius: var(--radius-pill);
+  transform: scale(0.997);
 }
 
 .token-select-symbol {
-  letter-spacing: 0.01em;
+  letter-spacing: -0.02em;
 }
 
-.token-select-caret {
+.select-caret {
   color: var(--muted-foreground);
-  transition: transform 0.18s ease;
+  flex: none;
+  transition: transform var(--duration-base) var(--ease-standard);
 }
 
-.token-select-trigger.open .token-select-caret {
+.token-select-trigger.open .select-caret,
+.chain-select-trigger.open .select-caret {
   transform: rotate(180deg);
 }
 
-.token-select-menu {
+.select-menu {
   position: absolute;
-  top: calc(100% + 7px);
+  top: calc(100% + 8px);
   right: 0;
   z-index: 40;
-  min-width: 216px;
-  padding: 6px;
+  width: 320px;
+  max-width: calc(100vw - 64px);
+  padding: 8px;
   border: 0;
   border-radius: var(--radius-lg);
   background: var(--surface-elevated);
-  box-shadow: var(--shadow-raised);
+  box-shadow: 0 0 0 1px var(--border), var(--shadow-card);
   transform-origin: top right;
-  animation: token-menu-in 0.15s cubic-bezier(0.16, 1, 0.3, 1);
+  animation: select-menu-in var(--duration-base) var(--ease-standard);
 }
 
-@keyframes token-menu-in {
+.select-menu-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 6px 10px 12px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.select-menu-heading small {
+  color: var(--muted-foreground);
+  font-size: 12px;
+  font-weight: 400;
+}
+
+.select-menu [role="listbox"] {
+  display: grid;
+  gap: 4px;
+}
+
+@keyframes select-menu-in {
   from {
     opacity: 0;
-    transform: translateY(-5px) scale(0.97);
+    transform: translateY(-4px) scale(0.98);
   }
   to {
     opacity: 1;
@@ -1682,14 +1688,15 @@ a {
   }
 }
 
-.token-option {
+.select-option {
   display: flex;
   align-items: center;
   gap: 10px;
   width: 100%;
-  padding: 8px 10px;
+  min-height: 60px;
+  padding: 10px;
   border: 0;
-  border-radius: 12px;
+  border-radius: var(--radius-md);
   background: transparent;
   color: var(--foreground);
   text-align: left;
@@ -1697,12 +1704,12 @@ a {
   transition: var(--transition-interactive);
 }
 
-.token-option:hover {
+.select-option:hover {
   background: var(--surface-muted);
 }
 
-.token-option.selected {
-  background: color-mix(in srgb, var(--foreground) 8%, var(--surface));
+.select-option.selected {
+  background: var(--accent-soft);
 }
 
 .token-option-text {
@@ -1717,21 +1724,24 @@ a {
    inside the read-only amount block. */
 .token-select-menu .token-option-text strong {
   max-width: none;
-  font-size: 14px;
-  font-weight: 800;
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.4;
   text-align: left;
 }
 
 .token-select-menu .token-option-text small {
   color: var(--muted-foreground);
-  font-size: 11px;
-  font-weight: 500;
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1.4;
 }
 
-.token-option-check {
+.select-option-check {
   margin-left: auto;
   flex: 0 0 auto;
-  color: var(--accent);
+  color: var(--accent-foreground);
 }
 
 .readonly-amount strong {
@@ -3166,15 +3176,7 @@ a {
     font-size: 13px;
   }
 
-  /* Overlay the dropdown (don't push the page down). Anchor the left button's
-     menu to its left edge and the right button's to its right so neither runs
-     off screen. A fixed width (capped to the viewport) keeps both menus the same
-     size — otherwise content-sizing let the Miden menu's note stretch it wide. */
-  .wallet-actions-menu {
-    width: 268px;
-    max-width: calc(100vw - 24px);
-  }
-
+  /* Keep the left wallet's menu inside the viewport when wallets share a row. */
   .wallet-cluster > .wallet-menu-root:first-child .wallet-actions-menu {
     right: auto;
     left: 0;
@@ -3279,10 +3281,7 @@ a {
     flex: 0 0 auto;
   }
 
-  .route-menu-root {
-    flex: 1 1 auto;
-    min-width: 0;
-  }
+
 
   .route-trigger {
     width: 100%;
@@ -3293,12 +3292,8 @@ a {
 
   /* Overlay the route dropdown over the card instead of pushing it down; keep
      it anchored to the trigger's right edge and capped to the viewport. */
-  .route-options-menu {
-    width: max-content;
-    min-width: 208px;
-    max-width: calc(100vw - 32px);
-    transform-origin: top right;
-  }
+
+
 
   .mode-switch button {
     /* Keep the direction toggles at a full touch target on mobile. */
@@ -3581,10 +3576,6 @@ a {
     grid-column: 1 / -1;
   }
 
-  .chain-select select {
-    font-size: 16px;
-  }
-
   .wallet-button,
   .wallet-pill,
   .wallet-menu-item,
@@ -3592,7 +3583,7 @@ a {
   .balance-refresh,
   .route-trigger,
   .token-select-trigger,
-  .chain-select select,
+  .chain-select-trigger,
   .route-option,
   .secondary-button,
   .preflight-close,
@@ -3689,67 +3680,7 @@ a {
     font-variant-numeric: tabular-nums;
   }
 
-  .route-sheet-backdrop {
-    position: fixed;
-    z-index: 100;
-    inset: 0;
-    display: block;
-    width: 100%;
-    height: 100dvh;
-    padding: 0;
-    border: 0;
-    border-radius: 0;
-    background: var(--scrim);
-    animation: route-backdrop-enter 260ms var(--ease-standard) both;
-  }
 
-  .route-options-layer {
-    position: fixed;
-    z-index: 101;
-    right: 0;
-    bottom: 0;
-    left: 0;
-    display: flex;
-    max-height: min(72dvh, 560px);
-    flex-direction: column;
-    padding-top: 24px;
-    border: 0;
-    border-bottom: 0;
-    border-radius: var(--radius-lg) var(--radius-lg) 0 0;
-    background: var(--surface-elevated);
-    box-shadow: var(--shadow-card);
-    animation: route-sheet-enter 260ms var(--ease-standard) both;
-  }
-
-  .route-options-layer::before {
-    content: "";
-    position: absolute;
-    top: 9px;
-    left: 50%;
-    width: 42px;
-    height: 4px;
-    border-radius: var(--radius-pill);
-    background: var(--border-strong);
-    transform: translateX(-50%);
-  }
-
-  .route-options-layer .route-options-list {
-    position: static;
-    width: 100%;
-    min-width: 0;
-    max-width: none;
-    max-height: none;
-    overflow-x: hidden;
-    overflow-y: auto;
-    overscroll-behavior: contain;
-    padding: 0 12px calc(12px + env(safe-area-inset-bottom));
-    border: 0;
-    border-radius: 0;
-    background: transparent;
-    box-shadow: none;
-    opacity: 1;
-    transform: none;
-  }
 
   .primary-action-dock {
     position: sticky;
@@ -3817,18 +3748,7 @@ a {
   }
 }
 
-@keyframes route-backdrop-enter {
-  from {
-    opacity: 0;
-  }
-}
 
-@keyframes route-sheet-enter {
-  from {
-    opacity: 0;
-    transform: translateY(24px);
-  }
-}
 
 @keyframes preflight-backdrop-enter {
   from {
@@ -3933,3 +3853,42 @@ a {
   cursor: default;
 }
 .dark .rcpt-logo { filter: invert(1) hue-rotate(180deg); }
+
+/* The route is revealed below the form after a valid amount is entered. */
+.transfer-route-card {
+  width: 100%;
+  padding: 16px;
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  box-shadow: var(--shadow-card);
+}
+.transfer-route-card[data-has-amount="false"] {
+  padding: 0;
+  background: transparent;
+  box-shadow: none;
+}
+.transfer-route-details[hidden],
+.transfer-route-options[hidden] { display: none; }
+.transfer-route-heading { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; }
+.transfer-route-heading h2 { margin: 0 0 4px; font-size: 16px; font-weight: 600; }
+.selected-provider { font-size: 14px; color: var(--muted-foreground); }
+.transfer-route-heading .route-trigger { display: inline-flex; min-width: 0; width: auto; min-height: 44px; padding: 8px 12px; }
+.transfer-route-heading .route-trigger span { font-size: 12px; }
+.transfer-route-heading .route-trigger[aria-expanded="true"] > svg { transform: rotate(180deg); }
+.transfer-route-received { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin: 20px 0 16px; }
+.transfer-route-received > span:first-child { width: 100%; color: var(--muted-foreground); font-size: 12px; }
+.transfer-route-received > strong { overflow-wrap: anywhere; min-width: 0; font-size: 26px; font-variant-numeric: tabular-nums; }
+.transfer-route-options { display: grid; gap: 12px; margin-bottom: 16px; }
+.provider-option { gap: 12px; border-color: var(--border); padding: 16px; }
+.provider-option.selected { background: var(--accent-soft); border-color: var(--accent-border); }
+.provider-route-path { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; color: var(--muted-foreground); font-size: 12px; }
+.provider-route-path svg { flex: none; }
+.provider-output { display: grid; gap: 4px; overflow-wrap: anywhere; font-size: 22px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.provider-output small, .provider-costs { color: var(--muted-foreground); font-size: 12px; font-weight: 500; }
+.provider-costs { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px; }
+.transfer-route-card .primary-button { margin-top: 0; }
+@media (max-width: 640px) {
+  .swap-group { margin-top: 0; }
+  .transfer-route-card { padding: 12px; box-shadow: none; }
+  .transfer-route-card[data-has-amount="false"] .primary-action-dock { margin: 0; }
+}

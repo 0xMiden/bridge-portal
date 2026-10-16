@@ -66,11 +66,12 @@ export const MIDEN_USDC = {
   faucetId: "0x537c15a622074e91188aa894456c52",
 } as const satisfies BridgeAsset;
 
+export function assetKey(asset: BridgeAsset): string {
+  const identifier = asset.kind === "erc20" ? asset.address
+    : asset.kind === "miden" ? asset.faucetId : "native";
+  return `${asset.network}:${asset.kind}:${identifier.toLowerCase()}`;
+}
+
 export function sameAsset(left: BridgeAsset, right: BridgeAsset): boolean {
-  if (left.network !== right.network || left.kind !== right.kind) return false;
-  if (left.kind === "erc20" && right.kind === "erc20")
-    return left.address.toLowerCase() === right.address.toLowerCase();
-  if (left.kind === "miden" && right.kind === "miden")
-    return left.faucetId.toLowerCase() === right.faucetId.toLowerCase();
-  return left.kind === "native" && right.kind === "native";
+  return assetKey(left) === assetKey(right);
 }

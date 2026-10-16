@@ -8,7 +8,7 @@ import type { Route, Mode } from "../../pages/bridge-page";
 //   empty amount → disabled "Enter amount"  →  valid amount → "Review <dir>".
 
 const combos: Array<{ route: Route; mode: Mode; label: RegExp }> = [
-  { route: "USDCx", mode: "Receive", label: /Review receive/i },
+  { route: "USDCx", mode: "Receive", label: /Review transfer/i },
 ];
 
 test("Miden balances are opt-in, stay revealed across origins, and reset after reload", async ({ bridge, page }) => {
@@ -16,7 +16,7 @@ test("Miden balances are opt-in, stay revealed across origins, and reset after r
   await bridge.showMidenBalance();
   const midenBalance = page.locator(".swap-box").last();
   await expect(midenBalance).toContainText("Available 0 USDCx");
-  await page.getByRole("combobox", { name: "Origin chain", exact: true }).selectOption("sepolia");
+  await bridge.setChain("Sepolia");
   await expect(midenBalance).toContainText("Available 0 USDCx");
   await page.getByRole("button", { name: "Refresh Miden balance" }).click();
   await expect(midenBalance).toContainText("Available 0 USDCx");
