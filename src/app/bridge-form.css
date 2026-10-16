@@ -1,0 +1,164 @@
+/* Bridge wireframe: navigation, paired asset panels, then an expandable route. */
+.app-shell.bridge-portal {
+  --surface: #fffdf8;
+  --surface-elevated: #fffdf8;
+  --field: #f5f3ed;
+  --surface-muted: #f0eee8;
+  --foreground: #22231d;
+  --muted-foreground: #69695e;
+  --border: #dddbd2;
+  --accent: #ff650a;
+  --accent-foreground: #a83b00;
+  --accent-soft: #fff0e4;
+  width: 100%;
+  padding: 0 24px;
+  color: var(--foreground);
+  font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+.dark .app-shell.bridge-portal {
+  --surface: #1b1c19;
+  --surface-elevated: #1b1c19;
+  --field: #252622;
+  --surface-muted: #252622;
+  --foreground: #f3f1e9;
+  --muted-foreground: #afafa3;
+  --border: #393a33;
+  --accent-foreground: #ff985a;
+  --accent-soft: #33271c;
+}
+.bridge-portal .topbar { min-height: 80px; padding: 16px 0; border-bottom: 1px solid var(--border); }
+.bridge-portal .brand .portal-network { padding: 2px 6px; border: 1px solid var(--border); border-radius: 5px; color: var(--muted-foreground); font-size: 10px; font-weight: 500; }
+.bridge-portal .swap-stage { padding: 0 0 40px; }
+.bridge-portal .swap-group { width: min(548px, 100%); margin: 24px auto 0; gap: 16px; }
+.bridge-portal .bridge-tab-panel,
+.bridge-portal .activity-tab-panel { width: 100%; }
+.bridge-portal .bridge-tab-panel:not([hidden]) { display: grid; gap: 12px; }
+.bridge-portal [role="tabpanel"][hidden] { display: none; }
+.bridge-tabs { display: flex; width: min(336px, 100%); border-bottom: 3px solid var(--border); }
+.bridge-tabs button { flex: 1; min-height: 48px; position: relative; background: transparent; color: var(--muted-foreground); font: inherit; font-size: 16px; border: 0; cursor: pointer; }
+.bridge-tabs button[aria-selected="true"] { color: var(--foreground); font-weight: 600; }
+.bridge-tabs button[aria-selected="true"]::after { content: ""; position: absolute; bottom: -3px; left: 0; right: 0; height: 3px; background: var(--foreground); border-radius: 2px; }
+.bridge-tabs button:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; }
+.activity-count { display: inline-grid; place-items: center; margin-left: 8px; min-width: 20px; height: 20px; border-radius: 50%; background: var(--accent-soft); color: var(--accent-foreground); font-size: 11px; }
+.bridge-portal .swap-card,
+.bridge-portal .transfer-route-card { width: 100%; padding: 20px; border: 1px solid var(--border); border-radius: 24px; box-shadow: none; animation: none; }
+.bridge-portal .mode-switch { border: 1px solid var(--border); border-radius: 12px; padding: 4px; gap: 8px; background: var(--field); }
+.bridge-portal .mode-switch::before { display: none; }
+.bridge-portal .mode-switch button { min-height: 40px; border-radius: 8px; font-size: 15px; font-weight: 500; }
+.bridge-portal .mode-switch button[aria-pressed="true"] { background: var(--surface); box-shadow: inset 0 0 0 1px var(--border); font-weight: 600; }
+.bridge-portal .swap-panels { display: grid; position: relative; gap: 16px; margin-top: 16px; }
+.bridge-portal .swap-card[data-provider] .swap-box {
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-rows: auto auto auto;
+  gap: 8px 12px;
+  margin: 0;
+  padding: 12px 16px;
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  background: var(--field);
+  min-height: 152px;
+}
+.bridge-portal .swap-box:focus-within { box-shadow: none; }
+.bridge-portal .swap-box-head { display: flex; align-items: center; gap: 8px; grid-column: 1; grid-row: 1; min-height: 36px; }
+.bridge-portal .swap-box-head > span:first-child { font-size: 14px; color: var(--muted-foreground); font-weight: 400; }
+.bridge-portal .chain-value { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.bridge-portal .network-logo { display: block; flex: none; width: 24px; height: 24px; object-fit: contain; }
+.bridge-portal .chain-select-trigger .network-logo { width: 20px; height: 20px; }
+.bridge-portal .token-logo { display: inline-flex; position: relative; flex: none; width: 32px; height: 32px; }
+.bridge-portal .token-logo img { display: block; width: 100%; height: 100%; object-fit: contain; }
+.bridge-portal .token-logo-variant { position: absolute; right: -3px; bottom: -2px; display: grid; place-items: center; width: 15px; height: 15px; border: 2px solid var(--surface); border-radius: 50%; background: var(--foreground); color: var(--surface); font: 600 10px/1 system-ui, sans-serif; }
+.bridge-portal .chain-value > strong { margin: 0; font-size: 14px; font-weight: 500; }
+.bridge-portal .panel-wallet { grid-column: 2; grid-row: 1; justify-self: end; min-width: 0; max-width: 172px; }
+.bridge-portal .panel-wallet .wallet-pill { width: 100%; min-height: 36px; max-width: 172px; padding: 8px 10px; gap: 6px; border: 1px solid var(--border); border-radius: var(--radius-pill); background: var(--surface); color: var(--accent-foreground); box-shadow: none; }
+.bridge-portal .panel-wallet .wallet-pill.connected { color: var(--foreground); }
+.bridge-portal .panel-wallet .wallet-pill:hover:not(:disabled),
+.bridge-portal .panel-wallet .wallet-pill[aria-expanded="true"] { background: var(--surface-muted); border-color: var(--border-strong); }
+.bridge-portal .panel-wallet .wallet-avatar { display: none; }
+.bridge-portal .panel-wallet .wallet-pill-label { font-size: 12px; font-weight: 500; }
+.bridge-portal .panel-wallet .wallet-menu-chevron { flex: none; width: 12px; }
+.bridge-portal .swap-box:has(.wallet-actions-menu.open) { z-index: 65; }
+.bridge-portal .swap-box-amount { grid-row: 2; grid-column: 1; justify-self: start; width: 100%; margin: 0; }
+.bridge-portal .swap-card .swap-box input,
+.bridge-portal .swap-card .readonly-amount strong {
+  width: 100%; max-width: 100%; margin: 0;
+  font: 500 36px/1.2 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  letter-spacing: -.6px; text-align: left;
+}
+.bridge-portal .swap-box-token { grid-row: 2; grid-column: 2; }
+.bridge-portal .token-select-trigger,
+.bridge-portal .token-select-value { min-height: 48px; padding: 8px 10px; gap: 8px; border: 1px solid var(--border); border-radius: var(--radius-pill); background: var(--surface); box-shadow: none; font-size: 18px; font-weight: 600; }
+.bridge-portal .token-select-trigger .token-logo,
+.bridge-portal .token-select-value .token-logo { width: 28px; height: 28px; }
+.bridge-portal .token-select-trigger:hover,
+.bridge-portal .token-select-trigger.open { background: var(--surface-muted); border-color: var(--border-strong); }
+.bridge-portal .token-select-value { padding-right: 4px; border-color: transparent; background: transparent; }
+.bridge-portal .swap-box-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; grid-row: 3; grid-column: 1 / -1; min-height: 20px; }
+.bridge-portal .fiat-amount { min-width: 0; overflow: hidden; text-overflow: ellipsis; font-size: 12px; color: var(--muted-foreground); white-space: nowrap; }
+.bridge-portal .balance-line { justify-content: flex-end; max-width: 75%; font-size: 12px; font-weight: 400; }
+.bridge-portal .balance-show { padding: 0; color: var(--muted-foreground); font-weight: 400; }
+.bridge-portal .swap-divider { position: absolute; left: 50%; bottom: -31px; transform: translateX(-50%); z-index: 2; display: grid; place-items: center; width: 44px; height: 44px; margin: 0; padding: 0; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); color: var(--foreground); cursor: pointer; }
+.bridge-portal .swap-divider:hover:not(:disabled) { color: var(--accent-foreground); border-color: var(--accent); }
+.bridge-portal .swap-divider:disabled { opacity: 1; color: var(--muted-foreground); cursor: not-allowed; }
+.bridge-portal .route-context .info-tip-bubble { left: auto; right: 0; transform: translateY(-3px); }
+.bridge-portal .route-context .info-tip-bubble::before { left: auto; right: 3px; transform: none; }
+.bridge-portal .route-context .info-tip:hover .info-tip-bubble,
+.bridge-portal .route-context .info-tip:focus-within .info-tip-bubble { transform: translateY(0); }
+.bridge-portal .transfer-route-card[data-has-amount="false"] { padding: 0; border: 0; }
+.bridge-portal .transfer-route-details > h2 { margin: 0; padding-bottom: 10px; border-bottom: 1px solid var(--border); font-size: 15px; font-weight: 500; }
+.bridge-portal .transfer-route-heading { margin: 0; gap: 8px; }
+.bridge-portal .provider-identity { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.bridge-portal .selected-provider { font-size: 15px; font-weight: 500; color: var(--foreground); }
+.bridge-portal .route-pill { min-height: 24px; border-radius: 6px; padding: 2px 8px; font-size: 11px; font-weight: 500; }
+.bridge-portal .selection-badge { background: var(--surface-muted); color: var(--foreground); border: 1px solid var(--border); }
+.bridge-portal .transfer-route-heading .route-trigger { min-width: 44px; min-height: 44px; padding: 6px 0; background: transparent; border-radius: 5px; box-shadow: none; font-size: 13px; font-weight: 400; color: var(--accent-foreground); }
+.bridge-portal .route-received { font-size: 28px; font-weight: 500; line-height: 1.3; overflow-wrap: anywhere; }
+.bridge-portal .route-footer { display: flex; justify-content: space-between; align-items: flex-end; flex-wrap: wrap; gap: 8px 20px; margin-top: 8px; padding-bottom: 12px; border-bottom: 1px solid var(--border); }
+.bridge-portal .route-context { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--muted-foreground); margin-left: auto; }
+.bridge-portal .transfer-route-card .quote-summary { display: flex; flex-wrap: wrap; gap: 4px 12px; padding: 0; margin: 0; border-radius: 0; }
+.bridge-portal .quote-summary > div { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px; min-height: 0; padding: 0; border: 0; }
+.bridge-portal .quote-summary span,
+.bridge-portal .quote-summary strong { margin: 0; font-size: 12px; line-height: 1.5; white-space: normal; overflow: visible; }
+.bridge-portal .quote-summary span { font-weight: 400; }
+.bridge-portal .quote-summary strong { font-weight: 500; }
+.bridge-portal .primary-action-dock { margin-top: 14px; padding: 0; border: 0; background: transparent; }
+.bridge-portal .primary-action-dock .primary-button { min-height: 48px; border-radius: 12px; background: #ff650a; color: #211307; font-size: 14px; font-weight: 600; }
+.bridge-portal .primary-action-dock .primary-button:hover:not(:disabled) { background: #f5813d; filter: none; }
+.bridge-portal .transfer-route-options { margin: 12px 0; gap: 8px; }
+.bridge-portal .provider-option { padding: 13px; border-radius: 10px; gap: 8px; }
+.bridge-portal .provider-option .route-option-head strong { font-weight: 600; }
+.bridge-portal .provider-output { font-size: 22px; font-weight: 500; }
+.bridge-portal .activity-region { width: 100%; }
+.activity-empty { text-align: center; padding: 48px 24px; background: var(--surface); border: 1px solid var(--border); border-radius: 24px; }
+.activity-empty h2 { margin: 0; font-size: 20px; }
+.activity-empty p { margin: 12px 0 24px; color: var(--muted-foreground); }
+@media (max-width: 640px) {
+  .app-shell.bridge-portal { padding: 0 12px; }
+  .bridge-portal .topbar { padding: 12px 0; }
+  .bridge-portal .swap-group { margin-top: 16px; }
+  .bridge-portal .swap-card,
+  .bridge-portal .transfer-route-card { padding: 12px; border-radius: 20px; }
+  .bridge-portal .swap-card[data-provider] .swap-box { padding: 10px 12px; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 8px; min-height: 160px; }
+  .bridge-portal .swap-box-head { gap: 5px; flex-wrap: wrap; }
+  .bridge-portal .swap-box-head > span:first-child { font-size: 12px; }
+  .bridge-portal .chain-value { gap: 4px; }
+  .bridge-portal .chain-select-trigger,
+  .bridge-portal .chain-value > strong { font-size: 12px; }
+  .bridge-portal .chain-select-trigger { min-height: 44px; padding: 6px 8px; gap: 4px; }
+  .bridge-portal .chain-select-label { white-space: normal; text-align: left; line-height: 1.25; }
+  .bridge-portal .panel-wallet .wallet-pill { min-height: 44px; }
+  .bridge-portal .swap-card .swap-box input,
+  .bridge-portal .swap-card .readonly-amount strong { font-size: 30px; }
+  .bridge-portal .token-select-trigger,
+  .bridge-portal .token-select-value { min-height: 44px; padding-top: 6px; padding-bottom: 6px; }
+  .bridge-portal .balance-show { min-height: 44px; }
+  .bridge-portal .primary-action-dock { margin: 14px 0 0; padding: 0 0 env(safe-area-inset-bottom); }
+}
+@media (max-width: 380px) {
+  .bridge-portal .swap-card[data-provider] .swap-box { grid-template-rows: auto auto auto auto; }
+  .bridge-portal .swap-box-head { position: relative; grid-column: 1 / -1; }
+  .bridge-portal .chain-select { position: static; }
+  .bridge-portal .panel-wallet { grid-column: 1 / -1; grid-row: 2; }
+  .bridge-portal .swap-box-amount,
+  .bridge-portal .swap-box-token { grid-row: 3; }
+  .bridge-portal .swap-box-foot { grid-row: 4; }
+}

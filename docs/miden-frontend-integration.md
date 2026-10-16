@@ -65,25 +65,22 @@ the adapter is still detecting the wallet.
 
 ### Wallet-Launched Bridge UI
 
-When the Miden wallet opens this bridge UI, it should either provide the active
-Miden account as launch context or prompt the user to connect MidenFi first.
+When the Miden wallet opens this bridge UI, prompt the user to connect their
+Miden and EVM wallets. Transfers always use their connected accounts.
 
 - Cross-chain Receive: Miden is the destination, so the active Miden account is
-  preloaded as the destination account.
+  used automatically as the destination account.
 - Cross-chain Send: Miden is the source, so the active Miden account is
   displayed as the source wallet. The destination resolves to the connected
-  Sepolia wallet or a pasted EVM address.
+  EVM wallet on the selected network.
 
-Do not preload placeholder accounts. Address preloading must come from a
-connected wallet session or explicit launch parameters.
+Recipient addresses cannot be entered manually or overridden through launch URLs.
 
-The launch URL accepts `provider`, `mode` (`receive` or `send`), `midenAccount`,
-and `evmAddress`. For example:
-`/?provider=xreserve&mode=receive&midenAccount=<account>`.
+The launch URL accepts `provider` and `mode` (`receive` or `send`). For example:
+`/?provider=xreserve&mode=receive`.
 These are the only parameter names; unknown names and direction values are ignored.
 A missing or invalid provider/direction uses the saved selection, then the default
-available route. A recipient parameter only prefills the form; the connected
-wallet still authorizes the transfer.
+available route. Legacy `midenAccount` and `evmAddress` parameters are ignored.
 
 Stored receipts retain conversions for formats actually written by earlier
 versions: text timestamps and encoded Agglayer recipient addresses from the
@@ -124,8 +121,7 @@ known deposit ID exactly; another exit cannot complete the saved transfer.
 
 1. Connect Sepolia wallet.
 2. Connect MidenFi wallet.
-3. Leave the destination input blank to use the connected Miden account, or
-   paste a testnet account ID/address for an explicit override.
+3. Check the connected receiving account in the destination wallet control.
 4. Request the route quote.
 5. Submit the Sepolia transaction through the EVM wallet.
 6. Track source finality, bridge message observation, Miden claim-note

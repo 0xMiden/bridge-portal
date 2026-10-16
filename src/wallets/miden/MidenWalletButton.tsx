@@ -7,24 +7,16 @@ import {
   type MidenFiWalletContextState,
   useMidenFiWallet,
 } from "@miden-sdk/miden-wallet-adapter-react";
-import { ChevronDown, Copy, LogOut, RefreshCcw, Wallet } from "lucide-react";
+import { ChevronDown, Copy, LogOut, RefreshCcw } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import {
   midenWalletIdentity,
   shortAddress,
-  walletGradient,
 } from "../identity";
 import { useResetMidenProvider } from "./MidenWalletProvider";
 import { WalletMenu } from "../WalletMenu";
+import { WalletBrandIcon } from "../WalletBrandIcon";
 import { useMidenBalances } from "../../bridge/BalanceProvider";
-
-/** MidenFi brand logo from the wallet adapter, or a neutral wallet fallback. */
-function WalletBrandIcon({ src, size }: { src?: string; size: number }) {
-  if (!src) return <Wallet size={size} aria-hidden="true" />;
-  const s = { width: size, height: size, borderRadius: 5, display: "block" };
-  // eslint-disable-next-line @next/next/no-img-element -- data-URI wallet logo, not an optimizable asset
-  return <img src={src} alt="" style={s} />;
-}
 
 export type MidenWalletSnapshot = {
   address: string;
@@ -381,17 +373,8 @@ function MidenWalletButtonInner({
         aria-haspopup="menu"
         aria-label={identity.actionLabel}
       >
-        <span
-          className="wallet-avatar"
-          style={
-            wallet.connected ? { background: walletGradient(address) } : undefined
-          }
-        >
-          <span className="wallet-avatar-badge">
-            <WalletBrandIcon src={walletLogo} size={11} />
-          </span>
-        </span>
-        <span className="wallet-pill-label">{identity.pillLabel}</span>
+        <WalletBrandIcon src={walletLogo} size={18} />
+        <span className="wallet-pill-label">{identity.state === "idle" ? "Connect wallet" : identity.pillLabel}</span>
         <ChevronDown
           className="wallet-menu-chevron"
           size={15}
@@ -405,7 +388,7 @@ function MidenWalletButtonInner({
           <span
             className={`wallet-menu-avatar ${wallet.connected ? "connected" : wallet.connecting ? "pending" : ""}`}
           >
-            <WalletBrandIcon src={walletLogo} size={16} />
+            <WalletBrandIcon src={walletLogo} size={20} />
           </span>
         }
         name="Bread wallet"

@@ -1,11 +1,11 @@
 "use client";
 
 import { bridgeProviders } from "../../bridge/providers/registry";
-
-import { ChevronDown } from "lucide-react";
 import { sameAsset } from "../../bridge/core/assets";
 import { bridgeRoutes, type BridgeRoute } from "../../bridge/core/routes";
 import { networkLabels } from "../lib/bridge-presentation";
+import { NetworkLogo } from "./AssetLogo";
+import { ListboxSelect } from "./ListboxSelect";
 
 /** Miden stays fixed; the external chain only offers enabled bridge routes. */
 export function ChainSelect({
@@ -21,30 +21,37 @@ export function ChainSelect({
   const routes = bridgeRoutes.filter((option) => !option.disabled && option.mode === route.mode && !bridgeProviders[option.provider].disabled);
   const networks = [...new Set(routes.map((option) => option[side].network))];
   const label = networkLabels[asset.network];
+  const menuLabel = side === "source" ? "Origin chain" : "Destination chain";
 
-  if (asset.kind === "miden" || networks.length < 2) return <strong>{label}</strong>;
+  if (asset.kind === "miden" || networks.length < 2) {
+    return <span className="chain-value"><NetworkLogo network={asset.network} /><strong>{label}</strong></span>;
+  }
 
   return (
-    <span className="chain-select">
-      <select
-        aria-label={side === "source" ? "Origin chain" : "Destination chain"}
-        value={asset.network}
-        onChange={(event) => {
-          const candidates = routes.filter((option) => option[side].network === event.target.value);
-          const midenSide = side === "source" ? "destination" : "source";
-          // Keep the Miden asset when the new chain supports it; otherwise use
-          // the matching source symbol, then the chain's first enabled route.
-          const next = candidates.find((option) => sameAsset(option[midenSide], route[midenSide]))
-            ?? candidates.find((option) => option[side].symbol === asset.symbol)
-            ?? candidates[0];
-          if (next) onSelectRoute(next);
-        }}
-      >
-        {networks.map((network) => (
-          <option key={network} value={network}>{networkLabels[network]}</option>
-        ))}
-      </select>
-      <ChevronDown size={16} aria-hidden="true" />
-    </span>
+    <ListboxSelect
+      kind="chain"
+      label={menuLabel}
+      menuLabel={menuLabel}
+      heading="Select network"
+      value={asset.network}
+      options={networks.map((network) => ({
+        value: network,
+        label: networkLabels[network],
+        content: <><NetworkLogo network={network} /><span>{networkLabels[network]}</span></>,
+      }))}
+      onChange={(network) => {
+        const candidates = routes.filter((option) => option[side].network === network);
+        const midenSide = side === "source" ? "destination" : "source";
+        // Keep the Miden asset when the new chain supports it; otherwise use
+        // the matching source symbol, then the chain's first enabled route.
+        const next = candidates.find((option) => sameAsset(option[midenSide], route[midenSide]))
+          ?? candidates.find((option) => option[side].symbol === asset.symbol)
+          ?? candidates[0];
+        if (next) onSelectRoute(next);
+      }}
+    >
+      <NetworkLogo network={asset.network} />
+      <span className="chain-select-label" title={label}>{label}</span>
+    </ListboxSelect>
   );
 }

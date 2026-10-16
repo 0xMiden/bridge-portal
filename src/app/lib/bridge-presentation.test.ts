@@ -51,7 +51,7 @@ describe("deriveCtaState (primary CTA progression)", () => {
   const ready: CtaInputs = {
     mode: "receive",
     sourceConnected: true,
-    hasDestination: true,
+    destinationConnected: true,
     amount: "1",
     sourceTokenSymbol: "USDC",
     insufficientBalance: false,
@@ -88,13 +88,13 @@ describe("deriveCtaState (primary CTA progression)", () => {
     expect(send.label).toBe("Connect Bread wallet");
   });
 
-  it("prompts for the correct destination when it's missing", () => {
-    const receive = deriveCtaState({ ...ready, hasDestination: false });
-    expect(receive.action).toBe("add-destination");
-    expect(receive.label).toBe("Add Miden account");
+  it("prompts to connect the correct destination wallet when it's missing", () => {
+    const receive = deriveCtaState({ ...ready, destinationConnected: false });
+    expect(receive.action).toBe("connect-destination");
+    expect(receive.label).toBe("Connect Bread wallet");
 
-    const send = deriveCtaState({ ...ready, mode: "send", hasDestination: false });
-    expect(send.label).toBe("Add Sepolia address");
+    const send = deriveCtaState({ ...ready, mode: "send", destinationConnected: false });
+    expect(send.label).toBe("Connect Sepolia wallet");
   });
 
   it("surfaces insufficient balance as a disabled state", () => {

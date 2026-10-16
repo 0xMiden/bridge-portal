@@ -6,14 +6,11 @@ import type { BridgePage } from "../../pages/bridge-page";
 // rounding, which is compliant but trips a strict `>= 44`.
 const MIN_TAP_TARGET = 43.5;
 
-const destination = "0x4e6fb40fd2f6a55140df2c42dfb5b7";
-
 async function openUsdcxReview(bridge: BridgePage) {
   await bridge.waitForReady();
   await bridge.setRoute("USDCx");
   await bridge.setMode("Receive");
   await bridge.fillAmount("0.07");
-  await bridge.fillDestination(destination);
   await bridge.openPreflight();
 }
 

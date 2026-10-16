@@ -32,23 +32,17 @@ export const modes: Record<
     label: string;
     from: string;
     to: string;
-    destinationLabel: string;
-    destinationPlaceholder: string;
   }
 > = {
   receive: {
     label: "Receive",
     from: "Sepolia",
     to: "Miden",
-    destinationLabel: "Miden account",
-    destinationPlaceholder: "mtst1... or 0x account id",
   },
   send: {
     label: "Send",
     from: "Miden",
     to: "Sepolia",
-    destinationLabel: "Sepolia address",
-    destinationPlaceholder: "0x...",
   },
 };
 
@@ -122,7 +116,7 @@ export function deriveCtaState(input: CtaInputs): CtaState {
     submitting: input.submitPhase || "Preparing…",
     "enter-amount": "Enter amount",
     "connect-source": input.mode === "receive" ? `Connect ${input.evmNetworkLabel ?? "Sepolia"} wallet` : "Connect Bread wallet",
-    "add-destination": input.mode === "receive" ? "Add Miden account" : `Add ${input.evmNetworkLabel ?? "Sepolia"} address`,
+    "connect-destination": input.mode === "receive" ? "Connect Bread wallet" : `Connect ${input.evmNetworkLabel ?? "Sepolia"} wallet`,
     insufficient: `Not enough ${input.sourceTokenSymbol}`,
     "quote-loading": "Fetching quote…",
     review: input.mode === "receive" ? "Review receive" : "Review send",
@@ -130,7 +124,7 @@ export function deriveCtaState(input: CtaInputs): CtaState {
   return {
     action,
     label: labels[action],
-    disabled: action !== "connect-source" && action !== "add-destination" && action !== "review",
+    disabled: action !== "connect-source" && action !== "connect-destination" && action !== "review",
     opensReview: action === "review",
   };
 }
