@@ -28,7 +28,7 @@ test("a receipt leaves an unknown delivery time blank even when it has a transac
     .toBe(1_700_000_100_000);
 });
 test.each(["agglayer", "xreserve"] as const)(
-  "%s settlement keeps wallet consumption separate from delivery",
+  "%s delivery does not assert an unverified wallet claim is pending",
   (provider) => {
     const model = activityDetailFor({ ...DEMO_ACTIVITIES["demo-agglayer-receive"], provider });
     if (model.progress.kind !== "tracked") throw new Error("Expected tracked progress");
@@ -38,9 +38,10 @@ test.each(["agglayer", "xreserve"] as const)(
       "done",
     );
     expect(model.progress.milestones.find((step) => step.status === "consume")?.state).toBe(
-      "current",
+      "unknown",
     );
-    expect(model.guidance?.icon).toBe("wallet");
+    expect(model.guidance).toBeNull();
+    expect(model.receipt.status?.label).toBe("Delivered");
   },
 );
 test("an untracked withdrawal exposes its note without a refresh or delivery timeline", () => {
@@ -79,8 +80,8 @@ test("resolved xReserve delivery updates receipt, announcement, and support acti
     xreserveStatus: "delivered",
   });
   expect(model.receipt.pending).toBe(false);
-  expect(model.receipt.status).toBeUndefined();
+  expect(model.receipt.status?.label).toBe("Delivered");
   expect(model.receipt.activity.status).toBe("complete");
-  expect(model.announcement).toBe("Complete. Delivered on Miden — claim in your wallet");
+  expect(model.announcement).toBe("Delivered on Miden");
   expect(model.canCopyDiagnostics).toBe(false);
 });

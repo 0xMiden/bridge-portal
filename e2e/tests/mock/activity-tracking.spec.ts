@@ -88,7 +88,7 @@ for (const mode of ["send", "receive"] as const) {
   });
 }
 
-test("Agglayer receive recovers the delayed Miden transaction after reload", async ({ page }) => {
+test("Agglayer receive recovers the delayed Miden transaction after reload", async ({ page }, testInfo) => {
   let delivered = false;
   let claimTxHash: string | undefined = undefined;
   await page.route("**/api/agglayer/deposits**", (route) => {
@@ -115,6 +115,18 @@ test("Agglayer receive recovers the delayed Miden transaction after reload", asy
   delivered = true;
   await expect.poll(async () => (await storedActivity(page)).status).toBe("complete");
   expect((await storedActivity(page)).midenTxId).toBeUndefined();
+  const receipt = page.getByRole("article", { name: "Transfer receipt" });
+  await expect(receipt.getByText("Delivered", { exact: true })).toBeVisible();
+  await expect(receipt.getByText("Wallet claim", { exact: true })).toBeVisible();
+  await expect(receipt.getByText("Ready to claim", { exact: true })).toHaveCount(0);
+  await expect(receipt.getByText(/If you already consumed the note in Bread/)).toBeVisible();
+  await expect(receipt.getByText("No provider fee", { exact: true })).toBeVisible();
+  for (const width of [1440, 390]) {
+    await page.setViewportSize({ width, height: 1100 });
+    await expect(receipt.getByText("Network fee · estimated", { exact: true })).toBeVisible();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+    await page.screenshot({ path: testInfo.outputPath(`journey-${width}.png`), fullPage: true });
+  }
   await page.reload();
   await expect(page.locator(".detail-simple")).toBeVisible();
   claimTxHash = DESTINATION_TX;

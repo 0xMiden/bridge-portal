@@ -171,7 +171,7 @@ test("a saved deposit resumes tracking after reload without claiming delivery du
   await expect(receipt).toContainText("Arc Testnet tx");
   await expect(receipt).toContainText("1.000001 USDCx");
   await expect(receipt.getByRole("link", { name: /Arc explorer/i })).toHaveAttribute("href", `https://explorer.testnet.arc.io/tx/${hash}`);
-  await expect(receipt.locator(".rcpt-meta > div").filter({ hasText: "Miden time" })).toContainText("—");
+  await expect(receipt.getByText("Miden note", { exact: true }).locator("..")).toContainText("Pending");
   const stored = () => page.evaluate(() => JSON.parse(localStorage.getItem("miden.bridge.ui.activities")!)[0]);
   await expect.poll(async () => (await stored()).xreserveStatus).toBe("confirmed");
 
@@ -270,6 +270,9 @@ test("USDCx withdrawals restore the destination and show the net payout estimate
   await expect(bridge.preflight()).toContainText("2.000001 USDCx");
   await expect(bridge.preflight()).toContainText("1.983601 USDC");
   await expect(bridge.preflight()).toContainText("0.0164 USDC (estimated)");
-  await expect(bridge.preflight()).toContainText("Not quoted");
+  await expect(bridge.preflight().getByText("Minimum received", { exact: true })).toHaveCount(0);
+  await expect(bridge.preflight().locator(".fiat-amount")).toHaveText("$2.00");
+  await expect(page.locator("#preflight-source-value")).toHaveAttribute("title", await page.evaluate(() => window.__E2E__!.midenAddress!));
+  await expect(page.locator("#preflight-destination-value")).toHaveAttribute("title", await page.evaluate(() => window.__E2E__!.evmAddress!));
   await expect(bridge.preflight()).toContainText("Burning USDCx is irreversible");
 });

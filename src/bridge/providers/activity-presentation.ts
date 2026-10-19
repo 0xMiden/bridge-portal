@@ -14,6 +14,7 @@ export function presentActivity(activity: BridgeActivity): ProviderActivityPrese
   const state = activityState(activity);
   const details = direction.activityDetails(activity);
   const asset = activityRoute(activity)?.destination.symbol ?? activity.asset;
+  const walletClaimUnverified = direction.consumeNote && (state.status === "complete" || state.status === "claim_available");
   const headline = state.headline.replaceAll("{asset}", asset);
   const destination = {
     hash: details.destinationHash,
@@ -25,7 +26,7 @@ export function presentActivity(activity: BridgeActivity): ProviderActivityPrese
       status: state.status,
       headline,
       destination,
-      guidance: state.guidance ?? null,
+      guidance: walletClaimUnverified ? null : state.guidance ?? null,
       progress: {
         kind: "manual",
         message: state.message ?? headline,
@@ -51,6 +52,6 @@ export function presentActivity(activity: BridgeActivity): ProviderActivityPrese
     headline,
     destination,
     progress,
-    guidance: state.guidance ?? null,
+    guidance: walletClaimUnverified ? null : state.guidance ?? null,
   };
 }

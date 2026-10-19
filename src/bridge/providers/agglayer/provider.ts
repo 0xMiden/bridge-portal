@@ -159,7 +159,7 @@ const directions = {
       complete: {
         status: "complete",
         order: 5,
-        headline: "Delivered on Miden — claim in your wallet",
+        headline: "Delivered on Miden",
         guidance: consumeNoteGuidance,
       },
       claim_available: {

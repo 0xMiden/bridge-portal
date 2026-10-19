@@ -10,7 +10,6 @@ import {
   ExternalLink,
   LogOut,
   RefreshCcw,
-  ShieldCheck,
   X,
 } from "lucide-react";
 import dynamic from "next/dynamic";
@@ -38,11 +37,9 @@ import {
 import {
   type Activity,
   deriveCtaState,
-  modes,
   quoteFor,
   providerFee,
   networkLabels,
-  sourceAssetLabel,
   statusLabel,
   statusTone,
 } from "../lib/bridge-presentation";
@@ -66,6 +63,7 @@ import { InfoTip } from "./InfoTip";
 import { RelativeTime } from "./RelativeTime";
 import { TokenSelect } from "./TokenSelect";
 import { FiatAmount } from "./FiatAmount";
+import { NetworkLogo } from "./AssetLogo";
 import { ChainSelect } from "./ChainSelect";
 import { ProviderOptions } from "./ProviderOptions";
 import { WalletMenu } from "../../wallets/WalletMenu";
@@ -223,6 +221,7 @@ export function BridgeExperience() {
   // Reveals the full destination value in the preflight (a long Miden id / 0x
   // address is shortened by default, with an affordance to inspect it in full).
   const [showFullDestination, setShowFullDestination] = useState(false);
+  const [showFullSource, setShowFullSource] = useState(false);
   const [preflightDestinationCopied, setPreflightDestinationCopied] =
     useState(false);
   const walletPanelsRef = useRef<HTMLDivElement>(null);
@@ -268,11 +267,6 @@ export function BridgeExperience() {
     { dependencies: [route.id], scope: swapCardRef },
   );
 
-  const copy = {
-    ...modes[mode],
-    from: networkLabels[route.source.network],
-    to: networkLabels[route.destination.network],
-  };
   const providerCopy = bridgeProviders[provider];
   const hasRouteAmount = useMemo(() => {
     try {
@@ -364,6 +358,9 @@ export function BridgeExperience() {
   // the Miden wallet).
   const sourceConnected = mode === "receive" ? Boolean(evmAddress) : Boolean(midenAccount);
   // Keep the reviewed accounts fixed if a wallet changes while review is open.
+  const previewSource = mode === "receive"
+    ? reviewedAccounts?.evmAddress ?? evmAddress
+    : reviewedAccounts?.midenAccount ?? midenAccount;
   const previewDestination =
     mode === "receive"
       ? reviewedAccounts?.midenAccount ?? midenAccount
@@ -668,6 +665,7 @@ export function BridgeExperience() {
         } else setReviewedQuote(undefined);
         setReviewedAccounts({ evmAddress, midenAccount });
         setShowFullDestination(false);
+        setShowFullSource(false);
         setPreflightDestinationCopied(false);
         preflightPreviousFocusRef.current =
           document.activeElement instanceof HTMLElement
@@ -1086,12 +1084,12 @@ export function BridgeExperience() {
               <div className="preflight-panel">
                 <div className="preflight-head">
                   <span className="preflight-head-title">
-                    <ShieldCheck size={16} aria-hidden="true" />
-                    Review {mode === "receive" ? "receive" : "send"}
+                    Review transfer
+                    <span className="preflight-testnet">Testnet</span>
                   </span>
                   <button
                     type="button"
-                    className="preflight-close"
+                    className="preflight-close preflight-cancel"
                     onClick={cancelPreflight}
                     aria-label="Cancel review"
                   >
@@ -1100,80 +1098,61 @@ export function BridgeExperience() {
                 </div>
 
                 <div className="preflight-body">
-                  <div className="preflight-route">
-                    <strong>{copy.from}</strong>
-                    <ArrowRight size={15} aria-hidden="true" />
-                    <strong>{copy.to}</strong>
-                    <span className="preflight-testnet">Testnet</span>
+                  <div className="preflight-amount">
+                    <span className="preflight-quantity">{amount} <span>{route.source.symbol}</span></span>
+                    <FiatAmount amount={amount} symbol={route.source.symbol} />
+                  </div>
+
+                  <div className="preflight-path">
+                    {(["source", "destination"] as const).map((side) => {
+                      const isSource = side === "source";
+                      const account = isSource ? previewSource : previewDestination;
+                      const expanded = isSource ? showFullSource : showFullDestination;
+                      return (
+                        <div className="preflight-stop" key={side}>
+                          <NetworkLogo network={route[side].network} />
+                          <div className="preflight-stop-content">
+                            <strong>{networkLabels[route[side].network]}</strong>
+                            <div className="preflight-address">
+                              <span>{isSource ? "From" : "To"}</span>
+                              <button
+                                type="button"
+                                id={`preflight-${side}-value`}
+                                className="preflight-account"
+                                title={account}
+                                aria-label={`${expanded ? "Hide" : "Show full"} ${side} address: ${account}`}
+                                aria-expanded={expanded}
+                                onClick={() => isSource ? setShowFullSource(!expanded) : setShowFullDestination(!expanded)}
+                              >
+                                {expanded ? account : shortAddress(account)}
+                              </button>
+                              {!isSource ? (
+                                <button type="button" className="preflight-copy" aria-label={preflightDestinationCopied ? "Destination copied" : "Copy destination"} onClick={copyPreflightDestination}>
+                                  {preflightDestinationCopied ? <Check size={14} aria-hidden="true" /> : <Copy size={14} aria-hidden="true" />}
+                                </button>
+                              ) : null}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
 
                   <dl className="preflight-rows">
-                  <div>
-                    <dt>You send</dt>
-                    <dd>
-                      {amount} {sourceAssetLabel(route.source)}
-                    </dd>
-                  </div>
-                  <div>
-                    <dt>{fees.estimated ? "Estimated received" : "Expected received"}</dt>
-                    <dd>
-                      {expectedReceivedAmount} {destinationSymbol}
-                    </dd>
-                  </div>
-                  <div>
+                  {route.source.symbol !== destinationSymbol || Number(amount) !== Number(expectedReceivedAmount) ? <div>
+                    <dt>{fees.estimated ? "Estimated received" : "You receive"}</dt>
+                    <dd>{expectedReceivedAmount} {destinationSymbol}</dd>
+                  </div> : null}
+                  {quote.minReceived !== "Not quoted" && Number(quote.minReceived) !== Number(expectedReceivedAmount) ? <div>
                     <dt>Minimum received</dt>
                     <dd>{displayMinReceived}</dd>
-                  </div>
+                  </div> : null}
                   <div>
-                    <dt>Destination</dt>
-                    <dd className="preflight-destination">
-                      <span
-                        id="preflight-destination-value"
-                        className={showFullDestination ? "full" : undefined}
-                        title={previewDestination}
-                        aria-label={`Destination: ${previewDestination}`}
-                      >
-                        {showFullDestination
-                          ? previewDestination
-                          : shortAddress(previewDestination)}
-                      </span>
-                      {previewDestination.length > 16 ? (
-                        <button
-                          type="button"
-                          className="preflight-inspect"
-                          aria-controls="preflight-destination-value"
-                          aria-expanded={showFullDestination}
-                          aria-label={`${
-                            showFullDestination ? "Hide" : "Show full"
-                          } destination`}
-                          onClick={() =>
-                            setShowFullDestination((shown) => !shown)
-                          }
-                        >
-                          {showFullDestination ? "Hide" : "Show full"}
-                        </button>
-                      ) : null}
-                      <button
-                        type="button"
-                        className="preflight-inspect"
-                        aria-label="Copy destination"
-                        onClick={copyPreflightDestination}
-                      >
-                        {preflightDestinationCopied ? (
-                          <Check size={14} aria-hidden="true" />
-                        ) : (
-                          <Copy size={14} aria-hidden="true" />
-                        )}
-                        {preflightDestinationCopied ? "Copied" : "Copy"}
-                      </button>
-                    </dd>
-                  </div>
-                  <div>
-                    <dt>Route</dt>
+                    <dt>Provider</dt>
                     <dd>{providerCopy.label}</dd>
                   </div>
                   {fees.showEta ? <div>
-                    <dt>ETA</dt>
+                    <dt>Estimated time</dt>
                     <dd>{quote.eta}</dd>
                   </div> : null}
                   <div>
@@ -1184,21 +1163,14 @@ export function BridgeExperience() {
                     <dt>{feeLabel}</dt>
                     <dd>{feeDisplay}</dd>
                   </div>
-                  {fees.charging === "additional" && liveQuote?.fee !== undefined ? <div><dt>Total {route.source.symbol}</dt><dd>{formatUnits(parseUnits(amount, route.source.decimals) + parseUnits(liveQuote.fee, route.source.decimals), route.source.decimals)} {route.source.symbol}</dd></div> : null}
+                  {fees.charging === "additional" && liveQuote?.fee !== undefined && Number(liveQuote.fee) > 0 ? <div><dt>Total {route.source.symbol}</dt><dd>{formatUnits(parseUnits(amount, route.source.decimals) + parseUnits(liveQuote.fee, route.source.decimals), route.source.decimals)} {route.source.symbol}</dd></div> : null}
                   </dl>
 
-                  <p className="preflight-note">{routeNote}</p>
+                  {provider === "xreserve" ? <p className="preflight-note">{routeNote}</p> : null}
                   {reviewWalletsChanged ? <p className="form-error" role="alert">Your connected wallet changed. Close this review and review the transfer again.</p> : null}
                 </div>
 
                 <div className="preflight-actions">
-                  <button
-                    type="button"
-                    className="secondary-button preflight-cancel"
-                    onClick={cancelPreflight}
-                  >
-                    Cancel
-                  </button>
                   <button
                     type="button"
                     className="primary-button preflight-confirm"

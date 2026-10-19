@@ -18,17 +18,17 @@ test.each<{
   headline: string;
   live: boolean;
   complete: boolean;
-  current: string;
+  current: string | null;
   guidance: "wallet" | "alert" | null;
 }>([
   {
     name: "completed delivery cannot regress to attestation",
     patch: { status: "complete", xreserveStatus: "attested" },
-    headline: "Delivered on Miden — claim in your wallet",
+    headline: "Delivered on Miden",
     live: false,
     complete: true,
-    current: "consume",
-    guidance: "wallet",
+    current: null,
+    guidance: null,
   },
   {
     name: "failure beats stale attestation",
@@ -105,11 +105,11 @@ test.each<{
   {
     name: "delivery beats stale failure",
     patch: { status: "failed", xreserveStatus: "delivered" },
-    headline: "Delivered on Miden — claim in your wallet",
+    headline: "Delivered on Miden",
     live: false,
     complete: true,
-    current: "consume",
-    guidance: "wallet",
+    current: null,
+    guidance: null,
   },
   {
     name: "attestation beats forwarding",
@@ -150,7 +150,7 @@ test.each<{
     progress.milestones
       .filter((step) => step.state === "current" || step.state === "failed")
       .map((step) => step.status),
-  ).toEqual([current]);
+  ).toEqual(current === null ? [] : [current]);
   expect(presentation.guidance?.icon ?? null).toBe(guidance);
   expect(progress.deliveryWarningAt !== undefined).toBe(live);
 });

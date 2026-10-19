@@ -89,7 +89,7 @@ describe("agglayerPatch", () => {
 
     expect(next.status).toBe("complete");
     expect(next.readyForClaim).toBe(true);
-    expect(next.eta).toBe("Delivered — claim in your Bread wallet");
+    expect(next.eta).toBe("Delivered on Miden");
   });
 
   test("captures the Miden note-creation tx (claim_tx_hash) as the destination claim, not the balance-reflecting consume", () => {
@@ -113,7 +113,7 @@ describe("agglayerPatch", () => {
     // Agglayer destination claim happened (note created on Miden) — the app's
     // terminal success state. The Miden note is now the user's to claim in-wallet.
     expect(next.status).toBe("complete");
-    expect(next.eta).toBe("Delivered — claim in your Bread wallet");
+    expect(next.eta).toBe("Delivered on Miden");
     // The claim_tx_hash is the Miden note-creation tx, surfaced for Midenscan.
     expect(next.midenTxId).toBe(claimTx);
     expect(next.destinationTxHash).toBe(claimTx);
