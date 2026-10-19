@@ -51,6 +51,20 @@ test("USDCx joins the shared form with Arc balances, exact amounts and deposit r
   await expect(page.locator(".swap-box").first()).toContainText("10.1234 USDC");
   await expect(page.getByRole("button", { name: "Arc Testnet wallet menu", exact: true })).toBeVisible();
   expect.soft((await bridgeFrames(page)).filter((frame) => !frame.route.includes("USDCx") || frame.source !== "Arc Testnet")).toEqual([]);
+  // Single-asset chains still expose a real, keyboard-operable token selector.
+  for (const symbol of ["USDC", "USDCx"]) {
+    const selector = page.getByRole("button", { name: `${symbol} — change token`, exact: true });
+    await selector.press("ArrowDown");
+    const options = page.getByRole("listbox", { name: "Token", exact: true }).getByRole("option");
+    await expect(options).toHaveCount(1);
+    await expect(options).toContainText(symbol);
+    const search = page.getByRole("searchbox", { name: "Search tokens by name or symbol" });
+    await expect(search).toBeFocused();
+    await search.press("ArrowDown");
+    await expect(options).toBeFocused();
+    await options.press("Enter");
+    await expect(selector).toBeFocused();
+  }
   const origin = page.getByRole("combobox", { name: "Origin chain", exact: true });
   await expect(origin).toHaveText("Arc Testnet");
   await expect(page.locator(".swap-box").last().getByRole("combobox")).toHaveCount(0);
@@ -72,6 +86,24 @@ test("USDCx joins the shared form with Arc balances, exact amounts and deposit r
   const tokens = page.getByRole("listbox", { name: "Token", exact: true });
   await expect(tokens.getByRole("option", { name: "ETH Ether", exact: true })).toBeEnabled();
   await expect(tokens.getByRole("option")).toHaveText(["ETHEther", "USDCCircle USDC"]);
+  const search = page.getByRole("searchbox", { name: "Search tokens by name or symbol" });
+  await expect(search).toBeFocused();
+  for (const query of ["usdc", "  cIrClE  "]) {
+    await search.fill(query);
+    await expect(tokens.getByRole("option")).toHaveText(["USDCCircle USDC"]);
+  }
+  await search.fill("unknown-token");
+  await expect(tokens.getByRole("option")).toHaveCount(0);
+  await expect(page.getByRole("status").filter({ hasText: "No tokens found" })).toBeVisible();
+  await search.press("ArrowDown");
+  await expect(search).toBeFocused();
+  await search.fill("ether");
+  await search.press("ArrowUp");
+  await expect(tokens.getByRole("option", { name: "ETH Ether", exact: true })).toBeFocused();
+  await page.keyboard.press("Escape");
+  await page.getByRole("button", { name: "USDC — change token", exact: true }).click();
+  await expect(search).toHaveValue("");
+  await expect(tokens.getByRole("option")).toHaveCount(2);
   await page.keyboard.press("Escape");
   await expect(page.locator(".mode-switch").getByRole("button", { name: "Withdraw", exact: true })).toBeEnabled();
   await bridge.setChain("Arc Testnet");
@@ -102,6 +134,7 @@ test("USDCx joins the shared form with Arc balances, exact amounts and deposit r
   await bridge.openPreflight();
   await bridge.cancelPreflight();
   await expect(bridge.primaryButton()).toBeFocused();
+  await page.getByRole("button", { name: "USDC — change token", exact: true }).click();
   await page.screenshot({ path: info.outputPath("usdcx-desktop.png"), fullPage: true, animations: "disabled" });
   await page.setViewportSize({ width: 390, height: 844 });
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);

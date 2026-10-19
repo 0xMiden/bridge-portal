@@ -1,7 +1,7 @@
 import { assetKey, sameAsset, type BridgeAsset } from "../../bridge/core/assets";
 import type { BridgeRoute } from "../../bridge/core/routes";
 
-/** One choice per asset, with a compatible route resolved behind the selector. */
+/** Discover tokens for the selected chain pair, then resolve a route per asset. */
 export function tokenChoices(
   current: BridgeRoute,
   side: "source" | "destination",
@@ -14,6 +14,9 @@ export function tokenChoices(
       + Number(route.provider === current.provider);
 
   for (const route of routes) {
+    if (route.disabled || route.mode !== current.mode ||
+      route.source.network !== current.source.network ||
+      route.destination.network !== current.destination.network) continue;
     const asset = route[side];
     const key = assetKey(asset);
     const existing = choices.get(key);

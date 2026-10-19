@@ -19,19 +19,14 @@ export function TokenSelect({
   onSelectRoute: (route: BridgeRoute) => void;
 }) {
   const active = route[side];
-  const externalSide = route.mode === "receive" ? "source" : "destination";
-  const routes = bridgeRoutes.filter((option) => !option.disabled && !bridgeProviders[option.provider].disabled && option.mode === route.mode &&
-    option[externalSide].network === route[externalSide].network);
+  const routes = bridgeRoutes.filter((option) => !bridgeProviders[option.provider].disabled);
   const options = tokenChoices(route, side, routes);
   const selectedToken = <><TokenLogo asset={active} /><span className="token-select-symbol">{active.symbol}</span></>;
-
-  if (options.length < 2) {
-    return <div className="token-select"><span className="token-select-value">{selectedToken}</span></div>;
-  }
 
   return (
     <ListboxSelect
       kind="token"
+      searchable
       label={`${active.symbol} — change token`}
       menuLabel="Token"
       heading="Select token"

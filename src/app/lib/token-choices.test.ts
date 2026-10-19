@@ -1,12 +1,19 @@
 import { describe, expect, it } from "vitest";
 import { CIRCLE_SEPOLIA_USDC, MIDEN_ETH, MIDEN_USDCX, SEPOLIA_USDC } from "../../bridge/core/assets";
-import { findBridgeRoute, type BridgeRoute } from "../../bridge/core/routes";
+import { bridgeRoutes, findBridgeRoute, type BridgeRoute } from "../../bridge/core/routes";
 import { tokenChoices } from "./token-choices";
 
 const circle = findBridgeRoute("xreserve-sepolia-usdc-to-miden")!;
 const alternative: BridgeRoute = { ...circle, id: "another-usdc-route", provider: "agglayer" };
 
 describe("token choices across compatible routes", () => {
+  it.each(["source", "destination"] as const)("keeps %s choices on the selected chains and direction", (side) => {
+    const arc = findBridgeRoute("xreserve-usdc-to-miden")!;
+    const choices = tokenChoices(arc, side, bridgeRoutes);
+    expect(choices.map(({ asset }) => asset.symbol)).toEqual([side === "source" ? "USDC" : "USDCx"]);
+    expect(choices[0].route.id).toBe(arc.id);
+  });
+
   it.each(["source", "destination"] as const)("lists an asset once and preserves the selected route on the %s side", (side) => {
     // A later route serves the same asset pair, including differently cased
     // contract metadata. Selecting that asset must not switch back to the first.

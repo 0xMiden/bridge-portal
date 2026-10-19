@@ -1,23 +1,29 @@
 "use client";
 
-import { Check, ChevronDown } from "lucide-react";
+import { Check, ChevronDown, Search } from "lucide-react";
 import { type KeyboardEvent, type ReactNode, useEffect, useId, useRef, useState } from "react";
 
 /** Shared selection, focus, and dismissal behavior for bridge asset controls. */
 export function ListboxSelect({
-  kind, label, menuLabel, heading, context, value, options, onChange, children,
+  kind, label, menuLabel, heading, context, value, options, onChange, children, searchable = false,
 }: {
   kind: "chain" | "token";
   label: string;
   menuLabel: string;
   heading: string;
   context?: string;
+  searchable?: boolean;
   value: string;
   options: { value: string; label: string; content: ReactNode }[];
   onChange: (value: string) => void;
   children: ReactNode;
 }) {
   const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const searchInputRef = useRef<HTMLInputElement>(null);
+  const filteredOptions = searchable
+    ? options.filter((option) => option.label.toLowerCase().includes(query.trim().toLowerCase()))
+    : options;
   const menuId = useId();
   const rootRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
@@ -38,7 +44,7 @@ export function ListboxSelect({
     const match = searchRef.current.text
       ? buttons.find((button) => button.getAttribute("aria-label")?.toLowerCase().startsWith(searchRef.current.text))
       : undefined;
-    (match ?? buttons.find((button) => button.getAttribute("aria-selected") === "true"))?.focus();
+    (searchInputRef.current ?? match ?? buttons.find((button) => button.getAttribute("aria-selected") === "true"))?.focus();
     document.addEventListener("pointerdown", onPointer);
     document.addEventListener("keydown", onKey);
     return () => {
@@ -48,6 +54,8 @@ export function ListboxSelect({
   }, [open]);
 
   function navigateOptions(event: KeyboardEvent<HTMLDivElement>) {
+    const editingSearch = event.target === searchInputRef.current;
+    if (editingSearch && event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
     const buttons = Array.from(rootRef.current?.querySelectorAll<HTMLButtonElement>('[role="option"]') ?? []);
     const index = buttons.indexOf(document.activeElement as HTMLButtonElement);
     let next: number;
@@ -55,10 +63,14 @@ export function ListboxSelect({
       event.preventDefault();
       if (!open) {
         searchRef.current = { text: "", at: 0 };
+        setQuery("");
         setOpen(true);
         return;
       }
-      next = (index + (event.key === "ArrowDown" ? 1 : -1) + buttons.length) % buttons.length;
+      if (!buttons.length) return;
+      next = index < 0
+        ? event.key === "ArrowDown" ? 0 : buttons.length - 1
+        : (index + (event.key === "ArrowDown" ? 1 : -1) + buttons.length) % buttons.length;
     } else if (open && (event.key === "Home" || event.key === "End")) {
       event.preventDefault();
       next = event.key === "Home" ? 0 : buttons.length - 1;
@@ -70,6 +82,7 @@ export function ListboxSelect({
       const text = previous === key ? key : previous + key;
       searchRef.current = { text, at: now };
       if (!open) {
+        setQuery("");
         setOpen(true);
         return;
       }
@@ -102,6 +115,7 @@ export function ListboxSelect({
         aria-label={label}
         onClick={() => {
           searchRef.current = { text: "", at: 0 };
+          setQuery("");
           setOpen((previous) => !previous);
         }}
       >
@@ -114,8 +128,24 @@ export function ListboxSelect({
             <span>{heading}</span>
             {context ? <small>{context}</small> : null}
           </div>
+          {searchable ? (
+            <label className="select-search">
+              <Search size={16} aria-hidden="true" />
+              <input
+                ref={searchInputRef}
+                type="search"
+                aria-label="Search tokens by name or symbol"
+                aria-controls={menuId}
+                placeholder="Search name or symbol"
+                autoComplete="off"
+                spellCheck={false}
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+              />
+            </label>
+          ) : null}
           <div id={menuId} role="listbox" aria-label={menuLabel}>
-            {options.map((option) => (
+            {filteredOptions.map((option) => (
               <button
                 key={option.value}
                 type="button"
@@ -135,6 +165,7 @@ export function ListboxSelect({
               </button>
             ))}
           </div>
+          {filteredOptions.length === 0 ? <p className="select-empty" role="status">No tokens found. Try another name or symbol.</p> : null}
         </div>
       ) : null}
     </div>

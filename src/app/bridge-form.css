@@ -78,7 +78,7 @@
 .bridge-portal .panel-wallet .wallet-menu-chevron { flex: none; width: 12px; }
 .bridge-portal .swap-box:has(.wallet-actions-menu.open) { z-index: 65; }
 .bridge-portal .swap-box-amount { grid-row: 2; grid-column: 1; justify-self: start; width: 100%; margin: 0; }
-.bridge-portal .swap-card .swap-box input,
+.bridge-portal .swap-card .swap-box input:not([type="search"]),
 .bridge-portal .swap-card .readonly-amount strong {
   width: 100%; max-width: 100%; margin: 0;
   font: 500 36px/1.2 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
@@ -146,7 +146,7 @@
   .bridge-portal .chain-select-trigger { min-height: 44px; padding: 6px 8px; gap: 4px; }
   .bridge-portal .chain-select-label { white-space: normal; text-align: left; line-height: 1.25; }
   .bridge-portal .panel-wallet .wallet-pill { min-height: 44px; }
-  .bridge-portal .swap-card .swap-box input,
+  .bridge-portal .swap-card .swap-box input:not([type="search"]),
   .bridge-portal .swap-card .readonly-amount strong { font-size: 30px; }
   .bridge-portal .token-select-trigger,
   .bridge-portal .token-select-value { min-height: 44px; padding-top: 6px; padding-bottom: 6px; }

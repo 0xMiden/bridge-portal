@@ -8,7 +8,7 @@
   min-width: 0;
   max-width: 100%;
 }
-.swap-card[data-provider="xreserve"] .swap-box input {
+.swap-card[data-provider="xreserve"] .swap-box input:not([type="search"]) {
   width: 100%;
   font-size: 36px;
 }
@@ -18,7 +18,7 @@
   }
 }
 @media (max-width: 600px) {
-  .swap-card[data-provider="xreserve"] .swap-box input,
+  .swap-card[data-provider="xreserve"] .swap-box input:not([type="search"]),
   .swap-card[data-provider="xreserve"] .readonly-amount strong {
     font-size: 26px;
   }
@@ -1574,7 +1574,7 @@ a {
   justify-items: end;
 }
 
-.swap-box input {
+.swap-box input:not([type="search"]) {
   width: min(240px, 100%);
   border: 0;
   background: transparent;
@@ -1666,6 +1666,48 @@ a {
   color: var(--muted-foreground);
   font-size: 12px;
   font-weight: 400;
+}
+
+.select-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 2px 8px;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  color: var(--muted-foreground);
+  background: var(--surface);
+}
+
+.select-search:focus-within {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.select-search svg { flex-shrink: 0; }
+
+.token-select-menu .select-search input {
+  width: 100%;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: var(--foreground);
+  font: inherit;
+  font-size: 16px;
+}
+
+.select-search input::placeholder { color: var(--muted-foreground); }
+
+.token-select-menu .select-empty {
+  margin: 0;
+  padding: 12px 10px;
+  color: var(--muted-foreground);
+  font-size: 14px;
+  line-height: 1.5;
+  text-align: left;
 }
 
 .select-menu [role="listbox"] {
@@ -3194,7 +3236,7 @@ a {
     padding: 11px 14px;
   }
 
-  .swap-box input {
+  .swap-box input:not([type="search"]) {
     width: min(160px, 100%);
     font-size: clamp(26px, 9vw, 34px);
   }
@@ -3639,7 +3681,7 @@ a {
     padding: 10px;
   }
 
-  .swap-box input {
+  .swap-box input:not([type="search"]) {
     min-width: 0;
     width: min(140px, 100%);
   }
