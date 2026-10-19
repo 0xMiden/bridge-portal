@@ -487,8 +487,7 @@ export function BridgeExperience() {
     );
   }
 
-  // The Miden balance cell. Reactive + opt-in: it stays a "Show balance" button
-  // (no popup) until the user asks, then shows the amount with a refresh control.
+  // The shared session loads balances on connection; failed reads can be retried.
   function renderMidenBalance() {
     // Connection state (not connected / connecting / launch-account) lives in the
     // wallet chip above; the balance line only appears once there's a balance.
@@ -510,14 +509,14 @@ export function BridgeExperience() {
         </>
       );
     }
-    if (midenBalance.loading) return <>Available Syncing…</>;
+    if (!midenBalance.error) return <>Available Syncing…</>;
     return (
       <button
         type="button"
         className="balance-show"
         onClick={() => void midenBalance.show().catch(() => {})}
       >
-        Show balance
+        Balance unavailable · Retry
       </button>
     );
   }

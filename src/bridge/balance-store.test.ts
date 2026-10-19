@@ -26,14 +26,15 @@ afterEach(() => {
 });
 
 describe("private balance sessions", () => {
-  it("shares one opted-in request across consumers and keeps its result after unmount", async () => {
+  it("loads on connection, shares the read across consumers, and keeps its result after unmount", async () => {
     const pending = Promise.withResolvers<typeof holdings>();
     const requestAssets = vi.fn(() => pending.promise);
     store.setMidenSession({ account, network, requestAssets });
     const observer = new QueryObserver(client, store.midenQuery(account, network));
     const unsubscribe = observer.subscribe(() => {});
     expect(observer.getCurrentResult().data).toBeUndefined();
-    expect(requestAssets).not.toHaveBeenCalled();
+    await vi.waitFor(() => expect(requestAssets).toHaveBeenCalledOnce());
+    store.setMidenSession({ account, network, requestAssets });
 
     const first = store.requestMiden(account, network);
     const second = store.requestMiden(account.toUpperCase(), network, true);

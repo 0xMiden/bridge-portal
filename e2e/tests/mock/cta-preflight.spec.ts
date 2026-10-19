@@ -11,9 +11,7 @@ const combos: Array<{ route: Route; mode: Mode; label: RegExp }> = [
   { route: "USDCx", mode: "Receive", label: /Review transfer/i },
 ];
 
-test("Miden balances are opt-in, stay revealed across origins, and reset after reload", async ({ bridge, page }) => {
-  await expect(page.getByRole("button", { name: "Show balance", exact: true })).toBeVisible();
-  await bridge.showMidenBalance();
+test("Miden balances load on connection, stay visible across origins, and reload automatically", async ({ bridge, page }) => {
   const midenBalance = page.locator(".swap-box").last();
   await expect(midenBalance).toContainText("Available 0 USDCx");
   await bridge.setChain("Sepolia");
@@ -22,7 +20,7 @@ test("Miden balances are opt-in, stay revealed across origins, and reset after r
   await expect(midenBalance).toContainText("Available 0 USDCx");
   await page.reload();
   await bridge.waitForReady();
-  await expect(page.getByRole("button", { name: "Show balance", exact: true })).toBeVisible();
+  await expect(midenBalance).toContainText("Available 0 USDCx");
 });
 
 for (const { route, mode, label } of combos) {

@@ -148,9 +148,8 @@ function MidenWalletButtonInner({
   // to the same wallet once the adapter is selected + the extension is ready —
   // so the Miden wallet survives a refresh like WalletConnect does, instead of
   // needing a manual reconnect every time. Kept out of the adapter's built-in
-  // autoConnect (which could sit in "Connecting" forever): balances stay opt-in,
-  // and the same 45s timeout as a manual
-  // connect resets a hung restore rather than leaving the button stuck.
+  // autoConnect (which could sit in "Connecting" forever). The same 45s timeout
+  // as a manual connect resets a hung restore rather than leaving the button stuck.
   const autoReconnectTriedRef = useRef(false);
   useEffect(() => {
     if (autoReconnectTriedRef.current) return;
@@ -215,9 +214,8 @@ function MidenWalletButtonInner({
       return;
     }
 
-    // Connecting never reads the balance — that would open the MidenFi asset
-    // popup unprompted. Show a neutral connected state; the user pulls a fresh
-    // read explicitly via the menu's "Sync wallet state" action.
+    // Asset balances load through the shared session on connection. Notes still
+    // require the menu's explicit "Sync wallet state" action.
     queueMicrotask(() => {
       setNoteSyncStatus("Refresh to sync");
     });
