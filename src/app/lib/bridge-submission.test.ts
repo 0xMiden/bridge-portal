@@ -108,7 +108,6 @@ describe("submission validation", () => {
     ["unknown route", { routeId: "unknown-route" }, /isn't available/],
     ["insufficient balance", { insufficientBalance: true }, /Not enough USDC/],
     ["disconnected Miden source", { routeId: "epoch-usdc-to-sepolia", midenWallet: { connected: false, address: "" } }, /Connect your Bread wallet/],
-    ["paused Agglayer withdrawal", { routeId: "agglayer-eth-to-sepolia", evmAddress: EVM_ADDRESS }, /isn't available/],
     ["disconnected Miden destination with a stale address", { routeId: "agglayer-eth-to-miden", midenWallet: { connected: false, address: MIDEN_ACCOUNT } }, /Connect your Bread wallet/],
     ["Miden recipient differs from the connected wallet", { midenAccount: "0x4e6fb40fd2f6a55140df2c42dfb5b7" }, /wallet changed.*review/i],
     ["EVM recipient differs from the connected wallet", { routeId: "epoch-usdc-to-sepolia", evmAddress: `0x${"22".repeat(20)}` }, /wallet changed.*review/i],

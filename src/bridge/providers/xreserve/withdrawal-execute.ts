@@ -22,20 +22,36 @@ export async function withdrawUsdcx(input: {
   const faucet = sdk.AccountId.fromHex(ARC.faucetId);
   const rpc = new sdk.RpcClient(new sdk.Endpoint(process.env.NEXT_PUBLIC_MIDEN_RPC_URL ?? "https://rpc.testnet.miden.io"));
   try {
-    const fetched = await rpc.getAccountDetails(faucet);
-    const account = fetched.account();
-    // Account.storage() is patched to StorageView at runtime; RPC types still
-    // describe the raw WASM return. Only the underlying objects own free().
-    const view = account?.storage() as unknown as import("@miden-sdk/miden-sdk").StorageView | undefined;
-    const storage = view?.raw;
-    const minimum = storage?.getItem("miden::standards::faucets::policies::burn::min_burn_amount::min_burn_amount");
-    const allowed = storage?.getMapItem("miden::standards::auth::network_account::allowed_note_scripts", sdk.NoteScript.burn().root());
+    // Only request the burn-policy entry. Fetching the full faucet account fails
+    // once its unrelated used_nonces map exceeds the node's response limit.
+    const slot = "miden::standards::auth::network_account::allowed_note_scripts";
+    const script = sdk.NoteScript.burn();
+    const root = script.root();
+    const rootHex = root.toHex();
+    script.free();
+    const requirements = sdk.AccountStorageRequirements.fromSlotAndKeysArray([
+      new sdk.SlotAndKeys(slot, [root]),
+    ]);
+    // The SDK consumes requirements (and its keys) when constructing the request.
+    const proof = await rpc.getAccountProof(faucet, requirements);
     try {
-      if (allowed?.toU64s()[0] !== 1n) throw new Error("The USDCx faucet does not currently accept this burn script.");
-      const floor = minimum?.toU64s()[0];
-      if (floor === undefined) throw new Error("Unable to verify the faucet's minimum withdrawal. Try again later.");
-      if (amount < floor) throw new Error(`The faucet requires at least ${Number(floor) / 1e6} USDCx per withdrawal.`);
-    } finally { minimum?.free(); allowed?.free(); storage?.free(); account?.free(); fetched.free(); }
+      const minimum = proof.getStorageSlotValue("miden::standards::faucets::policies::burn::min_burn_amount::min_burn_amount");
+      const entries = proof.getStorageMapEntries(slot) ?? [];
+      let allowed = false;
+      try {
+        for (const entry of entries) {
+          const key = entry.key();
+          const value = entry.value();
+          try {
+            if (key.toHex() === rootHex && value.toU64s()[0] === 1n) allowed = true;
+          } finally { key.free(); value.free(); }
+        }
+        if (!allowed) throw new Error("The USDCx faucet does not currently accept this burn script.");
+        const floor = minimum?.toU64s()[0];
+        if (floor === undefined) throw new Error("Unable to verify the faucet's minimum withdrawal. Try again later.");
+        if (amount < floor) throw new Error(`The faucet requires at least ${Number(floor) / 1e6} USDCx per withdrawal.`);
+      } finally { minimum?.free(); entries.forEach(entry => entry.free()); }
+    } finally { proof.free(); }
   } finally { rpc.free(); }
   const asset = new sdk.FungibleAsset(faucet, amount);
   const storage = new sdk.NoteStorage(new sdk.FeltArray([...asset.vaultKey().toFelts(), ...asset.intoWord().toFelts()]));

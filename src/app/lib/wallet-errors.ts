@@ -24,6 +24,7 @@ export function isUserRejection(error: unknown): boolean {
 export function errorMessage(error: unknown) {
   if (isUserRejection(error)) return "You cancelled the request in your wallet.";
   if (error instanceof Error) return error.message;
+  if (typeof error === "string" && error.trim()) return error;
   if (typeof error === "object" && error && "message" in error)
     return String(error.message);
   return "Something went wrong. Try again.";

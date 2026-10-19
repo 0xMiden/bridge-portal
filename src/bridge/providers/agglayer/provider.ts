@@ -179,7 +179,6 @@ const directions = {
 export const agglayer: Provider = {
   label: "Agglayer",
   badge: "Testnet",
-  unavailableReason: "Agglayer withdrawals are not available yet",
   directions,
   load: () => import("./flows"),
 };
