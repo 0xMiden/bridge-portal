@@ -68,9 +68,12 @@ export const flows: ProviderFlows = {
             : Promise.resolve(),
           activity.bridgeDestinationAddress
             ? (async () => {
+                const params = new URLSearchParams({ destinationAddress: activity.bridgeDestinationAddress! });
+                if (deploymentId) params.set("deployment", deploymentId);
+                if (activity.sourceTxHash) params.set("sourceTxHash", activity.sourceTxHash);
                 const response = await fetch(
-                  `/api/agglayer/deposits?destinationAddress=${encodeURIComponent(activity.bridgeDestinationAddress!)}${deploymentId ? `&deployment=${encodeURIComponent(deploymentId)}` : ""}`,
-                  { signal },
+                  `/api/agglayer/deposits?${params}`,
+                  { cache: "no-store", signal },
                 );
                 if (!response.ok) throw new Error("Unable to read Agglayer deposits.");
                 const status: AgglayerDepositStatus = await response.json();
