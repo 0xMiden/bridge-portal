@@ -33,7 +33,7 @@ vi.mock("@miden-sdk/miden-sdk", () => ({
   WasmWebClient: { createClient: sdk.createClient },
   AccountId: sdk.AccountId,
   AccountStorageMode: { public: () => "public" },
-  AuthScheme: { AuthRpoFalcon512: "falcon" },
+  AuthScheme: { Falcon: "falcon", ECDSA: "ecdsa" } satisfies typeof import("@miden-sdk/miden-sdk").AuthScheme,
   NetworkId: { testnet: () => "testnet" },
   AccountInterface: { BasicWallet: "wallet" },
 }));

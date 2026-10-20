@@ -184,7 +184,7 @@ async function openClient(seedBytes: Uint8Array): Promise<ReadyClient> {
 
   // Public, so a later run with an empty IndexedDB can import the same account
   // from the seed. A private account cannot. Falcon matches newWallet's scheme.
-  const auth = AuthScheme.AuthRpoFalcon512;
+  const auth = AuthScheme.Falcon;
   let account: { id(): ReadyClient["accountId"] };
   try {
     account = await client.importPublicAccountFromSeed(seedBytes, auth);
