@@ -1208,8 +1208,8 @@ export function BridgeExperience() {
                   {inFlightActivities.map((activity) => (
                     <Link
                       className="home-activity-item"
-                      href={`/activity/${activity.id}`}
-                      key={activity.id}
+                      href={`/activity/${encodeURIComponent(activity.id)}`}
+                      key={encodeURIComponent(activity.id)}
                     >
                       <span
                         className={`status-dot ${statusTone(activity.status, activity)}`}

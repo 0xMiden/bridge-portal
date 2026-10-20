@@ -3442,6 +3442,7 @@ a {
   cursor: pointer;
 }
 .preflight-copy { display: inline-flex; align-items: center; justify-content: center; border: 0; padding: 4px; background: transparent; color: var(--muted-foreground); cursor: pointer; }
+.preflight-account, .preflight-copy { min-width: 44px; min-height: 44px; }
 .preflight-account:focus-visible, .preflight-copy:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; }
 
 .preflight-rows {
@@ -3647,7 +3648,6 @@ a {
   }
 
   .preflight-rows div { align-items: flex-start; }
-  .preflight-account { min-height: 36px; }
   .preflight-address { align-items: center; }
 
   .balance-refresh {

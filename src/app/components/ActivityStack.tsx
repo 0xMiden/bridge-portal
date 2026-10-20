@@ -129,7 +129,7 @@ export function ActivityStack({
           <h2>{title}</h2>
         </div>
         <div className="home-activity-list">
-          <Link className="home-activity-item" href={`/activity/${top.id}`}>
+          <Link className="home-activity-item" href={`/activity/${encodeURIComponent(top.id)}`}>
             <Row activity={top} />
           </Link>
         </div>
@@ -161,8 +161,8 @@ export function ActivityStack({
           {activities.map((activity) => (
             <Link
               className="home-activity-item"
-              href={`/activity/${activity.id}`}
-              key={activity.id}
+              href={`/activity/${encodeURIComponent(activity.id)}`}
+              key={encodeURIComponent(activity.id)}
             >
               <Row activity={activity} />
             </Link>
