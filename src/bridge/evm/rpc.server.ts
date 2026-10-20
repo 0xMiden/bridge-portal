@@ -12,7 +12,10 @@ export function evmRpcUrls(network: EvmNetwork): string[] {
     arbitrum: process.env.ARBITRUM_RPC_URL,
   };
   if (network in privateUrls) return [...new Set([
-    privateUrls[network], ...evmNetworks[network].rpcUrls.default.http,
+    privateUrls[network],
+    // Viem's Ethereum default can reject public reads with HTTP 429.
+    ...(network === "ethereum" ? ["https://ethereum-rpc.publicnode.com"] : []),
+    ...evmNetworks[network].rpcUrls.default.http,
   ].filter((url): url is string => Boolean(url)))];
   const urls = network === "sepolia"
     ? [process.env.AGGLAYER_SEPOLIA_RPC_URL, process.env.EVM_RPC_URL,
