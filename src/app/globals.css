@@ -1,20 +1,57 @@
 @import "tailwindcss";
 
-.network-selector select {
+.network-select {
+  position: relative;
+  flex: 0 0 auto;
+}
+
+.network-select-trigger {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   min-height: 44px;
-  max-width: 120px;
-  padding: 8px 12px;
-  border: 1px solid var(--border-strong);
-  border-radius: 8px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: var(--radius-md);
   background: var(--surface);
+  box-shadow: var(--shadow-control);
   color: var(--foreground);
   font: inherit;
   font-size: 13px;
+  font-weight: 600;
   cursor: pointer;
+  transition: var(--transition-interactive);
 }
-.network-selector select:hover { background: var(--surface-muted); }
-.network-selector select:focus-visible { outline: 2px solid var(--foreground); outline-offset: 3px; }
-.network-selector select:disabled { cursor: wait; opacity: 0.6; }
+
+.network-select-trigger:hover,
+.network-select-trigger.open { background: var(--surface-muted); }
+.network-select-trigger:active { transform: scale(0.97); }
+.network-select-trigger:disabled { cursor: wait; opacity: 0.6; }
+.network-select-trigger .network-symbol { color: var(--accent-foreground); }
+
+.select-menu.network-select-menu {
+  z-index: 80;
+  width: 224px;
+  border-radius: var(--radius-md);
+}
+
+.network-select-menu .select-menu-heading {
+  padding: 8px 10px 12px;
+  color: var(--muted-foreground);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.network-select-menu .select-option {
+  min-height: 48px;
+  gap: 12px;
+  border-radius: var(--radius-sm);
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.network-option-icon { flex: none; color: var(--muted-foreground); }
+.network-select-menu .selected .network-option-icon { color: var(--accent-foreground); }
 
 /* The Arc label and six-decimal USDC amounts need balanced column widths. */
 .swap-card[data-provider="xreserve"] .swap-box {
@@ -964,6 +1001,7 @@ a {
 .wallet-menu-item:focus-visible,
 .token-select-trigger:focus-visible,
 .chain-select-trigger:focus-visible,
+.network-select-trigger:focus-visible,
 .select-option:focus-visible {
   outline: 2px solid var(--accent-foreground);
   outline-offset: 3px;
@@ -1648,6 +1686,7 @@ a {
 }
 
 .token-select-trigger.open .select-caret,
+.network-select-trigger.open .select-caret,
 .chain-select-trigger.open .select-caret {
   transform: rotate(180deg);
 }
@@ -3523,6 +3562,13 @@ a {
 }
 
 @media (max-width: 640px) {
+  .select-menu.network-select-menu {
+    left: 50%;
+    right: auto;
+    translate: -50% 0;
+    transform-origin: top center;
+  }
+
   .app-shell,
   .detail-shell {
     padding:
