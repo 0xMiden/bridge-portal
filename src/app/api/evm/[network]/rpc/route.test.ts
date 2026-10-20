@@ -31,27 +31,48 @@ it.each<EvmNetwork>(["sepolia", "arc-testnet", "base-sepolia", "arbitrum-sepolia
   expect(await (await POST(request(), context(network))).json()).toEqual(result);
   expect(fetch.mock.calls[0][0]).toBe(evmRpcUrls(network)[0]);
 });
-it("forwards the exact domain call and retries a failed upstream", async () => {
+it.each<EvmNetwork>(["arc-testnet", "base-sepolia"])("forwards the exact call after a failed %s upstream", async (network) => {
   const result = { jsonrpc: "2.0", id: 7, result: `0x${"0".repeat(63)}1` };
   const fetch = vi
     .fn()
     .mockRejectedValueOnce(new TypeError("Failed to fetch"))
     .mockResolvedValueOnce(Response.json(result));
   vi.stubGlobal("fetch", fetch);
-  const response = await post(request());
+  const response = await POST(request(), context(network));
   expect(await response.json()).toEqual(result);
   expect(fetch).toHaveBeenCalledTimes(2);
   expect(fetch).toHaveBeenNthCalledWith(
     2,
-    evmRpcUrls("arc-testnet")[1],
+    evmRpcUrls(network)[1],
     expect.objectContaining({ body: JSON.stringify(payload) }),
   );
 });
-it("preserves contract revert details without retry", async () => {
+it.each([
+  { status: 429 },
+  { status: 503 },
+  { code: -32002, message: "Resource unavailable" },
+  { code: -32005, message: "Rate limit exceeded" },
+])("recovers a Base read after an upstream availability failure (%j)", async (failure) => {
+  const result = { jsonrpc: "2.0", id: 7, result: "0x" };
+  const fetch = vi.fn()
+    .mockResolvedValueOnce("status" in failure
+      ? new Response(null, { status: failure.status })
+      : Response.json({ jsonrpc: "2.0", id: 7, error: failure }))
+    .mockResolvedValueOnce(Response.json(result));
+  vi.stubGlobal("fetch", fetch);
+  expect(await (await POST(request(), context("base-sepolia"))).json()).toEqual(result);
+  expect(fetch).toHaveBeenCalledTimes(2);
+  expect(fetch.mock.calls[1][0]).not.toBe(fetch.mock.calls[0][0]);
+});
+it.each([
+  { code: 3, message: "execution reverted", data: "0x12345678" },
+  { code: -32000, message: "execution reverted", data: "0x12345678" },
+  { code: -32602, message: "Invalid params" },
+])("preserves contract and request errors without retry (%j)", async (error) => {
   const result = {
     jsonrpc: "2.0",
     id: 7,
-    error: { code: 3, message: "execution reverted", data: "0x12345678" },
+    error,
   };
   const fetch = vi.fn().mockResolvedValue(Response.json(result));
   vi.stubGlobal("fetch", fetch);
@@ -83,7 +104,7 @@ it("returns a bounded outage response when every RPC fails", async () => {
   expect(response.status).toBe(502);
   expect(await response.json()).toMatchObject({
     id: 7,
-    error: { code: -32000 },
+    error: { code: -32002 },
   });
   expect(fetch).toHaveBeenCalledTimes(evmRpcUrls("arc-testnet").length);
 });

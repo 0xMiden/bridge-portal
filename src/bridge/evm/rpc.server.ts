@@ -11,7 +11,10 @@ export function evmRpcUrls(network: EvmNetwork): string[] {
     : network === "arc-testnet"
       ? [...evmNetworks[network].rpcUrls.default.http,
           "https://rpc.drpc.testnet.arc.io", "https://rpc.quicknode.testnet.arc.io"]
-      : evmNetworks[network].rpcUrls.default.http;
+      : network === "base-sepolia"
+        ? [process.env.BASE_SEPOLIA_RPC_URL, ...evmNetworks[network].rpcUrls.default.http,
+            "https://base-sepolia-rpc.publicnode.com"]
+        : evmNetworks[network].rpcUrls.default.http;
   return [...new Set(urls.map((url) => url?.trim()).filter((url): url is string => Boolean(url)))];
 }
 
@@ -40,8 +43,12 @@ export async function forwardEvmRpc(
       const payload = await response.json();
       if (!payload || typeof payload !== "object" || Array.isArray(payload) ||
           payload.jsonrpc !== "2.0" || payload.id !== body.id) continue;
-      if (payload.error && typeof payload.error.code === "number" && typeof payload.error.message === "string")
+      if (payload.error && typeof payload.error.code === "number" && typeof payload.error.message === "string") {
+        // EIP-1474 availability/limit errors can arrive over HTTP 200.
+        // Invalid requests and contract reverts must still reach the caller.
+        if (payload.error.code === -32002 || payload.error.code === -32005) continue;
         return { jsonrpc: "2.0", id: body.id, error: payload.error };
+      }
       if ("result" in payload && !("error" in payload)) return payload;
     } catch {
       // Network failure, timeout, or malformed response: try this network's next RPC.

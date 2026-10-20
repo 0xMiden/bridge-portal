@@ -1822,6 +1822,8 @@ a {
 .form-error {
   display: flex;
   align-items: center;
+  min-width: 0;
+  overflow-wrap: anywhere;
   min-height: 40px;
   margin: 10px 2px 0;
   padding: 10px 12px;
