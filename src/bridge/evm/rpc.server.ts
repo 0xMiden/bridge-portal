@@ -5,6 +5,18 @@ import { SEPOLIA_NETWORK } from "../../config/sepolia";
 
 // Keep private RPC configuration on the server, out of browser transports.
 export function evmRpcUrls(network: EvmNetwork): string[] {
+  const privateUrls: Partial<Record<EvmNetwork, string | undefined>> = {
+    ethereum: process.env.ETHEREUM_RPC_URL,
+    arc: process.env.ARC_MAINNET_RPC_URL,
+    base: process.env.BASE_RPC_URL,
+    arbitrum: process.env.ARBITRUM_RPC_URL,
+  };
+  if (network in privateUrls) return [...new Set([
+    privateUrls[network],
+    // Viem's Ethereum default can reject public reads with HTTP 429.
+    ...(network === "ethereum" ? ["https://ethereum-rpc.publicnode.com"] : []),
+    ...evmNetworks[network].rpcUrls.default.http,
+  ].filter((url): url is string => Boolean(url)))];
   const urls = network === "sepolia"
     ? [process.env.AGGLAYER_SEPOLIA_RPC_URL, process.env.EVM_RPC_URL,
         process.env.NEXT_PUBLIC_SEPOLIA_RPC_URL, SEPOLIA_NETWORK.rpcUrl]

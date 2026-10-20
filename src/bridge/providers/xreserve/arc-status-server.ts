@@ -1,13 +1,15 @@
 import { createPublicClient, parseEventLogs } from "viem";
-import { ARC, ARC_MAX_MIDEN_AMOUNT, arcTestnet, xReserveAbi } from "./config";
+import { arcConfig, ARC_MAX_MIDEN_AMOUNT, xReserveAbi } from "./config";
 import { evmServerTransport } from "../../evm/rpc.server";
 import { decodeArcRecipient, parseArcDepositIntent } from "./attestation";
 
-export async function getArcDepositStatus(hash: string) {
+export async function getArcDepositStatus(hash: string, deploymentId?: string) {
+  const ARC = arcConfig(deploymentId);
+  const arcTestnet = ARC.chain;
   if (!/^0x[\da-f]{64}$/i.test(hash))
     return Response.json({ error: "Invalid deposit hash." }, { status: 400 });
   try {
-    const client = createPublicClient({ chain: arcTestnet, transport: evmServerTransport("arc-testnet") });
+    const client = createPublicClient({ chain: arcTestnet, transport: evmServerTransport(ARC.network) });
     const receipt = await client.getTransactionReceipt({ hash: hash as `0x${string}` })
       .catch((error: Error) => {
         if (error.name === "TransactionReceiptNotFoundError") return null;
@@ -50,7 +52,7 @@ export async function getArcDepositStatus(hash: string) {
         if (!attestation || Number(attestation.remoteDomain) !== ARC.midenDomain ||
             typeof attestation.attestation !== "string" || !/^0x(?:[\da-f]{2})+$/i.test(attestation.attestation)) continue;
         try {
-          const intent = parseArcDepositIntent(attestation.payload);
+          const intent = parseArcDepositIntent(attestation.payload, deploymentId);
           if (intent.amount !== deposit.amount || intent.recipient !== deposit.recipient ||
               intent.faucet !== deposit.faucet || intent.sender !== deposit.sender) {
             unreadable = true;

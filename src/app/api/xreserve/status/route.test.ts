@@ -1,3 +1,4 @@
+import { currentDeployment } from "../../../../config/deployments";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { encodeAbiParameters, encodeEventTopics, parseAbi } from "viem";
 import { GET } from "./route";
@@ -65,16 +66,44 @@ it("rejects malformed hashes before network access", async () => {
   expect((await GET(new Request("http://localhost/api/xreserve/status?network=arc-testnet&hash=bad"))).status).toBe(400);
   expect(mocks.receipt).not.toHaveBeenCalled();
 });
-it.each(["sepolia", "base-sepolia", "arbitrum-sepolia"])("tracks %s through its forwarding provider", async (network) => {
+it.each(["sepolia", "base-sepolia", "arbitrum-sepolia", "ethereum", "base", "arbitrum"])("tracks %s through its forwarding provider", async (network) => {
   vi.mocked(getCctpStatus).mockResolvedValue({ status: "submitted", forwarding: true });
   const hash = `0x${"a".repeat(64)}`;
-  const response = await GET(new Request(`http://localhost/api/xreserve/status?network=${network}&hash=${hash}`));
+  const deploymentId = ["ethereum", "base", "arbitrum"].includes(network) ? currentDeployment("mainnet").id : undefined;
+  const response = await GET(new Request(`http://localhost/api/xreserve/status?network=${network}&hash=${hash}${deploymentId ? `&deployment=${deploymentId}` : ""}`));
   expect(await response.json()).toEqual({ status: "submitted", forwarding: true });
-  expect(getCctpStatus).toHaveBeenCalledWith(network, hash);
+  expect(getCctpStatus).toHaveBeenCalledWith(network, hash, deploymentId);
   expect(mocks.receipt).not.toHaveBeenCalled();
 });
 it("rejects unknown origins without treating them as Arc", async () => {
   expect((await GET(new Request(`http://localhost/api/xreserve/status?network=mainnet&hash=0x${"a".repeat(64)}`))).status).toBe(400);
   expect(getCctpStatus).not.toHaveBeenCalled();
   expect(mocks.receipt).not.toHaveBeenCalled();
+});
+
+it.each([
+  ["ethereum", undefined],
+  ["arc-testnet", currentDeployment("mainnet").id],
+  ["base", currentDeployment("testnet").id],
+  ["arc", "https://attacker.invalid"],
+])("rejects a network/deployment mismatch (%s, %s) before any upstream access", async (network, deployment) => {
+  const response = await GET(new Request(`http://localhost/api/xreserve/status?network=${network}&hash=0x${"a".repeat(64)}${deployment ? `&deployment=${deployment}` : ""}`));
+  expect(response.status).toBe(400);
+  expect(getCctpStatus).not.toHaveBeenCalled();
+  expect(mocks.receipt).not.toHaveBeenCalled();
+  expect(fetchMock).not.toHaveBeenCalled();
+});
+
+it("verifies mainnet Circle events against its faucet and production attestation service", async () => {
+  const mainnetFaucet = "0x00000000000000000000000000000000e69e6ca6e39df1b10c1e5399399feb00";
+  const mainnetLog = { ...log, address: "0x8888888199b2Df864bf678259607d6D5EBb4e3Ce",
+    data: encodeAbiParameters([{ type: "uint256" }, { type: "uint32" }, { type: "bytes32" }, { type: "uint256" }, { type: "bytes" }], [1_000_000n, 10007, mainnetFaucet, 0n, "0x"]),
+  };
+  mocks.receipt.mockResolvedValue({ status: "success", logs: [mainnetLog] });
+  fetchMock.mockResolvedValue(Response.json({ attestations: [{ remoteDomain: 10007, attestation: "0x1234", payload: payload.replace(faucet.slice(2), mainnetFaucet.slice(2)) }] }));
+  const request = new Request(`http://localhost/api/xreserve/status?network=arc&hash=0x${"a".repeat(64)}&deployment=${currentDeployment("mainnet").id}`);
+  expect(await (await GET(request)).json()).toMatchObject({ status: "attested", deposit: { faucet: "0xe69e6ca6e39df1b10c1e5399399feb" } });
+  expect(fetchMock.mock.calls[0][0]).toBe(`https://xreserve-api.circle.com/v1/attestations?txHash=0x${"a".repeat(64)}`);
+  mocks.receipt.mockResolvedValue({ status: "success", logs: [log] });
+  expect((await GET(request)).status).toBe(422);
 });

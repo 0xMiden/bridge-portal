@@ -1,3 +1,4 @@
+import { deploymentMiden } from "../../config/deployments";
 import { evmNetworks } from "../../config/evm-networks";
 import type { BridgeAsset, BridgeNetwork } from "../../bridge/core/assets";
 import { activityRoute, type BridgeRoute } from "../../bridge/core/routes";
@@ -53,6 +54,7 @@ export const explorerUrls = {
 };
 
 export const networkLabels: Record<BridgeNetwork, string> = {
+  ethereum: "Ethereum", arc: "Arc", base: "Base", arbitrum: "Arbitrum", "miden-mainnet": "Miden",
   sepolia: "Sepolia",
   "arc-testnet": "Arc Testnet",
   "base-sepolia": "Base Sepolia",
@@ -63,7 +65,7 @@ export const networkLabels: Record<BridgeNetwork, string> = {
 export const tokenNames: Record<string, string> = { USDC: "USD Coin", USDCx: "USDC-backed token", ETH: "Ether" };
 
 export function sourceAssetLabel(asset: BridgeAsset): string {
-  return asset.network === "miden-testnet" && asset.symbol === "ETH" ? "Miden ETH" : asset.symbol;
+  return asset.kind === "miden" && asset.symbol === "ETH" ? "Miden ETH" : asset.symbol;
 }
 
 export function quoteFor(route: BridgeRoute, amount: string): Quote {
@@ -208,7 +210,7 @@ export function sourceExplorer(activity: BridgeActivity): ExplorerLink {
   const midenTx = fullHash(directionFor(activity).activityDetails(activity).sourceHash);
   return {
     label: "View on Midenscan",
-    href: midenTx ? `${explorerUrls.miden}/tx/${midenTx}` : undefined,
+    href: midenTx ? `${deploymentMiden(activityRoute(activity)?.deploymentId).explorer}/tx/${midenTx}` : undefined,
     available: !!midenTx,
   };
 }
@@ -226,7 +228,7 @@ export function destinationExplorer(activity: BridgeActivity): ExplorerLink {
       activity.status === "complete" || !!fullHash(activity.midenTxId);
     return {
       label: "View on Midenscan",
-      href: account ? `${explorerUrls.miden}/account/${account}` : undefined,
+      href: account ? `${deploymentMiden(activityRoute(activity)?.deploymentId).explorer}/account/${account}` : undefined,
       available: delivered && !!account,
     };
   }
@@ -261,6 +263,8 @@ export function buildDiagnostics(
   return {
     tool: "miden-bridge-portal",
     activityId: activity.id,
+    environment: activity.environment ?? "testnet",
+    deploymentId: activityRoute(activity)?.deploymentId,
     route: bridgeProviders[activity.provider].label,
     provider: activity.provider,
     direction: activity.mode,

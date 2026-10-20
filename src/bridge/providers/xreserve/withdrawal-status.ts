@@ -1,3 +1,5 @@
+import { deploymentMiden } from "../../../config/deployments";
+import { activityRoute } from "../../core/routes";
 import type { BridgeActivity } from "../../core/models";
 
 /** Burn consumption is not proof that Circle paid out USDC. Never infer delivery from a balance change. */
@@ -7,7 +9,7 @@ export async function observeXreserveWithdrawal(activity: BridgeActivity): Promi
   if (activity.mode !== "send" || !activity.xreserveNoteId || activity.status === "complete" || activity.status === "failed") return { patch: {} };
   if (activity.xreserveBurnStatus === "confirmed") return { patch: {}, warning: "USDCx burned. Check the recipient's USDC balance; automatic payout verification is not available yet. Do not submit again." };
   const sdk = await import("@miden-sdk/miden-sdk");
-  const rpc = new sdk.RpcClient(new sdk.Endpoint(process.env.NEXT_PUBLIC_MIDEN_RPC_URL ?? "https://rpc.testnet.miden.io"));
+  const rpc = new sdk.RpcClient(new sdk.Endpoint(deploymentMiden(activityRoute(activity)?.deploymentId).rpcUrl));
   const noteId = sdk.NoteId.fromHex(activity.xreserveNoteId);
   try {
     const result = await rpc.getNetworkNoteStatus(noteId);

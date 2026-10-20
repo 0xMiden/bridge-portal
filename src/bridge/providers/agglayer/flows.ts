@@ -1,12 +1,12 @@
 import type { ProviderFlows } from "../../core/provider";
 import { parseUnits } from "viem";
-import { ensureSepolia } from "../../../wallets/evm/evm-wallet";
+import { activityRoute } from "../../core/routes";
+import type { EvmNetwork } from "../../core/assets";
 import { midenAccountLink } from "../../miden-account-link";
 import {
-  AGGLAYER_TESTNET,
-  buildSepoliaDepositTransaction,
-  normalizeMidenAccountHex,
+  agglayerConfig,
 } from "./agglayer";
+import { submitAgglayerDeposit } from "./deposit";
 
 import type { AgglayerDepositStatus } from "./agglayer";
 import { findMidenToEvmDeposit } from "./agglayer-status";
@@ -15,12 +15,12 @@ import {
   type ChainTxObservation,
   type AgglayerObservation,
 } from "./activity-observation";
-async function sourceTransaction(hash: string, signal: AbortSignal): Promise<ChainTxObservation> {
-  const response = await fetch(`/api/evm/sepolia/transaction?hash=${encodeURIComponent(hash)}`, {
+async function sourceTransaction(hash: string, signal: AbortSignal, network: EvmNetwork = "sepolia"): Promise<ChainTxObservation> {
+  const response = await fetch(`/api/evm/${network}/transaction?hash=${encodeURIComponent(hash)}`, {
     cache: "no-store",
     signal,
   });
-  if (!response.ok) throw new Error("Unable to read Sepolia transaction.");
+  if (!response.ok) throw new Error("Unable to read the EVM transaction.");
   return response.json();
 }
 
@@ -29,36 +29,22 @@ export const flows: ProviderFlows = {
     async quote() {
       return null;
     },
-    async submit({ input, phase, record }) {
+    async submit({ input, route, phase, record }) {
+      const AGGLAYER_TESTNET = agglayerConfig(route.deploymentId);
       const { provider, address } = input.evmWallet;
       if (!provider || !address) throw new Error("Connect your Ethereum wallet.");
       const destination = input.midenAccount;
       if (!destination)
         throw new Error("Connect Bread or paste a Miden account ID before receiving.");
-      await ensureSepolia(provider);
-      const transaction = buildSepoliaDepositTransaction({
-        amountEth: input.amount,
-        midenAccountId: normalizeMidenAccountHex(destination),
-      });
-      phase("Confirm in your wallet…");
-      const sourceTxHash = await provider.request<string>({
-        method: "eth_sendTransaction",
-        params: [
-          {
-            from: address,
-            to: transaction.to,
-            data: transaction.data,
-            value: transaction.value,
-            gas: transaction.gas,
-          },
-        ],
+      const { sourceTxHash, destinationAddress } = await submitAgglayerDeposit({
+        route, amount: input.amount, destination, provider, address, phase,
       });
       record({
         status: "source_finality",
         eta: "10-20 min",
         destination,
         sourceTxHash,
-        bridgeDestinationAddress: transaction.destinationAddress,
+        bridgeDestinationAddress: destinationAddress,
         midenAccountHex: midenAccountLink(destination),
         sourceNetworkId: AGGLAYER_TESTNET.sourceNetworkId,
         destinationNetworkId: AGGLAYER_TESTNET.destinationNetworkId,
@@ -70,19 +56,24 @@ export const flows: ProviderFlows = {
         !(activity.status === "complete" && activity.midenTxId) &&
         Boolean(activity.bridgeDestinationAddress || activity.sourceTxHash),
       async observe(activity, signal) {
+        const deploymentId = activityRoute(activity)?.deploymentId;
+        const config = agglayerConfig(deploymentId);
         const observation: AgglayerObservation = {};
         // Source and indexer are independent. A temporary outage must not discard the other's evidence.
         const results = await Promise.allSettled([
           activity.status !== "complete" && activity.sourceTxHash
-            ? sourceTransaction(activity.sourceTxHash, signal).then((tx) => {
+            ? sourceTransaction(activity.sourceTxHash, signal, config.evmNetwork).then((tx) => {
                 observation.sourceTx = tx;
               })
             : Promise.resolve(),
           activity.bridgeDestinationAddress
             ? (async () => {
+                const params = new URLSearchParams({ destinationAddress: activity.bridgeDestinationAddress! });
+                if (deploymentId) params.set("deployment", deploymentId);
+                if (activity.sourceTxHash) params.set("sourceTxHash", activity.sourceTxHash);
                 const response = await fetch(
-                  `/api/agglayer/deposits?destinationAddress=${encodeURIComponent(activity.bridgeDestinationAddress!)}`,
-                  { signal },
+                  `/api/agglayer/deposits?${params}`,
+                  { cache: "no-store", signal },
                 );
                 if (!response.ok) throw new Error("Unable to read Agglayer deposits.");
                 const status: AgglayerDepositStatus = await response.json();
@@ -110,15 +101,19 @@ export const flows: ProviderFlows = {
     async quote() {
       return null;
     },
-    async submit({ input, phase, record }) {
+    async submit({ input, route, phase, record }) {
+      const AGGLAYER_TESTNET = agglayerConfig(route.deploymentId);
       const wallet = input.midenWallet;
       if (!wallet.requestTransaction || !wallet.waitForTransaction || !wallet.address)
-        throw new Error("Connect your Bread wallet before bridging out to Sepolia.");
+        throw new Error("Connect your Bread wallet before bridging out.");
       const destination = input.evmAddress;
       if (!/^0x[0-9a-fA-F]{40}$/.test(destination))
-        throw new Error("Enter a valid Sepolia (0x…) destination, or connect your Sepolia wallet.");
+        throw new Error("Connect the destination EVM wallet.");
       if (!input.midenAsset)
         throw new Error('Tap "Show balance" first so we can detect the Miden ETH you\'re sending.');
+      if (route.source.kind !== "miden" || input.midenAsset.faucetId.toLowerCase() !== route.source.faucetId.toLowerCase() ||
+          input.midenAsset.decimals !== route.source.decimals)
+        throw new Error("The Miden asset changed. Refresh your balance and review the transfer again.");
       const amount = parseUnits(input.amount, input.midenAsset.decimals);
       if (amount <= 0n) throw new Error("Enter an amount greater than zero.");
       phase("Confirm in your wallet…");
@@ -130,7 +125,7 @@ export const flows: ProviderFlows = {
         senderAddress: wallet.address,
         requestTransaction: wallet.requestTransaction,
         waitForTransaction: wallet.waitForTransaction,
-      });
+      }, route.deploymentId);
       record({
         status: "source_finality",
         eta: "10-20 min",
@@ -146,8 +141,10 @@ export const flows: ProviderFlows = {
         activity.status !== "failed" &&
         Boolean(activity.destination),
       async observe(activity, signal) {
+        const deploymentId = activityRoute(activity)?.deploymentId;
+        const config = agglayerConfig(deploymentId);
         if (activity.status === "claim_submitted" && activity.claimTxHash) {
-          const destinationTx = await sourceTransaction(activity.claimTxHash, signal);
+          const destinationTx = await sourceTransaction(activity.claimTxHash, signal, config.evmNetwork);
           return {
             patch: agglayerPatch(activity, { destinationTx }),
           };
@@ -156,6 +153,7 @@ export const flows: ProviderFlows = {
           activity.destination!,
           activity.depositCount,
           signal,
+          deploymentId,
         );
         if (!deposit) return { patch: {} };
         return {

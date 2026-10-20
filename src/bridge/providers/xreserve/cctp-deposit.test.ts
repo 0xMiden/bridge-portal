@@ -2,7 +2,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { EvmProvider } from "../../../wallets/evm/evm-wallet";
 import { depositViaCctp } from "./cctp-deposit";
 import { cctpDepositHook, decodeCctpDepositHook } from "./cctp-hook";
-import { CCTP, cctpSources, type CctpNetwork } from "./cctp-config";
+import { cctpConfig, cctpSource, type CctpNetwork } from "./cctp-config";
+const CCTP = cctpConfig();
 import { ARC } from "./config";
 import { arcRecipient } from "./deposit";
 import type { CctpQuote } from "./cctp-quote";
@@ -33,14 +34,14 @@ beforeEach(() => {
   network = "base-sepolia";
   fee = 400_000n;
   walletAccount = account;
-  chainId = cctpSources[network].chain.id;
+  chainId = cctpSource(network).chain.id;
   quote = { network, sender: account, amount: "1", recipient: fixture.recipient, fee: "400000", signedQuote: "0x1234", expiresAt: Date.now() + 120000 };
   mocks.quote.mockImplementation(async (request) => ({ ...quote, ...request, fee: fee.toString() }));
   mocks.read.mockImplementation(async ({ functionName }) => {
     if (functionName === "paused") return false;
     if (functionName === "isRemoteDomainRegistered") return true;
     if (functionName === "getRemoteToken") return arcRecipient(ARC.faucetId);
-    if (functionName === "getFee") return [fee, cctpSources[network].asset.address];
+    if (functionName === "getFee") return [fee, cctpSource(network).asset.address];
     if (functionName === "balanceOf") return 10_000_000n;
     return 0n;
   });
@@ -59,14 +60,14 @@ describe("Circle multichain deposits", () => {
   });
   it.each<CctpNetwork>(["sepolia", "base-sepolia", "arbitrum-sepolia"])("burns the full amount from %s and separately approves the reviewed fee", async (origin) => {
     network = origin;
-    chainId = cctpSources[network].chain.id;
+    chainId = cctpSource(network).chain.id;
     quote.network = origin;
     const args = input();
     await depositViaCctp(args);
-    expect(mocks.write).toHaveBeenNthCalledWith(1, expect.objectContaining({ address: cctpSources[network].asset.address,
+    expect(mocks.write).toHaveBeenNthCalledWith(1, expect.objectContaining({ address: cctpSource(network).asset.address,
       functionName: "approve", args: [CCTP.tokenMessengerWithFees, 1_400_000n] }));
     expect(mocks.write).toHaveBeenNthCalledWith(2, expect.objectContaining({ address: CCTP.tokenMessengerWithFees,
-      functionName: "depositForBurnWithHookAndFees", args: [1_000_000n, 26, expect.any(String), cctpSources[network].asset.address,
+      functionName: "depositForBurnWithHookAndFees", args: [1_000_000n, 26, expect.any(String), cctpSource(network).asset.address,
         expect.any(String), fixture.hook, { signedQuote: "0x1234", refundAddress: account }] }));
     expect(args.onBroadcast).toHaveBeenCalledWith(hash, "400000");
     expect(mocks.receipt).toHaveBeenCalledTimes(1);

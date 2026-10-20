@@ -6,6 +6,7 @@ import { AppKitProvider } from "../../wallets/evm/AppKitProvider";
 import { RejectionGuard } from "../../wallets/RejectionGuard";
 import { ThemeProvider } from "./ThemeProvider";
 import { BalanceProvider } from "../../bridge/BalanceProvider";
+import { NetworkProvider, useBridgeEnvironment } from "./NetworkProvider";
 
 // E2E-only: auto-connect the headless test wallet. ssr:false + flag-gated so it
 // never enters normal builds.
@@ -41,12 +42,21 @@ export function Providers({
   return (
     <ThemeProvider>
       <AppKitProvider cookies={cookies}>
-        <BalanceProvider>
-          <RejectionGuard />
-          {E2EAutoConnect ? <E2EAutoConnect /> : null}
-          <MidenWalletProvider>{children}</MidenWalletProvider>
-        </BalanceProvider>
+        <NetworkProvider>
+          <NetworkWalletProviders>{children}</NetworkWalletProviders>
+        </NetworkProvider>
       </AppKitProvider>
     </ThemeProvider>
+  );
+}
+
+function NetworkWalletProviders({ children }: { children: ReactNode }) {
+  const environment = useBridgeEnvironment();
+  return (
+    <BalanceProvider key={environment}>
+      <RejectionGuard />
+      {E2EAutoConnect && environment === "testnet" ? <E2EAutoConnect /> : null}
+      <MidenWalletProvider>{children}</MidenWalletProvider>
+    </BalanceProvider>
   );
 }

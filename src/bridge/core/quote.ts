@@ -30,5 +30,5 @@ export type QuoteResult = {
 
 /** Bind a review to its route, amount and accounts, even if the wallet changes. */
 export type TransferQuote = QuoteResult & {
-  request: Omit<QuoteRequest, "route"> & { routeId: string };
+  request: Omit<QuoteRequest, "route"> & { routeId: string; deploymentId?: string };
 };

@@ -1,6 +1,7 @@
 import { sameAsset } from "./assets";
 import type { BridgeRoute } from "./routes";
 import type { BridgeActivity } from "./models";
+import { routeEnvironment } from "./routes";
 
 /** Clear the amount when the selected source network or token changes. */
 export function routeSwitchChangesAsset(from: BridgeRoute, to: BridgeRoute): boolean {
@@ -20,6 +21,18 @@ export function validateTransferAmount(route: BridgeRoute, amount: string): void
   const decimals = value.split(".")[1]?.length ?? 0;
   if (!/^(?:0|[1-9]\d*)(?:\.\d+)?$/.test(value) || !isValidAmount(value) || decimals > route.source.decimals) {
     throw new Error(`Enter a positive ${route.source.symbol} amount with at most ${route.source.decimals} decimal places.`);
+  }
+  if (route.provider === "agglayer" && route.mode === "receive") {
+    const [whole, fraction = ""] = value.split(".");
+    const precision = route.destination.decimals;
+    if (/[1-9]/.test(fraction.slice(precision))) {
+      throw new Error(`Miden supports at most ${precision} decimal places for ${route.source.symbol}. Reduce the amount's precision.`);
+    }
+    const midenAmount = BigInt(whole + fraction.slice(0, precision).padEnd(precision, "0"));
+    // SDK 0.17 FungibleAsset::MAX_AMOUNT; excess units cannot be minted on Miden.
+    if (midenAmount > (1n << 63n) - (1n << 31n)) {
+      throw new Error(`This amount exceeds Miden's per-transfer ${route.source.symbol} limit.`);
+    }
   }
 }
 
@@ -61,6 +74,8 @@ export function createActivity(
     mode: route.mode,
     provider: route.provider,
     routeId: route.id,
+    environment: routeEnvironment(route),
+    routeSnapshot: { ...route },
     status: "signature",
     amount: amount || "0",
     asset: route.source.symbol,

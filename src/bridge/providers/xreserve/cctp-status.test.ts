@@ -2,7 +2,8 @@ import { beforeEach, expect, it, vi } from "vitest";
 import { encodeAbiParameters, encodeEventTopics, encodePacked, pad, parseAbi, parseAbiParameters, type Hex } from "viem";
 import { getCctpStatus } from "./cctp-status";
 import { ARC } from "./config";
-import { CCTP, cctpSources } from "./cctp-config";
+import { cctpConfig, cctpSource } from "./cctp-config";
+const CCTP = cctpConfig();
 import fixture from "./fixtures/cctp-hook.json";
 
 const mocks = vi.hoisted(() => ({ receipt: vi.fn(), arcReceipt: vi.fn(), arcStatus: vi.fn(), fetch: vi.fn() }));
@@ -17,7 +18,7 @@ const burnHash = `0x${"11".repeat(32)}` as Hex;
 const arcHash = `0x${"22".repeat(32)}` as Hex;
 const nonce = `0x${"33".repeat(32)}` as Hex;
 const zero = pad("0x00");
-const source = cctpSources["base-sepolia"];
+const source = cctpSource("base-sepolia");
 
 // Circle's documented MessageV2 / BurnMessageV2 layout, with the independently
 // captured hook that its quote service accepted. No production encoder here.

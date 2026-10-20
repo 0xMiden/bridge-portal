@@ -7,9 +7,9 @@ for (const mode of ["receive", "send"] as const) {
       json: { tokenOut: mode === "receive" ? "991878" : "990000000000000000" },
     }));
     await page.evaluate((mode) => {
-      localStorage.setItem("miden.bridge.ui.route", "epoch");
-      localStorage.setItem("miden.bridge.ui.mode", mode);
-      localStorage.setItem("miden.bridge.ui.route.id", `epoch-usdc-to-${mode === "receive" ? "miden" : "sepolia"}`);
+      localStorage.setItem("miden.bridge.ui.route.testnet", "epoch");
+      localStorage.setItem("miden.bridge.ui.mode.testnet", mode);
+      localStorage.setItem("miden.bridge.ui.route.testnet.id", `epoch-usdc-to-${mode === "receive" ? "miden" : "sepolia"}`);
     }, mode);
     await page.reload();
     await bridge.waitForReady();

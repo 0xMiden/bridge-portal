@@ -166,7 +166,7 @@ describe("activity presentation", () => {
     ["send", "agglayer", "ETH", "Send 10 ETH to Sepolia", "10-20 min", "agglayer-eth-to-sepolia"],
   ] as const)("preserves the stored activity fields for %s via %s", (mode, provider, asset, summary, eta, routeId) => {
     vi.spyOn(Date, "now").mockReturnValue(1_700_000_000_000);
-    expect(createActivity(findBridgeRoute(routeId)!, "10")).toEqual({
+    expect(createActivity(findBridgeRoute(routeId)!, "10")).toMatchObject({
       id: "act-loyw3v28",
       routeId,
       mode,

@@ -22,7 +22,7 @@ const request = (body: unknown = payload) =>
     method: "POST",
     body: JSON.stringify(body),
   });
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => { vi.unstubAllGlobals(); vi.unstubAllEnvs(); });
 it.each<EvmNetwork>(["sepolia", "arc-testnet", "base-sepolia", "arbitrum-sepolia"])("keeps %s reads on the selected network", async (network) => {
   const result = { jsonrpc: "2.0", id: 7, result: "0x1" };
   const fetch = vi.fn().mockResolvedValue(Response.json(result));
@@ -47,12 +47,14 @@ it.each<EvmNetwork>(["arc-testnet", "base-sepolia"])("forwards the exact call af
     expect.objectContaining({ body: JSON.stringify(payload) }),
   );
 });
-it.each([
+it.each((["base-sepolia", "ethereum"] as const).flatMap(network => [
   { status: 429 },
   { status: 503 },
   { code: -32002, message: "Resource unavailable" },
   { code: -32005, message: "Rate limit exceeded" },
-])("recovers a Base read after an upstream availability failure (%j)", async (failure) => {
+].map(failure => ({ network, failure }))))("recovers a $network read after an upstream availability failure ($failure)", async ({ network, failure }) => {
+  vi.stubEnv("ETHEREUM_RPC_URL", "");
+  vi.stubEnv("BASE_SEPOLIA_RPC_URL", "");
   const result = { jsonrpc: "2.0", id: 7, result: "0x" };
   const fetch = vi.fn()
     .mockResolvedValueOnce("status" in failure
@@ -60,7 +62,7 @@ it.each([
       : Response.json({ jsonrpc: "2.0", id: 7, error: failure }))
     .mockResolvedValueOnce(Response.json(result));
   vi.stubGlobal("fetch", fetch);
-  expect(await (await POST(request(), context("base-sepolia"))).json()).toEqual(result);
+  expect(await (await POST(request(), context(network))).json()).toEqual(result);
   expect(fetch).toHaveBeenCalledTimes(2);
   expect(fetch.mock.calls[1][0]).not.toBe(fetch.mock.calls[0][0]);
 });

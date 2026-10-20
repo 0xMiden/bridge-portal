@@ -1,9 +1,13 @@
-import { arbitrumSepolia, baseSepolia, sepolia } from "viem/chains";
-import { arcTestnet } from "./arc";
+import { arbitrum, base, mainnet, arbitrumSepolia, baseSepolia, sepolia } from "viem/chains";
+import { arcMainnet, arcTestnet } from "./arc";
 import type { EvmNetwork } from "../bridge/core/assets";
 import type { Chain } from "viem";
 
 export const evmNetworks = {
+  ethereum: mainnet,
+  arc: arcMainnet,
+  base,
+  arbitrum,
   sepolia,
   "arc-testnet": arcTestnet,
   "base-sepolia": baseSepolia,

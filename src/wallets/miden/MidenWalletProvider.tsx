@@ -8,17 +8,23 @@ import {
 import { MidenFiSignerProvider, useMidenFiWallet } from "@miden-sdk/miden-wallet-adapter-react";
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 import { useBalanceStore } from "../../bridge/BalanceProvider";
+import { useBridgeEnvironment } from "../../app/components/NetworkProvider";
+import { midenNetworks } from "../../config/environment";
+import { assertMidenAccountNetwork } from "./network";
 
 function MidenBalanceSession() {
   const wallet = useMidenFiWallet();
   const store = useBalanceStore();
+  const environment = useBridgeEnvironment();
   useEffect(() => {
-    store.setMidenSession(wallet.connected && wallet.address ? {
+    let matches = false;
+    try { if (wallet.address) { assertMidenAccountNetwork(wallet.address, environment); matches = true; } } catch { /* wrong wallet network */ }
+    store.setMidenSession(matches && wallet.connected && wallet.address ? {
       account: wallet.address,
-      network: "miden-testnet",
+      network: midenNetworks[environment].network,
       requestAssets: wallet.requestAssets,
     } : null);
-  }, [store, wallet.connected, wallet.address, wallet.requestAssets]);
+  }, [store, wallet.connected, wallet.address, wallet.requestAssets, environment]);
   useEffect(() => () => store.setMidenSession(null), [store]);
   return null;
 }
@@ -48,6 +54,7 @@ export function useResetMidenProvider() {
  */
 export function MidenWalletProvider({ children }: { children: ReactNode }) {
   const [providerKey, setProviderKey] = useState(0);
+  const environment = useBridgeEnvironment();
 
   return (
     <ResetMidenProviderContext.Provider
@@ -56,14 +63,17 @@ export function MidenWalletProvider({ children }: { children: ReactNode }) {
       <MidenFiSignerProvider
         key={providerKey}
         appName="Miden Bridge"
-        network={WalletAdapterNetwork.Testnet}
+        // 0.17's adapter forwards this string unchanged to wallet.connect.
+        // Bread supports "mainnet"; its published enum has not caught up yet.
+        // Network-bearing addresses are independently checked before signing.
+        network={environment === "testnet" ? WalletAdapterNetwork.Testnet : "mainnet" as WalletAdapterNetwork}
         // Request balance access in Bread's connection approval. Once granted,
         // asset reads need no additional prompt; notes and storage are excluded.
         privateDataPermission={PrivateDataPermission.Auto}
         allowedPrivateData={AllowedPrivateData.Assets}
-        localStorageKey="miden-bridge-wallet"
+        localStorageKey={environment === "testnet" ? "miden-bridge-wallet" : "miden-bridge-wallet.mainnet"}
       >
-        {process.env.NEXT_PUBLIC_E2E_TEST !== "true" ? <MidenBalanceSession /> : null}
+        {process.env.NEXT_PUBLIC_E2E_TEST !== "true" || environment === "mainnet" ? <MidenBalanceSession /> : null}
         {children}
       </MidenFiSignerProvider>
     </ResetMidenProviderContext.Provider>

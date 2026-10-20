@@ -1,23 +1,29 @@
+import { assertMidenAccountNetwork } from "../../../wallets/miden/network";
 import type { QuoteRequest, QuoteResult } from "../../core/quote";
 import { formatUnits, padHex } from "viem";
 import type { BridgeNetwork } from "../../core/assets";
-import { bridgeRoutes } from "../../core/routes";
-import { ARC } from "./config";
+import { getDeployment, assertDeploymentNetwork } from "../../../config/deployments";
+import { isEvmNetwork } from "../../../config/evm-networks";
+import { arcConfig } from "./config";
 import { arcRecipient } from "./deposit";
 import { validateWithdrawal, withdrawalDomains, withdrawalPayload } from "./withdrawal";
 
-export type WithdrawalQuoteRequest = { network: BridgeNetwork; amount: string; sender: string; recipient: string };
+export type WithdrawalQuoteRequest = { network: BridgeNetwork; amount: string; sender: string; recipient: string; deploymentId?: string };
 export type WithdrawalQuote = WithdrawalQuoteRequest & { fee: string; received: string; expiresAt: number };
 
 export function validateWithdrawalQuoteRequest(input: WithdrawalQuoteRequest) {
+  if (!isEvmNetwork(input.network)) throw new Error("Unsupported withdrawal network.");
+  assertDeploymentNetwork(input.deploymentId, input.network);
   const amount = validateWithdrawal(input.amount, input.network);
   withdrawalPayload(input.recipient, withdrawalDomains[input.network]!);
+  assertMidenAccountNetwork(input.sender, getDeployment(input.deploymentId).environment);
   arcRecipient(input.sender);
   return amount;
 }
 
 /** Read-only preparation, never signing or submitting Circle's returned intent. */
 export async function requestWithdrawalQuote(input: WithdrawalQuoteRequest): Promise<WithdrawalQuote> {
+  const ARC = arcConfig(input.deploymentId);
   const amount = validateWithdrawalQuoteRequest(input);
   const remoteDepositor = arcRecipient(input.sender);
   const recipient = padHex(input.recipient as `0x${string}`, { size: 32 }).toLowerCase();
@@ -38,8 +44,9 @@ export async function requestWithdrawalQuote(input: WithdrawalQuoteRequest): Pro
   const intent = batch?.burnIntents?.[0];
   const spec = intent?.spec;
   const hook = spec?.hookData;
-  const destination = bridgeRoutes.find(route => route.provider === "xreserve" && route.mode === "send" && route.destination.network === input.network)?.destination;
-  const token = destination?.kind === "erc20" ? padHex(destination.address, { size: 32 }).toLowerCase() : undefined;
+  const network = input.network;
+  const destination = isEvmNetwork(network) ? getDeployment(input.deploymentId).document.supportedEvmChains[network]?.bridges.usdcx?.tokens?.USDC : undefined;
+  const token = destination ? padHex(destination.contractAddress, { size: 32 }).toLowerCase() : undefined;
   if (body?.batches?.length !== 1 || batch?.burnIntents?.length !== 1 ||
       !/^\d+$/.test(intent?.maxFee ?? "") || !/^\d+$/.test(spec?.value ?? "") ||
       spec?.version !== 1 || spec?.sourceDomain !== ARC.circleDomain || spec?.destinationDomain !== domain ||
@@ -66,7 +73,7 @@ export async function fetchWithdrawalQuote(input: WithdrawalQuoteRequest, signal
 }
 
 export async function quoteTransfer(input: QuoteRequest, signal: AbortSignal): Promise<QuoteResult> {
-  const request = { network: input.route.destination.network, amount: input.amount, sender: input.midenAccount, recipient: input.evmAddress };
+  const request = { deploymentId: input.route.deploymentId, network: input.route.destination.network, amount: input.amount, sender: input.midenAccount, recipient: input.evmAddress };
   validateWithdrawalQuoteRequest(request);
   const quote = await fetchWithdrawalQuote(request, signal);
   return { kind: "withdrawal", received: formatUnits(BigInt(quote.received), 6), fee: formatUnits(BigInt(quote.fee), 6), expiresAt: quote.expiresAt, authorization: quote };

@@ -1,3 +1,4 @@
+import { getDeployment } from "../../../config/deployments";
 /**
  * Epoch Protocol integration config.
  *
@@ -7,9 +8,13 @@
  * submitter; the allocator is hosted by Epoch.
  */
 
-export const EPOCH_ALLOCATOR_URL =
-  process.env.NEXT_PUBLIC_EPOCH_ALLOCATOR_URL ??
-  "https://testnet-dev.epochprotocol.xyz";
+export function epochAllocatorUrl(deploymentId?: string) {
+  const deployment = getDeployment(deploymentId);
+  const provider = deployment.document["bridge-providers"].epoch;
+  if (deployment.environment !== "testnet" || !provider) throw new Error("Epoch is unavailable on this network.");
+  return process.env.NEXT_PUBLIC_EPOCH_ALLOCATOR_URL ?? provider.allocatorUrl;
+}
+export const EPOCH_ALLOCATOR_URL = epochAllocatorUrl();
 
 /**
  * Virtual chain id used by the SDK when an intent's origin / destination

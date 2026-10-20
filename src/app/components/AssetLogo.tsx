@@ -2,6 +2,7 @@ import Image from "next/image";
 import type { BridgeAsset, BridgeNetwork } from "../../bridge/core/assets";
 
 const networkLogos = {
+  ethereum: "/asset-logos/ethereum.svg", arc: "/asset-logos/arc.png", base: "/asset-logos/base.svg", arbitrum: "/asset-logos/arbitrum.svg", "miden-mainnet": "/asset-logos/miden.svg",
   sepolia: "/asset-logos/ethereum.svg",
   "arc-testnet": "/asset-logos/arc.png",
   "base-sepolia": "/asset-logos/base.svg",
@@ -16,6 +17,8 @@ const tokenLogos: Partial<Record<string, string>> = {
   DAI: "/asset-logos/dai.svg",
   USDT: "/asset-logos/usdt.svg",
   WBTC: "/asset-logos/wbtc.svg",
+  PYUSD: "/asset-logos/pyusd.png",
+  WSOL: "/asset-logos/sol.svg",
 };
 
 /** The adjacent network/token name supplies the accessible label. */

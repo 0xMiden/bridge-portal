@@ -1,4 +1,4 @@
-import { ARC, ARC_MAX_MIDEN_AMOUNT } from "./config";
+import { arcConfig, ARC_MAX_MIDEN_AMOUNT } from "./config";
 
 export type ArcDepositIntent = {
   amount: string;
@@ -15,7 +15,8 @@ export function decodeArcRecipient(value: string): string {
 }
 
 /** Circle DepositIntent v1; offsets match miden-usdcx's deposit_intent codec. */
-export function parseArcDepositIntent(payload: string): ArcDepositIntent {
+export function parseArcDepositIntent(payload: string, deploymentId?: string): ArcDepositIntent {
+  const ARC = arcConfig(deploymentId);
   if (!/^0x(?:[\da-f]{2})+$/i.test(payload))
     throw new Error("Invalid Circle payload.");
   const hex = payload.slice(2).toLowerCase();

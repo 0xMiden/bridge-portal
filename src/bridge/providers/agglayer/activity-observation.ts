@@ -20,6 +20,7 @@ export function agglayerPatch(
   activity: Activity,
   { sourceTx, destinationTx, deposit }: AgglayerObservation,
 ): Partial<Activity> {
+  const network = activity.environment === "mainnet" ? "Ethereum" : "Sepolia";
   if (sourceTx?.status === "confirmed" && sourceTx.success === false) {
     return {
       status: "failed",
@@ -40,7 +41,7 @@ export function agglayerPatch(
     const confirmed = destinationTx.status === "confirmed" && destinationTx.success === true;
     return {
       status: confirmed ? "complete" : "claim_submitted",
-      eta: confirmed ? "Settled on Sepolia" : "Waiting for Sepolia",
+      eta: confirmed ? `Settled on ${network}` : `Waiting for ${network}`,
       destinationTxHash: destinationTx.hash,
       claimTxHash: destinationTx.hash,
     };
@@ -51,8 +52,8 @@ export function agglayerPatch(
       status: "source_finality",
       eta:
         sourceTx.status === "confirmed" && sourceTx.success === true
-          ? "Sepolia confirmed, waiting for Agglayer"
-          : "Waiting for Sepolia confirmation",
+          ? `${network} confirmed, waiting for Agglayer`
+          : `Waiting for ${network} confirmation`,
       sourceTxHash: sourceTx.hash,
     };
   }
@@ -81,8 +82,8 @@ export function agglayerPatch(
       ? "claim_available"
       : "message_observed";
   const labels = {
-    complete: "Settled on Sepolia",
-    claim_available: "Ready to claim on Sepolia",
+    complete: `Settled on ${network}`,
+    claim_available: `Ready to claim on ${network}`,
     message_observed: "Waiting for Agglayer proof",
   };
   return {

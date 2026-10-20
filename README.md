@@ -3,9 +3,11 @@
 Next.js app for the wallet-native Miden bridge transfer flow — the wallet-facing
 cross-chain Receive/Send surface.
 
-The current app implements Agglayer and Epoch testnet routes between Miden and
-Ethereum Sepolia. It models Cross-chain Receive, Cross-chain Send, route
-selection, destination settlement, and stuck-funds recovery.
+The app serves both networks at `/`. The network selector remembers the choice
+for the current tab and resets the transfer form and Miden wallet session. New
+tabs default to testnet. Mainnet supports Agglayer ETH and Circle USDCx; testnet
+also retains Epoch routes. `/activity/:id` receipts automatically use their saved
+network, including existing testnet transfers.
 
 ## Product model
 
@@ -19,7 +21,7 @@ e.g. [why we ship single-thread WASM without cross-origin isolation
 
 ## Prerequisites
 
-Testnet only. To exercise the live bridge path locally you need:
+For local testnet transfers you need:
 
 - **A Miden testnet wallet** — the MidenFi extension (or the Bread wallet). It
   supplies the Miden testnet account and signs the Miden-side transactions. Its
@@ -74,6 +76,63 @@ the app boots with none of them set. In brief:
 them before `npm run build` / the Docker or Cloudflare build, not just at
 runtime.
 
+## Network configuration and upgrades
+
+Both environments reuse [0xMiden/wallet-config](https://github.com/0xMiden/wallet-config).
+Reviewed snapshots live in `src/config/wallet-config/snapshots.json`; the browser
+never downloads mutable configuration at runtime. Contracts, Circle domains and
+services, Epoch outputs, and provider direction switches come from that repo.
+The import script resolves missing ETH faucet/precision and rollup information
+from the Miden bridge registry, and the USDCx faucet from Arc's xReserve contract.
+Mainnet USDT, WBTC, PYUSD and WSOL metadata is verified against Ethereum and the
+Miden registry, including faucet ownership and destination precision, then saved
+in the same snapshot. These tokens support Ethereum → Miden deposits through
+Agglayer. Native ETH uses the zero token address and retains both directions.
+ERC-20 deposits use zero ETH value, exact-amount approvals when needed, and a
+confirmed zero reset for existing insufficient allowances (including USDT).
+Amounts must fit the destination precision: 6 decimals for USDT/PYUSD and 8 for
+WBTC/WSOL/ETH. Ethereum's WSOL contract reports symbol `SOL` and 9 decimals;
+the portal displays `WSOL` and rejects nonzero ninth-decimal amounts.
+RPC and explorer URLs live in the local network registry.
+
+To import a reviewed upstream revision:
+
+```bash
+npm run sync:wallet-config -- <full-40-character-commit-sha>
+npm run typecheck
+npm test
+npm run build
+```
+
+Review the resulting JSON diff before deployment. The importer requires both
+networks to validate and keeps earlier snapshots. **Do not delete or reorder old
+snapshots**: legacy transfers resolve to the first testnet deployment; new
+receipts save their route, assets, and deployment ID. New transfers use the last
+snapshot for their environment. API calls accept only bundled deployment IDs;
+old calls without one still target the original testnet deployment. A rollback
+of active configuration should be deliberate and preserve all receipt snapshots.
+The additional verified Epoch test tokens remain portal-owned; canonical Epoch
+USDC and availability follow wallet-config.
+
+Activity storage retains the existing JSON array and key, with history filtered
+by the selected network. Reading old history adds testnet metadata in memory; the
+original data is kept until an activity is saved. Route and direction preferences
+are separate per environment. Network choice uses session storage, survives
+reloads, and can differ across tabs without adding a network prefix to URLs. Switching clears amount, quote, review, and
+Miden balances; EVM submission checks the required chain and account. Quotes
+are bound to their deployment as well as route, amount, and recipients.
+
+Bread must support the selected network. The installed adapter forwards the
+`mainnet` connection string even though its published enum omits it; network
+prefix checks reject wrong-network accounts before signing. Mainnet requires an
+`mm1…` address; raw account IDs remain supported only for legacy testnet callers.
+Use a mainnet-capable Bread release for manual end-to-end validation. The automated
+suite uses mock signatures and does not transfer mainnet funds.
+
+`GET /health/deep` remains the legacy testnet upstream check; it does not attest
+to mainnet availability. Network-specific quote/status endpoints validate the
+selected deployment independently.
+
 ## Build toolchain notes
 
 A few non-obvious choices are load-bearing; don't "fix" them without checking
@@ -112,10 +171,13 @@ correctly at runtime via webpack's CJS interop.
 
 ### `@miden-sdk` pin
 
-`package.json` pins `@miden-sdk/miden-sdk` to `0.16.2` (exact, mirrored in
-`overrides` so `@miden-sdk/react` and the wallet adapters resolve to the same
-single SDK instance). The `st` wasm is ~19 MB, under Cloudflare's 25 MiB
+`package.json` pins `@miden-sdk/miden-sdk` and `@miden-sdk/react` to `0.17.4`,
+matching the wallet. The core SDK pin is mirrored in `overrides` so React and
+the compatible `0.17.0` wallet adapters resolve to one SDK instance. The `st`
+wasm is ~20 MiB, under Cloudflare's 25 MiB
 per-asset limit. `npm run check:wasm-size` fails the PR if that regresses.
+`npm run check:usdcx-note` checks the pinned browser WASM against the preserved
+Rust `0.17.1` note-ID reference so upgrades keep recognizing existing deposits.
 
 ## Validation
 
@@ -167,7 +229,7 @@ Miden testnet integration boundary.
 
 ### EVM reads and bridge providers
 
-All supported origins (Sepolia, Arc Testnet, Base Sepolia and Arbitrum Sepolia)
+All supported origins (Ethereum, Arc, Base, Arbitrum and their testnets)
 use `/api/evm/[network]/{balance,rpc,gas,transaction}`. The shared network registry
 selects the chain; the server RPC layer owns upstream configuration, timeouts
 and fallbacks. Balance responses use `balanceRaw` and `balance` for both native

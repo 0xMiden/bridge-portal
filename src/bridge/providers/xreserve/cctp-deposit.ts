@@ -2,19 +2,22 @@ import { createPublicClient, createWalletClient, custom, erc20Abi, pad, parseAbi
 import { ensureEvmNetwork } from "../../../wallets/evm/ensure-network";
 import type { EvmProvider } from "../../../wallets/evm/evm-wallet";
 import { normalizeMidenAccountHex } from "../agglayer/agglayer";
-import { ARC, arcTestnet, xReserveAbi } from "./config";
+import { arcConfig, xReserveAbi } from "./config";
 import { evmReadTransport } from "../../evm/transport";
 import { arcRecipient, parseArcAmount, type ArcDepositPhase } from "./deposit";
-import { CCTP, cctpAbi, cctpSources, type CctpNetwork } from "./cctp-config";
+import { cctpConfig, cctpAbi, cctpSource, type CctpNetwork } from "./cctp-config";
 import { cctpDepositHook } from "./cctp-hook";
 import { fetchCctpQuote, type CctpQuote } from "./cctp-quote";
 
 export async function depositViaCctp({ network, provider, account, amount, recipient, quote, onPhase, onBroadcast }: {
   network: CctpNetwork; provider: EvmProvider; account: Address; amount: string; recipient: string;
   quote: CctpQuote; onPhase: (phase: ArcDepositPhase) => void; onBroadcast: (hash: Hash, fee: string) => void;
-}) {
+}, deploymentId?: string) {
+  const ARC = arcConfig(deploymentId);
+  const arcTestnet = ARC.chain;
+  const CCTP = cctpConfig(deploymentId, network);
   const value = parseArcAmount(amount);
-  if (quote.network !== network || quote.sender.toLowerCase() !== account.toLowerCase() ||
+  if (quote.deploymentId !== deploymentId || quote.network !== network || quote.sender.toLowerCase() !== account.toLowerCase() ||
       normalizeMidenAccountHex(quote.recipient) !== normalizeMidenAccountHex(recipient) ||
       parseArcAmount(quote.amount) !== value)
     throw new Error("The transfer changed. Review its fee again.");
@@ -22,8 +25,8 @@ export async function depositViaCctp({ network, provider, account, amount, recip
   const id = AccountId.fromHex(`0x${normalizeMidenAccountHex(recipient)}`);
   id.free();
   onPhase("checking");
-  const source = cctpSources[network];
-  const arc = createPublicClient({ chain: arcTestnet, transport: evmReadTransport("arc-testnet") });
+  const source = cctpSource(network, deploymentId);
+  const arc = createPublicClient({ chain: arcTestnet, transport: evmReadTransport(ARC.network) });
   const pausedAbi = parseAbi(["function paused() view returns (bool)"]);
   const [registered, remoteToken, executorPaused, handlerPaused] = await Promise.all([
     arc.readContract({ address: ARC.xReserve, abi: xReserveAbi, functionName: "isRemoteDomainRegistered", args: [ARC.midenDomain] }),
@@ -43,7 +46,7 @@ export async function depositViaCctp({ network, provider, account, amount, recip
       throw new Error("Your wallet account or network changed. Review the transfer again.");
   };
   const refreshQuote = async () => {
-    const fresh = await fetchCctpQuote({ network, sender: account, amount, recipient });
+    const fresh = await fetchCctpQuote({ network, sender: account, amount, recipient, ...(deploymentId ? { deploymentId } : {}) });
     // Contract decoding independently checks the displayed fee against the signed claim.
     const [fee, token] = await client.readContract({ address: CCTP.tokenMessengerWithFees, abi: cctpAbi,
       functionName: "getFee", args: [fresh.signedQuote] });
@@ -72,8 +75,8 @@ export async function depositViaCctp({ network, provider, account, amount, recip
   }
   await assertWallet();
   const deposit = await client.simulateContract({ account, address: CCTP.tokenMessengerWithFees, abi: cctpAbi,
-    functionName: "depositForBurnWithHookAndFees", args: [value, 26, pad(CCTP.executor), source.asset.address,
-      pad(CCTP.executor), cctpDepositHook(account, recipient), { signedQuote: fresh.signedQuote, refundAddress: account }],
+    functionName: "depositForBurnWithHookAndFees", args: [value, ARC.circleDomain, pad(CCTP.executor), source.asset.address,
+      pad(CCTP.executor), cctpDepositHook(account, recipient, deploymentId), { signedQuote: fresh.signedQuote, refundAddress: account }],
   });
   onPhase("depositing");
   await assertWallet();

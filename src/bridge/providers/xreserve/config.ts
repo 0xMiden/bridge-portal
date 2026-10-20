@@ -1,20 +1,25 @@
 import { parseAbi } from "viem";
-import { arcTestnet } from "../../../config/arc";
-import { ARC_USDC, MIDEN_USDCX } from "../../core/assets";
+import { getDeployment, deploymentArcNetwork } from "../../../config/deployments";
+import { evmNetworks } from "../../../config/evm-networks";
 export { arcTestnet } from "../../../config/arc";
 
-export const ARC = {
-  chainId: arcTestnet.id,
-  circleDomain: 26,
-  midenDomain: 10007,
-  usdc: ARC_USDC.address,
-  faucetId: MIDEN_USDCX.faucetId,
-  xReserve: "0x008888878f94C0d87defdf0B07f46B93C1934442",
-  decimals: 6,
-  maxFee: 0n,
-  attestationApi: "https://xreserve-api-testnet.circle.com",
-  explorer: arcTestnet.blockExplorers.default.url,
-} as const;
+export function arcConfig(deploymentId?: string) {
+  const deployment = getDeployment(deploymentId);
+  const network = deploymentArcNetwork(deploymentId);
+  const chain = evmNetworks[network];
+  const route = deployment.document.supportedEvmChains[network]?.bridges.usdcx;
+  const services = deployment.document["bridge-providers"].usdcx;
+  if (!route?.deposit?.xReserve || !route.tokens?.USDC || route.domain === undefined)
+    throw new Error("The xReserve deployment is unavailable.");
+  return {
+    network, chain, chainId: chain.id, circleDomain: route.domain,
+    midenDomain: services.midenDomain, usdc: route.tokens.USDC.contractAddress,
+    faucetId: deployment.derived.usdcxFaucetId, xReserve: route.deposit.xReserve,
+    decimals: 6, maxFee: 0n, attestationApi: services.attestationUrl,
+    explorer: chain.blockExplorers.default.url,
+  };
+}
+export const ARC = arcConfig();
 
 export const xReserveAbi = parseAbi([
   "function isRemoteDomainRegistered(uint32 remoteDomain) view returns (bool)",

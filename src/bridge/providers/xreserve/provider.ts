@@ -122,7 +122,7 @@ const directions = {
     pollMs: 12000,
     deliveryWarningMs: 15 * 60000,
     fees: (route) =>
-      !route || route.source.network === "arc-testnet"
+      !route || ["arc-testnet", "arc"].includes(route.source.network)
         ? depositFees
         : {
             ...depositFees,

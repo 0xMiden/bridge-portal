@@ -1,29 +1,32 @@
-import { MIDEN_ETH } from "../../core/assets";
-import { encodeFunctionData, parseEther, toHex } from "viem";
-import { SEPOLIA_NETWORK } from "../../../config/sepolia";
+import { getDeployment, deploymentEvmNetwork, deploymentMiden } from "../../../config/deployments";
+import { evmNetworks } from "../../../config/evm-networks";
+import { encodeFunctionData, parseUnits, toHex } from "viem";
+import type { EvmAsset } from "../../core/assets";
 
-export const AGGLAYER_TESTNET = {
-  sepoliaChainId: SEPOLIA_NETWORK.chainId,
-  sepoliaChainHex: SEPOLIA_NETWORK.chainHex,
-  sepoliaBridgeAddress: "0x528e26b25a34a4a5d0dbda1d57d318153d2ed582",
-  // Cardona deployment confirmed by Gateway on 2026-10-09 (see docs/agglayer-testnet.md).
-  // This is the rollup ID, not the synthetic EVM chain ID (604208969).
-  destinationNetworkId: 73,
-  // The Cardona bridge indexer reports Miden exits under the rollup ID too.
-  midenIndexerNetworkId: 73,
-  sourceNetworkId: 0,
-  nativeTokenAddress: "0x0000000000000000000000000000000000000000",
-  gasLimit: BigInt(300000),
-  bridgeServiceApi: "https://bridge.miden-testnet.gateway.fm/api",
-  sepoliaRpcUrl: SEPOLIA_NETWORK.rpcUrl,
-  sepoliaExplorer: SEPOLIA_NETWORK.explorerUrl,
-  midenExplorer: "https://testnet.midenscan.com",
-  midenEthFaucetId: "mtst1ap7x68w8ldcytyfa2f9mauqh75qhs3hh_qr7qqq9wr6w",
-  // Same account as midenEthFaucetId, hex form — this is the canonical Agglayer
-  // ETH faucet on Cardona. The Miden→Sepolia send must bridge this asset.
-  midenEthFaucetIdHex: MIDEN_ETH.faucetId,
-  midenEthDecimals: MIDEN_ETH.decimals,
-} as const;
+export function agglayerConfig(deploymentId?: string) {
+  const deployment = getDeployment(deploymentId);
+  const evmNetwork = deploymentEvmNetwork(deploymentId);
+  const chain = evmNetworks[evmNetwork];
+  const bridge = deployment.document.supportedEvmChains[evmNetwork]?.bridges.agglayer;
+  if (!bridge?.contractAddress || !bridge.midenBridgeId) throw new Error("Agglayer is not configured.");
+  return {
+    evmNetwork, chain, midenBridgeId: bridge.midenBridgeId,
+    sepoliaChainId: chain.id, sepoliaChainHex: `0x${chain.id.toString(16)}`,
+    sepoliaBridgeAddress: bridge.contractAddress,
+    destinationNetworkId: deployment.derived.rollupId,
+    midenIndexerNetworkId: deployment.derived.rollupId,
+    sourceNetworkId: 0,
+    nativeTokenAddress: "0x0000000000000000000000000000000000000000" as const,
+    gasLimit: 300000n,
+    bridgeServiceApi: deployment.document["bridge-providers"].agglayer.indexerUrl,
+    sepoliaRpcUrl: chain.rpcUrls.default.http[0],
+    sepoliaExplorer: chain.blockExplorers.default.url,
+    midenExplorer: deploymentMiden(deploymentId).explorer,
+    midenEthFaucetIdHex: deployment.derived.eth.faucetId,
+    midenEthDecimals: deployment.derived.eth.decimals,
+  };
+}
+export const AGGLAYER_TESTNET = agglayerConfig();
 
 const bridgeAssetAbi = [
   {
@@ -181,15 +184,18 @@ export function midenAccountToBridgeDestination(value: string) {
   return `0x00000000${midenAccount}00` as `0x${string}`;
 }
 
-export function buildSepoliaDepositTransaction({
-  amountEth,
+export function buildDepositTransaction({
+  amount,
+  asset,
   midenAccountId,
 }: {
-  amountEth: string;
+  amount: string;
+  asset: EvmAsset;
   midenAccountId: string;
-}) {
-  const amountWei = parseEther(amountEth);
-  if (amountWei <= BigInt(0)) {
+}, deploymentId?: string) {
+  const AGGLAYER_TESTNET = agglayerConfig(deploymentId);
+  const amountRaw = parseUnits(amount, asset.decimals);
+  if (amountRaw <= 0n) {
     throw new Error("Enter an amount greater than zero.");
   }
 
@@ -200,8 +206,8 @@ export function buildSepoliaDepositTransaction({
     args: [
       AGGLAYER_TESTNET.destinationNetworkId,
       destinationAddress,
-      amountWei,
-      AGGLAYER_TESTNET.nativeTokenAddress,
+      amountRaw,
+      asset.kind === "erc20" ? asset.address : AGGLAYER_TESTNET.nativeTokenAddress,
       true,
       "0x",
     ],
@@ -210,12 +216,13 @@ export function buildSepoliaDepositTransaction({
   return {
     to: AGGLAYER_TESTNET.sepoliaBridgeAddress,
     data,
-    value: toHex(amountWei),
+    value: toHex(asset.kind === "native" ? amountRaw : 0n),
     gas: toHex(AGGLAYER_TESTNET.gasLimit),
     destinationAddress,
   };
 }
 
-export function bridgeStatusUrl(destinationAddress: string) {
+export function bridgeStatusUrl(destinationAddress: string, deploymentId?: string) {
+  const AGGLAYER_TESTNET = agglayerConfig(deploymentId);
   return `${AGGLAYER_TESTNET.bridgeServiceApi}/bridges/${destinationAddress}?limit=1&offset=0`;
 }

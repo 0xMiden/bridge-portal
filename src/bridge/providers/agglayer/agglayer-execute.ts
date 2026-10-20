@@ -1,6 +1,6 @@
 import type { MidenFiWalletContextState } from "@miden-sdk/miden-wallet-adapter-react";
 import { normalizeMidenAccountHex } from "./agglayer";
-import { EVM_AGGLAYER_NETWORK_ID, MIDEN_BRIDGE_ID } from "./agglayer-b2agg";
+import { agglayerConfig } from "./agglayer";
 import { createFeeConversionSalt } from "../../../wallets/miden/miden-transaction";
 
 // Agglayer outbound (Miden → Sepolia / L2→L1). Builds the B2AGG bridge-out note
@@ -49,7 +49,8 @@ export async function runAgglayerSend({
   destinationAddress: string;
   /** Sender Miden account — bech32 (mcst1…/mtst1…) or hex. */
   senderAddress: string;
-} & AgglayerSendDeps): Promise<AgglayerSendResult> {
+} & AgglayerSendDeps, deploymentId?: string): Promise<AgglayerSendResult> {
+  const config = agglayerConfig(deploymentId);
   const {
     AccountId,
     EthAddress,
@@ -62,7 +63,7 @@ export async function runAgglayerSend({
   const { Transaction } = await import("@miden-sdk/miden-wallet-adapter-base");
 
   const sender = AccountId.fromHex(`0x${normalizeMidenAccountHex(senderAddress)}`);
-  const bridge = AccountId.fromHex(MIDEN_BRIDGE_ID);
+  const bridge = AccountId.fromHex(config.midenBridgeId);
   const faucet = faucetId.startsWith("0x")
     ? AccountId.fromHex(faucetId)
     : AccountId.fromBech32(faucetId);
@@ -75,7 +76,7 @@ export async function runAgglayerSend({
     sender,
     bridge,
     new NoteAssets([asset]),
-    EVM_AGGLAYER_NETWORK_ID,
+    config.sourceNetworkId,
     EthAddress.fromHex(destinationAddress),
   );
 

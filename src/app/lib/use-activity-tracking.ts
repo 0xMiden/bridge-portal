@@ -7,10 +7,12 @@ import { normalizeActivityState } from "../../bridge/activity";
 import { observeActivity } from "../../bridge/tracking";
 import { loadStoredActivities, patchStoredActivity } from "./bridge-persistence";
 import { DEMO_ACTIVITIES } from "./activity-demo";
+import { useBridgeEnvironment } from "../components/NetworkProvider";
 import { errorMessage } from "./wallet-errors";
 
 /** One polling lifecycle for every provider: read latest, observe, merge, publish. */
 export function useActivityTracking(id: string) {
+  const environment = useBridgeEnvironment();
   const [view, setView] = useState<{
     id: string;
     activity?: Activity;
@@ -28,11 +30,11 @@ export function useActivityTracking(id: string) {
   useEffect(() => {
     const controller = new AbortController();
     let timer: ReturnType<typeof setTimeout>;
-    const demo = DEMO_ACTIVITIES[id];
+    const demo = environment === "testnet" ? DEMO_ACTIVITIES[id] : undefined;
     async function poll() {
       let delay = 3_000;
       try {
-        const activity = demo ?? loadStoredActivities().find((item) => item.id === id);
+        const activity = demo ?? loadStoredActivities(environment).find((item) => item.id === id);
         if (controller.signal.aborted) return;
         const current = activity ? normalizeActivityState(activity) : undefined;
         setView((previous) => ({
@@ -49,7 +51,7 @@ export function useActivityTracking(id: string) {
         if (observation) {
           // Patch the newest persisted row, never the snapshot captured before the request.
           patchStoredActivity(id, observation.patch);
-          const updated = loadStoredActivities().find((item) => item.id === id);
+          const updated = loadStoredActivities(environment).find((item) => item.id === id);
           setView({
             id,
             activity: updated,
@@ -93,12 +95,13 @@ export function useActivityTracking(id: string) {
       window.removeEventListener("storage", refresh);
       document.removeEventListener("visibilitychange", onVisible);
     };
-  }, [id, version]);
+  }, [id, version, environment]);
 
   const current = view.id === id;
+  const demo = environment === "testnet" ? DEMO_ACTIVITIES[id] : undefined;
   return {
-    activity: DEMO_ACTIVITIES[id] ?? (current ? view.activity : undefined),
-    isLoading: !DEMO_ACTIVITIES[id] && (!current || !view.loaded),
+    activity: demo ?? (current ? view.activity : undefined),
+    isLoading: !demo && (!current || !view.loaded),
     monitorError: current ? view.monitorError : "",
     lastCheckedAt: current ? view.lastCheckedAt : 0,
     refresh: () => setVersion((value) => value + 1),

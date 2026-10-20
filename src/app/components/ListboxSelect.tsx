@@ -5,14 +5,15 @@ import { type KeyboardEvent, type ReactNode, useEffect, useId, useRef, useState 
 
 /** Shared selection, focus, and dismissal behavior for bridge asset controls. */
 export function ListboxSelect({
-  kind, label, menuLabel, heading, context, value, options, onChange, children, searchable = false,
+  kind, label, menuLabel, heading, context, value, options, onChange, children, searchable = false, disabled = false,
 }: {
-  kind: "chain" | "token";
+  kind: "chain" | "token" | "network";
   label: string;
   menuLabel: string;
   heading: string;
   context?: string;
   searchable?: boolean;
+  disabled?: boolean;
   value: string;
   options: { value: string; label: string; content: ReactNode }[];
   onChange: (value: string) => void;
@@ -54,6 +55,7 @@ export function ListboxSelect({
   }, [open]);
 
   function navigateOptions(event: KeyboardEvent<HTMLDivElement>) {
+    if (disabled) return;
     const editingSearch = event.target === searchInputRef.current;
     if (editingSearch && event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
     const buttons = Array.from(rootRef.current?.querySelectorAll<HTMLButtonElement>('[role="option"]') ?? []);
@@ -107,7 +109,8 @@ export function ListboxSelect({
       <button
         ref={triggerRef}
         type="button"
-        role={kind === "chain" ? "combobox" : undefined}
+        role={kind !== "token" ? "combobox" : undefined}
+        disabled={disabled}
         className={`${kind}-select-trigger ${open ? "open" : ""}`}
         aria-haspopup="listbox"
         aria-expanded={open}
