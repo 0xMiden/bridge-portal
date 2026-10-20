@@ -9,15 +9,22 @@ const networkLogos = {
   "miden-testnet": "/asset-logos/miden.svg",
 } satisfies Record<BridgeNetwork, string>;
 
+const tokenLogos: Partial<Record<string, string>> = {
+  ETH: "/asset-logos/ethereum.svg",
+  USDC: "/asset-logos/usdc.svg",
+  USDCx: "/asset-logos/usdc.svg",
+  DAI: "/asset-logos/dai.svg",
+  USDT: "/asset-logos/usdt.svg",
+  WBTC: "/asset-logos/wbtc.svg",
+};
+
 /** The adjacent network/token name supplies the accessible label. */
 export function NetworkLogo({ network }: { network: BridgeNetwork }) {
   return <Image className="network-logo" src={networkLogos[network]} alt="" width={24} height={24} unoptimized />;
 }
 
 export function TokenLogo({ asset }: { asset: BridgeAsset }) {
-  const src = asset.symbol === "ETH" ? "/asset-logos/ethereum.svg"
-    : asset.symbol === "USDC" || asset.symbol === "USDCx" ? "/asset-logos/usdc.svg"
-    : undefined;
+  const src = tokenLogos[asset.symbol];
   if (!src) return null;
 
   return (

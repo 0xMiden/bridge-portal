@@ -45,7 +45,7 @@ const fees = {
   showEta: true,
   networkFee: "Sepolia gas",
   bridgeFee: "In quoted rate",
-  warning: "Epoch is configured as a testnet route.",
+  warning: "Epoch uses mock tokens on Sepolia. Check the quoted output before confirming.",
   sepoliaGasUnits: 150000,
 } as const;
 
@@ -146,9 +146,8 @@ const directions = {
 
 export const epoch: Provider = {
   label: "Epoch",
-  badge: "Paused",
-  disabled: true,
-  unavailableReason: "Paused in this build.",
+  badge: "Testnet",
+  unavailableReason: "Epoch does not currently quote the reverse direction for this token pair.",
   directions,
   load: () => import("./flows"),
 };

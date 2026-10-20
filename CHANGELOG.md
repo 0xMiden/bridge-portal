@@ -2,26 +2,19 @@
 
 ## Unreleased
 
-### Agglayer bridge
-
-- Re-enable ETH deposits and Miden-to-Sepolia withdrawals, including saved selections and launch links. Use Gateway's confirmed 2026-10-09 Cardona deployment: rollup 73, Sepolia bridge `0x528e26b25a34a4a5d0dbda1d57d318153d2ed582`, Miden bridge `0x187cabbc404359d16be94954ca9879`, wrapped ETH faucet `0x7c6d1dc7fb7045913d524bbef017f5`, and `https://bridge.miden-testnet.gateway.fm/api`. Track withdrawals under indexer network 73. Epoch remains paused.
-
-### USDCx bridge
-
-- Enable testnet withdrawals to Arc, Sepolia, Base and Arbitrum using Bread-signed burn notes, live faucet checks and a saved submission receipt. Show live Circle fee and net-payout estimates before signing; final USDC payout requires verification in the destination wallet until the attester exposes its withdrawal mapping.
-
-- Unify all EVM reads under `/api/evm/[network]` and USDCx quotes/tracking under `/api/xreserve`; remove the separate Arc, CCTP and Sepolia API implementations.
-
-- Add Ethereum Sepolia, Base Sepolia and Arbitrum Sepolia origins via Circle CCTP forwarding through Arc Testnet into Miden Testnet. Show signed Circle fee quotes, approve the reviewed amount plus fee, and correlate the source burn with the Arc executor and Miden deposit. Persist the selected origin and keep source explorer links on the correct chain.
-- Fix the Sepolia chain label collapsing to zero width when the amount input claims the grid width; longer origin labels fit on mobile.
-
-- Add Arc Testnet USDC → Miden USDCx through Circle xReserve to the shared route selector, balances, review, activity history, and receipt. Confirming a deposit requests the source wallet network only when needed. Deposits check the current faucet mapping and simulate before signing; saved transfers resume from activity history.
-- Keep Miden fixed in the form and let users select an enabled origin chain. Token choices stay on that chain; selecting Arc Testnet resolves to USDC → USDCx without prompting the wallet.
-- Upgrade the Miden SDK to 0.17.1 and React/wallet adapters to 0.17.0. Pin the USDCx testnet faucet to `0x4cbdcaffe75f0a317482224dae6436`. Circle attestation remains pending until the exact v0.17 P2ID note is included on Miden; users consume the note in Bread.
-- USDCx withdrawals remain unavailable pending a verified withdrawal integration. Existing Epoch/Agglayer deployment pins are unchanged and require separate v0.17 deployment verification.
-
 ### Changes
 
+- [CHANGE] **Epoch testnet routes are re-enabled.** Sepolia ↔ Miden supports Epoch test USDC, DAI, USDT and WBTC using the v0.17 faucets published by [Epoch's faucet dashboard](https://userdashboard.epochprotocol.xyz/faucets). Retired USDC route IDs remain available for historical receipts; new selections use the current routes. Epoch mock tokens are labeled separately from Circle USDC.
+- [CHANGE] **Epoch token availability follows verified allocator estimates.** Both directions returned positive estimates on 2026-10-20 for the enabled token pairs. WETH returned no quote at 0.01, 1 or 10 tokens and is excluded. WBTC deposits quoted at 0.01 and 1 but not 10; every transfer requires a live estimate for its actual amount.
+- [CHANGE] **Epoch supports USDCx withdrawals to mock Sepolia USDC.** Miden USDCx can withdraw to Epoch's 18-decimal mock USDC (`0x2BB4FfD7E2c6D432b697554Efd77fA13bdbefd69`). The reverse direction returned no quote at 0.01, 1 or 10 tokens and stays unavailable. This route is separate from Circle USDC ↔ USDCx.
+- [CHANGE] **Agglayer ETH deposits and withdrawals are re-enabled.** Saved selections and launch links use Gateway's confirmed 2026-10-09 Cardona deployment: rollup 73, Sepolia bridge `0x528e26b25a34a4a5d0dbda1d57d318153d2ed582`, Miden bridge `0x187cabbc404359d16be94954ca9879`, wrapped ETH faucet `0x7c6d1dc7fb7045913d524bbef017f5`, and `https://bridge.miden-testnet.gateway.fm/api`. Withdrawals are tracked under indexer network 73.
+- [CHANGE] **USDCx testnet withdrawals support Arc, Sepolia, Base and Arbitrum.** Bread signs burn notes after live faucet checks, and the app saves a submission receipt. Live Circle fee and net-payout estimates appear before signing; final USDC payout requires verification in the destination wallet until the attester exposes its withdrawal mapping.
+- [CHANGE] **EVM reads and USDCx APIs use shared endpoints.** All EVM reads use `/api/evm/[network]`, and USDCx quotes/tracking use `/api/xreserve`; the separate Arc, CCTP and Sepolia API implementations are removed.
+- [CHANGE] **USDCx deposits support Ethereum Sepolia, Base Sepolia and Arbitrum Sepolia origins.** Circle CCTP forwards deposits through Arc Testnet into Miden Testnet. The app shows signed Circle fee quotes, approves the reviewed amount plus fee, and correlates the source burn with the Arc executor and Miden deposit. The selected origin persists, and source explorer links stay on the correct chain.
+- [CHANGE] **Arc Testnet USDC deposits deliver Miden USDCx through Circle xReserve.** The route joins the shared selector, balances, review, activity history, and receipt. Confirming a deposit requests the source wallet network only when needed. Deposits check the current faucet mapping and simulate before signing; saved transfers resume from activity history.
+- [CHANGE] **Miden stays fixed while users select an enabled origin chain.** Token choices stay on that chain; selecting Arc Testnet resolves to USDC → USDCx without prompting the wallet.
+- [CHANGE] **Miden SDK is upgraded to 0.17.1 and React/wallet adapters to 0.17.0.** The USDCx testnet faucet is pinned to `0x4cbdcaffe75f0a317482224dae6436`. Circle attestation remains pending until the exact v0.17 P2ID note is included on Miden; users consume the note in Bread.
+- [CHANGE] **The initial v0.17 upgrade keeps unverified routes unavailable.** USDCx withdrawals await a verified withdrawal integration. Existing Epoch/Agglayer deployment pins remain unchanged and require separate v0.17 deployment verification.
 - [CHANGE] **Epoch SDK is pinned to 1.0.39.** Miden collateral uses the SDK's reclaim window and mandate-binding attachment in a custom wallet transaction; both directions use the exported witness schemas.
 - [CHANGE] **Production deploys wait on live testnet E2E**, which itself waits on `ci`. The Worker is canaried at `/health/deep` after ship. A production bundle with inlined E2E keys fails the deploy.
 - [CHANGE] **`GET /health/deep`** checks Sepolia, Miden RPC, Epoch, and AggLayer. A cron hits it every 20 minutes. `/health` stays liveness-only.
@@ -37,6 +30,9 @@
 
 ### Fixes
 
+- [FIX] **DAI, USDT and WBTC display token logos.** Epoch token selectors and selected-token displays show the corresponding logo on both Sepolia and Miden.
+- [FIX] **Epoch rejects missing, zero or malformed output estimates before signing.** Preview and execution validate the allocator's output even when the SDK reports success, including the fresh quote requested immediately before collateral signing.
+- [FIX] **The Sepolia chain label retains its width beside the amount input.** Longer origin labels fit on mobile instead of collapsing to zero width when the input claims the grid width.
 - [FIX] **Agglayer testnet follows rollup 86 and the current Miden bridge account.** Withdrawal tracking uses the bridge indexer’s local network ID 1, separately from the rollup ID. Deployment pins match wallet main as checked on 2026-09-24.
 
 - [FIX] **Custom Miden bridge-out requests declare a fresh fee-conversion salt.** Epoch and AggLayer now support guarded multisig replay protection, including after the request is serialized to the wallet.

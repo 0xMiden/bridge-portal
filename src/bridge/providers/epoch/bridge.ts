@@ -54,6 +54,15 @@ export interface EVMToMidenQuote {
   params: EVMToMidenIntentParams;
 }
 
+/** Used by preview and by the fresh quote taken immediately before signing. */
+function requireEstimate(quote: IntentQuoteResult): void {
+  if (!quote.success) throw new Error(quote.error ?? "Quote failed");
+  if (typeof quote.tokenOut !== "string" || !/^\d+$/.test(quote.tokenOut) ||
+      BigInt(quote.tokenOut) <= 0n) {
+    throw new Error("No liquidity available for this transfer.");
+  }
+}
+
 /**
  * Cross-chain bridge architecture using P2ID notes:
  *
@@ -161,9 +170,7 @@ export async function getEVMToMidenQuote(
     isNative: false,
   });
 
-  if (!quoteResult.success) {
-    throw new Error(quoteResult.error ?? "Quote failed");
-  }
+  requireEstimate(quoteResult);
 
   return { taskTypeString, intentData, quoteResult, params };
 }
@@ -225,9 +232,7 @@ export async function getCrossChainQuote(
     isNative: false,
   });
 
-  if (!quoteResult.success) {
-    throw new Error(quoteResult.error ?? "Quote failed");
-  }
+  requireEstimate(quoteResult);
 
   return { taskTypeString, intentData, quoteResult, params };
 }

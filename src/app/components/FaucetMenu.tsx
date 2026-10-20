@@ -22,9 +22,8 @@ type MintStatus =
 
 /**
  * Header popover for one-click testnet funding. Mints Epoch's Sepolia USDC mock
- * ERC20 straight from the connected wallet (the one asset that bootstraps every
- * route); the non-mintable assets — gas ETH and the dashboard-only Miden faucets
- * — are external links.
+ * ERC20 straight from the connected wallet. Other Epoch mocks and Miden tokens
+ * are available through the external faucet links.
  */
 export function FaucetMenu() {
   const balances = useBalanceStore();
@@ -145,6 +144,15 @@ export function FaucetMenu() {
           ) : null}
 
           <div className="faucet-links">
+            <a
+              className="faucet-link"
+              href="https://userdashboard.epochprotocol.xyz/faucets"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              Epoch test token faucets
+              <ArrowUpRight size={13} aria-hidden="true" />
+            </a>
             <a
               className="faucet-link"
               href={SEPOLIA_ETH_FAUCET_URL}

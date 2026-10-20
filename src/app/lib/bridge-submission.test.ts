@@ -53,7 +53,7 @@ afterEach(() => vi.unstubAllGlobals());
 function setup(overrides: Partial<TransferSubmission> = {}) {
   const evmRequest = vi.fn<EvmProvider["request"]>().mockResolvedValue(SEPOLIA_NETWORK.chainHex);
   const input: TransferSubmission = {
-    routeId: "epoch-usdc-to-miden",
+    routeId: "epoch-test-usdc-to-miden",
     amount: "0.123456",
     insufficientBalance: false,
     evmBalance: "1 USDC",
@@ -106,11 +106,12 @@ describe("submission validation", () => {
 
   it.each([
     ["unknown route", { routeId: "unknown-route" }, /isn't available/],
+    ["retired Epoch faucet", { routeId: "epoch-usdc-to-miden" }, /isn't available/],
     ["insufficient balance", { insufficientBalance: true }, /Not enough USDC/],
-    ["disconnected Miden source", { routeId: "epoch-usdc-to-sepolia", midenWallet: { connected: false, address: "" } }, /Connect your Bread wallet/],
+    ["disconnected Miden source", { routeId: "epoch-test-usdc-to-sepolia", midenWallet: { connected: false, address: "" } }, /Connect your Bread wallet/],
     ["disconnected Miden destination with a stale address", { routeId: "agglayer-eth-to-miden", midenWallet: { connected: false, address: MIDEN_ACCOUNT } }, /Connect your Bread wallet/],
     ["Miden recipient differs from the connected wallet", { midenAccount: "0x4e6fb40fd2f6a55140df2c42dfb5b7" }, /wallet changed.*review/i],
-    ["EVM recipient differs from the connected wallet", { routeId: "epoch-usdc-to-sepolia", evmAddress: `0x${"22".repeat(20)}` }, /wallet changed.*review/i],
+    ["EVM recipient differs from the connected wallet", { routeId: "epoch-test-usdc-to-sepolia", evmAddress: `0x${"22".repeat(20)}` }, /wallet changed.*review/i],
   ] satisfies Array<[string, Partial<TransferSubmission>, RegExp]>)("rejects %s before signing or creating an activity", async (_name, overrides, message) => {
     const { input, effects, evmRequest } = setup(overrides);
     await submitBridgeTransfer(input, effects);
@@ -124,7 +125,7 @@ describe("submission validation", () => {
     expect(effects.onSubmittingChange.mock.lastCall?.[0] ?? false).toBe(false);
   });
 
-  it.each(["epoch-usdc-to-miden", "agglayer-eth-to-miden", "epoch-usdc-to-sepolia"])("requests the EVM connection for a disconnected source or destination on %s", async (routeId) => {
+  it.each(["epoch-test-usdc-to-miden", "agglayer-eth-to-miden", "epoch-test-usdc-to-sepolia"])("requests the EVM connection for a disconnected source or destination on %s", async (routeId) => {
     const { input, effects } = setup({ routeId, evmWallet: { connected: false, address: EVM_ADDRESS } });
     await submitBridgeTransfer(input, effects);
 
