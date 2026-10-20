@@ -48,7 +48,7 @@ function makeDirections(network: "Sepolia" | "Ethereum") {
     showEta: true,
     networkFee: `${network} gas`,
     bridgeFee: "No provider fee",
-    warning: network === "Sepolia" ? "Agglayer is configured as a testnet route." : "Consume delivered ETH notes in Bread.",
+    warning: network === "Sepolia" ? "Agglayer is configured as a testnet route." : "Consume delivered notes in Bread.",
     sepoliaGasUnits: 140000,
   } as const;
 
@@ -175,7 +175,11 @@ function makeDirections(network: "Sepolia" | "Ethereum") {
       consumeNote: true,
       tracking: "automatic",
       pollMs: 6000,
-      fees: () => fees,
+      fees: (route) => route?.source.kind === "erc20" ? {
+        ...fees,
+        sepoliaGasUnits: 300000,
+        warning: "Token approval may require additional Ethereum transactions. Consume delivered notes in Bread.",
+      } : fees,
     },
   } satisfies ProviderDirections;
 

@@ -67,6 +67,15 @@ function configuredRoutes(deployment: BridgeDeployment): BridgeRoute[] {
       { network: midenNetwork, kind: "miden", symbol: "ETH", ...derived.eth },
       agglayer.depositEnabled && document.features.bridgeIn !== false,
       agglayer.withdrawalEnabled && document.features.bridgeOut !== false);
+    if (agglayer && environment === "mainnet" && network === "ethereum") {
+      for (const token of derived.agglayerTokens ?? []) routes.push({
+        id: `${deployment.id}:agglayer:${network}:${token.address.toLowerCase()}:receive`,
+        deploymentId: deployment.id, provider: "agglayer", mode: "receive",
+        source: { network, kind: "erc20", symbol: token.symbol, name: token.name, address: token.address, decimals: token.decimals },
+        destination: { network: midenNetwork, kind: "miden", symbol: token.symbol, name: token.name, faucetId: token.faucetId, decimals: token.midenDecimals },
+        disabled: !agglayer.depositEnabled || document.features.bridgeIn === false,
+      });
+    }
   }
   // Preserve the portal's additional verified Epoch test tokens. Their addresses
   // are distinct from Circle USDC; wallet-config owns provider availability.

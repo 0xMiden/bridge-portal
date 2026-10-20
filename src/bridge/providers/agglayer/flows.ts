@@ -1,14 +1,12 @@
 import type { ProviderFlows } from "../../core/provider";
 import { parseUnits } from "viem";
-import { ensureEvmNetwork } from "../../../wallets/evm/ensure-network";
 import { activityRoute } from "../../core/routes";
 import type { EvmNetwork } from "../../core/assets";
 import { midenAccountLink } from "../../miden-account-link";
 import {
   agglayerConfig,
-  buildSepoliaDepositTransaction,
-  normalizeMidenAccountHex,
 } from "./agglayer";
+import { submitAgglayerDeposit } from "./deposit";
 
 import type { AgglayerDepositStatus } from "./agglayer";
 import { findMidenToEvmDeposit } from "./agglayer-status";
@@ -38,35 +36,15 @@ export const flows: ProviderFlows = {
       const destination = input.midenAccount;
       if (!destination)
         throw new Error("Connect Bread or paste a Miden account ID before receiving.");
-      await ensureEvmNetwork(provider, AGGLAYER_TESTNET.chain);
-      const transaction = buildSepoliaDepositTransaction({
-        amountEth: input.amount,
-        midenAccountId: normalizeMidenAccountHex(destination),
-      }, route.deploymentId);
-      phase("Confirm in your wallet…");
-      const accounts = await provider.request<string[]>({ method: "eth_accounts" });
-      if (accounts[0]?.toLowerCase() !== address.toLowerCase() ||
-          Number(await provider.request({ method: "eth_chainId" })) !== AGGLAYER_TESTNET.chain.id)
-        throw new Error("Your wallet account or network changed. Review the transfer again.");
-      const sourceTxHash = await provider.request<string>({
-        method: "eth_sendTransaction",
-        params: [
-          {
-            from: address,
-            chainId: AGGLAYER_TESTNET.sepoliaChainHex,
-            to: transaction.to,
-            data: transaction.data,
-            value: transaction.value,
-            gas: transaction.gas,
-          },
-        ],
+      const { sourceTxHash, destinationAddress } = await submitAgglayerDeposit({
+        route, amount: input.amount, destination, provider, address, phase,
       });
       record({
         status: "source_finality",
         eta: "10-20 min",
         destination,
         sourceTxHash,
-        bridgeDestinationAddress: transaction.destinationAddress,
+        bridgeDestinationAddress: destinationAddress,
         midenAccountHex: midenAccountLink(destination),
         sourceNetworkId: AGGLAYER_TESTNET.sourceNetworkId,
         destinationNetworkId: AGGLAYER_TESTNET.destinationNetworkId,

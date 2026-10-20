@@ -1,6 +1,7 @@
 import { getDeployment, deploymentEvmNetwork, deploymentMiden } from "../../../config/deployments";
 import { evmNetworks } from "../../../config/evm-networks";
-import { encodeFunctionData, parseEther, toHex } from "viem";
+import { encodeFunctionData, parseUnits, toHex } from "viem";
+import type { EvmAsset } from "../../core/assets";
 
 export function agglayerConfig(deploymentId?: string) {
   const deployment = getDeployment(deploymentId);
@@ -183,16 +184,18 @@ export function midenAccountToBridgeDestination(value: string) {
   return `0x00000000${midenAccount}00` as `0x${string}`;
 }
 
-export function buildSepoliaDepositTransaction({
-  amountEth,
+export function buildDepositTransaction({
+  amount,
+  asset,
   midenAccountId,
 }: {
-  amountEth: string;
+  amount: string;
+  asset: EvmAsset;
   midenAccountId: string;
 }, deploymentId?: string) {
   const AGGLAYER_TESTNET = agglayerConfig(deploymentId);
-  const amountWei = parseEther(amountEth);
-  if (amountWei <= BigInt(0)) {
+  const amountRaw = parseUnits(amount, asset.decimals);
+  if (amountRaw <= 0n) {
     throw new Error("Enter an amount greater than zero.");
   }
 
@@ -203,8 +206,8 @@ export function buildSepoliaDepositTransaction({
     args: [
       AGGLAYER_TESTNET.destinationNetworkId,
       destinationAddress,
-      amountWei,
-      AGGLAYER_TESTNET.nativeTokenAddress,
+      amountRaw,
+      asset.kind === "erc20" ? asset.address : AGGLAYER_TESTNET.nativeTokenAddress,
       true,
       "0x",
     ],
@@ -213,7 +216,7 @@ export function buildSepoliaDepositTransaction({
   return {
     to: AGGLAYER_TESTNET.sepoliaBridgeAddress,
     data,
-    value: toHex(amountWei),
+    value: toHex(asset.kind === "native" ? amountRaw : 0n),
     gas: toHex(AGGLAYER_TESTNET.gasLimit),
     destinationAddress,
   };
