@@ -152,12 +152,17 @@ describe("Agglayer submission", () => {
 });
 
 describe("Epoch activity lifecycle", () => {
-  it("persists the acknowledged submission before navigation, then saves solver tracking data", async () => {
+  it.each([
+    { routeId: "epoch-test-usdc-to-miden", mode: "receive", destination: MIDEN_ACCOUNT },
+    { routeId: "epoch-usdcx-to-sepolia", mode: "send", destination: EVM_ADDRESS },
+  ] as const)("persists $mode accounts and source evidence before navigation, then saves solver tracking data", async ({ routeId, mode, destination }) => {
     const started = Promise.withResolvers<void>();
     const execution = Promise.withResolvers<EpochExecuteResult>();
-    const { input, effects } = setup();
+    const { input, effects } = setup({ routeId });
     effects.navigate.mockImplementation((path: string) => {
-      expect(path).toBe(`/activity/${loadStoredActivities()[0].id}`);
+      const [activity] = loadStoredActivities();
+      expect(path).toBe(`/activity/${activity.id}`);
+      expect(activity).toMatchObject({ midenAccount: MIDEN_ACCOUNT, evmAddress: EVM_ADDRESS });
     });
     vi.mocked(runEpochTransfer).mockImplementation(() => {
       expect(effects.navigate).not.toHaveBeenCalled();
@@ -175,10 +180,10 @@ describe("Epoch activity lifecycle", () => {
     expect(effects.onPhaseChange).toHaveBeenLastCalledWith("Confirm the deposit in your wallet…");
     onSubmitted!({ sourceTxHash: TX_HASH });
     const [submitted] = loadStoredActivities();
-    expect(submitted).toMatchObject({ provider: "epoch", status: "source_finality", sourceTxHash: TX_HASH, destination: MIDEN_ACCOUNT });
+    expect(submitted).toMatchObject({ provider: "epoch", status: "source_finality", sourceTxHash: TX_HASH, destination });
 
     execution.resolve({
-      direction: "receive", intentNonce: "42", sponsorAddress: EVM_ADDRESS,
+      direction: mode, intentNonce: "42", sponsorAddress: EVM_ADDRESS,
       sourceTxHash: TX_HASH, outputAmount: "0.123456789012345678",
       raw: { taskTypeString: "test", intentData: {} },
     });
@@ -188,6 +193,7 @@ describe("Epoch activity lifecycle", () => {
       id: submitted.id, status: "message_observed", eta: "1-3 min",
       epochIntentNonce: "42", epochSponsor: EVM_ADDRESS,
       sourceTxHash: TX_HASH, receivedAmount: "0.123456789012345678",
+      midenAccount: MIDEN_ACCOUNT, evmAddress: EVM_ADDRESS,
     });
     expect(effects.onActivitiesChange).toHaveBeenLastCalledWith(loadStoredActivities());
     expect(effects.onSubmittingChange).toHaveBeenLastCalledWith(false);
