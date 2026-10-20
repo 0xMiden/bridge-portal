@@ -393,7 +393,41 @@
         "faucetId": "0x419f8f4bff72959132aa7cea15a4c1",
         "decimals": 8
       },
-      "usdcxFaucetId": "0xe69e6ca6e39df1b10c1e5399399feb"
+      "usdcxFaucetId": "0xe69e6ca6e39df1b10c1e5399399feb",
+      "agglayerTokens": [
+        {
+          "symbol": "USDT",
+          "name": "Tether USD",
+          "address": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+          "decimals": 6,
+          "faucetId": "0x5cb79d29507d3ad17bb6dc60279e89",
+          "midenDecimals": 6
+        },
+        {
+          "symbol": "WBTC",
+          "name": "Wrapped BTC",
+          "address": "0x2260fac5e5542a773aa44fbcfedf7c193bc2c599",
+          "decimals": 8,
+          "faucetId": "0x3084d3c389ececd15fda9770d18c8a",
+          "midenDecimals": 8
+        },
+        {
+          "symbol": "PYUSD",
+          "name": "PayPal USD",
+          "address": "0x6c3ea9036406852006290770bedfcaba0e23a0e8",
+          "decimals": 6,
+          "faucetId": "0xeb4266c94493b091380b25349fddd3",
+          "midenDecimals": 6
+        },
+        {
+          "symbol": "WSOL",
+          "name": "Wrapped SOL",
+          "address": "0xd31a59c85ae9d8edefec411d448f90841571b89c",
+          "decimals": 9,
+          "faucetId": "0xf4f3dd3678997811522164320be4be",
+          "midenDecimals": 8
+        }
+      ]
     }
   }
 ]

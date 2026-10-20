@@ -3,6 +3,14 @@ import { midenNetworks, type BridgeEnvironment } from "./environment";
 import type { EvmNetwork } from "../bridge/core/assets";
 
 type Address = `0x${string}`;
+export type AgglayerToken = {
+  symbol: string;
+  name: string;
+  address: Address;
+  decimals: number;
+  faucetId: string;
+  midenDecimals: number;
+};
 export type WalletBridge = {
   depositEnabled: boolean;
   withdrawalEnabled: boolean;
@@ -37,7 +45,13 @@ export type BridgeDeployment = {
       bridges: { agglayer?: WalletBridge; usdcx?: WalletBridge; epoch?: WalletBridge };
     }>>;
   };
-  derived: { rpcUrl: string; rollupId: number; eth: { faucetId: string; decimals: number }; usdcxFaucetId: string };
+  derived: {
+    rpcUrl: string;
+    rollupId: number;
+    eth: { faucetId: string; decimals: number };
+    usdcxFaucetId: string;
+    agglayerTokens?: AgglayerToken[];
+  };
 };
 
 // Imported from a reviewed commit by scripts/sync-wallet-config.mjs. Appending
