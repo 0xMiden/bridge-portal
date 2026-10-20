@@ -1,5 +1,21 @@
 @import "tailwindcss";
 
+.network-selector select {
+  min-height: 44px;
+  max-width: 120px;
+  padding: 8px 12px;
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--foreground);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+.network-selector select:hover { background: var(--surface-muted); }
+.network-selector select:focus-visible { outline: 2px solid var(--foreground); outline-offset: 3px; }
+.network-selector select:disabled { cursor: wait; opacity: 0.6; }
+
 /* The Arc label and six-decimal USDC amounts need balanced column widths. */
 .swap-card[data-provider="xreserve"] .swap-box {
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
@@ -3517,8 +3533,15 @@ a {
   }
 
   .detail-topbar {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto 44px;
     gap: 8px;
   }
+
+  .detail-topbar-actions { display: contents; }
+  .detail-topbar .back-link { grid-column: 1 / -1; justify-self: end; }
+  .topbar .brand > span { display: none; }
+  .topbar .brand img { max-width: 100%; height: auto; }
 
   .detail-topbar .brand {
     min-height: 44px;

@@ -17,7 +17,7 @@ const geistMono = Geist_Mono({
 
 const SITE_URL = "https://bridge.miden.xyz";
 const SITE_DESCRIPTION =
-  "Move value across Sepolia and Miden with wallet-native cross-chain receive and send flows.";
+  "Move value across Ethereum networks and Miden with wallet-native cross-chain receive and send flows.";
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
@@ -36,7 +36,7 @@ export const metadata: Metadata = {
         url: "/og.png",
         width: 2400,
         height: 1260,
-        alt: "Miden Bridge — move value across Sepolia and Miden",
+        alt: "Miden Bridge — move value across Ethereum networks and Miden",
       },
     ],
   },

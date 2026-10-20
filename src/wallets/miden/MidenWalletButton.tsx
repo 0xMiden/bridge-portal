@@ -8,7 +8,7 @@ import {
   useMidenFiWallet,
 } from "@miden-sdk/miden-wallet-adapter-react";
 import { ChevronDown, Copy, LogOut, RefreshCcw } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   midenWalletIdentity,
   shortAddress,
@@ -16,6 +16,9 @@ import {
 import { useResetMidenProvider } from "./MidenWalletProvider";
 import { WalletMenu } from "../WalletMenu";
 import { WalletBrandIcon } from "../WalletBrandIcon";
+import { useBridgeEnvironment } from "../../app/components/NetworkProvider";
+import { midenNetworks, type BridgeEnvironment } from "../../config/environment";
+import { assertMidenAccountNetwork } from "./network";
 import { useMidenBalances } from "../../bridge/BalanceProvider";
 
 export type MidenWalletSnapshot = {
@@ -57,19 +60,19 @@ const walletRequestTimeoutMs = 45_000;
 // page load so the Miden wallet behaves like WalletConnect (stays connected
 // across refreshes) instead of dropping every reload. Separate from the
 // adapter's own selection key ("miden-bridge-wallet") so a reset clears both.
-const walletConnectedFlagKey = "miden-bridge-wallet-connected";
+const connectedKey = (environment: BridgeEnvironment) => environment === "testnet" ? "miden-bridge-wallet-connected" : "miden-bridge-wallet-connected.mainnet";
 
-function markWalletConnected() {
+function markWalletConnected(environment: BridgeEnvironment) {
   try {
-    window.localStorage.setItem(walletConnectedFlagKey, "1");
+    window.localStorage.setItem(connectedKey(environment), "1");
   } catch {
     // ignore storage failures — reconnect-on-refresh just won't fire
   }
 }
 
-function clearWalletConnected() {
+function clearWalletConnected(environment: BridgeEnvironment) {
   try {
-    window.localStorage.removeItem(walletConnectedFlagKey);
+    window.localStorage.removeItem(connectedKey(environment));
   } catch {
     // ignore storage failures
   }
@@ -110,6 +113,7 @@ function MidenWalletButtonInner({
   onStateChange,
 }: MidenWalletButtonInnerProps) {
   const wallet = useMidenFiWallet();
+  const environment = useBridgeEnvironment();
   const [error, setError] = useState("");
   const [menuOpen, setMenuOpen] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -122,7 +126,7 @@ function MidenWalletButtonInner({
   // deduplicated with the bridge form by the shared balance store.
   const refreshInflightRef = useRef<Promise<void> | null>(null);
   const address = wallet.address ?? "";
-  const balances = useMidenBalances(wallet.connected ? address : "", "miden-testnet");
+  const balances = useMidenBalances(wallet.connected ? address : "", midenNetworks[environment].network);
   const heldAssets = Object.values(balances.balances ?? {}).flatMap((asset) => asset && asset.amountRaw > 0n ? [asset] : []);
   const balanceText = !wallet.connected
     ? "Not connected"
@@ -133,6 +137,18 @@ function MidenWalletButtonInner({
         : balances.balances
           ? heldAssets.map((asset) => `${asset.balance} ${asset.symbol}`).join(" · ") || "No bridge assets"
           : "Connected";
+  const guardedRequestTransaction = useMemo(() => {
+    const request = wallet.requestTransaction;
+    const adapter = wallet.wallet?.adapter;
+    if (!request) return undefined;
+    return (...args: Parameters<typeof request>) => {
+      if (!adapter?.connected || adapter.address !== address) throw new Error("Your Miden wallet changed. Reconnect and review the transfer.");
+      assertMidenAccountNetwork(adapter.address, environment);
+      return request(...args);
+    };
+  }, [wallet.requestTransaction, wallet.wallet, address, environment]);
+  let networkError = "";
+  if (wallet.connected) { try { assertMidenAccountNetwork(address, environment); } catch (error) { networkError = errorMessage(error); } }
   const readyState = wallet.wallet?.readyState;
   const walletLogo = wallet.wallet?.adapter?.icon;
   const ready =
@@ -158,7 +174,7 @@ function MidenWalletButtonInner({
     let wasConnected = false;
     try {
       wasConnected =
-        window.localStorage.getItem(walletConnectedFlagKey) === "1";
+        window.localStorage.getItem(connectedKey(environment)) === "1";
     } catch {
       // storage unavailable → no restore
     }
@@ -169,10 +185,10 @@ function MidenWalletButtonInner({
         window.setTimeout(onResetProvider, 250);
       } else {
         // Stale/rejected session — drop the flag so we don't retry it every load.
-        clearWalletConnected();
+        clearWalletConnected(environment);
       }
     });
-  }, [ready, wallet, wallet.wallet, wallet.connected, wallet.connecting, onResetProvider]);
+  }, [ready, wallet, wallet.wallet, wallet.connected, wallet.connecting, onResetProvider, environment]);
 
   useEffect(() => {
     onStateChange({
@@ -180,12 +196,12 @@ function MidenWalletButtonInner({
       connected: wallet.connected,
       connecting: wallet.connecting,
       ready,
-      error,
+      error: networkError || error,
       balanceText,
       noteSyncStatus,
       consumableNoteCount,
       requestSend: wallet.requestSend,
-      requestTransaction: wallet.requestTransaction,
+      requestTransaction: guardedRequestTransaction,
       waitForTransaction: wallet.waitForTransaction,
       requestConsumableNotes: wallet.requestConsumableNotes,
     });
@@ -200,7 +216,8 @@ function MidenWalletButtonInner({
     wallet.connected,
     wallet.connecting,
     wallet.requestSend,
-    wallet.requestTransaction,
+    guardedRequestTransaction,
+    networkError,
     wallet.waitForTransaction,
     wallet.requestConsumableNotes,
   ]);
@@ -252,7 +269,7 @@ function MidenWalletButtonInner({
 
     try {
       await withWalletTimeout(wallet.connect());
-      markWalletConnected();
+      markWalletConnected(environment);
     } catch (connectError) {
       setError(errorMessage(connectError));
       if (connectError instanceof WalletRequestTimeoutError) {
@@ -266,7 +283,7 @@ function MidenWalletButtonInner({
     try {
       if (wallet.connected) await wallet.disconnect();
       await withWalletTimeout(wallet.connect());
-      markWalletConnected();
+      markWalletConnected(environment);
       setMenuOpen(false);
     } catch (reconnectError) {
       setError(errorMessage(reconnectError));
@@ -280,7 +297,7 @@ function MidenWalletButtonInner({
     setError("");
     try {
       // Explicit disconnect = don't silently reconnect on the next load.
-      clearWalletConnected();
+      clearWalletConnected(environment);
       await wallet.disconnect();
       setMenuOpen(false);
     } catch (disconnectError) {
@@ -343,11 +360,11 @@ function MidenWalletButtonInner({
   function resetMidenConnection() {
     setError("");
     try {
-      window.localStorage.removeItem("miden-bridge-wallet");
+      window.localStorage.removeItem(environment === "testnet" ? "miden-bridge-wallet" : "miden-bridge-wallet.mainnet");
     } catch {
       // Ignore storage failures; remounting the provider still clears local UI state.
     }
-    clearWalletConnected();
+    clearWalletConnected(environment);
     void wallet.disconnect().catch(() => undefined);
     setMenuOpen(false);
     onResetProvider();

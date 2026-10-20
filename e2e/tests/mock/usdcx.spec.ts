@@ -3,7 +3,7 @@ import { stubNetwork } from "../../fixtures/mock-network";
 import { BridgePage } from "../../pages/bridge-page";
 import { decodeFunctionData, encodeFunctionResult, erc20Abi, parseAbi } from "viem";
 import { ARC, xReserveAbi } from "../../../src/bridge/providers/xreserve/config";
-import { cctpAbi, cctpSources } from "../../../src/bridge/providers/xreserve/cctp-config";
+import { cctpAbi, cctpSource } from "../../../src/bridge/providers/xreserve/cctp-config";
 import { arcRecipient } from "../../../src/bridge/providers/xreserve/deposit";
 
 type BridgeFrame = { route: string; source: string; wallet: string };
@@ -65,7 +65,7 @@ test("Base simulation outages leave a readable error and a retryable, contained 
       isRemoteDomainRegistered: true,
       getRemoteToken: arcRecipient(ARC.faucetId),
       paused: false,
-      getFee: [250000n, cctpSources["base-sepolia"].asset.address],
+      getFee: [250000n, cctpSource("base-sepolia").asset.address],
       balanceOf: 10000000n,
       allowance: 10000000n,
     };

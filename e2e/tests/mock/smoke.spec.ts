@@ -71,6 +71,9 @@ test("launch links select the route but connected wallets determine both recipie
     localStorage.removeItem("miden.bridge.ui.route");
     localStorage.removeItem("miden.bridge.ui.route.id");
     localStorage.removeItem("miden.bridge.ui.mode");
+    localStorage.removeItem("miden.bridge.ui.route.testnet");
+    localStorage.removeItem("miden.bridge.ui.route.testnet.id");
+    localStorage.removeItem("miden.bridge.ui.mode.testnet");
   });
   await page.goto(`/?route=agglayer&intent=withdraw&mode=deposit&miden_account=${midenAccount}&account=${midenAccount}`);
   await bridge.waitForReady();

@@ -43,7 +43,7 @@ import {
   statusLabel,
   statusTone,
 } from "../lib/bridge-presentation";
-import { bridgeRoutes, defaultBridgeRoute, reverseBridgeRoute, type BridgeRoute } from "../../bridge/core/routes";
+import { routesForEnvironment, defaultBridgeRoute, reverseBridgeRoute, type BridgeRoute } from "../../bridge/core/routes";
 import { flowModes, isFlowMode, type FlowMode } from "../../bridge/core/models";
 import { bridgeProviders, isBridgeProvider } from "../../bridge/providers/registry";
 import { activityStartedAt, routeSwitchChangesAsset, validateTransferAmount } from "../../bridge/core/rules";
@@ -69,6 +69,9 @@ import { ProviderOptions } from "./ProviderOptions";
 import { WalletMenu } from "../../wallets/WalletMenu";
 import { WalletBrandIcon } from "../../wallets/WalletBrandIcon";
 import { FaucetMenu } from "./FaucetMenu";
+import { useBridgeEnvironment } from "./NetworkProvider";
+import { NetworkSelect } from "./NetworkSelect";
+import type { BridgeEnvironment } from "../../config/environment";
 import { ThemeToggle } from "./ThemeToggle";
 import { useMidenBalance, useEvmBalance } from "../../bridge/BalanceProvider";
 import {
@@ -129,26 +132,32 @@ const emptyMidenWallet: MidenWalletSnapshot = {
   consumableNoteCount: null,
 };
 
-function initialBridgeForm(params: ReadonlyURLSearchParams) {
+function initialBridgeForm(params: ReadonlyURLSearchParams, environment: BridgeEnvironment) {
+  const bridgeRoutes = routesForEnvironment(environment);
   // Providers mounts this form inside the client-only Miden wallet provider.
   // Resolve the launch URL and saved selection before its first render.
   const requestedProvider = params.get("provider");
   const provider =
     isBridgeProvider(requestedProvider) && !bridgeProviders[requestedProvider].disabled
       ? requestedProvider
-      : loadStoredRoute() ?? "xreserve";
+      : loadStoredRoute(environment) ?? "xreserve";
   const requestedMode = params.get("mode");
-  const mode = isFlowMode(requestedMode) ? requestedMode : loadStoredMode() ?? "receive";
-  const saved = loadStoredRouteId();
+  const mode = isFlowMode(requestedMode) ? requestedMode : loadStoredMode(environment) ?? "receive";
+  const saved = loadStoredRouteId(environment);
   const route =
     (saved?.provider === provider && saved.mode === mode && !saved.disabled ? saved : undefined) ??
-    defaultBridgeRoute(provider, mode) ??
-    defaultBridgeRoute(provider, "receive") ??
+    defaultBridgeRoute(provider, mode, environment) ??
+    defaultBridgeRoute(provider, "receive", environment) ??
     bridgeRoutes.find((option) => !option.disabled && !bridgeProviders[option.provider].disabled)!;
   return { route };
 }
 
-const MidenWalletButton = dynamic(
+const MainnetMidenWalletButton = dynamic(
+  () => import("../../wallets/miden/MidenWalletButton").then(mod => mod.MidenWalletButton),
+  { ssr: false },
+);
+
+const TestnetMidenWalletButton = dynamic(
   () =>
     process.env.NEXT_PUBLIC_E2E_TEST === "true"
       ? import("../../wallets/testing/E2EMidenWalletButton").then(
@@ -182,6 +191,17 @@ function compactTokenAmount(value: string) {
 }
 
 export function BridgeExperience() {
+  const environment = useBridgeEnvironment();
+  if (!routesForEnvironment(environment).some(route => !route.disabled)) return (
+    <main className="app-shell"><header className="topbar"><h1>Miden Bridge</h1><NetworkSelect /></header>
+      <section className="detail-empty"><h2>No routes available</h2><p>New transfers are currently unavailable on {environment}. Existing receipts remain accessible from their saved links.</p></section>
+    </main>
+  );
+  return <BridgeForm key={environment} />;
+}
+
+function BridgeForm() {
+  const environment = useBridgeEnvironment();
   const mobileRouteSheet = useSyncExternalStore(
     subscribeToMobileRouteQuery,
     getMobileRouteSnapshot,
@@ -195,7 +215,7 @@ export function BridgeExperience() {
   const { disconnect } = useDisconnect();
   const { walletInfo } = useWalletInfo("eip155");
   const evmIcon = walletInfo?.icon;
-  const [initialForm] = useState(() => initialBridgeForm(searchParams));
+  const [initialForm] = useState(() => initialBridgeForm(searchParams, environment));
   const [route, setRoute] = useState<BridgeRoute>(initialForm.route);
   const { provider, mode } = route;
   const [amount, setAmount] = useState("");
@@ -204,7 +224,7 @@ export function BridgeExperience() {
   const walletAccount = address ?? "";
   const walletConnected = isConnected && Boolean(address);
   const externalAsset = route.source.kind === "miden" ? route.destination : route.source;
-  const evmNetwork = evmNetworks[externalAsset.network === "miden-testnet" ? "sepolia" : externalAsset.network];
+  const evmNetwork = evmNetworks[externalAsset.kind === "miden" ? "sepolia" : externalAsset.network];
   const [midenWallet, setMidenWallet] =
     useState<MidenWalletSnapshot>(emptyMidenWallet);
   const [walletError, setWalletError] = useState("");
@@ -285,7 +305,7 @@ export function BridgeExperience() {
   // Live Sepolia gas estimate for the network-fee line (real gasPrice * gas
   // limit) where the fee is Sepolia-side; falls back to the route label
   // (e.g. "Miden fee") when the leg's fee isn't on Sepolia.
-  const sepoliaGas = useSepoliaGasEstimate(quote.fees.sepoliaGasUnits);
+  const sepoliaGas = useSepoliaGasEstimate(quote.fees.sepoliaGasUnits, externalAsset.kind === "miden" ? "sepolia" : externalAsset.network);
   const networkFeeDisplay = sepoliaGas.fee
     ? sepoliaGas.fee
     : sepoliaGas.loading
@@ -386,17 +406,17 @@ export function BridgeExperience() {
 
   useEffect(() => {
     try {
-      const stored = loadStoredActivities();
+      const stored = loadStoredActivities(environment);
       queueMicrotask(() => setActivities(stored));
     } catch {
       queueMicrotask(() => setActivities([]));
     }
-  }, []);
+  }, [environment]);
 
   useEffect(() => {
-    saveStoredRoute(initialForm.route.provider, initialForm.route.id);
-    saveStoredMode(initialForm.route.mode);
-  }, [initialForm]);
+    saveStoredRoute(initialForm.route.provider, initialForm.route.id, environment);
+    saveStoredMode(initialForm.route.mode, environment);
+  }, [initialForm, environment]);
 
   useEffect(() => {
     if (!evmMenuOpen) return;
@@ -462,8 +482,8 @@ export function BridgeExperience() {
     setRoute(nextRoute);
     setProviderSelection("automatic");
     // Remember the tab and route so a refresh keeps this direction.
-    saveStoredMode(nextMode);
-    saveStoredRoute(nextRoute.provider, nextRoute.id);
+    saveStoredMode(nextMode, environment);
+    saveStoredRoute(nextRoute.provider, nextRoute.id, environment);
     setAmount("");
     setBridgeError("");
   }
@@ -544,7 +564,7 @@ export function BridgeExperience() {
     setRouteMenuOpen(false);
     setRoute(nextRoute);
     setProviderSelection("automatic");
-    saveStoredRoute(nextRoute.provider, nextRoute.id);
+    saveStoredRoute(nextRoute.provider, nextRoute.id, environment);
     setBridgeError("");
   }
 
@@ -750,6 +770,7 @@ export function BridgeExperience() {
     return submitBridgeTransfer(
       {
         routeId: route.id,
+        environment,
         quote: reviewedQuote,
         amount,
         insufficientBalance,
@@ -774,7 +795,7 @@ export function BridgeExperience() {
         onError: setBridgeError,
         onSubmittingChange: setIsSubmitting,
         onPhaseChange: setSubmitPhase,
-        onActivitiesChange: setActivities,
+        onActivitiesChange: all => setActivities(all.filter(activity => (activity.environment ?? "testnet") === environment)),
         navigate: (path) => router.push(path),
       },
     );
@@ -880,12 +901,13 @@ export function BridgeExperience() {
             priority
           />
           <span>Bridge</span>
-          <span className="portal-network">Testnet</span>
+
         </Link>
 
         <div className="topbar-actions">
           <div className="topbar-utilities">
-            <FaucetMenu />
+            <NetworkSelect disabled={isSubmitting} />
+            {environment === "testnet" ? <FaucetMenu /> : null}
             <ThemeToggle />
           </div>
 
@@ -961,7 +983,7 @@ export function BridgeExperience() {
                     <ChainSelect route={route} side={side} onSelectRoute={selectRoute} />
                   </div>
                   <div className="panel-wallet" data-wallet={isMiden ? "miden" : "evm"}>
-                    {isMiden ? <MidenWalletButton onStateChange={handleMidenWalletState} /> : evmWalletControl}
+                    {isMiden ? environment === "mainnet" ? <MainnetMidenWalletButton onStateChange={handleMidenWalletState} /> : <TestnetMidenWalletButton onStateChange={handleMidenWalletState} /> : evmWalletControl}
                   </div>
                   {isSource ? (
                     <label className="swap-box-amount">
@@ -1085,7 +1107,7 @@ export function BridgeExperience() {
                 <div className="preflight-head">
                   <span className="preflight-head-title">
                     Review transfer
-                    <span className="preflight-testnet">Testnet</span>
+                    <span className="preflight-testnet">{environment === "mainnet" ? "Mainnet" : "Testnet"}</span>
                   </span>
                   <button
                     type="button"

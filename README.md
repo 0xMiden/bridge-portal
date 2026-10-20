@@ -3,9 +3,11 @@
 Next.js app for the wallet-native Miden bridge transfer flow — the wallet-facing
 cross-chain Receive/Send surface.
 
-The current app implements Agglayer and Epoch testnet routes between Miden and
-Ethereum Sepolia. It models Cross-chain Receive, Cross-chain Send, route
-selection, destination settlement, and stuck-funds recovery.
+The app serves both networks at `/`. The network selector remembers the choice
+for the current tab and resets the transfer form and Miden wallet session. New
+tabs default to testnet. Mainnet supports Agglayer ETH and Circle USDCx; testnet
+also retains Epoch routes. `/activity/:id` receipts automatically use their saved
+network, including existing testnet transfers.
 
 ## Product model
 
@@ -19,7 +21,7 @@ e.g. [why we ship single-thread WASM without cross-origin isolation
 
 ## Prerequisites
 
-Testnet only. To exercise the live bridge path locally you need:
+For local testnet transfers you need:
 
 - **A Miden testnet wallet** — the MidenFi extension (or the Bread wallet). It
   supplies the Miden testnet account and signs the Miden-side transactions. Its
@@ -73,6 +75,54 @@ the app boots with none of them set. In brief:
 `NEXT_PUBLIC_*` vars are inlined into the client bundle at **build time** — set
 them before `npm run build` / the Docker or Cloudflare build, not just at
 runtime.
+
+## Network configuration and upgrades
+
+Both environments reuse [0xMiden/wallet-config](https://github.com/0xMiden/wallet-config).
+Reviewed snapshots live in `src/config/wallet-config/snapshots.json`; the browser
+never downloads mutable configuration at runtime. Contracts, Circle domains and
+services, Epoch outputs, and provider direction switches come from that repo.
+The import script resolves missing ETH faucet/precision and rollup information
+from the Miden bridge registry, and the USDCx faucet from Arc's xReserve contract.
+RPC and explorer URLs live in the local network registry.
+
+To import a reviewed upstream revision:
+
+```bash
+npm run sync:wallet-config -- <full-40-character-commit-sha>
+npm run typecheck
+npm test
+npm run build
+```
+
+Review the resulting JSON diff before deployment. The importer requires both
+networks to validate and keeps earlier snapshots. **Do not delete or reorder old
+snapshots**: legacy transfers resolve to the first testnet deployment; new
+receipts save their route, assets, and deployment ID. New transfers use the last
+snapshot for their environment. API calls accept only bundled deployment IDs;
+old calls without one still target the original testnet deployment. A rollback
+of active configuration should be deliberate and preserve all receipt snapshots.
+The additional verified Epoch test tokens remain portal-owned; canonical Epoch
+USDC and availability follow wallet-config.
+
+Activity storage retains the existing JSON array and key, with history filtered
+by the selected network. Reading old history adds testnet metadata in memory; the
+original data is kept until an activity is saved. Route and direction preferences
+are separate per environment. Network choice uses session storage, survives
+reloads, and can differ across tabs without adding a network prefix to URLs. Switching clears amount, quote, review, and
+Miden balances; EVM submission checks the required chain and account. Quotes
+are bound to their deployment as well as route, amount, and recipients.
+
+Bread must support the selected network. The installed adapter forwards the
+`mainnet` connection string even though its published enum omits it; network
+prefix checks reject wrong-network accounts before signing. Mainnet requires an
+`mm1…` address; raw account IDs remain supported only for legacy testnet callers.
+Use a mainnet-capable Bread release for manual end-to-end validation. The automated
+suite uses mock signatures and does not transfer mainnet funds.
+
+`GET /health/deep` remains the legacy testnet upstream check; it does not attest
+to mainnet availability. Network-specific quote/status endpoints validate the
+selected deployment independently.
 
 ## Build toolchain notes
 
@@ -167,7 +217,7 @@ Miden testnet integration boundary.
 
 ### EVM reads and bridge providers
 
-All supported origins (Sepolia, Arc Testnet, Base Sepolia and Arbitrum Sepolia)
+All supported origins (Ethereum, Arc, Base, Arbitrum and their testnets)
 use `/api/evm/[network]/{balance,rpc,gas,transaction}`. The shared network registry
 selects the chain; the server RPC layer owns upstream configuration, timeouts
 and fallbacks. Balance responses use `balanceRaw` and `balance` for both native

@@ -9,6 +9,7 @@ import { type Activity, buildDiagnostics } from "../lib/bridge-presentation";
 import { type ActivityDetailModel, activityDetailFor } from "../lib/activity-detail-presentation";
 import { formatAgo } from "../lib/relative-time";
 import { useActivityTracking } from "../lib/use-activity-tracking";
+import { NetworkSelect } from "./NetworkSelect";
 import { ThemeToggle } from "./ThemeToggle";
 import { ActivityJourney } from "./ActivityJourney";
 
@@ -27,7 +28,7 @@ export function ActivityDetail({ id }: { id: string }) {
           <span>Bridge</span>
         </Link>
         <div className="detail-topbar-actions">
-          <ThemeToggle />
+          <NetworkSelect /><ThemeToggle />
           <Link className="back-link" href="/">
             <ArrowLeft size={17} aria-hidden="true" />
             New transfer
