@@ -108,10 +108,9 @@ describe("submission validation", () => {
     ["unknown route", { routeId: "unknown-route" }, /isn't available/],
     ["insufficient balance", { insufficientBalance: true }, /Not enough USDC/],
     ["disconnected Miden source", { routeId: "epoch-usdc-to-sepolia", midenWallet: { connected: false, address: "" } }, /Connect your Bread wallet/],
-    ["paused Agglayer withdrawal", { routeId: "agglayer-eth-to-sepolia", evmAddress: EVM_ADDRESS }, /isn't available/],
-    ["missing Agglayer recipient", { routeId: "agglayer-eth-to-miden", midenAccount: "", midenWallet: { connected: false, address: "" } }, /paste a Miden account/],
-    ["missing Epoch recipient", { midenAccount: "" }, /paste a Miden account/],
-    ["invalid Epoch recipient", { routeId: "epoch-usdc-to-sepolia", evmAddress: "invalid" }, /valid Sepolia/],
+    ["disconnected Miden destination with a stale address", { routeId: "agglayer-eth-to-miden", midenWallet: { connected: false, address: MIDEN_ACCOUNT } }, /Connect your Bread wallet/],
+    ["Miden recipient differs from the connected wallet", { midenAccount: "0x4e6fb40fd2f6a55140df2c42dfb5b7" }, /wallet changed.*review/i],
+    ["EVM recipient differs from the connected wallet", { routeId: "epoch-usdc-to-sepolia", evmAddress: `0x${"22".repeat(20)}` }, /wallet changed.*review/i],
   ] satisfies Array<[string, Partial<TransferSubmission>, RegExp]>)("rejects %s before signing or creating an activity", async (_name, overrides, message) => {
     const { input, effects, evmRequest } = setup(overrides);
     await submitBridgeTransfer(input, effects);
@@ -125,8 +124,8 @@ describe("submission validation", () => {
     expect(effects.onSubmittingChange.mock.lastCall?.[0] ?? false).toBe(false);
   });
 
-  it.each(["epoch", "agglayer"] as const)("requests the EVM connection for a disconnected %s receive", async (provider) => {
-    const { input, effects } = setup({ routeId: provider === "epoch" ? "epoch-usdc-to-miden" : "agglayer-eth-to-miden", evmWallet: { connected: false, address: "" } });
+  it.each(["epoch-usdc-to-miden", "agglayer-eth-to-miden", "epoch-usdc-to-sepolia"])("requests the EVM connection for a disconnected source or destination on %s", async (routeId) => {
+    const { input, effects } = setup({ routeId, evmWallet: { connected: false, address: EVM_ADDRESS } });
     await submitBridgeTransfer(input, effects);
 
     expect(effects.openEvmWallet).toHaveBeenCalledOnce();
@@ -286,7 +285,7 @@ describe("USDCx withdrawal submission", () => {
   it.each([false, true])("retains the burn note across wallet settlement (failure: %s)", async (fails) => {
     const { input, effects, evmRequest } = setup({
       routeId: "xreserve-usdc-to-arc", amount: "2", evmAddress: EVM_ADDRESS, quote: reviewedQuote(),
-      evmWallet: { connected: false, address: "" },
+      evmWallet: { connected: true, address: EVM_ADDRESS },
     });
     const noteId = `0x${"cd".repeat(32)}`;
     vi.mocked(withdrawUsdcx).mockImplementation(async ({ onSubmitted }) => {

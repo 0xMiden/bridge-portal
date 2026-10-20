@@ -16,7 +16,7 @@ test("switching chains shows loading until the balance resolves, and only failur
       : { json: { balanceRaw: "750000" } });
   });
 
-  await page.getByRole("combobox", { name: "Origin chain", exact: true }).selectOption("sepolia");
+  await bridge.setChain("Sepolia");
   await requested.promise;
   try {
     await expect(balance).not.toContainText("Balance unavailable", { timeout: 1_000 });
@@ -29,7 +29,7 @@ test("switching chains shows loading until the balance resolves, and only failur
     release.resolve();
   }
   await expect(balance).toHaveText("Available 0.75 USDC");
-  await page.getByRole("combobox", { name: "Origin chain", exact: true }).selectOption("arc-testnet");
+  await bridge.setChain("Arc Testnet");
   await expect(balance).toHaveText("Available 1 USDC");
   await expect(balance.getByRole("status")).toHaveCount(0);
 
@@ -37,7 +37,7 @@ test("switching chains shows loading until the balance resolves, and only failur
   fail = true;
   await page.reload();
   await bridge.waitForReady();
-  await page.getByRole("combobox", { name: "Origin chain", exact: true }).selectOption("sepolia");
+  await bridge.setChain("Sepolia");
   await expect(balance).toHaveText("Balance unavailable");
   await expect(balance.getByRole("status")).toHaveCount(0);
 });

@@ -45,8 +45,8 @@ export async function submitBridgeTransfer(
     );
     return;
   }
-  if (route.mode === "send" && !input.midenWallet.connected) {
-    effects.onError("Connect your Bread wallet to sign the send.");
+  if (!input.midenWallet.connected || !input.midenWallet.address) {
+    effects.onError("Connect your Bread wallet before transferring.");
     return;
   }
 
@@ -60,11 +60,15 @@ export async function submitBridgeTransfer(
   effects.onSubmittingChange(true);
   try {
     if (
-      route.mode === "receive" &&
-      (!input.evmWallet.connected || !input.evmWallet.provider || !input.evmWallet.address)
+      !input.evmWallet.connected || !input.evmWallet.address ||
+      (route.mode === "receive" && !input.evmWallet.provider)
     ) {
       await effects.openEvmWallet();
       return;
+    }
+    if (input.midenAccount !== input.midenWallet.address ||
+        input.evmAddress.toLowerCase() !== input.evmWallet.address.toLowerCase()) {
+      throw new Error("Your connected wallet changed. Review the transfer again.");
     }
     const { flows } = await bridgeProviders[route.provider].load();
     if (directionFor(route).fees(route).requiresQuote) {

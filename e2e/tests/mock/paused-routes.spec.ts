@@ -13,12 +13,12 @@ for (const provider of ["epoch"] as const) {
       }, { provider, mode });
       await page.reload();
       await bridge.waitForReady();
-      await expect(bridge.routeTrigger()).toContainText("USDCx");
+      await expect(bridge.selectedProvider()).toContainText("USDCx");
       await page.goto(`/?provider=${provider}&mode=${mode}`);
       await bridge.waitForReady();
-      await expect(bridge.routeTrigger()).toContainText("USDCx");
-      await expect(page.locator(".mode-switch button[aria-pressed='true']")).toHaveText(mode === "send" ? "Send" : "Receive");
-      await expect(page.locator(".mode-switch").getByRole("button", { name: "Send", exact: true })).toBeEnabled();
+      await expect(bridge.selectedProvider()).toContainText("USDCx");
+      await expect(page.locator(".mode-switch button[aria-pressed='true']")).toHaveText(mode === "send" ? "Withdraw" : "Deposit");
+      await expect(page.locator(".mode-switch").getByRole("button", { name: "Withdraw", exact: true })).toBeEnabled();
       expect(await bridge.readActivities()).toEqual([]);
     });
   }

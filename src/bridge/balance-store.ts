@@ -29,7 +29,7 @@ function evmKey(account: string, asset: EvmAsset) {
     asset.kind === "erc20" ? asset.address.toLowerCase() : "native"] as const;
 }
 
-/** App-session balance storage. Private reads are only started by explicit commands. */
+/** App-session balances, loaded after connection grants asset access. */
 export class BalanceStore {
   private midenSession: MidenSession | null = null;
   private midenSessionVersion = 0;
@@ -42,6 +42,7 @@ export class BalanceStore {
       ? midenBalanceScope(value.account, value.network)
       : null;
     const changed = scope(session) !== scope(this.midenSession);
+    const assetsBecameAvailable = !this.midenSession?.requestAssets && Boolean(session?.requestAssets);
     this.midenSession = session;
     if (changed) {
       this.midenSessionVersion += 1;
@@ -53,6 +54,11 @@ export class BalanceStore {
         queryKey: midenQueryPrefix,
         predicate: (query) => query.getObserversCount() === 0,
       });
+    }
+    if (session?.requestAssets && (changed || assetsBecameAvailable)) {
+      // One automatic read per session. The query retains errors for the UI;
+      // retry is explicit so denied access never becomes a prompt loop.
+      void this.requestMiden(session.account, session.network).catch(() => {});
     }
   }
 
@@ -68,7 +74,7 @@ export class BalanceStore {
     });
   }
 
-  /** Show/refresh and wallet-menu sync share one permission request per session. */
+  /** Connection, refresh, and wallet-menu sync share the same in-flight read. */
   requestMiden(account: string, network: MidenAsset["network"], refresh = false): Promise<MidenBalances> {
     const session = this.midenSession;
     if (!session?.requestAssets ||

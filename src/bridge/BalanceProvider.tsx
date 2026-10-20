@@ -20,7 +20,7 @@ export function useBalanceStore() {
   return store;
 }
 
-/** Subscribing, remounting, focusing, and reconnecting never request private data. */
+/** Observers share the session read; remounting and focusing do not trigger new reads. */
 export function useMidenBalances(account: string, network: MidenAsset["network"]) {
   const store = useBalanceStore();
   const query = useQuery(store.midenQuery(account, network));

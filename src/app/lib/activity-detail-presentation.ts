@@ -18,7 +18,8 @@ export function activityDetailFor(activity: Activity) {
   const receiptActivity = { ...activity, status: presentation.status };
   const complete = presentation.status === "complete";
   const untracked = presentation.progress.kind === "manual";
-  const label = untracked ? presentation.headline : statusLabel(presentation.status);
+  const delivered = complete && directionFor(activity).consumeNote;
+  const label = delivered ? "Delivered" : untracked ? presentation.headline : statusLabel(presentation.status);
   const quote = quoteForActivity(receiptActivity);
   const details = directionFor(activity).activityDetails(activity);
   return {
@@ -29,7 +30,7 @@ export function activityDetailFor(activity: Activity) {
       sepoliaGasUnits: quote.fees.sepoliaGasUnits,
       fee:
         details.fee === undefined
-          ? undefined
+          ? { label: quote.fees.label, value: quote.bridgeFee }
           : providerFee(quote.fees, details.fee, activity.asset, quote.asset),
       receivedLabel: complete
         ? "Received"
@@ -45,9 +46,9 @@ export function activityDetailFor(activity: Activity) {
       sourceTxAt: activityStartedAt(activity),
       destinationTxAt: presentation.destination.at,
       pending: !complete,
-      status: complete ? undefined : { label, tone: statusTone(presentation.status, activity) },
+      status: complete && !delivered ? undefined : { label, tone: statusTone(presentation.status, activity) },
     },
-    announcement: untracked ? presentation.headline : `${label}. ${presentation.headline}`,
+    announcement: untracked || delivered ? presentation.headline : `${label}. ${presentation.headline}`,
     progress: presentation.progress,
     guidance: presentation.guidance,
     canCopyDiagnostics: !complete,

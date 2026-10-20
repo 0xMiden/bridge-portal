@@ -16,20 +16,31 @@ export class BridgePage {
   }
 
   async setRoute(route: Route): Promise<void> {
-    await this.routeTrigger().click();
-    await this.routeListbox()
-      .getByRole("option", { name: new RegExp(`^${route}`, "i") })
-      .click();
+    // Assets/networks define the route; the provider picker only contains
+    // compatible providers and must never silently switch assets.
+    if (!new RegExp(route, "i").test((await this.selectedProvider().textContent()) ?? "")) {
+      await this.setChain("Sepolia");
+      await this.page.locator(".token-select-trigger").first().click();
+      const token = route === "AggLayer" ? "ETH Ether" : route === "USDCx" ? "USDC Circle USDC" : "USDC USD Coin";
+      await this.page.getByRole("listbox", { name: "Token", exact: true })
+        .getByRole("option", { name: token, exact: true }).click();
+    }
     // Case-insensitive: the semantic route name ("AggLayer") differs from the
     // UI label casing ("Agglayer", lowercase L).
-    await expect(this.page.locator(".route-trigger")).toContainText(
+    await expect(this.selectedProvider()).toContainText(
       new RegExp(route, "i"),
     );
   }
 
+  async setChain(label: string): Promise<void> {
+    await this.page.getByRole("combobox", { name: /Origin chain|Destination chain/ }).click();
+    await this.page.getByRole("listbox", { name: /Origin chain|Destination chain/ })
+      .getByRole("option", { name: label, exact: true }).click();
+  }
+
   async setMode(mode: Mode): Promise<void> {
     await this.page
-      .locator(".mode-switch button", { hasText: mode })
+      .locator(".mode-switch button", { hasText: mode === "Receive" ? "Deposit" : "Withdraw" })
       .click();
   }
 
@@ -54,10 +65,6 @@ export class BridgePage {
       .waitFor({ state: "visible", timeout });
   }
 
-  async fillDestination(value: string): Promise<void> {
-    await this.page.locator(".destination-input input").fill(value);
-  }
-
   primaryButton() {
     return this.actionDock().locator(".primary-button");
   }
@@ -66,12 +73,12 @@ export class BridgePage {
     return this.page.locator(".route-trigger");
   }
 
-  routeDialog() {
-    return this.page.getByRole("dialog", { name: "Choose bridge route" });
+  selectedProvider() {
+    return this.page.locator(".selected-provider");
   }
 
-  routeListbox() {
-    return this.page.getByRole("listbox", { name: "Bridge route" });
+  providerOptions() {
+    return this.page.getByRole("group", { name: "Compatible providers" });
   }
 
   actionDock() {
@@ -86,7 +93,7 @@ export class BridgePage {
   /** Open the preflight from a ready CTA (waits out any transient quote-loading). */
   async openPreflight(): Promise<void> {
     const cta = this.primaryButton();
-    await expect(cta).toContainText(/Review (receive|send)/i);
+    await expect(cta).toContainText(/Review transfer/i);
     await cta.click();
     await this.preflight().waitFor({ state: "visible" });
   }
@@ -107,6 +114,7 @@ export class BridgePage {
 
   /** The first Current-transfer activity row, once one appears. */
   async waitForActivityRow(timeout = 120_000) {
+    await this.page.getByRole("tab", { name: /Activity/ }).click();
     const row = this.page.locator(".home-activity-item").first();
     await row.waitFor({ state: "visible", timeout });
     return row;

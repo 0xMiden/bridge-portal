@@ -11,7 +11,7 @@ export type Milestone = {
   status: ActivityStatus | "consume";
   label: string;
   detail: string;
-  state: "done" | "current" | "upcoming" | "failed";
+  state: "done" | "current" | "upcoming" | "failed" | "unknown";
 };
 
 export type ActivityProgress =
@@ -86,12 +86,12 @@ export function trackedProgress(
   if (consumeNote)
     milestones.push({
       status: "consume",
-      label: "Consume note in your wallet",
+      label: "Wallet claim",
       detail:
-        "Balance updates only after you claim the note in Bread — this happens in your wallet, not here.",
+        "If you already consumed the note in Bread, you’re done. Wallet consumption isn’t tracked here.",
       state:
         activity.status === "complete" || activity.status === "claim_available"
-          ? "current"
+          ? "unknown"
           : "upcoming",
     });
   return {

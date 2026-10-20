@@ -1,7 +1,7 @@
 "use client";
 
 import {
-  ArrowDown,
+  ArrowDownUp,
   ArrowRight,
   Check,
   ChevronDown,
@@ -10,8 +10,6 @@ import {
   ExternalLink,
   LogOut,
   RefreshCcw,
-  ShieldCheck,
-  Wallet,
   X,
 } from "lucide-react";
 import dynamic from "next/dynamic";
@@ -33,26 +31,21 @@ import { ensureEvmNetwork } from "../../wallets/evm/ensure-network";
 import { useTransferQuote } from "../lib/use-transfer-quote";
 import type { TransferQuote } from "../../bridge/core/quote";
 import {
-  type WalletIdentity,
   evmWalletIdentity,
-  midenWalletIdentity,
   shortAddress,
-  walletGradient,
 } from "../../wallets/identity";
 import {
   type Activity,
   deriveCtaState,
-  modes,
   quoteFor,
   providerFee,
   networkLabels,
-  sourceAssetLabel,
   statusLabel,
   statusTone,
 } from "../lib/bridge-presentation";
 import { bridgeRoutes, defaultBridgeRoute, reverseBridgeRoute, type BridgeRoute } from "../../bridge/core/routes";
-import { flowModes, isFlowMode, type BridgeProvider, type FlowMode } from "../../bridge/core/models";
-import { bridgeProviders, isBridgeProvider, directionFor } from "../../bridge/providers/registry";
+import { flowModes, isFlowMode, type FlowMode } from "../../bridge/core/models";
+import { bridgeProviders, isBridgeProvider } from "../../bridge/providers/registry";
 import { activityStartedAt, routeSwitchChangesAsset, validateTransferAmount } from "../../bridge/core/rules";
 import {
   loadStoredActivities,
@@ -69,8 +62,12 @@ import { ActivityStack } from "./ActivityStack";
 import { InfoTip } from "./InfoTip";
 import { RelativeTime } from "./RelativeTime";
 import { TokenSelect } from "./TokenSelect";
+import { FiatAmount } from "./FiatAmount";
+import { NetworkLogo } from "./AssetLogo";
 import { ChainSelect } from "./ChainSelect";
+import { ProviderOptions } from "./ProviderOptions";
 import { WalletMenu } from "../../wallets/WalletMenu";
+import { WalletBrandIcon } from "../../wallets/WalletBrandIcon";
 import { FaucetMenu } from "./FaucetMenu";
 import { ThemeToggle } from "./ThemeToggle";
 import { useMidenBalance, useEvmBalance } from "../../bridge/BalanceProvider";
@@ -101,14 +98,6 @@ function getMobileRouteSnapshot() {
 
 function getServerMobileRouteSnapshot() {
   return false;
-}
-
-/** The connected wallet's own brand logo, or a neutral wallet fallback. */
-function WalletBrandIcon({ src, size }: { src?: string; size: number }) {
-  if (!src) return <Wallet size={size} aria-hidden="true" />;
-  const s = { width: size, height: size, borderRadius: 5, display: "block" };
-  // eslint-disable-next-line @next/next/no-img-element -- data-URI wallet logo, not an optimizable asset
-  return <img src={src} alt="" style={s} />;
 }
 
 type MidenWalletSnapshot = {
@@ -156,13 +145,7 @@ function initialBridgeForm(params: ReadonlyURLSearchParams) {
     defaultBridgeRoute(provider, mode) ??
     defaultBridgeRoute(provider, "receive") ??
     bridgeRoutes.find((option) => !option.disabled && !bridgeProviders[option.provider].disabled)!;
-  const midenAccount = params.get("midenAccount") ?? "";
-  const evmAddress = params.get("evmAddress") ?? "";
-  return {
-    route,
-    midenAccount,
-    destination: route.mode === "receive" ? midenAccount : evmAddress,
-  };
+  return { route };
 }
 
 const MidenWalletButton = dynamic(
@@ -210,20 +193,20 @@ export function BridgeExperience() {
   const { address, isConnected } = useAppKitAccount();
   const { walletProvider } = useAppKitProvider<EvmProvider>("eip155");
   const { disconnect } = useDisconnect();
-  const { walletInfo } = useWalletInfo();
+  const { walletInfo } = useWalletInfo("eip155");
   const evmIcon = walletInfo?.icon;
   const [initialForm] = useState(() => initialBridgeForm(searchParams));
   const [route, setRoute] = useState<BridgeRoute>(initialForm.route);
   const { provider, mode } = route;
   const [amount, setAmount] = useState("");
-  const [destination, setDestination] = useState(initialForm.destination);
+  const [activeTab, setActiveTab] = useState<"bridge" | "activity">("bridge");
+  const [providerSelection, setProviderSelection] = useState<"automatic" | "manual">("automatic");
   const walletAccount = address ?? "";
   const walletConnected = isConnected && Boolean(address);
   const externalAsset = route.source.kind === "miden" ? route.destination : route.source;
   const evmNetwork = evmNetworks[externalAsset.network === "miden-testnet" ? "sepolia" : externalAsset.network];
   const [midenWallet, setMidenWallet] =
     useState<MidenWalletSnapshot>(emptyMidenWallet);
-  const launchMidenAccount = initialForm.midenAccount;
   const [walletError, setWalletError] = useState("");
   const [bridgeError, setBridgeError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -234,25 +217,22 @@ export function BridgeExperience() {
   // untouched, so all entered data is preserved).
   const [showPreflight, setShowPreflight] = useState(false);
   const [reviewedQuote, setReviewedQuote] = useState<TransferQuote>();
+  const [reviewedAccounts, setReviewedAccounts] = useState<{ evmAddress: string; midenAccount: string }>();
   // Reveals the full destination value in the preflight (a long Miden id / 0x
   // address is shortened by default, with an affordance to inspect it in full).
   const [showFullDestination, setShowFullDestination] = useState(false);
+  const [showFullSource, setShowFullSource] = useState(false);
   const [preflightDestinationCopied, setPreflightDestinationCopied] =
     useState(false);
-  const destinationInputRef = useRef<HTMLInputElement>(null);
-  const walletClusterRef = useRef<HTMLDivElement>(null);
+  const walletPanelsRef = useRef<HTMLDivElement>(null);
   const preflightConfirmRef = useRef<HTMLButtonElement>(null);
   const primaryActionRef = useRef<HTMLButtonElement>(null);
   const preflightPreviousFocusRef = useRef<HTMLElement | null>(null);
-  // Prefill the destination input with the connected wallet once per direction;
-  // cleared in selectMode so switching modes re-prefills for the new side.
-  const destinationPrefilledRef = useRef(false);
   const [activities, setActivities] = useState<Activity[]>([]);
   const [evmMenuOpen, setEvmMenuOpen] = useState(false);
   const [evmCopied, setEvmCopied] = useState(false);
   const evmMenuRef = useRef<HTMLDivElement>(null);
   const [routeMenuOpen, setRouteMenuOpen] = useState(false);
-  const routeMenuRef = useRef<HTMLDivElement>(null);
   const routeTriggerRef = useRef<HTMLButtonElement>(null);
 
   // Tier B: when the mode (Receive/Send) or route changes, the swap boxes and
@@ -287,13 +267,15 @@ export function BridgeExperience() {
     { dependencies: [route.id], scope: swapCardRef },
   );
 
-  const copy = {
-    ...modes[mode],
-    from: networkLabels[route.source.network],
-    to: networkLabels[route.destination.network],
-    destinationLabel: mode === "send" ? `${networkLabels[route.destination.network]} address` : modes.receive.destinationLabel,
-  };
   const providerCopy = bridgeProviders[provider];
+  const hasRouteAmount = useMemo(() => {
+    try {
+      validateTransferAmount(route, amount);
+      return true;
+    } catch {
+      return false;
+    }
+  }, [route, amount]);
   const quote = useMemo(
     () => quoteFor(route, amount),
     [amount, route],
@@ -315,11 +297,10 @@ export function BridgeExperience() {
     if (!(Number(amount) > 0)) return;
     preloadBridgeSubmission(provider);
   }, [amount, provider]);
-  const midenAddress = midenWallet.address || launchMidenAccount;
-  // The typed recipient takes precedence; adapters validate it before signing.
-  const evmAddress = mode === "send" ? destination.trim() || walletAccount : walletAccount;
-  const midenAccount =
-    mode === "send" ? midenAddress : destination.trim() || midenAddress;
+  // Quotes and transfers always use the current connected wallet accounts.
+  const midenAddress = midenWallet.connected ? midenWallet.address : "";
+  const evmAddress = walletConnected ? walletAccount : "";
+  const midenAccount = midenAddress;
   const quoteQuery = useTransferQuote({ route, amount, midenAccount, evmAddress }, showPreflight || isSubmitting);
   const liveQuote = showPreflight || isSubmitting ? reviewedQuote : quoteQuery.data;
   const fees = quote.fees;
@@ -351,9 +332,7 @@ export function BridgeExperience() {
     ? midenTokenBalance && midenRouteToken
       ? `${compactTokenAmount(midenTokenBalance.balance)} ${midenRouteToken.symbol}`
       : "Syncing…"
-    : launchMidenAccount
-      ? "Launch account"
-      : "Not connected";
+    : "Not connected";
   // Chain-specific wallet identity for the header pill + the From/To panels, so
   // each side explicitly names its wallet and shows its connection state.
   const evmIdentity = evmWalletIdentity({
@@ -361,19 +340,7 @@ export function BridgeExperience() {
     networkLabel: evmNetwork.name,
     address: walletAccount,
   });
-  const midenIdentity = midenWalletIdentity({
-    connecting: midenWallet.connecting,
-    connected: midenWallet.connected,
-    ready: midenWallet.ready,
-    address: midenAddress,
-  });
-  // Receive: Sepolia is the source, Miden the destination. Send flips it.
-  const sourceIdentity = mode === "receive" ? evmIdentity : midenIdentity;
-  const destinationIdentity =
-    mode === "receive" ? midenIdentity : evmIdentity;
-  const hasDestination = Boolean(
-    destination.trim() || (mode === "receive" ? midenAddress : walletAccount),
-  );
+  const destinationConnected = mode === "receive" ? Boolean(midenAccount) : Boolean(evmAddress);
   // Receive deposits the source token from the connected Sepolia wallet, so a
   // request above its balance would revert on-chain (MetaMask shows "likely to
   // fail"). Block it in-app before the wallet prompt. Send sources from the
@@ -385,22 +352,25 @@ export function BridgeExperience() {
     evmBalanceValue != null &&
     Number(amount) > 0 &&
     Number(amount) + (fees.charging === "additional" ? Number(liveQuote?.fee ?? 0) : 0) > evmBalanceValue;
-  const routeTone = bridgeProviders[provider].disabled ? "disabled" : "testnet";
   const routeNote = quote.warning;
   // The connected wallet on the direction's source side — the guard for whether
   // the CTA should prompt a connection (receive sources from Sepolia, send from
   // the Miden wallet).
-  const sourceConnected = mode === "receive" ? walletConnected : midenWallet.connected;
-  // The resolved destination shown in the preflight: the typed value, else the
-  // connected wallet on the receiving side (Miden for receive, Sepolia for send).
+  const sourceConnected = mode === "receive" ? Boolean(evmAddress) : Boolean(midenAccount);
+  // Keep the reviewed accounts fixed if a wallet changes while review is open.
+  const previewSource = mode === "receive"
+    ? reviewedAccounts?.evmAddress ?? evmAddress
+    : reviewedAccounts?.midenAccount ?? midenAccount;
   const previewDestination =
     mode === "receive"
-      ? destination.trim() || midenAddress
-      : destination.trim() || walletAccount;
+      ? reviewedAccounts?.midenAccount ?? midenAccount
+      : reviewedAccounts?.evmAddress ?? evmAddress;
+  const reviewWalletsChanged = reviewedAccounts?.midenAccount !== midenAccount ||
+    reviewedAccounts?.evmAddress.toLowerCase() !== evmAddress.toLowerCase();
   const cta = deriveCtaState({
     mode,
     sourceConnected,
-    hasDestination,
+    destinationConnected,
     amount,
     sourceTokenSymbol,
     insufficientBalance,
@@ -409,20 +379,6 @@ export function BridgeExperience() {
     submitPhase,
     evmNetworkLabel: evmNetwork.name,
   });
-  // Destination help is route-agnostic: it depends only on direction (receive =
-  // Miden account, send = Sepolia address) and shows consistently on every route.
-  const destinationHelp =
-    mode === "receive"
-      ? midenWallet.connected
-        ? `Defaults to your connected Bread wallet ${shortAddress(midenAddress)}. Paste a different Miden account (mtst1…/30-hex) to override.`
-        : launchMidenAccount
-          ? `Preloaded from wallet launch: ${shortAddress(launchMidenAccount)}. Connect Bread before signing Miden-side actions.`
-          : "Connect your Bread wallet, or paste a Miden account (mtst1…/30-hex)."
-      : walletConnected
-        ? `Defaults to your connected Sepolia wallet ${shortAddress(walletAccount)}. Paste a different 0x address to override.`
-        : "Connect your Sepolia wallet, or paste a 0x destination address.";
-  const showDestinationHelp = true;
-  const destinationPlaceholder = copy.destinationPlaceholder;
   const handleMidenWalletState = useCallback(
     (next: MidenWalletSnapshot) => setMidenWallet(next),
     [],
@@ -462,33 +418,11 @@ export function BridgeExperience() {
     };
   }, [evmMenuOpen]);
 
-  useEffect(() => {
-    if (!routeMenuOpen) return;
-
-    function closeMenu(event: MouseEvent | PointerEvent) {
-      if (!routeMenuRef.current?.contains(event.target as Node))
-        closeRouteMenu(false);
-    }
-
-    function closeOnEscape(event: KeyboardEvent) {
-      if (event.key === "Escape") closeRouteMenu();
-    }
-
-    document.addEventListener("pointerdown", closeMenu);
-    document.addEventListener("keydown", closeOnEscape);
-    return () => {
-      document.removeEventListener("pointerdown", closeMenu);
-      document.removeEventListener("keydown", closeOnEscape);
-    };
-  }, [routeMenuOpen]);
-
-  // Mobile route and review surfaces freeze the page behind them. Preserve the
+  // The review surface freezes the page behind it. Preserve the
   // complete inline body state and scroll offset so closing (or unmounting)
   // returns the host page to exactly the state in which it was opened.
   useEffect(() => {
-    if (!routeMenuOpen && !showPreflight) return;
-    // The desktop route control remains an anchored popover, not an overlay.
-    if (routeMenuOpen && !showPreflight && !mobileRouteSheet) return;
+    if (!showPreflight) return;
     const body = document.body;
     const previous = {
       overflow: body.style.overflow,
@@ -519,120 +453,19 @@ export function BridgeExperience() {
       else body.dataset.overlayOpen = previous.overlayOpen;
       if (mobileRouteSheet) window.scrollTo(previous.scrollX, previous.scrollY);
     };
-  }, [mobileRouteSheet, routeMenuOpen, showPreflight]);
-
-  // Move focus onto the active option when the listbox opens so arrow-key
-  // navigation and Enter/Space selection work without a mouse.
-  useEffect(() => {
-    if (!routeMenuOpen) return;
-    const menu = routeMenuRef.current?.querySelector<HTMLElement>(
-      ".route-options-menu",
-    );
-    const selectedOption = menu?.querySelector<HTMLElement>(
-      '.route-option[aria-selected="true"]:not([disabled])',
-    );
-    const firstOption = menu?.querySelector<HTMLElement>(
-      ".route-option:not([disabled])",
-    );
-    (selectedOption ?? firstOption)?.focus();
-  }, [routeMenuOpen]);
-
-  // Roving focus for the route listbox: Arrow keys move between enabled options,
-  // Home/End jump to the ends. Enter/Space selection is native to the <button>
-  // options; Escape closes via the document listener above.
-  function handleRouteMenuKeyDown(event: ReactKeyboardEvent<HTMLDivElement>) {
-    const keys = ["ArrowDown", "ArrowUp", "Home", "End"];
-    if (!keys.includes(event.key)) return;
-    const options = Array.from(
-      event.currentTarget.querySelectorAll<HTMLElement>(
-        ".route-option:not([disabled])",
-      ),
-    );
-    if (options.length === 0) return;
-    event.preventDefault();
-    const currentIndex = options.indexOf(document.activeElement as HTMLElement);
-    let nextIndex = currentIndex;
-    if (event.key === "ArrowDown")
-      nextIndex = currentIndex < 0 ? 0 : (currentIndex + 1) % options.length;
-    else if (event.key === "ArrowUp")
-      nextIndex =
-        currentIndex < 0
-          ? options.length - 1
-          : (currentIndex - 1 + options.length) % options.length;
-    else if (event.key === "Home") nextIndex = 0;
-    else if (event.key === "End") nextIndex = options.length - 1;
-    options[nextIndex]?.focus();
-  }
-
-  function handleRouteDialogKeyDown(event: ReactKeyboardEvent<HTMLDivElement>) {
-    if (event.key !== "Tab" || !mobileRouteSheet) return;
-    const focusable = Array.from(
-      event.currentTarget.querySelectorAll<HTMLElement>(
-        'button:not([disabled]), [href], input:not([disabled]), [tabindex]:not([tabindex="-1"])',
-      ),
-    );
-    if (focusable.length === 0) return;
-    const first = focusable[0];
-    const last = focusable[focusable.length - 1];
-    if (event.shiftKey && document.activeElement === first) {
-      event.preventDefault();
-      last.focus();
-    } else if (!event.shiftKey && document.activeElement === last) {
-      event.preventDefault();
-      first.focus();
-    }
-  }
-
-  // Default the destination input to the connected wallet on the relevant side
-  // (Miden for receive, Sepolia for send). Runs once per direction; the user can
-  // freely edit or clear it afterward.
-  useEffect(() => {
-    if (destinationPrefilledRef.current) return;
-    const connected =
-      mode === "receive"
-        ? midenWallet.connected
-          ? midenAddress
-          : ""
-        : walletConnected
-          ? walletAccount
-          : "";
-    if (connected && !destination) {
-      // Syncing the input to an external event (wallet connect), guarded to run
-      // once per direction — not a render-derived cascade.
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setDestination(connected);
-      destinationPrefilledRef.current = true;
-    }
-  }, [
-    mode,
-    midenWallet.connected,
-    midenAddress,
-    walletConnected,
-    walletAccount,
-    destination,
-  ]);
+  }, [mobileRouteSheet, showPreflight]);
 
   function selectMode(nextMode: FlowMode) {
     const nextRoute = nextMode === mode ? route : reverseBridgeRoute(route);
     if (!nextRoute) return;
+    setRouteMenuOpen(false);
     setRoute(nextRoute);
+    setProviderSelection("automatic");
     // Remember the tab and route so a refresh keeps this direction.
     saveStoredMode(nextMode);
     saveStoredRoute(nextRoute.provider, nextRoute.id);
     setAmount("");
-    setDestination("");
-    destinationPrefilledRef.current = false;
     setBridgeError("");
-  }
-
-  // Connection status belongs in the panel; choosing an asset never requires
-  // a wallet network change. Submission switches to the source chain if needed.
-  function renderWalletChip(identity: WalletIdentity) {
-    return (
-      <span className={`wallet-chip ${identity.state}`}>
-        <span className="wallet-chip-state">{identity.stateText}</span>
-      </span>
-    );
   }
 
   // The Sepolia balance line — shown only once the wallet is connected (the chip
@@ -651,8 +484,7 @@ export function BridgeExperience() {
     );
   }
 
-  // The Miden balance cell. Reactive + opt-in: it stays a "Show balance" button
-  // (no popup) until the user asks, then shows the amount with a refresh control.
+  // The shared session loads balances on connection; failed reads can be retried.
   function renderMidenBalance() {
     // Connection state (not connected / connecting / launch-account) lives in the
     // wallet chip above; the balance line only appears once there's a balance.
@@ -674,14 +506,14 @@ export function BridgeExperience() {
         </>
       );
     }
-    if (midenBalance.loading) return <>Available Syncing…</>;
+    if (!midenBalance.error) return <>Available Syncing…</>;
     return (
       <button
         type="button"
         className="balance-show"
         onClick={() => void midenBalance.show().catch(() => {})}
       >
-        Show balance
+        Balance unavailable · Retry
       </button>
     );
   }
@@ -709,13 +541,16 @@ export function BridgeExperience() {
     if (routeSwitchChangesAsset(route, nextRoute)) {
       setAmount("");
     }
+    setRouteMenuOpen(false);
     setRoute(nextRoute);
+    setProviderSelection("automatic");
     saveStoredRoute(nextRoute.provider, nextRoute.id);
     setBridgeError("");
   }
 
   function selectRouteOption(nextRoute: BridgeRoute) {
     selectRoute(nextRoute);
+    setProviderSelection("manual");
     closeRouteMenu();
   }
 
@@ -786,15 +621,12 @@ export function BridgeExperience() {
     await openWalletModal();
   }
 
-  // Bring the header Miden wallet button into view and focus it — the send
-  // source wallet connects from there (its own menu), so "Connect Miden wallet"
-  // points the user at the right control rather than prompting from the CTA.
-  function focusMidenWalletButton() {
-    const pills =
-      walletClusterRef.current?.querySelectorAll<HTMLButtonElement>(
-        ".wallet-pill",
-      );
-    const midenPill = pills?.[pills.length - 1];
+  // Focus the actual Miden control inside its panel; do not create a second
+  // wallet adapter instance when the transfer direction changes.
+  function connectMidenWallet() {
+    const midenPill = walletPanelsRef.current?.querySelector<HTMLButtonElement>(
+      '[data-wallet="miden"] .wallet-pill',
+    );
     const reducedMotion = window.matchMedia(
       "(prefers-reduced-motion: reduce)",
     ).matches;
@@ -803,20 +635,21 @@ export function BridgeExperience() {
       behavior: reducedMotion ? "auto" : "smooth",
     });
     midenPill?.focus();
+    midenPill?.click();
   }
 
   // The CTA never submits directly: it either advances the form (connect the
-  // source wallet, focus the destination) or opens the preflight review. Only
+  // missing wallet) or opens the preflight review. Only
   // the review's confirm action reaches submitTransfer.
   function handlePrimaryAction() {
     switch (cta.action) {
       case "connect-source":
         if (mode === "receive") void openWalletModal();
-        else focusMidenWalletButton();
+        else connectMidenWallet();
         return;
-      case "add-destination":
-        destinationInputRef.current?.focus();
-        destinationInputRef.current?.scrollIntoView({ block: "center" });
+      case "connect-destination":
+        if (mode === "receive") connectMidenWallet();
+        else void openWalletModal();
         return;
       case "review":
         setBridgeError("");
@@ -830,7 +663,9 @@ export function BridgeExperience() {
           }
           setReviewedQuote(quoteQuery.data);
         } else setReviewedQuote(undefined);
+        setReviewedAccounts({ evmAddress, midenAccount });
         setShowFullDestination(false);
+        setShowFullSource(false);
         setPreflightDestinationCopied(false);
         preflightPreviousFocusRef.current =
           document.activeElement instanceof HTMLElement
@@ -855,6 +690,10 @@ export function BridgeExperience() {
 
   function confirmPreflight() {
     setShowPreflight(false);
+    if (reviewWalletsChanged) {
+      setBridgeError("Your connected wallet changed. Review the transfer again.");
+      return;
+    }
     void submitTransfer();
   }
 
@@ -941,30 +780,7 @@ export function BridgeExperience() {
     );
   }
 
-  return (
-    <main className="app-shell">
-      <header className="topbar">
-        <Link className="brand" href="/" aria-label="Miden bridge home">
-          <Image
-            src="/miden-logo-horizontal.svg"
-            alt="Miden"
-            width={112}
-            height={34}
-            priority
-          />
-          <span>Bridge</span>
-        </Link>
-
-        <div className="topbar-actions">
-          <div className="topbar-utilities">
-            <FaucetMenu />
-            <ThemeToggle />
-          </div>
-          <div
-            className="wallet-cluster"
-            aria-label="Connected wallets"
-            ref={walletClusterRef}
-          >
+  const evmWalletControl = (
           <div className="wallet-menu-root" ref={evmMenuRef}>
             <button
               className={`wallet-button wallet-pill ${walletConnected ? "connected" : ""}`}
@@ -974,22 +790,8 @@ export function BridgeExperience() {
               aria-haspopup={walletConnected ? "menu" : undefined}
               aria-label={evmIdentity.actionLabel}
             >
-              <span
-                className="wallet-avatar"
-                style={
-                  walletConnected
-                    ? { background: walletGradient(walletAccount) }
-                    : undefined
-                }
-              >
-                <span className="wallet-avatar-badge">
-                  <WalletBrandIcon
-                    src={walletConnected ? evmIcon : undefined}
-                    size={11}
-                  />
-                </span>
-              </span>
-              <span className="wallet-pill-label">{evmIdentity.pillLabel}</span>
+              <WalletBrandIcon src={walletConnected ? evmIcon : undefined} size={18} />
+              <span className="wallet-pill-label">{walletConnected ? evmIdentity.pillLabel : "Connect wallet"}</span>
               {walletConnected ? (
                 <ChevronDown
                   className="wallet-menu-chevron"
@@ -1004,7 +806,7 @@ export function BridgeExperience() {
                 open={evmMenuOpen}
                 avatar={
                   <span className="wallet-menu-avatar connected">
-                    <Wallet size={16} aria-hidden="true" />
+                    <WalletBrandIcon src={evmIcon} size={20} />
                   </span>
                 }
                 name={evmWalletLabel}
@@ -1064,9 +866,29 @@ export function BridgeExperience() {
               </WalletMenu>
             ) : null}
           </div>
+  );
 
-            <MidenWalletButton onStateChange={handleMidenWalletState} />
+  return (
+    <main className="app-shell bridge-portal">
+      <header className="topbar">
+        <Link className="brand" href="/" aria-label="Miden bridge home">
+          <Image
+            src="/miden-logo-horizontal.svg"
+            alt="Miden"
+            width={112}
+            height={34}
+            priority
+          />
+          <span>Bridge</span>
+          <span className="portal-network">Testnet</span>
+        </Link>
+
+        <div className="topbar-actions">
+          <div className="topbar-utilities">
+            <FaucetMenu />
+            <ThemeToggle />
           </div>
+
         </div>
       </header>
       {midenWallet.error ? (
@@ -1075,106 +897,33 @@ export function BridgeExperience() {
 
       <section className="swap-stage">
         <div className="swap-group">
-        <section className="swap-card" data-provider={provider} aria-label="Miden bridge" ref={swapCardRef}>
-          <div className="swap-card-top">
-            <h1>Bridge</h1>
-            <div
-              className="route-menu-root"
-              data-open={routeMenuOpen}
-              ref={routeMenuRef}
+        <h1 className="sr-only">Miden Bridge</h1>
+        <div className="bridge-tabs" role="tablist" aria-label="Bridge portal">
+          {(["bridge", "activity"] as const).map((tab) => (
+            <button
+              key={tab}
+              id={`${tab}-tab`}
+              type="button"
+              role="tab"
+              aria-selected={activeTab === tab}
+              aria-controls={`${tab}-panel`}
+              tabIndex={activeTab === tab ? 0 : -1}
+              onClick={() => setActiveTab(tab)}
+              onKeyDown={(event) => {
+                if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+                event.preventDefault();
+                const next = event.key === "Home" ? "bridge" : event.key === "End" ? "activity" : tab === "bridge" ? "activity" : "bridge";
+                setActiveTab(next);
+                document.getElementById(`${next}-tab`)?.focus();
+              }}
             >
-              <button
-                className="route-trigger"
-                type="button"
-                ref={routeTriggerRef}
-                aria-expanded={routeMenuOpen}
-                aria-haspopup={mobileRouteSheet ? "dialog" : "listbox"}
-                aria-controls="bridge-route-listbox"
-                onClick={() => setRouteMenuOpen((open) => !open)}
-              >
-                <span>Route</span>
-                <strong>{providerCopy.label}</strong>
-                <ChevronDown size={15} aria-hidden="true" />
-              </button>
-
-              {routeMenuOpen ? (
-                <>
-                  <button
-                    type="button"
-                    className="route-sheet-backdrop"
-                    aria-label="Close route menu"
-                    onClick={() => closeRouteMenu()}
-                  />
-                  <div
-                    className="route-options-layer"
-                    role={mobileRouteSheet ? "dialog" : undefined}
-                    aria-modal={mobileRouteSheet ? "true" : undefined}
-                    aria-label={mobileRouteSheet ? "Choose bridge route" : undefined}
-                    onKeyDown={handleRouteDialogKeyDown}
-                  >
-                    <div
-                      id="bridge-route-listbox"
-                      className="route-options-menu route-options-list open"
-                      role="listbox"
-                      aria-label="Bridge route"
-                      onKeyDown={handleRouteMenuKeyDown}
-                    >
-                  {(Object.keys(bridgeProviders) as BridgeProvider[]).flatMap((key) => {
-                    const routes = bridgeRoutes.filter((option) => !option.disabled && option.provider === key && option.mode === mode);
-                    const preferred = routes.find((option) => option.id === route.id) ?? routes.find((option) => option.source.network === route.source.network) ?? routes[0];
-                    return [preferred].map((optionRoute) => {
-                      const option = bridgeProviders[key];
-                      const optionFees = optionRoute ? directionFor(optionRoute).fees(optionRoute) : undefined;
-                      const selected = optionRoute?.id === route.id;
-                      const disabled = Boolean(option.disabled) || !optionRoute;
-                      return (
-                        <button
-                          className={`route-option ${selected ? "selected" : ""} ${disabled ? "disabled" : ""}`}
-                          type="button"
-                          role="option"
-                          aria-selected={selected}
-                          aria-disabled={disabled}
-                          disabled={disabled}
-                          key={optionRoute?.id ?? key}
-                          onClick={() => optionRoute && selectRouteOption(optionRoute)}
-                        >
-                          <span className="route-option-head">
-                            <strong>{option.label}</strong>
-                            <small className="route-tag testnet">
-                              {option.badge}
-                            </small>
-                            {selected ? (
-                              <Check
-                                className="route-check"
-                                size={15}
-                                aria-hidden="true"
-                              />
-                            ) : null}
-                          </span>
-                          <span className="route-option-sub">
-                            {disabled ? option.unavailableReason ?? "Unavailable in this direction" : `${optionRoute?.source.symbol ?? "—"} · ${networkLabels[optionRoute!.source.network]}${optionFees?.showEta ? ` · ${optionFees.eta}` : ""}`}
-                          </span>
-                        </button>
-                      );
-                    });
-                    })}
-                    </div>
-                  </div>
-                </>
-              ) : null}
-            </div>
-          </div>
-
-          {/* Keep the active route legible without reopening the menu: provider
-              is on the trigger; asset + ETA + persistent Testnet status here. */}
-          <div className="route-status-line" aria-label="Selected route summary">
-            <span className={`route-pill ${routeTone}`}>
-              {providerCopy.badge}
-            </span>
-            {fees.showEta ? <span className="route-pill">{quote.eta}</span> : null}
-            {fees.showEta ? <InfoTip label={routeNote} /> : null}
-          </div>
-
+              {tab === "bridge" ? "Bridge" : "Activity"}
+              {tab === "activity" && inFlightActivities.length > 0 ? <span className="activity-count">{inFlightActivities.length}</span> : null}
+            </button>
+          ))}
+        </div>
+        <div id="bridge-panel" role="tabpanel" aria-labelledby="bridge-tab" hidden={activeTab !== "bridge"} className="bridge-tab-panel">
+        <section className="swap-card" data-provider={provider} aria-label="Miden bridge" ref={swapCardRef}>
           {walletError ? (
             <p className="form-error compact">{walletError}</p>
           ) : null}
@@ -1194,101 +943,97 @@ export function BridgeExperience() {
                 title={item !== mode && !reverseBridgeRoute(route) ? providerCopy.unavailableReason : undefined}
                 onClick={() => selectMode(item)}
               >
-                {modes[item].label}
+                {item === "receive" ? "Deposit" : "Withdraw"}
               </button>
             ))}
           </div>
 
-          <div className="swap-box">
-            <div className="swap-box-head">
-              <span>From</span>
-              <ChainSelect route={route} side="source" onSelectRoute={selectRoute} />
-              {/* The Miden account is already in the field below, and a connected
-                  Sepolia address is already in the header — so a chip here only
-                  earns its space for an unconnected state (connect or
-                  connecting). Once connected, the balance row is
-                  all that's needed. */}
-              {sourceIdentity === evmIdentity &&
-              sourceIdentity.state !== "connected"
-                ? renderWalletChip(sourceIdentity)
-                : null}
-            </div>
-            <label className="swap-box-amount">
-              <input
-                aria-label="Amount"
-                inputMode="decimal"
-                placeholder="0"
-                value={amount}
-                onChange={(event) => setAmount(event.target.value)}
-              />
-            </label>
-            <div className="swap-box-foot">
-              {(() => {
-                const line =
-                  mode === "send" ? renderMidenBalance() : renderEvmBalance();
-                return line ? (
-                  <small className="balance-line">{line}</small>
-                ) : null;
-              })()}
-            </div>
-            <div className="swap-box-token">
-              <TokenSelect
-                route={route}
-                side="source"
-                onSelectRoute={selectRoute}
-              />
-            </div>
+          <div className="swap-panels" ref={walletPanelsRef}>
+            {(["source", "destination"] as const).map((side) => {
+              const isSource = side === "source";
+              const isMiden = route[side].kind === "miden";
+              // Keys follow the wallet, so reversing the route moves the mounted
+              // controls rather than disconnecting/reinitializing their adapters.
+              return (
+                <div className="swap-box" key={isMiden ? "miden" : "evm"} data-side={side}>
+                  <div className="swap-box-head">
+                    <span>{isSource ? "From" : "To"}</span>
+                    <ChainSelect route={route} side={side} onSelectRoute={selectRoute} />
+                  </div>
+                  <div className="panel-wallet" data-wallet={isMiden ? "miden" : "evm"}>
+                    {isMiden ? <MidenWalletButton onStateChange={handleMidenWalletState} /> : evmWalletControl}
+                  </div>
+                  {isSource ? (
+                    <label className="swap-box-amount">
+                      <input aria-label="Amount" inputMode="decimal" placeholder="0" value={amount}
+                        onChange={(event) => { setAmount(event.target.value); setRouteMenuOpen(false); }} />
+                    </label>
+                  ) : (
+                    <div className="readonly-amount swap-box-amount" aria-label="Expected received">
+                      <strong>{expectedReceivedAmount}</strong>
+                    </div>
+                  )}
+                  <div className="swap-box-token">
+                    <TokenSelect route={route} side={side} onSelectRoute={selectRoute} />
+                  </div>
+                  <div className="swap-box-foot">
+                    <FiatAmount amount={isSource ? amount : expectedReceivedAmount} symbol={route[side].symbol} />
+                    <small className="balance-line">{isMiden ? renderMidenBalance() : renderEvmBalance()}</small>
+                  </div>
+                  {isSource ? (
+            <button className="swap-divider" type="button" aria-label="Reverse transfer direction"
+              disabled={!reverseBridgeRoute(route)}
+              title={!reverseBridgeRoute(route) ? providerCopy.unavailableReason : "Reverse transfer direction"}
+              onClick={() => selectMode(mode === "receive" ? "send" : "receive")}>
+              <ArrowDownUp size={20} aria-hidden="true" />
+            </button>
+                  ) : null}
+                </div>
+              );
+            })}
+
           </div>
 
-          <div className="swap-divider" aria-hidden="true">
-            <ArrowDown size={18} />
-          </div>
-
-          <div className="swap-box">
-            <div className="swap-box-head">
-              <span>To</span>
-              <ChainSelect route={route} side="destination" onSelectRoute={selectRoute} />
-              {destinationIdentity === evmIdentity &&
-              destinationIdentity.state !== "connected"
-                ? renderWalletChip(destinationIdentity)
-                : null}
-            </div>
-            <label className="readonly-amount swap-box-amount">
-              <strong>
-                {expectedReceivedAmount}
-              </strong>
-            </label>
-            <div className="swap-box-foot">
-              {(() => {
-                const line =
-                  mode === "receive" ? renderMidenBalance() : renderEvmBalance();
-                return line ? (
-                  <small className="balance-line">{line}</small>
-                ) : null;
-              })()}
-            </div>
-            <div className="swap-box-token">
-              <TokenSelect
-                route={route}
-                side="destination"
-                onSelectRoute={selectRoute}
-              />
-            </div>
-          </div>
-
-          <label className="destination-input">
-            <span>{copy.destinationLabel}</span>
-            <input
-              ref={destinationInputRef}
-              value={destination}
-              onChange={(event) => setDestination(event.target.value)}
-              placeholder={destinationPlaceholder}
-              aria-label={copy.destinationLabel}
-            />
-            {showDestinationHelp ? <small>{destinationHelp}</small> : null}
-          </label>
           {bridgeError || quoteQuery.error ? <p className="form-error">{bridgeError || quoteQuery.error?.message}</p> : null}
 
+        </section>
+        <section className="transfer-route-card" data-provider={provider} data-has-amount={hasRouteAmount} aria-label="Transfer route">
+          <div className="transfer-route-details" hidden={!hasRouteAmount}>
+            <h2>Your route</h2>
+            <div className="transfer-route-heading">
+              <div className="provider-identity">
+                <strong className="selected-provider">{providerCopy.label}</strong>
+                <span className="route-pill selection-badge">{providerSelection === "automatic" ? "Automatic" : "Manual"}</span>
+              </div>
+              <button
+                className="route-trigger"
+                type="button"
+                ref={routeTriggerRef}
+                aria-expanded={routeMenuOpen && hasRouteAmount}
+                aria-controls="bridge-route-options"
+                onClick={() => setRouteMenuOpen((open) => !open)}
+              >
+                {routeMenuOpen ? "Close" : "Change"}
+              </button>
+            </div>
+            <div className="route-received" aria-label="Route received amount">{expectedReceivedAmount} <span>{destinationSymbol}</span></div>
+            <div
+              id="bridge-route-options"
+              className="transfer-route-options"
+              role="group"
+              aria-label="Compatible providers"
+              hidden={!routeMenuOpen}
+              onKeyDown={(event) => {
+                if (event.key === "Escape") {
+                  event.preventDefault();
+                  closeRouteMenu();
+                }
+              }}
+            >
+              <ProviderOptions route={route} amount={amount} received={expectedReceivedAmount} fee={feeDisplay} onSelect={selectRouteOption} />
+            </div>
+
+          <div className="route-footer">
           <div className="quote-summary" aria-label="Route quote">
             {fees.charging === "additional" || fees.charging === "deducted" ? <div><span>{feeLabel}</span><strong>{feeDisplay}</strong></div> : null}
             {fees.showEta ? <div>
@@ -1296,15 +1041,16 @@ export function BridgeExperience() {
               <strong>{quote.eta}</strong>
             </div> : null}
             <div>
-              <span>Min received</span>
-              <strong>{displayMinReceived}</strong>
-            </div>
-            <div>
               <span>Network fee</span>
               <strong>{networkFeeDisplay}</strong>
             </div>
           </div>
-
+          <div className="route-context">
+            <span>{providerSelection === "manual" ? "Selected by you" : "Selected automatically"}</span>
+            <InfoTip label={routeNote} />
+          </div>
+          </div>
+          </div>
           <div className="primary-action-dock">
             <button
               className="primary-button"
@@ -1313,16 +1059,14 @@ export function BridgeExperience() {
               onClick={handlePrimaryAction}
               disabled={cta.disabled}
             >
-              {cta.label}
+              {cta.action === "review" ? "Review transfer" : cta.label}
               {isSubmitting ? (
                 <RefreshCcw
                   size={18}
                   className="animate-spin"
                   aria-hidden="true"
                 />
-              ) : (
-                <ArrowRight size={18} aria-hidden="true" />
-              )}
+              ) : null}
             </button>
           </div>
           {showPreflight ? (
@@ -1340,12 +1084,12 @@ export function BridgeExperience() {
               <div className="preflight-panel">
                 <div className="preflight-head">
                   <span className="preflight-head-title">
-                    <ShieldCheck size={16} aria-hidden="true" />
-                    Review {mode === "receive" ? "receive" : "send"}
+                    Review transfer
+                    <span className="preflight-testnet">Testnet</span>
                   </span>
                   <button
                     type="button"
-                    className="preflight-close"
+                    className="preflight-close preflight-cancel"
                     onClick={cancelPreflight}
                     aria-label="Cancel review"
                   >
@@ -1354,80 +1098,61 @@ export function BridgeExperience() {
                 </div>
 
                 <div className="preflight-body">
-                  <div className="preflight-route">
-                    <strong>{copy.from}</strong>
-                    <ArrowRight size={15} aria-hidden="true" />
-                    <strong>{copy.to}</strong>
-                    <span className="preflight-testnet">Testnet</span>
+                  <div className="preflight-amount">
+                    <span className="preflight-quantity">{amount} <span>{route.source.symbol}</span></span>
+                    <FiatAmount amount={amount} symbol={route.source.symbol} />
+                  </div>
+
+                  <div className="preflight-path">
+                    {(["source", "destination"] as const).map((side) => {
+                      const isSource = side === "source";
+                      const account = isSource ? previewSource : previewDestination;
+                      const expanded = isSource ? showFullSource : showFullDestination;
+                      return (
+                        <div className="preflight-stop" key={side}>
+                          <NetworkLogo network={route[side].network} />
+                          <div className="preflight-stop-content">
+                            <strong>{networkLabels[route[side].network]}</strong>
+                            <div className="preflight-address">
+                              <span>{isSource ? "From" : "To"}</span>
+                              <button
+                                type="button"
+                                id={`preflight-${side}-value`}
+                                className="preflight-account"
+                                title={account}
+                                aria-label={`${expanded ? "Hide" : "Show full"} ${side} address: ${account}`}
+                                aria-expanded={expanded}
+                                onClick={() => isSource ? setShowFullSource(!expanded) : setShowFullDestination(!expanded)}
+                              >
+                                {expanded ? account : shortAddress(account)}
+                              </button>
+                              {!isSource ? (
+                                <button type="button" className="preflight-copy" aria-label={preflightDestinationCopied ? "Destination copied" : "Copy destination"} onClick={copyPreflightDestination}>
+                                  {preflightDestinationCopied ? <Check size={14} aria-hidden="true" /> : <Copy size={14} aria-hidden="true" />}
+                                </button>
+                              ) : null}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
 
                   <dl className="preflight-rows">
-                  <div>
-                    <dt>You send</dt>
-                    <dd>
-                      {amount} {sourceAssetLabel(route.source)}
-                    </dd>
-                  </div>
-                  <div>
-                    <dt>{fees.estimated ? "Estimated received" : "Expected received"}</dt>
-                    <dd>
-                      {expectedReceivedAmount} {destinationSymbol}
-                    </dd>
-                  </div>
-                  <div>
+                  {route.source.symbol !== destinationSymbol || Number(amount) !== Number(expectedReceivedAmount) ? <div>
+                    <dt>{fees.estimated ? "Estimated received" : "You receive"}</dt>
+                    <dd>{expectedReceivedAmount} {destinationSymbol}</dd>
+                  </div> : null}
+                  {quote.minReceived !== "Not quoted" && Number(quote.minReceived) !== Number(expectedReceivedAmount) ? <div>
                     <dt>Minimum received</dt>
                     <dd>{displayMinReceived}</dd>
-                  </div>
+                  </div> : null}
                   <div>
-                    <dt>Destination</dt>
-                    <dd className="preflight-destination">
-                      <span
-                        id="preflight-destination-value"
-                        className={showFullDestination ? "full" : undefined}
-                        title={previewDestination}
-                        aria-label={`Destination: ${previewDestination}`}
-                      >
-                        {showFullDestination
-                          ? previewDestination
-                          : shortAddress(previewDestination)}
-                      </span>
-                      {previewDestination.length > 16 ? (
-                        <button
-                          type="button"
-                          className="preflight-inspect"
-                          aria-controls="preflight-destination-value"
-                          aria-expanded={showFullDestination}
-                          aria-label={`${
-                            showFullDestination ? "Hide" : "Show full"
-                          } destination`}
-                          onClick={() =>
-                            setShowFullDestination((shown) => !shown)
-                          }
-                        >
-                          {showFullDestination ? "Hide" : "Show full"}
-                        </button>
-                      ) : null}
-                      <button
-                        type="button"
-                        className="preflight-inspect"
-                        aria-label="Copy destination"
-                        onClick={copyPreflightDestination}
-                      >
-                        {preflightDestinationCopied ? (
-                          <Check size={14} aria-hidden="true" />
-                        ) : (
-                          <Copy size={14} aria-hidden="true" />
-                        )}
-                        {preflightDestinationCopied ? "Copied" : "Copy"}
-                      </button>
-                    </dd>
-                  </div>
-                  <div>
-                    <dt>Route</dt>
+                    <dt>Provider</dt>
                     <dd>{providerCopy.label}</dd>
                   </div>
                   {fees.showEta ? <div>
-                    <dt>ETA</dt>
+                    <dt>Estimated time</dt>
                     <dd>{quote.eta}</dd>
                   </div> : null}
                   <div>
@@ -1438,24 +1163,19 @@ export function BridgeExperience() {
                     <dt>{feeLabel}</dt>
                     <dd>{feeDisplay}</dd>
                   </div>
-                  {fees.charging === "additional" && liveQuote?.fee !== undefined ? <div><dt>Total {route.source.symbol}</dt><dd>{formatUnits(parseUnits(amount, route.source.decimals) + parseUnits(liveQuote.fee, route.source.decimals), route.source.decimals)} {route.source.symbol}</dd></div> : null}
+                  {fees.charging === "additional" && liveQuote?.fee !== undefined && Number(liveQuote.fee) > 0 ? <div><dt>Total {route.source.symbol}</dt><dd>{formatUnits(parseUnits(amount, route.source.decimals) + parseUnits(liveQuote.fee, route.source.decimals), route.source.decimals)} {route.source.symbol}</dd></div> : null}
                   </dl>
 
-                  <p className="preflight-note">{routeNote}</p>
+                  {provider === "xreserve" ? <p className="preflight-note">{routeNote}</p> : null}
+                  {reviewWalletsChanged ? <p className="form-error" role="alert">Your connected wallet changed. Close this review and review the transfer again.</p> : null}
                 </div>
 
                 <div className="preflight-actions">
                   <button
                     type="button"
-                    className="secondary-button preflight-cancel"
-                    onClick={cancelPreflight}
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="button"
                     className="primary-button preflight-confirm"
                     ref={preflightConfirmRef}
+                    disabled={reviewWalletsChanged}
                     onClick={confirmPreflight}
                   >
                     Confirm in wallet
@@ -1467,8 +1187,16 @@ export function BridgeExperience() {
           ) : null}
         </section>
 
-        {(inFlightActivities.length > 0 || pastActivities.length > 0) && (
+        </div>
+        <div id="activity-panel" role="tabpanel" aria-labelledby="activity-tab" hidden={activeTab !== "activity"} className="activity-tab-panel">
           <div className="activity-region">
+            {inFlightActivities.length === 0 && pastActivities.length === 0 ? (
+              <div className="activity-empty">
+                <h2>No transfers yet</h2>
+                <p>Your current and past transfers will appear here.</p>
+                <button className="secondary-button" type="button" onClick={() => { setActiveTab("bridge"); document.getElementById("bridge-tab")?.focus(); }}>Make a transfer</button>
+              </div>
+            ) : null}
             {/* Live transfers stay as prominent standalone rows (they're what
                 you're waiting on); settled history collapses into the stack. */}
             {inFlightActivities.length > 0 && (
@@ -1480,8 +1208,8 @@ export function BridgeExperience() {
                   {inFlightActivities.map((activity) => (
                     <Link
                       className="home-activity-item"
-                      href={`/activity/${activity.id}`}
-                      key={activity.id}
+                      href={`/activity/${encodeURIComponent(activity.id)}`}
+                      key={encodeURIComponent(activity.id)}
                     >
                       <span
                         className={`status-dot ${statusTone(activity.status, activity)}`}
@@ -1511,7 +1239,7 @@ export function BridgeExperience() {
               title="Recent transfers"
             />
           </div>
-        )}
+        </div>
         </div>
       </section>
     </main>

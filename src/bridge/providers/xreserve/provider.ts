@@ -32,7 +32,7 @@ const depositPhases = {
   delivered: {
     status: "complete",
     order: 5,
-    headline: "Delivered on Miden — claim in your wallet",
+    headline: "Delivered on Miden",
     guidance: consumeNoteGuidance,
   },
   cancelled: {

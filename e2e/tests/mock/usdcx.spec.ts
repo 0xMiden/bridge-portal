@@ -12,13 +12,13 @@ async function recordBridgeFrames(page: Page) {
     // Observe every committed UI state, including flashes too short for a
     // Playwright visibility assertion to catch.
     new MutationObserver(() => {
-      const route = document.querySelector(".route-trigger")?.textContent;
+      const route = document.querySelector(".selected-provider")?.textContent;
       if (!route) return;
       const frame = {
         route,
-        source: document.querySelector<HTMLSelectElement>(".swap-box-head select")?.selectedOptions[0]?.textContent
+        source: document.querySelector('.swap-box-head [role="combobox"]')?.textContent
           ?? document.querySelector(".swap-box-head strong")?.textContent ?? "",
-        wallet: document.querySelector(".wallet-cluster .wallet-button")?.getAttribute("aria-label") ?? "",
+        wallet: document.querySelector('.panel-wallet[data-wallet="evm"] .wallet-button')?.getAttribute("aria-label") ?? "",
       };
       if (JSON.stringify(frame) !== JSON.stringify(frames.at(-1))) frames.push(frame);
     }).observe(document, { subtree: true, childList: true, characterData: true, attributes: true });
@@ -44,32 +44,69 @@ test("USDCx joins the shared form with Arc balances, exact amounts and deposit r
   await expect(page).toHaveURL(/provider=xreserve/);
   const bridge = new BridgePage(page);
   await bridge.waitForReady();
-  await expect(bridge.routeTrigger()).toContainText("USDCx");
-  await expect(page.locator(".mode-switch").getByRole("button", { name: "Send", exact: true })).toBeEnabled();
+  await expect(bridge.selectedProvider()).toContainText("USDCx");
+  await expect(page.locator(".mode-switch").getByRole("button", { name: "Withdraw", exact: true })).toBeEnabled();
   await expect(page.locator(".token-select-symbol")).toHaveText(["USDC", "USDCx"]);
   await expect(page.locator(".swap-box").first()).toContainText("Arc Testnet");
   await expect(page.locator(".swap-box").first()).toContainText("10.1234 USDC");
   await expect(page.getByRole("button", { name: "Arc Testnet wallet menu", exact: true })).toBeVisible();
   expect.soft((await bridgeFrames(page)).filter((frame) => !frame.route.includes("USDCx") || frame.source !== "Arc Testnet")).toEqual([]);
+  // Single-asset chains still expose a real, keyboard-operable token selector.
+  for (const symbol of ["USDC", "USDCx"]) {
+    const selector = page.getByRole("button", { name: `${symbol} — change token`, exact: true });
+    await selector.press("ArrowDown");
+    const options = page.getByRole("listbox", { name: "Token", exact: true }).getByRole("option");
+    await expect(options).toHaveCount(1);
+    await expect(options).toContainText(symbol);
+    const search = page.getByRole("searchbox", { name: "Search tokens by name or symbol" });
+    await expect(search).toBeFocused();
+    await search.press("ArrowDown");
+    await expect(options).toBeFocused();
+    await options.press("Enter");
+    await expect(selector).toBeFocused();
+  }
   const origin = page.getByRole("combobox", { name: "Origin chain", exact: true });
-  await expect(origin).toHaveValue("arc-testnet");
+  await expect(origin).toHaveText("Arc Testnet");
   await expect(page.locator(".swap-box").last().getByRole("combobox")).toHaveCount(0);
   await expect(page.locator(".swap-box").last().locator(".swap-box-head strong")).toHaveText("Miden");
   // A chain change resolves a supported route and clears the old amount. Token
   // menus stay on that chain, so selecting an asset cannot move it implicitly.
   await bridge.fillAmount("1.000001");
-  await origin.selectOption("sepolia");
+  await origin.press("ArrowDown");
+  await page.getByRole("option", { name: "Arc Testnet", exact: true }).press("Home");
+  const sepolia = page.getByRole("option", { name: "Sepolia", exact: true });
+  await expect(sepolia).toBeFocused();
+  await sepolia.press("Enter");
+  await expect(origin).toBeFocused();
   await expect(page.getByRole("textbox", { name: "Amount", exact: true })).toHaveValue("");
   await expect(page.getByRole("button", { name: "Sepolia wallet menu", exact: true })).toBeVisible();
   await expect(page.locator(".token-select-symbol")).toHaveText(["USDC", "USDCx"]);
   // Sepolia also offers Agglayer ETH; the selected USDCx route retains its token.
   await page.getByRole("button", { name: "USDC — change token", exact: true }).click();
   const tokens = page.getByRole("listbox", { name: "Token", exact: true });
-  await expect(tokens.getByRole("option", { name: /ETH.*Agglayer/ })).toBeEnabled();
-  await expect(tokens.getByRole("option", { name: /Epoch/ })).toHaveCount(0);
+  await expect(tokens.getByRole("option", { name: "ETH Ether", exact: true })).toBeEnabled();
+  await expect(tokens.getByRole("option")).toHaveText(["ETHEther", "USDCCircle USDC"]);
+  const search = page.getByRole("searchbox", { name: "Search tokens by name or symbol" });
+  await expect(search).toBeFocused();
+  for (const query of ["usdc", "  cIrClE  "]) {
+    await search.fill(query);
+    await expect(tokens.getByRole("option")).toHaveText(["USDCCircle USDC"]);
+  }
+  await search.fill("unknown-token");
+  await expect(tokens.getByRole("option")).toHaveCount(0);
+  await expect(page.getByRole("status").filter({ hasText: "No tokens found" })).toBeVisible();
+  await search.press("ArrowDown");
+  await expect(search).toBeFocused();
+  await search.fill("ether");
+  await search.press("ArrowUp");
+  await expect(tokens.getByRole("option", { name: "ETH Ether", exact: true })).toBeFocused();
   await page.keyboard.press("Escape");
-  await expect(page.locator(".mode-switch").getByRole("button", { name: "Send", exact: true })).toBeEnabled();
-  await origin.selectOption("arc-testnet");
+  await page.getByRole("button", { name: "USDC — change token", exact: true }).click();
+  await expect(search).toHaveValue("");
+  await expect(tokens.getByRole("option")).toHaveCount(2);
+  await page.keyboard.press("Escape");
+  await expect(page.locator(".mode-switch").getByRole("button", { name: "Withdraw", exact: true })).toBeEnabled();
+  await bridge.setChain("Arc Testnet");
   await expect(page.locator(".token-select-symbol")).toHaveText(["USDC", "USDCx"]);
   await expect(page.getByRole("button", { name: "Arc Testnet wallet menu", exact: true })).toBeVisible();
   expect.soft((await bridgeFrames(page)).filter((frame) => /wrong network/i.test(frame.wallet))).toEqual([]);
@@ -97,6 +134,7 @@ test("USDCx joins the shared form with Arc balances, exact amounts and deposit r
   await bridge.openPreflight();
   await bridge.cancelPreflight();
   await expect(bridge.primaryButton()).toBeFocused();
+  await page.getByRole("button", { name: "USDC — change token", exact: true }).click();
   await page.screenshot({ path: info.outputPath("usdcx-desktop.png"), fullPage: true, animations: "disabled" });
   await page.setViewportSize({ width: 390, height: 844 });
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
@@ -133,7 +171,7 @@ test("a saved deposit resumes tracking after reload without claiming delivery du
   await expect(receipt).toContainText("Arc Testnet tx");
   await expect(receipt).toContainText("1.000001 USDCx");
   await expect(receipt.getByRole("link", { name: /Arc explorer/i })).toHaveAttribute("href", `https://explorer.testnet.arc.io/tx/${hash}`);
-  await expect(receipt.locator(".rcpt-meta > div").filter({ hasText: "Miden time" })).toContainText("—");
+  await expect(receipt.getByText("Miden note", { exact: true }).locator("..")).toContainText("Pending");
   const stored = () => page.evaluate(() => JSON.parse(localStorage.getItem("miden.bridge.ui.activities")!)[0]);
   await expect.poll(async () => (await stored()).xreserveStatus).toBe("confirmed");
 
@@ -152,12 +190,11 @@ test("Circle origins retain Miden USDCx, review the separate fee and restore the
   const bridge = new BridgePage(page);
   await bridge.waitForReady();
   const origin = page.getByRole("combobox", { name: "Origin chain", exact: true });
-  for (const [network, label] of [["sepolia", "Sepolia"], ["base-sepolia", "Base Sepolia"], ["arbitrum-sepolia", "Arbitrum Sepolia"]]) {
-    await origin.selectOption(network);
+  for (const label of ["Sepolia", "Base Sepolia", "Arbitrum Sepolia"]) {
+    await bridge.setChain(label);
     await expect(page.locator(".token-select-symbol")).toHaveText(["USDC", "USDCx"]);
     await expect(page.locator(".swap-box").last().locator(".swap-box-head strong")).toHaveText("Miden");
     await bridge.fillAmount("1");
-    await bridge.fillDestination("0x4e6fb40fd2f6a55140df2c42dfb5b7");
     await expect(page.locator(".quote-summary")).toContainText("0.25 USDC");
     await bridge.openPreflight();
     await expect(bridge.preflight()).toContainText(label);
@@ -168,13 +205,12 @@ test("Circle origins retain Miden USDCx, review the separate fee and restore the
   // Reload the launch URL too: its provider must not reset the selected origin.
   await page.reload();
   await bridge.waitForReady();
-  await expect(origin).toHaveValue("arbitrum-sepolia");
+  await expect(origin).toHaveText("Arbitrum Sepolia");
   await page.goto("/");
   await bridge.waitForReady();
-  await expect(origin).toHaveValue("arbitrum-sepolia");
+  await expect(origin).toHaveText("Arbitrum Sepolia");
   expect((await bridgeFrames(page)).filter((frame) => frame.source !== "Arbitrum Sepolia" || !frame.route.includes("USDCx"))).toEqual([]);
   await bridge.fillAmount("1");
-  await bridge.fillDestination("0x4e6fb40fd2f6a55140df2c42dfb5b7");
   await expect(page.locator(".quote-summary")).toContainText("0.25 USDC");
   await page.screenshot({ path: info.outputPath("usdcx-origins-desktop.png"), fullPage: true, animations: "disabled" });
   await page.setViewportSize({ width: 390, height: 844 });
@@ -197,10 +233,9 @@ test("browsing routes leaves the wallet alone; confirming switches chains and a 
   await page.goto("/?provider=xreserve");
   const bridge = new BridgePage(page);
   await bridge.waitForReady();
-  await page.getByRole("combobox", { name: "Origin chain", exact: true }).selectOption("sepolia");
-  await page.getByRole("combobox", { name: "Origin chain", exact: true }).selectOption("arc-testnet");
+  await bridge.setChain("Sepolia");
+  await bridge.setChain("Arc Testnet");
   await bridge.fillAmount("1.000001");
-  await bridge.fillDestination("0x4e6fb40fd2f6a55140df2c42dfb5b7");
   await expect(page.locator(".form-error")).toHaveCount(0);
   await bridge.openPreflight();
   expect(arcReads).toBe(0);
@@ -210,7 +245,7 @@ test("browsing routes leaves the wallet alone; confirming switches chains and a 
   await bridge.confirmPreflight();
   await expect(page.locator(".form-error").filter({ hasText: /cancelled/i })).toBeVisible();
   expect(arcReads).toBe(0);
-  await expect(bridge.routeTrigger()).toContainText("USDCx");
+  await expect(bridge.selectedProvider()).toContainText("USDCx");
   await expect(page.getByRole("textbox", { name: "Amount", exact: true })).toHaveValue("1.000001");
   await page.evaluate(() => localStorage.setItem("e2e-signer-mode", "sign"));
   await bridge.openPreflight();
@@ -226,15 +261,18 @@ test("USDCx withdrawals restore the destination and show the net payout estimate
   await bridge.waitForReady();
   await expect(page.locator(".token-select-symbol")).toHaveText(["USDCx", "USDC"]);
   const destinationChain = page.getByRole("combobox", { name: "Destination chain", exact: true });
-  await destinationChain.selectOption("base-sepolia");
+  await bridge.setChain("Base Sepolia");
   await page.reload();
   await bridge.waitForReady();
-  await expect(destinationChain).toHaveValue("base-sepolia");
+  await expect(destinationChain).toHaveText("Base Sepolia");
   await bridge.fillAmount("2.000001");
   await bridge.openPreflight();
   await expect(bridge.preflight()).toContainText("2.000001 USDCx");
   await expect(bridge.preflight()).toContainText("1.983601 USDC");
   await expect(bridge.preflight()).toContainText("0.0164 USDC (estimated)");
-  await expect(bridge.preflight()).toContainText("Not quoted");
+  await expect(bridge.preflight().getByText("Minimum received", { exact: true })).toHaveCount(0);
+  await expect(bridge.preflight().locator(".fiat-amount")).toHaveText("$2.00");
+  await expect(page.locator("#preflight-source-value")).toHaveAttribute("title", await page.evaluate(() => window.__E2E__!.midenAddress!));
+  await expect(page.locator("#preflight-destination-value")).toHaveAttribute("title", await page.evaluate(() => window.__E2E__!.evmAddress!));
   await expect(bridge.preflight()).toContainText("Burning USDCx is irreversible");
 });

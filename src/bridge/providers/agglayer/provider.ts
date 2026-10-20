@@ -159,7 +159,7 @@ const directions = {
       complete: {
         status: "complete",
         order: 5,
-        headline: "Delivered on Miden — claim in your wallet",
+        headline: "Delivered on Miden",
         guidance: consumeNoteGuidance,
       },
       claim_available: {
@@ -179,7 +179,6 @@ const directions = {
 export const agglayer: Provider = {
   label: "Agglayer",
   badge: "Testnet",
-  unavailableReason: "Agglayer withdrawals are not available yet",
   directions,
   load: () => import("./flows"),
 };

@@ -1,16 +1,16 @@
 # AggLayer Cardona Testnet Integration
 
-The UI supports ETH deposits from Ethereum Sepolia into Miden testnet through
-the Cardona deployment. Withdrawals are temporarily disabled, like USDCx.
-Gateway confirmed this deployment and tested both directions on 2026-10-09;
-the portal currently enables deposits only.
+The UI supports ETH deposits from Ethereum Sepolia into Miden testnet and
+withdrawals back to Sepolia through the Cardona deployment. Gateway confirmed
+this deployment and tested both directions on 2026-10-09.
 
 Source: [Gateway deployment parameters in Slack](https://midengroup.slack.com/archives/C0A1LENARH9/p1791550662283559).
 
 ## Supported now
 
-- Route: Sepolia to Miden.
-- Action: `bridgeAsset(uint32,address,uint256,address,bool,bytes)` on the Sepolia bridge contract.
+- Routes: Sepolia to Miden and Miden to Sepolia.
+- Deposit action: `bridgeAsset(uint32,address,uint256,address,bool,bytes)` on the Sepolia bridge contract.
+- Withdrawal action: a Bread-signed `B2AGG` note from Miden to the connected Sepolia wallet.
 - Contract: `0x528e26b25a34a4a5d0dbda1d57d318153d2ed582`.
 - Destination rollup ID: `73` (synthetic EVM chain ID: `604208969`).
 - Miden bridge account: `0x187cabbc404359d16be94954ca9879`.
@@ -33,13 +33,14 @@ bridge destination slot as:
 0x00000000<MIDEN_ACCOUNT_ID>00
 ```
 
-## Existing withdrawal receipts
+## Withdrawals
 
-New Miden-to-Sepolia withdrawals are disabled. The Send button is unavailable,
-and saved withdrawal selections or launch links fall back to Agglayer Receive.
-Submission also rejects the paused route before requesting a wallet signature.
+Select ETH and Withdraw to send Miden ETH to the connected Sepolia wallet.
+Load the Miden balance, enter the amount, review the transfer, and confirm the
+`B2AGG` note in Bread. Saved withdrawal selections and
+`?provider=agglayer&mode=send` launch links open the withdrawal route directly.
 
-Existing withdrawal receipts remain available. Gateway FM observes their
+The receipt records the Miden transaction hash. Gateway FM observes
 `B2AGG` exits and auto-claims them on Sepolia once the proof is ready.
 
 The Activity detail page keeps these states separate:
@@ -54,8 +55,8 @@ The Activity detail page keeps these states separate:
 - AggLayer Cross-chain Receive submits a real Sepolia transaction.
 - AggLayer activity receipts link to Etherscan and Midenscan for public
   transaction evidence.
-- AggLayer Cross-chain Send is disabled for new transfers. Existing receipts
-  continue tracking Gateway's Sepolia auto-claim.
+- AggLayer Cross-chain Send submits a Miden `B2AGG` note. Its receipt tracks
+  Gateway's Sepolia auto-claim.
 - Activity details poll bridge status and update the receipt once the bridge
   service reports a bridge event for the destination.
 - A Sepolia-to-Miden bridge is delivered when the Miden claim transaction

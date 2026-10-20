@@ -71,7 +71,7 @@ export function agglayerPatch(
       midenTxId: deposit.claim_tx_hash || undefined,
       readyForClaim: delivered,
       status: delivered ? "complete" : "message_observed",
-      eta: delivered ? "Delivered — claim in your Bread wallet" : "Agglayer message observed",
+      eta: delivered ? "Delivered on Miden" : "Agglayer message observed",
     };
   }
   // A ready send still needs the Sepolia claim. Only the claimed exit proves delivery.

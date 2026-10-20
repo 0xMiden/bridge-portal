@@ -7,11 +7,10 @@ import { useEffect, useRef, useState } from "react";
 import { shortAddress } from "../../wallets/identity";
 import { type Activity, buildDiagnostics } from "../lib/bridge-presentation";
 import { type ActivityDetailModel, activityDetailFor } from "../lib/activity-detail-presentation";
-import { useSepoliaGasEstimate } from "../lib/sepolia-gas";
 import { formatAgo } from "../lib/relative-time";
 import { useActivityTracking } from "../lib/use-activity-tracking";
 import { ThemeToggle } from "./ThemeToggle";
-import { TempoReceipt } from "./TempoReceipt";
+import { ActivityJourney } from "./ActivityJourney";
 
 type Tracking = ReturnType<typeof useActivityTracking>;
 type LoadedActivityProps = Pick<Tracking, "monitorError" | "lastCheckedAt" | "refresh"> & {
@@ -52,14 +51,16 @@ export function ActivityDetail({ id }: { id: string }) {
 
 function LoadedActivity({ activity, monitorError, lastCheckedAt, refresh }: LoadedActivityProps) {
   const model = activityDetailFor(activity);
+  const needsClaim = model.progress.kind === "tracked" && model.progress.milestones.some((step) => step.status === "consume" && step.state === "current");
   return (
-    <section className="detail-simple detail-complete">
+    <section className="detail-simple detail-journey">
       <p className="sr-only activity-status-announcement" role="status" aria-live="polite" aria-atomic="true">
         {model.announcement}
       </p>
-      <ActivityReceipt receipt={model.receipt} />
-      <ActivityProgress progress={model.progress} lastCheckedAt={lastCheckedAt} refresh={refresh} />
-      {model.guidance && <ActivityGuidance guidance={model.guidance} />}
+      <ActivityJourney receipt={model.receipt} needsClaim={needsClaim}>
+        <ActivityProgress progress={model.progress} lastCheckedAt={lastCheckedAt} refresh={refresh} claimGuidance={needsClaim ? model.guidance : null} />
+        {model.guidance && !needsClaim && <ActivityGuidance guidance={model.guidance} />}
+      </ActivityJourney>
       {monitorError && model.progress.kind === "tracked" && (
         <p className="form-error compact">{monitorError}</p>
       )}
@@ -70,13 +71,8 @@ function LoadedActivity({ activity, monitorError, lastCheckedAt, refresh }: Load
   );
 }
 
-function ActivityReceipt({ receipt }: { receipt: ActivityDetailModel["receipt"] }) {
-  const gas = useSepoliaGasEstimate(receipt.sepoliaGasUnits);
-  const networkFee = gas.fee ?? (gas.loading ? "Estimating…" : receipt.networkFee);
-  return <TempoReceipt {...receipt} networkFee={networkFee} />;
-}
-
-function ActivityProgress({ progress, lastCheckedAt, refresh }: {
+function ActivityProgress({ progress, lastCheckedAt, refresh, claimGuidance }: {
+  claimGuidance: ActivityDetailModel["guidance"];
   progress: ActivityDetailModel["progress"];
   lastCheckedAt: number;
   refresh: () => void;
@@ -95,19 +91,22 @@ function ActivityProgress({ progress, lastCheckedAt, refresh }: {
   }
   return (
     <>
-      <div className={`steps-card ${progress.complete ? "compact" : ""}`}>
+      <div className="steps-card">
         <p className="steps-card-title">Bridge steps</p>
         <ol className="milestone-list">
-          {progress.milestones.map((milestone) => (
-            <li key={milestone.status} className={`milestone ${milestone.status === "consume" ? "consume " : ""}${milestone.state}`}>
+          {progress.milestones.map((milestone, index) => (
+            <li key={milestone.status} aria-current={milestone.state === "current" ? "step" : undefined} className={`milestone ${milestone.status === "consume" ? "consume " : ""}${milestone.state}`}>
               <span className="milestone-marker" aria-hidden="true">
                 {milestone.status === "consume" ? <Wallet size={12} />
                   : milestone.state === "done" ? <Check size={12} />
-                  : milestone.state === "failed" ? <AlertTriangle size={12} /> : null}
+                  : milestone.state === "failed" ? <AlertTriangle size={12} /> : index + 1}
               </span>
               <div className="milestone-copy">
                 <strong>{milestone.label}</strong>
-                <span>{milestone.detail}</span>
+                {milestone.status === "consume" && claimGuidance ? <>
+                  <span>{claimGuidance.body}</span>
+                  {claimGuidance.steps && <ol className="journey-claim-steps">{claimGuidance.steps.map((step) => <li key={step}>{step}</li>)}</ol>}
+                </> : (milestone.state === "current" || milestone.state === "failed" || milestone.status === "consume") && <span>{milestone.detail}</span>}
               </div>
             </li>
           ))}
@@ -139,7 +138,7 @@ function LiveProgress({ lastCheckedAt, deliveryWarningAt }: {
     <>
       <p className="steps-note">
         <ShieldCheck size={13} aria-hidden="true" />
-        Safe to leave — this keeps progressing on-chain and monitoring resumes when you reopen this page.
+        Safe to leave. Tracking resumes when you return.
         {checked ? ` Updated ${checked}.` : ""}
       </p>
       {deliveryWarningAt !== undefined && now > deliveryWarningAt && (

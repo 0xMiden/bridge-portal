@@ -23,8 +23,8 @@ Testnet only. To exercise the live bridge path locally you need:
 
 - **A Miden testnet wallet** — the MidenFi extension (or the Bread wallet). It
   supplies the Miden testnet account and signs the Miden-side transactions. Its
-  bech32 address (or the 30-hex account ID) is what you paste as the Receive
-  destination.
+  connected account is used automatically as the Receive destination. Both
+  wallets must be connected; recipient addresses cannot be entered manually.
 - **Miden testnet funds** — from the Miden faucet at
   `https://faucet.testnet.miden.io`.
 - **Sepolia funds** — an EVM wallet (WalletConnect or a `window.ethereum`

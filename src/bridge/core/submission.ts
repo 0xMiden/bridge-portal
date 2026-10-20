@@ -18,7 +18,7 @@ export interface TransferSubmission {
   };
   midenWallet: {
     connected: boolean;
-    /** Connected or wallet-launch account, matching the form's resolved address. */
+    /** Current connected account, also used for the transfer recipient. */
     address: string;
     requestTransaction?: MessageSignerWalletAdapter["requestTransaction"];
     waitForTransaction?: MessageSignerWalletAdapter["waitForTransaction"];

@@ -57,8 +57,10 @@ export function MidenWalletProvider({ children }: { children: ReactNode }) {
         key={providerKey}
         appName="Miden Bridge"
         network={WalletAdapterNetwork.Testnet}
-        privateDataPermission={PrivateDataPermission.UponRequest}
-        allowedPrivateData={AllowedPrivateData.None}
+        // Request balance access in Bread's connection approval. Once granted,
+        // asset reads need no additional prompt; notes and storage are excluded.
+        privateDataPermission={PrivateDataPermission.Auto}
+        allowedPrivateData={AllowedPrivateData.Assets}
         localStorageKey="miden-bridge-wallet"
       >
         {process.env.NEXT_PUBLIC_E2E_TEST !== "true" ? <MidenBalanceSession /> : null}
