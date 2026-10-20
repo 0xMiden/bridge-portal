@@ -81,17 +81,17 @@ test("USDCx joins the shared form with Arc balances, exact amounts and deposit r
   await expect(page.getByRole("textbox", { name: "Amount", exact: true })).toHaveValue("");
   await expect(page.getByRole("button", { name: "Sepolia wallet menu", exact: true })).toBeVisible();
   await expect(page.locator(".token-select-symbol")).toHaveText(["USDC", "USDCx"]);
-  // Sepolia also offers Agglayer ETH; the selected USDCx route retains its token.
+  // Sepolia offers other providers' tokens; the USDCx route retains Circle USDC.
   await page.getByRole("button", { name: "USDC — change token", exact: true }).click();
   const tokens = page.getByRole("listbox", { name: "Token", exact: true });
   await expect(tokens.getByRole("option", { name: "ETH Ether", exact: true })).toBeEnabled();
-  await expect(tokens.getByRole("option")).toHaveText(["ETHEther", "USDCCircle USDC"]);
+  await expect(tokens.getByRole("option", { name: "USDC Circle USDC", exact: true })).toHaveAttribute("aria-selected", "true");
   const search = page.getByRole("searchbox", { name: "Search tokens by name or symbol" });
   await expect(search).toBeFocused();
-  for (const query of ["usdc", "  cIrClE  "]) {
-    await search.fill(query);
-    await expect(tokens.getByRole("option")).toHaveText(["USDCCircle USDC"]);
-  }
+  await search.fill("usdc");
+  await expect(tokens.getByRole("option")).toHaveText(["USDCEpoch test USDC", "USDCCircle USDC"]);
+  await search.fill("  cIrClE  ");
+  await expect(tokens.getByRole("option")).toHaveText(["USDCCircle USDC"]);
   await search.fill("unknown-token");
   await expect(tokens.getByRole("option")).toHaveCount(0);
   await expect(page.getByRole("status").filter({ hasText: "No tokens found" })).toBeVisible();
@@ -103,7 +103,8 @@ test("USDCx joins the shared form with Arc balances, exact amounts and deposit r
   await page.keyboard.press("Escape");
   await page.getByRole("button", { name: "USDC — change token", exact: true }).click();
   await expect(search).toHaveValue("");
-  await expect(tokens.getByRole("option")).toHaveCount(2);
+  await expect(tokens.getByRole("option", { name: "ETH Ether", exact: true })).toBeVisible();
+  await expect(tokens.getByRole("option", { name: "USDC Circle USDC", exact: true })).toHaveAttribute("aria-selected", "true");
   await page.keyboard.press("Escape");
   await expect(page.locator(".mode-switch").getByRole("button", { name: "Withdraw", exact: true })).toBeEnabled();
   await bridge.setChain("Arc Testnet");

@@ -21,7 +21,7 @@ export class BridgePage {
     if (!new RegExp(route, "i").test((await this.selectedProvider().textContent()) ?? "")) {
       await this.setChain("Sepolia");
       await this.page.locator(".token-select-trigger").first().click();
-      const token = route === "AggLayer" ? "ETH Ether" : route === "USDCx" ? "USDC Circle USDC" : "USDC USD Coin";
+      const token = route === "AggLayer" ? "ETH Ether" : route === "USDCx" ? "USDC Circle USDC" : "USDC Epoch test USDC";
       await this.page.getByRole("listbox", { name: "Token", exact: true })
         .getByRole("option", { name: token, exact: true }).click();
     }

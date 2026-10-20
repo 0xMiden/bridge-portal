@@ -53,7 +53,7 @@ afterEach(() => vi.unstubAllGlobals());
 function setup(overrides: Partial<TransferSubmission> = {}) {
   const evmRequest = vi.fn<EvmProvider["request"]>().mockResolvedValue(SEPOLIA_NETWORK.chainHex);
   const input: TransferSubmission = {
-    routeId: "epoch-usdc-to-miden",
+    routeId: "epoch-test-usdc-to-miden",
     amount: "0.123456",
     insufficientBalance: false,
     evmBalance: "1 USDC",
@@ -106,11 +106,12 @@ describe("submission validation", () => {
 
   it.each([
     ["unknown route", { routeId: "unknown-route" }, /isn't available/],
+    ["retired Epoch faucet", { routeId: "epoch-usdc-to-miden" }, /isn't available/],
     ["insufficient balance", { insufficientBalance: true }, /Not enough USDC/],
-    ["disconnected Miden source", { routeId: "epoch-usdc-to-sepolia", midenWallet: { connected: false, address: "" } }, /Connect your Bread wallet/],
+    ["disconnected Miden source", { routeId: "epoch-test-usdc-to-sepolia", midenWallet: { connected: false, address: "" } }, /Connect your Bread wallet/],
     ["disconnected Miden destination with a stale address", { routeId: "agglayer-eth-to-miden", midenWallet: { connected: false, address: MIDEN_ACCOUNT } }, /Connect your Bread wallet/],
     ["Miden recipient differs from the connected wallet", { midenAccount: "0x4e6fb40fd2f6a55140df2c42dfb5b7" }, /wallet changed.*review/i],
-    ["EVM recipient differs from the connected wallet", { routeId: "epoch-usdc-to-sepolia", evmAddress: `0x${"22".repeat(20)}` }, /wallet changed.*review/i],
+    ["EVM recipient differs from the connected wallet", { routeId: "epoch-test-usdc-to-sepolia", evmAddress: `0x${"22".repeat(20)}` }, /wallet changed.*review/i],
   ] satisfies Array<[string, Partial<TransferSubmission>, RegExp]>)("rejects %s before signing or creating an activity", async (_name, overrides, message) => {
     const { input, effects, evmRequest } = setup(overrides);
     await submitBridgeTransfer(input, effects);
@@ -124,7 +125,7 @@ describe("submission validation", () => {
     expect(effects.onSubmittingChange.mock.lastCall?.[0] ?? false).toBe(false);
   });
 
-  it.each(["epoch-usdc-to-miden", "agglayer-eth-to-miden", "epoch-usdc-to-sepolia"])("requests the EVM connection for a disconnected source or destination on %s", async (routeId) => {
+  it.each(["epoch-test-usdc-to-miden", "agglayer-eth-to-miden", "epoch-test-usdc-to-sepolia"])("requests the EVM connection for a disconnected source or destination on %s", async (routeId) => {
     const { input, effects } = setup({ routeId, evmWallet: { connected: false, address: EVM_ADDRESS } });
     await submitBridgeTransfer(input, effects);
 
@@ -151,12 +152,17 @@ describe("Agglayer submission", () => {
 });
 
 describe("Epoch activity lifecycle", () => {
-  it("persists the acknowledged submission before navigation, then saves solver tracking data", async () => {
+  it.each([
+    { routeId: "epoch-test-usdc-to-miden", mode: "receive", destination: MIDEN_ACCOUNT },
+    { routeId: "epoch-usdcx-to-sepolia", mode: "send", destination: EVM_ADDRESS },
+  ] as const)("persists $mode accounts and source evidence before navigation, then saves solver tracking data", async ({ routeId, mode, destination }) => {
     const started = Promise.withResolvers<void>();
     const execution = Promise.withResolvers<EpochExecuteResult>();
-    const { input, effects } = setup();
+    const { input, effects } = setup({ routeId });
     effects.navigate.mockImplementation((path: string) => {
-      expect(path).toBe(`/activity/${loadStoredActivities()[0].id}`);
+      const [activity] = loadStoredActivities();
+      expect(path).toBe(`/activity/${activity.id}`);
+      expect(activity).toMatchObject({ midenAccount: MIDEN_ACCOUNT, evmAddress: EVM_ADDRESS });
     });
     vi.mocked(runEpochTransfer).mockImplementation(() => {
       expect(effects.navigate).not.toHaveBeenCalled();
@@ -174,10 +180,10 @@ describe("Epoch activity lifecycle", () => {
     expect(effects.onPhaseChange).toHaveBeenLastCalledWith("Confirm the deposit in your wallet…");
     onSubmitted!({ sourceTxHash: TX_HASH });
     const [submitted] = loadStoredActivities();
-    expect(submitted).toMatchObject({ provider: "epoch", status: "source_finality", sourceTxHash: TX_HASH, destination: MIDEN_ACCOUNT });
+    expect(submitted).toMatchObject({ provider: "epoch", status: "source_finality", sourceTxHash: TX_HASH, destination });
 
     execution.resolve({
-      direction: "receive", intentNonce: "42", sponsorAddress: EVM_ADDRESS,
+      direction: mode, intentNonce: "42", sponsorAddress: EVM_ADDRESS,
       sourceTxHash: TX_HASH, outputAmount: "0.123456789012345678",
       raw: { taskTypeString: "test", intentData: {} },
     });
@@ -187,6 +193,7 @@ describe("Epoch activity lifecycle", () => {
       id: submitted.id, status: "message_observed", eta: "1-3 min",
       epochIntentNonce: "42", epochSponsor: EVM_ADDRESS,
       sourceTxHash: TX_HASH, receivedAmount: "0.123456789012345678",
+      midenAccount: MIDEN_ACCOUNT, evmAddress: EVM_ADDRESS,
     });
     expect(effects.onActivitiesChange).toHaveBeenLastCalledWith(loadStoredActivities());
     expect(effects.onSubmittingChange).toHaveBeenLastCalledWith(false);

@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { defaultBridgeRoute, type BridgeRoute } from "../../core/routes";
+import { defaultBridgeRoute, findBridgeRoute, type BridgeRoute } from "../../core/routes";
 import type { BridgeAsset } from "../../core/assets";
 import { runEpochTransfer } from "./epoch-execute";
 import { quoteEpochReceive, quoteEpochSend } from "./epoch-quote";
@@ -41,16 +41,25 @@ const customMiden: BridgeAsset = {
 // The synthetic pair is intentionally not registered. It proves Epoch's inputs
 // come from the route, rather than defaulting to the current USDC constants.
 describe.each([
-  { name: "registered USDC", evm: "0x2BB4FfD7E2c6D432b697554Efd77fA13bdbefd69", evmDecimals: 18,
-    faucet: "0x537c15a622074e91188aa894456c52", midenDecimals: 6, sendUnits: 1250000n,
+  { name: "registered USDC", route: "epoch-test-usdc", evm: "0x2BB4FfD7E2c6D432b697554Efd77fA13bdbefd69", evmDecimals: 18,
+    faucet: "0x5b043dcb48d5721106f7a1ceb2b804", midenDecimals: 6, sendUnits: 1250000n,
     sendOutput: "0.000000000125", receiveOutput: "125", symbol: "USDC", midenSymbol: "USDC" },
+  { name: "registered DAI", route: "epoch-dai", evm: "0xc30f1Ce05d1434d484E9A47283aA925fc8A8699a", evmDecimals: 18,
+    faucet: "0xd41499b8f142ad9119fd9da357a3b2", midenDecimals: 6, sendUnits: 1250000n,
+    sendOutput: "0.000000000125", receiveOutput: "125", symbol: "DAI", midenSymbol: "DAI" },
+  { name: "registered USDT", route: "epoch-usdt", evm: "0xc04d2869665Be874881133943523723Be5782720", evmDecimals: 18,
+    faucet: "0x0ead4362a745e7d1790d75ea779611", midenDecimals: 6, sendUnits: 1250000n,
+    sendOutput: "0.000000000125", receiveOutput: "125", symbol: "USDT", midenSymbol: "USDT" },
+  { name: "registered WBTC", route: "epoch-wbtc", evm: "0x9b2a2754a9182fD65360E23afCDf3BeFF51796E9", evmDecimals: 18,
+    faucet: "0x1b22d80328f58c5171f67a85f170a3", midenDecimals: 6, sendUnits: 1250000n,
+    sendOutput: "0.000000000125", receiveOutput: "125", symbol: "WBTC", midenSymbol: "WBTC" },
   { name: "another token pair", evm: "0x2222222222222222222222222222222222222222", evmDecimals: 8,
     faucet: "0x123456789012345678901234567890", midenDecimals: 2, sendUnits: 125n,
     sendOutput: "1.25", receiveOutput: "1250000", symbol: "TEST", midenSymbol: "MTEST" },
 ])("Epoch route token inputs: $name", (expected) => {
   function route(mode: "send" | "receive"): BridgeRoute {
     const registered = defaultBridgeRoute("epoch", mode)!;
-    return expected.name === "registered USDC" ? registered : {
+    return expected.route ? findBridgeRoute(`${expected.route}-to-${mode === "send" ? "sepolia" : "miden"}`)! : {
       ...registered, id: "unregistered-test-pair",
       source: mode === "send" ? customMiden : customEvm,
       destination: mode === "send" ? customEvm : customMiden,

@@ -53,6 +53,8 @@ async function execute(
   const { runEpochTransfer } = await import("./epoch-execute");
   const accounts = {
     destination,
+    midenAccount: input.midenAccount,
+    evmAddress: input.evmAddress,
     midenAccountHex: route.mode === "receive" ? midenAccountLink(destination) : undefined,
     epochSponsor: input.evmAddress,
   };

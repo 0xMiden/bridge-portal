@@ -52,6 +52,7 @@ export const SEPOLIA_ETH = {
 
 // The existing testnet USDC contract uses 18 decimals, unlike Miden's faucet.
 export const SEPOLIA_USDC = {
+  name: "Epoch test USDC",
   network: "sepolia", kind: "erc20", symbol: "USDC", decimals: 18,
   address: "0x2BB4FfD7E2c6D432b697554Efd77fA13bdbefd69",
 } as const satisfies BridgeAsset;
@@ -61,9 +62,49 @@ export const MIDEN_ETH = {
   faucetId: "0x7c6d1dc7fb7045913d524bbef017f5",
 } as const satisfies BridgeAsset;
 
+// Retired v0.16 Epoch faucet, retained for saved activity receipts.
 export const MIDEN_USDC = {
   network: "miden-testnet", kind: "miden", symbol: "USDC", decimals: 6,
   faucetId: "0x537c15a622074e91188aa894456c52",
+} as const satisfies BridgeAsset;
+
+// Current v0.17 faucets from https://userdashboard.epochprotocol.xyz/faucets.
+// Positive allocator quotes verified in both directions on 2026-10-20.
+// These mocks have 18 decimals on Sepolia and 6 on Miden (including WBTC).
+export const EPOCH_MIDEN_USDC = {
+  name: "Epoch test USDC",
+  network: "miden-testnet", kind: "miden", symbol: "USDC", decimals: 6,
+  faucetId: "0x5b043dcb48d5721106f7a1ceb2b804",
+} as const satisfies BridgeAsset;
+export const EPOCH_SEPOLIA_DAI = {
+  name: "Epoch test DAI",
+  network: "sepolia", kind: "erc20", symbol: "DAI", decimals: 18,
+  address: "0xc30f1Ce05d1434d484E9A47283aA925fc8A8699a",
+} as const satisfies BridgeAsset;
+export const EPOCH_MIDEN_DAI = {
+  name: "Epoch test DAI",
+  network: "miden-testnet", kind: "miden", symbol: "DAI", decimals: 6,
+  faucetId: "0xd41499b8f142ad9119fd9da357a3b2",
+} as const satisfies BridgeAsset;
+export const EPOCH_SEPOLIA_USDT = {
+  name: "Epoch test USDT",
+  network: "sepolia", kind: "erc20", symbol: "USDT", decimals: 18,
+  address: "0xc04d2869665Be874881133943523723Be5782720",
+} as const satisfies BridgeAsset;
+export const EPOCH_MIDEN_USDT = {
+  name: "Epoch test USDT",
+  network: "miden-testnet", kind: "miden", symbol: "USDT", decimals: 6,
+  faucetId: "0x0ead4362a745e7d1790d75ea779611",
+} as const satisfies BridgeAsset;
+export const EPOCH_SEPOLIA_WBTC = {
+  name: "Epoch test WBTC",
+  network: "sepolia", kind: "erc20", symbol: "WBTC", decimals: 18,
+  address: "0x9b2a2754a9182fD65360E23afCDf3BeFF51796E9",
+} as const satisfies BridgeAsset;
+export const EPOCH_MIDEN_WBTC = {
+  name: "Epoch test WBTC",
+  network: "miden-testnet", kind: "miden", symbol: "WBTC", decimals: 6,
+  faucetId: "0x1b22d80328f58c5171f67a85f170a3",
 } as const satisfies BridgeAsset;
 
 export function assetKey(asset: BridgeAsset): string {

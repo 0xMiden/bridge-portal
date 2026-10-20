@@ -5,10 +5,8 @@ import { type EvmProvider, ensureSepolia } from "../../wallets/evm/evm-wallet";
 
 // Epoch's Sepolia USDC is a mock ERC20 with a permissionless `mint(to, amount)`
 // (0x40c10f19) — the same contract the bridge reads balances from. Minting this
-// bootstraps every route: mint USDC -> Epoch receive -> you now hold Miden USDC
-// for an Epoch send; bridge ETH in via Agglayer receive -> you hold Miden ETH.
-// The Miden-side faucets are dashboard-only (no public endpoint), so those are
-// link-outs, not one-click. https://docs.epochprotocol.xyz/supported-chains-and-tokens
+// funds the Epoch USDC route: mint USDC -> Epoch receive -> Miden test USDC.
+// Other mocks and the current Miden faucets are available from Epoch's dashboard.
 export const FAUCET_SEPOLIA_USDC = SEPOLIA_USDC;
 
 /** Default one-click mint size. */

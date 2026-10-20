@@ -1,4 +1,4 @@
-import { CIRCLE_SEPOLIA_USDC, BASE_SEPOLIA_USDC, ARBITRUM_SEPOLIA_USDC, ARC_USDC, MIDEN_USDCX, MIDEN_ETH, MIDEN_USDC, SEPOLIA_ETH, SEPOLIA_USDC, sameAsset, type BridgeAsset } from "./assets";
+import { CIRCLE_SEPOLIA_USDC, BASE_SEPOLIA_USDC, ARBITRUM_SEPOLIA_USDC, ARC_USDC, MIDEN_USDCX, MIDEN_ETH, MIDEN_USDC, SEPOLIA_ETH, SEPOLIA_USDC, EPOCH_MIDEN_USDC, EPOCH_MIDEN_DAI, EPOCH_SEPOLIA_DAI, EPOCH_MIDEN_USDT, EPOCH_SEPOLIA_USDT, EPOCH_MIDEN_WBTC, EPOCH_SEPOLIA_WBTC, sameAsset, type BridgeAsset } from "./assets";
 import type { BridgeActivity, BridgeProvider, FlowMode } from "./models";
 
 export type BridgeRoute = {
@@ -13,8 +13,19 @@ export type BridgeRoute = {
 
 // Known testnet routes, including paused providers needed for activity tracking.
 export const bridgeRoutes: readonly BridgeRoute[] = [
-  { id: "epoch-usdc-to-miden", provider: "epoch", mode: "receive", source: SEPOLIA_USDC, destination: MIDEN_USDC },
-  { id: "epoch-usdc-to-sepolia", provider: "epoch", mode: "send", source: MIDEN_USDC, destination: SEPOLIA_USDC },
+  { id: "epoch-usdc-to-miden", provider: "epoch", mode: "receive", source: SEPOLIA_USDC, destination: MIDEN_USDC, disabled: true },
+  { id: "epoch-usdc-to-sepolia", provider: "epoch", mode: "send", source: MIDEN_USDC, destination: SEPOLIA_USDC, disabled: true },
+  { id: "epoch-test-usdc-to-miden", provider: "epoch", mode: "receive", source: SEPOLIA_USDC, destination: EPOCH_MIDEN_USDC },
+  { id: "epoch-test-usdc-to-sepolia", provider: "epoch", mode: "send", source: EPOCH_MIDEN_USDC, destination: SEPOLIA_USDC },
+  { id: "epoch-dai-to-miden", provider: "epoch", mode: "receive", source: EPOCH_SEPOLIA_DAI, destination: EPOCH_MIDEN_DAI },
+  { id: "epoch-dai-to-sepolia", provider: "epoch", mode: "send", source: EPOCH_MIDEN_DAI, destination: EPOCH_SEPOLIA_DAI },
+  { id: "epoch-usdt-to-miden", provider: "epoch", mode: "receive", source: EPOCH_SEPOLIA_USDT, destination: EPOCH_MIDEN_USDT },
+  { id: "epoch-usdt-to-sepolia", provider: "epoch", mode: "send", source: EPOCH_MIDEN_USDT, destination: EPOCH_SEPOLIA_USDT },
+  { id: "epoch-wbtc-to-miden", provider: "epoch", mode: "receive", source: EPOCH_SEPOLIA_WBTC, destination: EPOCH_MIDEN_WBTC },
+  { id: "epoch-wbtc-to-sepolia", provider: "epoch", mode: "send", source: EPOCH_MIDEN_WBTC, destination: EPOCH_SEPOLIA_WBTC },
+  // Only this direction quotes. Epoch pays its mock USDC, not Circle USDC.
+  // WETH is omitted entirely: its current faucet returned no quotes.
+  { id: "epoch-usdcx-to-sepolia", provider: "epoch", mode: "send", source: MIDEN_USDCX, destination: SEPOLIA_USDC },
   { id: "agglayer-eth-to-miden", provider: "agglayer", mode: "receive", source: SEPOLIA_ETH, destination: MIDEN_ETH },
   { id: "agglayer-eth-to-sepolia", provider: "agglayer", mode: "send", source: MIDEN_ETH, destination: SEPOLIA_ETH },
   { id: "xreserve-usdc-to-arc", provider: "xreserve", mode: "send", source: MIDEN_USDCX, destination: ARC_USDC },
