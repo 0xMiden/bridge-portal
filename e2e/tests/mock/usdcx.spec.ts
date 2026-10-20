@@ -207,11 +207,11 @@ test("USDCx joins the shared form with Arc balances, exact amounts and deposit r
   await bridge.cancelPreflight();
 
   await bridge.fillAmount("1.0000001");
-  await bridge.primaryButton().click();
+  await expect(bridge.primaryButton()).toBeDisabled();
   await expect(bridge.preflight()).toBeHidden();
   await expect(page.locator(".form-error").filter({ hasText: "6 decimal places" })).toBeVisible();
   await bridge.fillAmount("1.000001");
-  // Clear validation feedback by reopening and closing the valid review.
+  // Valid input restores review, including its focus-return behavior.
   await bridge.openPreflight();
   await bridge.cancelPreflight();
   await expect(bridge.primaryButton()).toBeFocused();
