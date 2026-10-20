@@ -84,6 +84,15 @@ never downloads mutable configuration at runtime. Contracts, Circle domains and
 services, Epoch outputs, and provider direction switches come from that repo.
 The import script resolves missing ETH faucet/precision and rollup information
 from the Miden bridge registry, and the USDCx faucet from Arc's xReserve contract.
+Mainnet USDT, WBTC, PYUSD and WSOL metadata is verified against Ethereum and the
+Miden registry, including faucet ownership and destination precision, then saved
+in the same snapshot. These tokens support Ethereum → Miden deposits through
+Agglayer. Native ETH uses the zero token address and retains both directions.
+ERC-20 deposits use zero ETH value, exact-amount approvals when needed, and a
+confirmed zero reset for existing insufficient allowances (including USDT).
+Amounts must fit the destination precision: 6 decimals for USDT/PYUSD and 8 for
+WBTC/WSOL/ETH. Ethereum's WSOL contract reports symbol `SOL` and 9 decimals;
+the portal displays `WSOL` and rejects nonzero ninth-decimal amounts.
 RPC and explorer URLs live in the local network registry.
 
 To import a reviewed upstream revision:

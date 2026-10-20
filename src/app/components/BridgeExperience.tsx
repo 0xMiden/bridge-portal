@@ -46,7 +46,7 @@ import {
 import { routesForEnvironment, defaultBridgeRoute, reverseBridgeRoute, type BridgeRoute } from "../../bridge/core/routes";
 import { flowModes, isFlowMode, type FlowMode } from "../../bridge/core/models";
 import { bridgeProviders, isBridgeProvider } from "../../bridge/providers/registry";
-import { activityStartedAt, routeSwitchChangesAsset, validateTransferAmount } from "../../bridge/core/rules";
+import { activityStartedAt, isValidAmount, routeSwitchChangesAsset, validateTransferAmount } from "../../bridge/core/rules";
 import {
   loadStoredActivities,
   loadStoredMode,
@@ -288,14 +288,15 @@ function BridgeForm() {
   );
 
   const providerCopy = bridgeProviders[provider];
-  const hasRouteAmount = useMemo(() => {
+  const amountValidation = useMemo(() => {
     try {
       validateTransferAmount(route, amount);
-      return true;
-    } catch {
-      return false;
+      return { valid: true, error: "" };
+    } catch (error) {
+      return { valid: false, error: isValidAmount(amount) ? errorMessage(error) : "" };
     }
   }, [route, amount]);
+  const hasRouteAmount = amountValidation.valid;
   const quote = useMemo(
     () => quoteFor(route, amount),
     [amount, route],
@@ -987,7 +988,9 @@ function BridgeForm() {
                   </div>
                   {isSource ? (
                     <label className="swap-box-amount">
-                      <input aria-label="Amount" inputMode="decimal" placeholder="0" value={amount}
+                      <input aria-label="Amount" aria-invalid={Boolean(amountValidation.error)}
+                        aria-describedby={amountValidation.error ? "amount-error" : undefined}
+                        inputMode="decimal" placeholder="0" value={amount}
                         onChange={(event) => { setAmount(event.target.value); setRouteMenuOpen(false); }} />
                     </label>
                   ) : (
@@ -1016,7 +1019,8 @@ function BridgeForm() {
 
           </div>
 
-          {bridgeError || quoteQuery.error ? <p className="form-error" role="alert">{bridgeError || errorMessage(quoteQuery.error)}</p> : null}
+          {amountValidation.error ? <p id="amount-error" className="form-error" role="alert">{amountValidation.error}</p>
+            : bridgeError || quoteQuery.error ? <p className="form-error" role="alert">{bridgeError || errorMessage(quoteQuery.error)}</p> : null}
 
         </section>
         <section className="transfer-route-card" data-provider={provider} data-has-amount={hasRouteAmount} aria-label="Transfer route">
@@ -1079,7 +1083,7 @@ function BridgeForm() {
               type="button"
               ref={primaryActionRef}
               onClick={handlePrimaryAction}
-              disabled={cta.disabled}
+              disabled={cta.disabled || Boolean(amountValidation.error)}
             >
               {cta.action === "review" ? "Review transfer" : cta.label}
               {isSubmitting ? (

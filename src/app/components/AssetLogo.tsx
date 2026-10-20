@@ -17,6 +17,8 @@ const tokenLogos: Partial<Record<string, string>> = {
   DAI: "/asset-logos/dai.svg",
   USDT: "/asset-logos/usdt.svg",
   WBTC: "/asset-logos/wbtc.svg",
+  PYUSD: "/asset-logos/pyusd.png",
+  WSOL: "/asset-logos/sol.svg",
 };
 
 /** The adjacent network/token name supplies the accessible label. */

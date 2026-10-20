@@ -8,6 +8,36 @@ async function selectNetwork(page: Page, network: "Mainnet" | "Testnet") {
   await page.getByRole("option", { name: network, exact: true }).click();
 }
 
+test("mainnet tokens select matching Miden assets and explain unsupported precision", async ({ bridge, page }, info) => {
+  await page.route("**/api/evm/ethereum/gas**", route =>
+    route.fulfill({ json: { gasPriceWei: "1200000000", gwei: "1.2" } }));
+  await selectNetwork(page, "Mainnet");
+  await bridge.setChain("Ethereum");
+  for (const [symbol, name] of [["USDT", "Tether USD"], ["WBTC", "Wrapped BTC"], ["PYUSD", "PayPal USD"], ["WSOL", "Wrapped SOL"]]) {
+    await bridge.fillAmount("0.1");
+    await page.locator(".swap-box[data-side='source']").getByRole("button", { name: /change token/ }).click();
+    await page.getByRole("option", { name: `${symbol} ${name}`, exact: true }).click();
+    await expect(page.getByRole("textbox", { name: "Amount", exact: true })).toHaveValue("");
+    await expect(page.locator(".swap-box[data-side='destination']").getByRole("button", { name: `${symbol} — change token`, exact: true })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Reverse transfer direction" })).toBeDisabled();
+    await bridge.fillAmount("0.1");
+    await expect(bridge.selectedProvider()).toContainText("Agglayer");
+  }
+  await page.reload();
+  await expect(page.locator(".swap-box[data-side='source']").getByRole("button", { name: "WSOL — change token", exact: true })).toBeVisible();
+  await bridge.fillAmount("0.000000001");
+  await expect(page.locator(".swap-card").getByRole("alert")).toContainText("Miden supports at most 8 decimal places for WSOL");
+  await expect(bridge.primaryButton()).toBeDisabled();
+  await expect(page.getByRole("textbox", { name: "Amount", exact: true })).toHaveAttribute("aria-invalid", "true");
+  await bridge.fillAmount("0.12345678");
+  await expect(page.locator(".swap-card").getByRole("alert")).toHaveCount(0);
+  await expect(page.getByLabel("Expected received", { exact: true })).toContainText("0.12345678");
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.locator(".swap-box[data-side='source']").getByRole("button", { name: /change token/ }).click();
+  await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await page.screenshot({ path: info.outputPath("mainnet-tokens-mobile.png"), fullPage: true, animations: "disabled" });
+});
+
 test("network selection isolates forms, preferences and tabs", async ({ bridge, page, context }, info) => {
   await bridge.setRoute("AggLayer");
   await bridge.fillAmount("0.01");
