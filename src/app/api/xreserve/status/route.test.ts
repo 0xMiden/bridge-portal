@@ -103,7 +103,7 @@ it("verifies mainnet Circle events against its faucet and production attestation
   fetchMock.mockResolvedValue(Response.json({ attestations: [{ remoteDomain: 10007, attestation: "0x1234", payload: payload.replace(faucet.slice(2), mainnetFaucet.slice(2)) }] }));
   const request = new Request(`http://localhost/api/xreserve/status?network=arc&hash=0x${"a".repeat(64)}&deployment=${currentDeployment("mainnet").id}`);
   expect(await (await GET(request)).json()).toMatchObject({ status: "attested", deposit: { faucet: "0xe69e6ca6e39df1b10c1e5399399feb" } });
-  expect(fetchMock.mock.calls[0][0]).toMatch(/^https:\/\/xreserve-api.circle.com\/v1\/attestations\?/);
+  expect(fetchMock.mock.calls[0][0]).toBe(`https://xreserve-api.circle.com/v1/attestations?txHash=0x${"a".repeat(64)}`);
   mocks.receipt.mockResolvedValue({ status: "success", logs: [log] });
   expect((await GET(request)).status).toBe(422);
 });
