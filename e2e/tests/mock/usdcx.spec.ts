@@ -1,6 +1,10 @@
 import { expect, test, type Page } from "@playwright/test";
 import { stubNetwork } from "../../fixtures/mock-network";
 import { BridgePage } from "../../pages/bridge-page";
+import { decodeFunctionData, encodeFunctionResult, erc20Abi, parseAbi } from "viem";
+import { ARC, xReserveAbi } from "../../../src/bridge/providers/xreserve/config";
+import { cctpAbi, cctpSources } from "../../../src/bridge/providers/xreserve/cctp-config";
+import { arcRecipient } from "../../../src/bridge/providers/xreserve/deposit";
 
 type BridgeFrame = { route: string; source: string; wallet: string };
 type FrameWindow = typeof window & { bridgeFrames: BridgeFrame[] };
@@ -36,6 +40,82 @@ test.beforeEach(async ({ page }) => {
   await page.route("**/api/evm/*/balance**", (route) => route.fulfill({
     json: { balance: "10.123456", balanceRaw: "10123456" },
   }));
+});
+
+test("Base simulation outages leave a readable error and a retryable, contained form", async ({ page }, info) => {
+  await page.emulateMedia({ colorScheme: "dark" });
+  const abi = [...xReserveAbi, ...cctpAbi, ...erc20Abi, ...parseAbi(["function paused() view returns (bool)"])];
+  let simulations = 0;
+  await page.route("**/api/evm/*/rpc", async (route) => {
+    const { id, method, params } = route.request().postDataJSON();
+    // AppKit probes wallet metadata through Multicall independently of the
+    // deposit. Keep that optional read offline without mocking its internals.
+    if (params?.[0]?.to?.toLowerCase() === "0xca11bde05977b3631167028862be2a173976ca11") {
+      return route.fulfill({ json: { jsonrpc: "2.0", id, error: { code: -32601, message: "Metadata unavailable" } } });
+    }
+    expect(method).toBe("eth_call");
+    const { functionName } = decodeFunctionData({ abi, data: params[0].data });
+    if (functionName === "depositForBurnWithHookAndFees") {
+      simulations++;
+      return route.fulfill({ status: 502, json: { jsonrpc: "2.0", id, error: {
+        code: -32002, message: "Base Sepolia RPC is temporarily unavailable. Please retry shortly.",
+      } } });
+    }
+    const values: Record<string, unknown> = {
+      isRemoteDomainRegistered: true,
+      getRemoteToken: arcRecipient(ARC.faucetId),
+      paused: false,
+      getFee: [250000n, cctpSources["base-sepolia"].asset.address],
+      balanceOf: 10000000n,
+      allowance: 10000000n,
+    };
+    if (!(functionName in values)) throw new Error(`Unexpected read: ${functionName}`);
+    const result = encodeFunctionResult({ abi, functionName, result: values[functionName] as never });
+    return route.fulfill({ json: { jsonrpc: "2.0", id, result } });
+  });
+  await page.goto("/?provider=xreserve");
+  const bridge = new BridgePage(page);
+  await bridge.waitForReady();
+  await bridge.setChain("Base Sepolia");
+  await bridge.fillAmount("1");
+  await bridge.submit();
+  const error = page.locator(".swap-card > .form-error");
+  await expect(error).toHaveText("Base Sepolia RPC is temporarily unavailable. Please retry shortly.");
+  await expect(error).toHaveAttribute("role", "alert");
+  expect(simulations).toBe(1);
+  expect(await bridge.readActivities()).toHaveLength(0);
+  await expect(page.getByRole("textbox", { name: "Amount", exact: true })).toHaveValue("1");
+  await expect(bridge.primaryButton()).toBeEnabled();
+  for (const width of [1440, 390]) {
+    await page.setViewportSize({ width, height: 900 });
+    const card = await page.locator(".swap-card").boundingBox();
+    expect(card!.width).toBeLessThanOrEqual(Math.min(548, width));
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+    await page.screenshot({ path: info.outputPath(`base-outage-${width}.png`), fullPage: true, animations: "disabled" });
+  }
+  // Retrying returns to review, keeping the original amount and source chain.
+  await bridge.openPreflight();
+  await expect(bridge.preflight()).toContainText("Base Sepolia");
+  await expect(bridge.preflight()).toContainText("1 USDCx");
+});
+
+test("unbroken quote errors wrap within the bridge card on desktop and mobile", async ({ page }) => {
+  await page.route("**/api/xreserve/quote", (route) =>
+    route.fulfill({ status: 502, json: { error: "x".repeat(240) } }));
+  await page.goto("/?provider=xreserve");
+  const bridge = new BridgePage(page);
+  await bridge.waitForReady();
+  await bridge.setChain("Base Sepolia");
+  await bridge.fillAmount("1");
+  await expect(page.locator(".swap-card > .form-error")).toHaveText("x".repeat(240));
+  for (const width of [1440, 390]) {
+    await page.setViewportSize({ width, height: 900 });
+    const card = await page.locator(".swap-card").boundingBox();
+    const error = await page.locator(".swap-card > .form-error").boundingBox();
+    expect(card!.width).toBeLessThanOrEqual(Math.min(548, width));
+    expect(error!.x + error!.width).toBeLessThanOrEqual(card!.x + card!.width);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  }
 });
 
 test("USDCx joins the shared form with Arc balances, exact amounts and deposit review", async ({ page }, info) => {

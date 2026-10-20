@@ -657,7 +657,7 @@ export function BridgeExperience() {
         catch (error) { setBridgeError(errorMessage(error)); return; }
         if (fees.requiresQuote) {
           if (!quoteQuery.data || quoteQuery.data.expiresAt <= Date.now()) {
-            setBridgeError(quoteQuery.error?.message ?? "Refresh the quote before reviewing.");
+            setBridgeError(quoteQuery.error ? errorMessage(quoteQuery.error) : "Refresh the quote before reviewing.");
             void quoteQuery.refetch();
             return;
           }
@@ -892,7 +892,7 @@ export function BridgeExperience() {
         </div>
       </header>
       {midenWallet.error ? (
-        <p className="form-error topbar-error">{midenWallet.error}</p>
+        <p className="form-error topbar-error" role="alert">{errorMessage(midenWallet.error)}</p>
       ) : null}
 
       <section className="swap-stage">
@@ -925,7 +925,7 @@ export function BridgeExperience() {
         <div id="bridge-panel" role="tabpanel" aria-labelledby="bridge-tab" hidden={activeTab !== "bridge"} className="bridge-tab-panel">
         <section className="swap-card" data-provider={provider} aria-label="Miden bridge" ref={swapCardRef}>
           {walletError ? (
-            <p className="form-error compact">{walletError}</p>
+            <p className="form-error compact" role="alert">{walletError}</p>
           ) : null}
 
           <div
@@ -994,7 +994,7 @@ export function BridgeExperience() {
 
           </div>
 
-          {bridgeError || quoteQuery.error ? <p className="form-error">{bridgeError || quoteQuery.error?.message}</p> : null}
+          {bridgeError || quoteQuery.error ? <p className="form-error" role="alert">{bridgeError || errorMessage(quoteQuery.error)}</p> : null}
 
         </section>
         <section className="transfer-route-card" data-provider={provider} data-has-amount={hasRouteAmount} aria-label="Transfer route">

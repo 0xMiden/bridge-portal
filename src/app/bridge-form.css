@@ -32,7 +32,7 @@
 .bridge-portal .swap-group { width: min(548px, 100%); margin: 24px auto 0; gap: 16px; }
 .bridge-portal .bridge-tab-panel,
 .bridge-portal .activity-tab-panel { width: 100%; }
-.bridge-portal .bridge-tab-panel:not([hidden]) { display: grid; gap: 12px; }
+.bridge-portal .bridge-tab-panel:not([hidden]) { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; }
 .bridge-portal [role="tabpanel"][hidden] { display: none; }
 .bridge-tabs { display: flex; width: min(336px, 100%); border-bottom: 3px solid var(--border); }
 .bridge-tabs button { flex: 1; min-height: 48px; position: relative; background: transparent; color: var(--muted-foreground); font: inherit; font-size: 16px; border: 0; cursor: pointer; }
@@ -41,7 +41,7 @@
 .bridge-tabs button:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; }
 .activity-count { display: inline-grid; place-items: center; margin-left: 8px; min-width: 20px; height: 20px; border-radius: 50%; background: var(--accent-soft); color: var(--accent-foreground); font-size: 11px; }
 .bridge-portal .swap-card,
-.bridge-portal .transfer-route-card { width: 100%; padding: 20px; border: 1px solid var(--border); border-radius: 24px; box-shadow: none; animation: none; }
+.bridge-portal .transfer-route-card { width: 100%; min-width: 0; padding: 20px; border: 1px solid var(--border); border-radius: 24px; box-shadow: none; animation: none; }
 .bridge-portal .mode-switch { border: 1px solid var(--border); border-radius: 12px; padding: 4px; gap: 8px; background: var(--field); }
 .bridge-portal .mode-switch::before { display: none; }
 .bridge-portal .mode-switch button { min-height: 40px; border-radius: 8px; font-size: 15px; font-weight: 500; }

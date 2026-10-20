@@ -30,7 +30,7 @@ export async function POST(request: Request, context: { params: Promise<{ networ
     return Response.json(await forwardEvmRpc(network, body), { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
     return Response.json({ jsonrpc: "2.0", id: body.id, error: {
-      code: -32000, message: error instanceof Error ? error.message : "EVM RPC unavailable.",
+      code: -32002, message: error instanceof Error ? error.message : "EVM RPC unavailable.",
     } }, { status: 502, headers: { "Cache-Control": "no-store" } });
   }
 }
