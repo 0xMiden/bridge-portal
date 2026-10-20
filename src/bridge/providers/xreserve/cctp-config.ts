@@ -35,5 +35,5 @@ export function cctpConfig(deploymentId?: string, network?: EvmNetwork) {
 }
 export const cctpAbi = parseAbi([
   "function depositForBurnWithHookAndFees(uint256 amount,uint32 destinationDomain,bytes32 mintRecipient,address burnToken,bytes32 destinationCaller,bytes hookData,(bytes signedQuote,address refundAddress) claim) payable",
-  "function getFee(bytes signedQuote) view returns (uint256 totalFee,address feeToken)",
+  "function getFee(bytes signedQuote) pure returns (uint256 totalFee,address feeToken)",
 ]);
