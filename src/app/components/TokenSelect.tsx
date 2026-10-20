@@ -2,7 +2,7 @@
 
 import { bridgeProviders } from "../../bridge/providers/registry";
 import { assetKey } from "../../bridge/core/assets";
-import { bridgeRoutes, type BridgeRoute } from "../../bridge/core/routes";
+import { routesForEnvironment, routeEnvironment, type BridgeRoute } from "../../bridge/core/routes";
 import { networkLabels, tokenNames } from "../lib/bridge-presentation";
 import { tokenChoices } from "../lib/token-choices";
 import { TokenLogo } from "./AssetLogo";
@@ -19,7 +19,7 @@ export function TokenSelect({
   onSelectRoute: (route: BridgeRoute) => void;
 }) {
   const active = route[side];
-  const routes = bridgeRoutes.filter((option) => !bridgeProviders[option.provider].disabled);
+  const routes = routesForEnvironment(routeEnvironment(route)).filter((option) => !bridgeProviders[option.provider].disabled);
   const options = tokenChoices(route, side, routes);
   const selectedToken = <><TokenLogo asset={active} /><span className="token-select-symbol">{active.symbol}</span></>;
 

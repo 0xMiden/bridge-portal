@@ -2,7 +2,7 @@
 
 import { bridgeProviders } from "../../bridge/providers/registry";
 import { sameAsset } from "../../bridge/core/assets";
-import { bridgeRoutes, type BridgeRoute } from "../../bridge/core/routes";
+import { routesForEnvironment, routeEnvironment, type BridgeRoute } from "../../bridge/core/routes";
 import { networkLabels } from "../lib/bridge-presentation";
 import { NetworkLogo } from "./AssetLogo";
 import { ListboxSelect } from "./ListboxSelect";
@@ -18,7 +18,7 @@ export function ChainSelect({
   onSelectRoute: (route: BridgeRoute) => void;
 }) {
   const asset = route[side];
-  const routes = bridgeRoutes.filter((option) => !option.disabled && option.mode === route.mode && !bridgeProviders[option.provider].disabled);
+  const routes = routesForEnvironment(routeEnvironment(route)).filter((option) => !option.disabled && option.mode === route.mode && !bridgeProviders[option.provider].disabled);
   const networks = [...new Set(routes.map((option) => option[side].network))];
   const label = networkLabels[asset.network];
   const menuLabel = side === "source" ? "Origin chain" : "Destination chain";

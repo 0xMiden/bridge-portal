@@ -1,5 +1,7 @@
 import type { SourceTransaction } from "../evm/source-transaction";
 import type { ActivityStatus } from "./activity-status";
+import type { BridgeRoute } from "./routes";
+import type { BridgeEnvironment } from "../../config/environment";
 
 export type BridgeProvider = "agglayer" | "epoch" | "xreserve";
 export const flowModes = ["receive", "send"] as const;
@@ -15,6 +17,9 @@ export type BridgeActivity = {
   provider: BridgeProvider;
   /** Explicit route for new transfers; absent on legacy saved activities. */
   routeId?: string;
+  environment?: BridgeEnvironment;
+  /** Immutable route used by this transfer, including its allowlisted deployment. */
+  routeSnapshot?: BridgeRoute;
   status: ActivityStatus;
   /** Chain leg that failed; absent on legacy or provider-unspecified failures. */
   failureLeg?: "source" | "destination";

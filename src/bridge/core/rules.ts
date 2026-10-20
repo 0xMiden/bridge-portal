@@ -1,6 +1,7 @@
 import { sameAsset } from "./assets";
 import type { BridgeRoute } from "./routes";
 import type { BridgeActivity } from "./models";
+import { routeEnvironment } from "./routes";
 
 /** Clear the amount when the selected source network or token changes. */
 export function routeSwitchChangesAsset(from: BridgeRoute, to: BridgeRoute): boolean {
@@ -61,6 +62,8 @@ export function createActivity(
     mode: route.mode,
     provider: route.provider,
     routeId: route.id,
+    environment: routeEnvironment(route),
+    routeSnapshot: { ...route },
     status: "signature",
     amount: amount || "0",
     asset: route.source.symbol,

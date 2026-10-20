@@ -2,31 +2,35 @@
 
 import { EpochIntentSDK } from "@epoch-protocol/epoch-intents-sdk";
 import { buildEpochReadOnlyWalletClient, buildEpochWalletClient, getEvmConnection } from "./client";
-import { EPOCH_ALLOCATOR_URL } from "./config";
+import { epochAllocatorUrl } from "./config";
 
-type SdkCache = { address: string; sdk: EpochIntentSDK };
+type SdkCache = { key: string; sdk: EpochIntentSDK };
 let connectedCache: SdkCache | null = null;
 let readOnlyCache: SdkCache | null = null;
 
 /** Receive uses the connected Sepolia wallet to sign the collateral deposit. */
-export async function getEpochSdk(): Promise<EpochIntentSDK | null> {
+export async function getEpochSdk(deploymentId?: string): Promise<EpochIntentSDK | null> {
   const { address } = await getEvmConnection();
   if (!address) {
     connectedCache = null;
     return null;
   }
-  if (connectedCache?.address === address) return connectedCache.sdk;
+  const apiBaseUrl = epochAllocatorUrl(deploymentId);
+  const key = `${deploymentId ?? "legacy"}:${apiBaseUrl}:${address.toLowerCase()}`;
+  if (connectedCache?.key === key) return connectedCache.sdk;
   const walletClient = await buildEpochWalletClient(address as `0x${string}`);
-  const sdk = new EpochIntentSDK({ apiBaseUrl: EPOCH_ALLOCATOR_URL, walletClient });
-  connectedCache = { address, sdk };
+  const sdk = new EpochIntentSDK({ apiBaseUrl, walletClient });
+  connectedCache = { key, sdk };
   return sdk;
 }
 
 /** Miden sends and status reads need a sponsor address, without an EVM signer. */
-export async function getEpochReadOnlySdk(destinationAddress: `0x${string}`): Promise<EpochIntentSDK> {
-  if (readOnlyCache?.address === destinationAddress) return readOnlyCache.sdk;
+export async function getEpochReadOnlySdk(destinationAddress: `0x${string}`, deploymentId?: string): Promise<EpochIntentSDK> {
+  const apiBaseUrl = epochAllocatorUrl(deploymentId);
+  const key = `${deploymentId ?? "legacy"}:${apiBaseUrl}:${destinationAddress.toLowerCase()}`;
+  if (readOnlyCache?.key === key) return readOnlyCache.sdk;
   const walletClient = buildEpochReadOnlyWalletClient(destinationAddress);
-  const sdk = new EpochIntentSDK({ apiBaseUrl: EPOCH_ALLOCATOR_URL, walletClient });
-  readOnlyCache = { address: destinationAddress, sdk };
+  const sdk = new EpochIntentSDK({ apiBaseUrl, walletClient });
+  readOnlyCache = { key, sdk };
   return sdk;
 }

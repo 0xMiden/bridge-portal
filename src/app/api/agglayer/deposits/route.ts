@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { getDeployment } from "../../../../config/deployments";
 import {
   type AgglayerDeposit,
   type AgglayerDepositStatus,
@@ -10,12 +11,15 @@ export const dynamic = "force-dynamic";
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const destinationAddress = searchParams.get("destinationAddress") ?? "";
+  const deploymentId = searchParams.get("deployment") ?? undefined;
+  try { getDeployment(deploymentId); }
+  catch { return NextResponse.json({ error: "Invalid bridge deployment." }, { status: 400 }); }
 
   if (!/^0x[0-9a-fA-F]{40}$/.test(destinationAddress)) {
     return NextResponse.json({ error: "destinationAddress must be a 20-byte hex address." }, { status: 400 });
   }
 
-  const response = await fetch(bridgeStatusUrl(destinationAddress), {
+  const response = await fetch(bridgeStatusUrl(destinationAddress, deploymentId), {
     headers: { accept: "application/json" },
     next: { revalidate: 0 },
   });

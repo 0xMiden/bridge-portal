@@ -1,6 +1,6 @@
 import { ArrowRight, Check } from "lucide-react";
 import { sameAsset } from "../../bridge/core/assets";
-import { bridgeRoutes, type BridgeRoute } from "../../bridge/core/routes";
+import { routesForEnvironment, routeEnvironment, type BridgeRoute } from "../../bridge/core/routes";
 import { bridgeProviders, directionFor } from "../../bridge/providers/registry";
 import { networkLabels, quoteFor } from "../lib/bridge-presentation";
 
@@ -12,7 +12,7 @@ export function ProviderOptions({ route, amount, received, fee, onSelect }: {
   fee: string;
   onSelect: (route: BridgeRoute) => void;
 }) {
-  const compatible = bridgeRoutes.filter((candidate) =>
+  const compatible = routesForEnvironment(routeEnvironment(route)).filter((candidate) =>
     !candidate.disabled && !bridgeProviders[candidate.provider].disabled &&
     candidate.mode === route.mode &&
     sameAsset(candidate.source, route.source) &&
@@ -35,7 +35,7 @@ export function ProviderOptions({ route, amount, received, fee, onSelect }: {
       >
         <span className="route-option-head">
           <strong>{provider.label}</strong>
-          <small className="route-tag testnet">{provider.badge}</small>
+          <small className="route-tag testnet">{routeEnvironment(candidate) === "mainnet" ? "Mainnet" : provider.badge}</small>
           {selected ? <Check className="route-check" size={16} aria-hidden="true" /> : null}
         </span>
         <span className="provider-route-path">

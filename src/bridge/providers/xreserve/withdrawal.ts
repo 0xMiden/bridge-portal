@@ -4,6 +4,7 @@ import { parseArcAmount } from "./deposit";
 
 export const withdrawalDomains: Partial<Record<BridgeNetwork, number>> = {
   "arc-testnet": 26, sepolia: 0, "base-sepolia": 6, "arbitrum-sepolia": 3,
+  arc: 26, ethereum: 0, base: 6, arbitrum: 3,
 };
 
 /** Protocol v0.17.1 XReserveBurnItems: domain word + eight LE u32 recipient limbs. */

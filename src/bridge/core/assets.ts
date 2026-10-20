@@ -1,5 +1,6 @@
-export type EvmNetwork = "sepolia" | "arc-testnet" | "base-sepolia" | "arbitrum-sepolia";
-export type BridgeNetwork = EvmNetwork | "miden-testnet";
+export type EvmNetwork = "sepolia" | "arc-testnet" | "base-sepolia" | "arbitrum-sepolia" | "ethereum" | "arc" | "base" | "arbitrum";
+export type MidenNetwork = "miden-testnet" | "miden-mainnet";
+export type BridgeNetwork = EvmNetwork | MidenNetwork;
 
 type TokenMetadata = {
   symbol: string;
@@ -11,7 +12,7 @@ type TokenMetadata = {
 export type BridgeAsset = TokenMetadata & (
   | { network: EvmNetwork; kind: "native" }
   | { network: EvmNetwork; kind: "erc20"; address: `0x${string}` }
-  | { network: "miden-testnet"; kind: "miden"; faucetId: string }
+  | { network: MidenNetwork; kind: "miden"; faucetId: string }
 );
 
 export type MidenAsset = Extract<BridgeAsset, { kind: "miden" }>;

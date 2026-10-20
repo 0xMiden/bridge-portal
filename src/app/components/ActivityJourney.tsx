@@ -70,7 +70,8 @@ export function ActivityJourney({ receipt, needsClaim, children }: {
     : activity.sourceTransaction?.from ?? activity.evmAddress ?? activity.epochSponsor;
   const destinationAsset = destinationAssetSymbol(activity);
   const differentOutput = destinationAsset !== activity.asset || Number(receipt.receivedAmount) !== Number(activity.amount);
-  const gas = useSepoliaGasEstimate(receipt.sepoliaGasUnits);
+  const evmAsset = route?.source.kind === "miden" ? route.destination : route?.source;
+  const gas = useSepoliaGasEstimate(receipt.sepoliaGasUnits, evmAsset?.kind !== "miden" ? evmAsset?.network : undefined);
   const networkFee = gas.fee ?? (gas.loading ? "Estimating…" : receipt.networkFee);
   const status = needsClaim ? { label: "Ready to claim", tone: "active" }
     : receipt.status ?? { label: "Complete", tone: "success" };

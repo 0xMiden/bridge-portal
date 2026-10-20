@@ -1,11 +1,13 @@
 import { decodeAbiParameters, decodeFunctionData, encodeAbiParameters, encodeFunctionData, encodePacked, pad, parseAbiParameters, size, slice, stringToHex, type Address, type Hex } from "viem";
-import { ARC, xReserveAbi } from "./config";
-import { CCTP } from "./cctp-config";
+import { arcConfig, xReserveAbi } from "./config";
+import { cctpConfig } from "./cctp-config";
 import { arcRecipient } from "./deposit";
 import { decodeArcRecipient } from "./attestation";
 
 /** Wire format from the verified GenericExecutor and DepositForHandler on Arc. */
-export function cctpDepositHook(sender: Address, recipient: string): Hex {
+export function cctpDepositHook(sender: Address, recipient: string, deploymentId?: string): Hex {
+  const ARC = arcConfig(deploymentId);
+  const CCTP = cctpConfig(deploymentId);
   const deposit = encodeFunctionData({
     abi: xReserveAbi, functionName: "depositToRemote",
     args: [0n, ARC.midenDomain, arcRecipient(recipient), ARC.usdc, ARC.maxFee, "0x"],
@@ -23,7 +25,7 @@ export function cctpDepositHook(sender: Address, recipient: string): Hex {
 }
 
 /** Only accept this portal's exact handler, recovery address and deposit terms. */
-export function decodeCctpDepositHook(hook: Hex) {
+export function decodeCctpDepositHook(hook: Hex, deploymentId?: string) {
   const payloadLength = Number(BigInt(slice(hook, 28, 32)));
   const [, recovery, , handlerData] = decodeAbiParameters(parseAbiParameters("uint8,bytes32,address,bytes"), slice(hook, 32, 32 + payloadLength));
   if (!/^0x0{24}[\da-f]{40}$/i.test(recovery)) throw new Error("Invalid recovery address.");
@@ -32,6 +34,6 @@ export function decodeCctpDepositHook(hook: Hex) {
   const decoded = decodeFunctionData({ abi: xReserveAbi, data: calldata });
   if (decoded.functionName !== "depositToRemote") throw new Error("Unsupported deposit hook.");
   const recipient = decodeArcRecipient(decoded.args[2]);
-  if (cctpDepositHook(sender, recipient).toLowerCase() !== hook.toLowerCase()) throw new Error("Unsupported deposit hook.");
+  if (cctpDepositHook(sender, recipient, deploymentId).toLowerCase() !== hook.toLowerCase()) throw new Error("Unsupported deposit hook.");
   return { sender, recipient };
 }

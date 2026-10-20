@@ -1,11 +1,11 @@
 import { resolveSourceTransaction } from "../../evm/source-transaction";
 import { activityRoute } from "../../core/routes";
-import { CCTP, isCctpNetwork } from "./cctp-config";
+import { cctpConfig, isCctpNetwork } from "./cctp-config";
 import type { CctpStatusResponse } from "./cctp-status";
 import type { BridgeActivity } from "../../core/models";
 import { normalizeMidenAccountHex } from "../agglayer/agglayer";
 import type { ArcDepositIntent } from "./attestation";
-import { ARC } from "./config";
+import { arcConfig } from "./config";
 import { parseArcAmount } from "./deposit";
 
 export type ArcStatusResponse = {
@@ -23,11 +23,15 @@ export async function observeXreserveDeposit(activity: BridgeActivity, signal?: 
 }> {
   if (activity.provider !== "xreserve" || !activity.sourceTxHash ||
       activity.status === "complete" || activity.status === "failed") return { patch: {} };
-  const network = activityRoute(activity)?.source.network;
+  const route = activityRoute(activity);
+  const deploymentId = route?.deploymentId;
+  const ARC = arcConfig(deploymentId);
+  const CCTP = cctpConfig(deploymentId);
+  const network = route?.source.kind !== "miden" ? route?.source.network : undefined;
   const cctp = network && isCctpNetwork(network);
-  if (!network || network === "miden-testnet") throw new Error("Unknown deposit origin.");
+  if (!network) throw new Error("Unknown deposit origin.");
   const fetchStatus = async (hash: string) => {
-    const response = await fetch(`/api/xreserve/status?network=${network}&hash=${encodeURIComponent(hash)}`, { cache: "no-store", signal });
+    const response = await fetch(`/api/xreserve/status?network=${network}&hash=${encodeURIComponent(hash)}${deploymentId ? `&deployment=${encodeURIComponent(deploymentId)}` : ""}`, { cache: "no-store", signal });
     const observation: CctpStatusResponse & { error?: string } = await response.json();
     if (!response.ok) throw new Error(observation.error ?? "Unable to verify this deposit. Tracking will retry.");
     return observation;
@@ -82,7 +86,7 @@ export async function observeXreserveDeposit(activity: BridgeActivity, signal?: 
   }
   const { checkArcDelivery } = await import("./delivery");
   try {
-    const delivery = await checkArcDelivery(intent);
+    const delivery = await checkArcDelivery(intent, deploymentId);
     if (signal?.aborted) return { patch: {} };
     patch.xreserveNoteId = delivery.noteId;
     if (delivery.block !== undefined) {

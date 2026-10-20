@@ -1,10 +1,12 @@
 import { bridgeProviders } from "../../bridge/providers/registry";
 import { applyActivityPatch, normalizeActivityState } from "../../bridge/activity";
 import { shortAddress } from "../../wallets/identity";
-import { findBridgeRoute } from "../../bridge/core/routes";
+import { activityRoute, routeEnvironment, findBridgeRoute } from "../../bridge/core/routes";
 import { isFlowMode, type BridgeProvider, type FlowMode } from "../../bridge/core/models";
 import { isBridgeProvider } from "../../bridge/providers/registry";
 import { type Activity } from "./bridge-presentation";
+
+import type { BridgeEnvironment } from "../../config/environment";
 
 export const activityStorageKey = "miden.bridge.ui.activities";
 
@@ -12,9 +14,9 @@ export const activityStorageKey = "miden.bridge.ui.activities";
 // instead of snapping back to the default every time.
 const routeStorageKey = "miden.bridge.ui.route";
 
-export function loadStoredRoute(): BridgeProvider | null {
+export function loadStoredRoute(environment: BridgeEnvironment = "testnet"): BridgeProvider | null {
   try {
-    const value = window.localStorage.getItem(routeStorageKey);
+    const value = window.localStorage.getItem(`${routeStorageKey}.${environment}`) ?? (environment === "testnet" ? window.localStorage.getItem(routeStorageKey) : null);
     if (isBridgeProvider(value) && !bridgeProviders[value].disabled) return value;
   } catch {
     // ignore storage access failures (SSR / privacy mode)
@@ -22,14 +24,14 @@ export function loadStoredRoute(): BridgeProvider | null {
   return null;
 }
 
-export function loadStoredRouteId() {
-  try { return findBridgeRoute(window.localStorage.getItem(`${routeStorageKey}.id`) ?? ""); } catch { return undefined; }
+export function loadStoredRouteId(environment: BridgeEnvironment = "testnet") {
+  try { const route = findBridgeRoute(window.localStorage.getItem(`${routeStorageKey}.${environment}.id`) ?? (environment === "testnet" ? window.localStorage.getItem(`${routeStorageKey}.id`) : null) ?? ""); return route && routeEnvironment(route) === environment ? route : undefined; } catch { return undefined; }
 }
 
-export function saveStoredRoute(provider: BridgeProvider, routeId?: string) {
+export function saveStoredRoute(provider: BridgeProvider, routeId?: string, environment: BridgeEnvironment = "testnet") {
   try {
-    window.localStorage.setItem(routeStorageKey, provider);
-    if (routeId) window.localStorage.setItem(`${routeStorageKey}.id`, routeId);
+    window.localStorage.setItem(`${routeStorageKey}.${environment}`, provider);
+    if (routeId) window.localStorage.setItem(`${routeStorageKey}.${environment}.id`, routeId);
   } catch {
     // ignore storage write failures
   }
@@ -39,9 +41,9 @@ export function saveStoredRoute(provider: BridgeProvider, routeId?: string) {
 // of snapping back to Receive every time.
 const modeStorageKey = "miden.bridge.ui.mode";
 
-export function loadStoredMode(): FlowMode | null {
+export function loadStoredMode(environment: BridgeEnvironment = "testnet"): FlowMode | null {
   try {
-    const value = window.localStorage.getItem(modeStorageKey);
+    const value = window.localStorage.getItem(`${modeStorageKey}.${environment}`) ?? (environment === "testnet" ? window.localStorage.getItem(modeStorageKey) : null);
     return isFlowMode(value) ? value : null;
   } catch {
     // ignore storage access failures (SSR / privacy mode)
@@ -49,9 +51,9 @@ export function loadStoredMode(): FlowMode | null {
   return null;
 }
 
-export function saveStoredMode(mode: FlowMode) {
+export function saveStoredMode(mode: FlowMode, environment: BridgeEnvironment = "testnet") {
   try {
-    window.localStorage.setItem(modeStorageKey, mode);
+    window.localStorage.setItem(`${modeStorageKey}.${environment}`, mode);
   } catch {
     // ignore storage write failures
   }
@@ -84,17 +86,19 @@ function normalizeActivity(activity: Activity): Activity {
   const receivedAmount = activity.receivedAmount?.endsWith(suffix)
     ? activity.receivedAmount.slice(0, -suffix.length)
     : activity.receivedAmount;
-  return normalizeActivityState({ ...activity, midenAccountHex, failureLeg, updatedAt, receivedAmount });
+  const routeSnapshot = activityRoute(activity);
+  return normalizeActivityState({ ...activity, environment: routeSnapshot ? routeEnvironment(routeSnapshot) : "testnet", routeSnapshot, midenAccountHex, failureLeg, updatedAt, receivedAmount });
 }
 
-export function loadStoredActivities(): Activity[] {
+export function loadStoredActivities(environment?: BridgeEnvironment): Activity[] {
   const raw = window.localStorage.getItem(activityStorageKey);
   if (!raw) return [];
   const parsed = JSON.parse(raw) as Activity[];
   if (!Array.isArray(parsed)) return [];
   return parsed
     .filter((activity) => activity && isBridgeProvider(activity.provider) && isFlowMode(activity.mode))
-    .map(normalizeActivity);
+    .map(normalizeActivity)
+    .filter(activity => !environment || activity.environment === environment);
 }
 
 export function saveActivities(activities: Activity[]) {

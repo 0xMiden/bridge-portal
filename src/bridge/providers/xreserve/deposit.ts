@@ -11,7 +11,7 @@ import {
 } from "viem";
 import type { EvmProvider } from "../../../wallets/evm/evm-wallet";
 import { normalizeMidenAccountHex } from "../agglayer/agglayer";
-import { ARC, ARC_MAX_MIDEN_AMOUNT, arcTestnet, xReserveAbi } from "./config";
+import { ARC, arcConfig, ARC_MAX_MIDEN_AMOUNT, xReserveAbi } from "./config";
 import { evmReadTransport } from "../../evm/transport";
 
 export function parseArcAmount(amount: string): bigint {
@@ -30,7 +30,9 @@ export function arcRecipient(address: string): Hex {
   return pad(`0x${hex}00`, { size: 32 });
 }
 
-export async function ensureArc(provider: EvmProvider) {
+export async function ensureArc(provider: EvmProvider, deploymentId?: string) {
+  const ARC = arcConfig(deploymentId);
+  const arcTestnet = ARC.chain;
   const chainId = `0x${ARC.chainId.toString(16)}`;
   if (Number(await provider.request({ method: "eth_chainId" })) === ARC.chainId)
     return;
@@ -65,7 +67,7 @@ export async function ensureArc(provider: EvmProvider) {
     });
   }
   if (Number(await provider.request({ method: "eth_chainId" })) !== ARC.chainId)
-    throw new Error("Switch your wallet to Arc Testnet.");
+    throw new Error(`Switch your wallet to ${arcTestnet.name}.`);
 }
 
 export type ArcDepositPhase =
@@ -86,7 +88,9 @@ export async function depositOnArc({
   onPhase: (phase: ArcDepositPhase) => void;
   // Persist immediately after broadcast; a later polling failure is NOT a failed deposit.
   onBroadcast: (hash: Hash) => void;
-}) {
+}, deploymentId?: string) {
+  const ARC = arcConfig(deploymentId);
+  const arcTestnet = ARC.chain;
   const value = parseArcAmount(amount);
   const remoteRecipient = arcRecipient(recipient);
   // Validate the actual AccountId structure with the installed SDK before locking USDC.
@@ -94,8 +98,8 @@ export async function depositOnArc({
   const recipientId = AccountId.fromHex(`0x${normalizeMidenAccountHex(recipient)}`);
   recipientId.free();
   onPhase("checking");
-  await ensureArc(provider);
-  const client = createPublicClient({ chain: arcTestnet, transport: evmReadTransport("arc-testnet") });
+  await ensureArc(provider, deploymentId);
+  const client = createPublicClient({ chain: arcTestnet, transport: evmReadTransport(ARC.network) });
   const wallet = createWalletClient({
     chain: arcTestnet,
     transport: custom(provider),
@@ -110,7 +114,7 @@ export async function depositOnArc({
       Number(await provider.request({ method: "eth_chainId" })) !== ARC.chainId
     )
       throw new Error(
-        "Your wallet network changed. Switch to Arc Testnet and review again.",
+        `Your wallet network changed. Switch to ${arcTestnet.name} and review again.`,
       );
   };
   const registered = await client.readContract({
@@ -121,7 +125,7 @@ export async function depositOnArc({
   });
   if (!registered)
     throw new Error(
-      "Miden deposits are not registered on this Arc Testnet contract yet.",
+      `Miden deposits are not registered on this ${arcTestnet.name} contract yet.`,
     );
   const remoteToken = await client.readContract({
     address: ARC.xReserve,
@@ -138,7 +142,7 @@ export async function depositOnArc({
     args: [account],
   });
   if (balance <= value)
-    throw new Error("Keep some USDC on Arc Testnet to pay transaction fees.");
+    throw new Error(`Keep some USDC on ${arcTestnet.name} to pay transaction fees.`);
   const allowance = await client.readContract({
     address: ARC.usdc,
     abi: erc20Abi,

@@ -10,7 +10,7 @@ import { observeXreserveDeposit } from "./status";
 export const flows: ProviderFlows = {
   receive: {
     async quote(input, signal) {
-      if (input.route.source.network === "arc-testnet") return null;
+      if (["arc-testnet", "arc"].includes(input.route.source.network)) return null;
       const { quoteTransfer } = await import("./cctp-quote");
       return quoteTransfer(input, signal);
     },
@@ -47,7 +47,7 @@ export const flows: ProviderFlows = {
             midenAccount: recipient,
             receivedAmount: input.amount.trim(),
           });
-          if (route.source.network !== "miden-testnet")
+          if (route.source.kind !== "miden")
             void captureSourceTransaction(route.source.network, sourceTxHash)
               .then((sourceTransaction) => {
                 if (sourceTransaction) update({ sourceTransaction });
@@ -55,7 +55,7 @@ export const flows: ProviderFlows = {
               .catch(() => undefined);
         },
       };
-      if (route.source.network === "arc-testnet") await depositOnArc(request);
+      if (["arc-testnet", "arc"].includes(route.source.network)) await depositOnArc(request, route.deploymentId);
       else {
         if (!isCctpNetwork(route.source.network) || input.quote?.kind !== "cctp")
           throw new Error("Review the Circle fee before sending.");
@@ -64,7 +64,7 @@ export const flows: ProviderFlows = {
           ...request,
           network: route.source.network,
           quote: input.quote.authorization,
-        });
+        }, route.deploymentId);
       }
     },
     monitor: {
@@ -90,6 +90,7 @@ export const flows: ProviderFlows = {
       if (
         !reviewed ||
         reviewed.network !== route.destination.network ||
+        reviewed.deploymentId !== route.deploymentId ||
         reviewed.amount !== input.amount ||
         reviewed.sender !== wallet.address ||
         reviewed.recipient.toLowerCase() !== recipient.toLowerCase() ||
@@ -98,6 +99,7 @@ export const flows: ProviderFlows = {
         throw new Error("Refresh and review the withdrawal estimate before sending.");
       }
       const fresh = await fetchWithdrawalQuote({
+        deploymentId: route.deploymentId,
         network: route.destination.network,
         amount: input.amount,
         sender: wallet.address,
@@ -127,7 +129,7 @@ export const flows: ProviderFlows = {
             xreserveWithdrawalFeeEstimate: fresh.fee,
             xreserveWithdrawalReceivedEstimate: fresh.received,
           }),
-      });
+      }, route.deploymentId);
       update({ sourceTxHash: result.txHash });
     },
     monitor: { canPoll: () => false, observe: async () => ({ patch: {} }) },

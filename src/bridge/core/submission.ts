@@ -6,6 +6,7 @@ import type { Activity } from "./models";
 import type { BridgeRoute } from "./routes";
 
 export interface TransferSubmission {
+  environment?: import("../../config/environment").BridgeEnvironment;
   routeId: string;
   quote?: TransferQuote;
   amount: string;

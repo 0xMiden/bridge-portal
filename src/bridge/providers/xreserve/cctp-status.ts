@@ -1,6 +1,6 @@
 import { createPublicClient, pad, parseAbi, parseEventLogs, slice, size, type Hex } from "viem";
-import { CCTP, cctpSources, type CctpNetwork } from "./cctp-config";
-import { ARC, arcTestnet, ARC_MAX_MIDEN_AMOUNT } from "./config";
+import { cctpConfig, cctpSource, type CctpNetwork } from "./cctp-config";
+import { arcConfig, ARC_MAX_MIDEN_AMOUNT } from "./config";
 import { evmServerTransport } from "../../evm/rpc.server";
 import { decodeCctpDepositHook } from "./cctp-hook";
 import type { ArcStatusResponse } from "./status";
@@ -14,8 +14,11 @@ export type CctpStatusResponse = ArcStatusResponse & {
   forwarding?: boolean;
 };
 
-export async function getCctpStatus(network: CctpNetwork, hash: Hex): Promise<CctpStatusResponse> {
-  const source = cctpSources[network];
+export async function getCctpStatus(network: CctpNetwork, hash: Hex, deploymentId?: string): Promise<CctpStatusResponse> {
+  const ARC = arcConfig(deploymentId);
+  const arcTestnet = ARC.chain;
+  const CCTP = cctpConfig(deploymentId, network);
+  const source = cctpSource(network, deploymentId);
   const client = createPublicClient({ chain: source.chain, transport: evmServerTransport(network) });
   const receipt = await client.getTransactionReceipt({ hash }).catch((error: Error) => {
     if (error.name === "TransactionReceiptNotFoundError") return null;
@@ -28,7 +31,7 @@ export async function getCctpStatus(network: CctpNetwork, hash: Hex): Promise<Cc
   const message = messages[0].args.message;
   // MessageV2's 148-byte header and BurnMessageV2's 228-byte fixed body.
   if (size(message) <= 376 || BigInt(slice(message, 0, 4)) !== 1n ||
-      BigInt(slice(message, 4, 8)) !== BigInt(source.domain) || BigInt(slice(message, 8, 12)) !== 26n ||
+      BigInt(slice(message, 4, 8)) !== BigInt(source.domain) || BigInt(slice(message, 8, 12)) !== BigInt(ARC.circleDomain) ||
       slice(message, 44, 76).toLowerCase() !== pad(CCTP.tokenMessenger).toLowerCase() ||
       slice(message, 108, 140).toLowerCase() !== pad(CCTP.executor).toLowerCase() ||
       slice(message, 152, 184).toLowerCase() !== pad(source.asset.address).toLowerCase() ||
@@ -36,7 +39,7 @@ export async function getCctpStatus(network: CctpNetwork, hash: Hex): Promise<Cc
     throw new Error("Unsupported Circle burn message.");
   const amount = BigInt(slice(message, 216, 248));
   if (amount <= 0n || amount > ARC_MAX_MIDEN_AMOUNT) throw new Error("Unsupported burn amount.");
-  const deposit = { ...decodeCctpDepositHook(slice(message, 376)), amount: amount.toString() };
+  const deposit = { ...decodeCctpDepositHook(slice(message, 376), deploymentId), amount: amount.toString() };
   const block = await client.getBlock({ blockHash: receipt.blockHash });
   const pending: CctpStatusResponse = { status: "submitted", source: deposit, sourceTxAt: Number(block.timestamp) * 1000, forwarding: true };
   const response = await fetch(`${CCTP.api}/v2/messages/${source.domain}?transactionHash=${hash}`, { cache: "no-store", signal: AbortSignal.timeout(12_000) });
@@ -53,7 +56,7 @@ export async function getCctpStatus(network: CctpNetwork, hash: Hex): Promise<Cc
   });
   if (!forwarded?.forwardTxHash || !/^0x[\da-f]{64}$/i.test(forwarded.forwardTxHash)) return pending;
   const arcTxHash = forwarded.forwardTxHash as Hex;
-  const arc = createPublicClient({ chain: arcTestnet, transport: evmServerTransport("arc-testnet") });
+  const arc = createPublicClient({ chain: arcTestnet, transport: evmServerTransport(ARC.network) });
   const arcReceipt = await arc.getTransactionReceipt({ hash: arcTxHash });
   const executions = parseEventLogs({ abi: executorAbi, logs: arcReceipt.logs.filter((log) => log.address.toLowerCase() === CCTP.executor.toLowerCase()) });
   // Bind the intermediate transaction to THIS burn, including its Circle nonce.
@@ -62,7 +65,7 @@ export async function getCctpStatus(network: CctpNetwork, hash: Hex): Promise<Cc
       args.handler.toLowerCase() === CCTP.handler.toLowerCase() &&
       args.token.toLowerCase() === ARC.usdc.toLowerCase() && args.amount === amount))
     throw new Error("Circle forwarding transaction does not match the source transfer.");
-  const statusResponse = await getArcDepositStatus(arcTxHash);
+  const statusResponse = await getArcDepositStatus(arcTxHash, deploymentId);
   if (!statusResponse.ok) throw new Error("Forwarded Miden deposit could not be verified.");
   const status: ArcStatusResponse = await statusResponse.json();
   if (!status.deposit || status.deposit.amount !== deposit.amount || status.deposit.recipient !== deposit.recipient ||

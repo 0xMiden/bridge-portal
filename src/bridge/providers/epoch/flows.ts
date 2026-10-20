@@ -1,3 +1,4 @@
+import { activityRoute } from "../../core/routes";
 import { SEPOLIA_NETWORK } from "../../../config/sepolia";
 import { MIDEN_DESTINATION_CHAIN_ID } from "./config";
 import { epochActivityState, epochDestinationTx } from "./epoch-status";
@@ -98,7 +99,7 @@ function intentMonitor(destinationChainId: number): ActivityMonitor {
       Boolean(activity.epochSponsor && activity.epochIntentNonce),
     async observe(activity) {
       const { getEpochReadOnlySdk } = await import("./sdk");
-      const sdk = await getEpochReadOnlySdk(activity.epochSponsor as `0x${string}`);
+      const sdk = await getEpochReadOnlySdk(activity.epochSponsor as `0x${string}`, activityRoute(activity)?.deploymentId);
       const statuses = await sdk.getIntentStatus(
         activity.epochSponsor!,
         activity.epochIntentNonce!,

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import type { EvmNetwork } from "../../bridge/core/assets";
 import { formatEther } from "viem";
 
 function formatEthFee(wei: bigint): string {
@@ -25,7 +26,7 @@ export interface SepoliaGasFee {
  * and returns `gasPrice * gasUnits` as an ETH string. Pass `null` to disable
  * (e.g. when the route's fee isn't on Sepolia).
  */
-export function useSepoliaGasEstimate(gasUnits: number | null): SepoliaGasFee {
+export function useSepoliaGasEstimate(gasUnits: number | null, network: EvmNetwork = "sepolia"): SepoliaGasFee {
   const [state, setState] = useState<SepoliaGasFee>({ loading: gasUnits != null });
 
   useEffect(() => {
@@ -43,7 +44,7 @@ export function useSepoliaGasEstimate(gasUnits: number | null): SepoliaGasFee {
 
     async function load() {
       try {
-        const response = await fetch("/api/evm/sepolia/gas", { cache: "no-store" });
+        const response = await fetch(`/api/evm/${network}/gas`, { cache: "no-store" });
         const payload = (await response.json()) as {
           gasPriceWei?: string;
           gwei?: string;
@@ -78,7 +79,7 @@ export function useSepoliaGasEstimate(gasUnits: number | null): SepoliaGasFee {
       cancelled = true;
       window.clearInterval(interval);
     };
-  }, [gasUnits]);
+  }, [gasUnits, network]);
 
   return state;
 }

@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Activity } from "./bridge-presentation";
-import { activityRoute } from "../../bridge/core/routes";
+import { createActivity } from "./bridge-presentation";
+import { activityRoute, routesForEnvironment } from "../../bridge/core/routes";
 import {
   loadStoredActivities,
   loadStoredMode,
@@ -74,7 +75,7 @@ describe("activity persistence", () => {
     saveActivities(activities);
 
     expect(storage.get("miden.bridge.ui.activities")).toBe(JSON.stringify(activities));
-    expect(loadStoredActivities()).toEqual(activities);
+    expect(loadStoredActivities()).toMatchObject(activities);
   });
 
   it("recovers timestamps written before numeric dates without rewriting saved history", () => {
@@ -99,7 +100,7 @@ describe("activity persistence", () => {
       activity,
     ]);
     storage.set("miden.bridge.ui.activities", raw);
-    expect(loadStoredActivities()).toEqual([activity]);
+    expect(loadStoredActivities()).toMatchObject([activity]);
     expect(storage.get("miden.bridge.ui.activities")).toBe(raw);
   });
 
@@ -153,7 +154,7 @@ describe("activity persistence", () => {
     patchStoredActivity(activity.id, { status: "complete", claimTxHash: "0xclaim", updatedAt: 1 });
     patchStoredActivity("missing", { status: "failed" });
 
-    expect(JSON.parse(storage.get("miden.bridge.ui.activities")!)).toEqual([
+    expect(JSON.parse(storage.get("miden.bridge.ui.activities")!)).toMatchObject([
       { ...activity, status: "complete", claimTxHash: "0xclaim", destinationTxAt: now, updatedAt: now },
       other,
     ]);
@@ -200,15 +201,15 @@ describe("activity persistence", () => {
 });
 
 describe("route and direction preferences", () => {
-  it("keeps the existing keys and unencoded preference values", () => {
+  it("saves testnet preferences separately with unencoded values", () => {
     for (const route of ["xreserve", "agglayer", "epoch"] as const) {
       saveStoredRoute(route);
-      expect(storage.get("miden.bridge.ui.route")).toBe(route);
+      expect(storage.get("miden.bridge.ui.route.testnet")).toBe(route);
       expect(loadStoredRoute()).toBe(route);
     }
     for (const mode of ["send", "receive"] as const) {
       saveStoredMode(mode);
-      expect(storage.get("miden.bridge.ui.mode")).toBe(mode);
+      expect(storage.get("miden.bridge.ui.mode.testnet")).toBe(mode);
       expect(loadStoredMode()).toBe(mode);
     }
   });
@@ -249,6 +250,37 @@ describe("storage failures", () => {
     expect(() => saveStoredRoute("epoch")).not.toThrow();
     expect(() => saveStoredMode("send")).not.toThrow();
     expect(() => patchStoredActivity(activity.id, { status: "complete" })).not.toThrow();
-    expect(loadStoredActivities()).toEqual([activity]);
+    expect(loadStoredActivities()).toMatchObject([activity]);
+  });
+});
+
+describe("coexisting networks", () => {
+  it("keeps legacy transfers on testnet while saving and updating a mainnet receipt", () => {
+    storage.set("miden.bridge.ui.activities", JSON.stringify([activity]));
+    storage.set("miden.bridge.ui.route", "epoch");
+    storage.set("miden.bridge.ui.mode", "send");
+    expect(loadStoredRoute("testnet")).toBe("epoch");
+    expect(loadStoredMode("testnet")).toBe("send");
+    expect(loadStoredRoute("mainnet")).toBeNull();
+    expect(loadStoredMode("mainnet")).toBeNull();
+    const route = routesForEnvironment("mainnet").find(route => route.provider === "agglayer" && route.mode === "send")!;
+    const mainnet = createActivity(route, "0.01");
+    saveActivities([mainnet, ...loadStoredActivities()]);
+    saveStoredRoute("agglayer", route.id, "mainnet");
+    saveStoredMode("receive", "mainnet");
+    patchStoredActivity(mainnet.id, { claimTxHash: "0xmainnetclaim", status: "complete" });
+    const testnet = loadStoredActivities("testnet");
+    expect(testnet).toHaveLength(1);
+    expect(testnet[0]).toMatchObject({ ...activity, environment: "testnet", routeSnapshot: {
+      source: { network: "miden-testnet", faucetId: "0x7c6d1dc7fb7045913d524bbef017f5" },
+      destination: { network: "sepolia" },
+    } });
+    expect(loadStoredActivities("mainnet")).toMatchObject([{ id: mainnet.id, status: "complete", routeSnapshot: {
+      source: { network: "miden-mainnet", faucetId: "0x419f8f4bff72959132aa7cea15a4c1" },
+      destination: { network: "ethereum" },
+    } }]);
+    expect(loadStoredActivities()).toHaveLength(2);
+    expect(loadStoredMode("testnet")).toBe("send");
+    expect(loadStoredRoute("testnet")).toBe("epoch");
   });
 });

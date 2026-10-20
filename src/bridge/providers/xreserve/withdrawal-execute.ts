@@ -1,8 +1,9 @@
 import type { MidenFiWalletContextState } from "@miden-sdk/miden-wallet-adapter-react";
 import type { BridgeNetwork } from "../../core/assets";
 import { normalizeMidenAccountHex } from "../agglayer/agglayer";
-import { ARC } from "./config";
+import { arcConfig } from "./config";
 import { validateWithdrawal, withdrawalDomains, withdrawalPayload } from "./withdrawal";
+import { deploymentMiden } from "../../../config/deployments";
 import { createFeeConversionSalt } from "../../../wallets/miden/miden-transaction";
 
 /** Matches 0xMiden/wallet's v0.17.1 XReserveBurnNote construction. Browser only. */
@@ -14,13 +15,14 @@ export async function withdrawUsdcx(input: {
   requestTransaction: NonNullable<MidenFiWalletContextState["requestTransaction"]>;
   waitForTransaction: NonNullable<MidenFiWalletContextState["waitForTransaction"]>;
   onSubmitted: (noteId: string, requestId: string) => void;
-}): Promise<{ noteId: string; txHash: string }> {
+}, deploymentId?: string): Promise<{ noteId: string; txHash: string }> {
+  const ARC = arcConfig(deploymentId);
   const amount = validateWithdrawal(input.amount, input.network);
   const payload = withdrawalPayload(input.destination, withdrawalDomains[input.network]!);
   const sdk = await import("@miden-sdk/miden-sdk");
   const { Transaction } = await import("@miden-sdk/miden-wallet-adapter-base");
   const faucet = sdk.AccountId.fromHex(ARC.faucetId);
-  const rpc = new sdk.RpcClient(new sdk.Endpoint(process.env.NEXT_PUBLIC_MIDEN_RPC_URL ?? "https://rpc.testnet.miden.io"));
+  const rpc = new sdk.RpcClient(new sdk.Endpoint(deploymentMiden(deploymentId).rpcUrl));
   try {
     // Only request the burn-policy entry. Fetching the full faucet account fails
     // once its unrelated used_nonces map exceeds the node's response limit.

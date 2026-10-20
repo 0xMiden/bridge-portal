@@ -1,4 +1,4 @@
-import { AGGLAYER_TESTNET } from "./agglayer";
+import { agglayerConfig } from "./agglayer";
 
 // Ported from 0xMiden/wallet@utk-bridge-integration (src/lib/agglayer/status.ts).
 // Talks to the public gateway.fm bridge indexer directly — no local Rust
@@ -6,7 +6,7 @@ import { AGGLAYER_TESTNET } from "./agglayer";
 
 // `${bridgeServiceApi}/bridges` is the deposit indexer; the service root (with
 // `/merkle-proof`) is one level up.
-const BRIDGES_API = `${AGGLAYER_TESTNET.bridgeServiceApi}/bridges`;
+
 
 // One row from the bridge indexer's `deposits` array.
 export interface AgglayerDeposit {
@@ -38,7 +38,9 @@ export async function fetchDeposits(
   destAddr: string,
   limit = 10,
   signal?: AbortSignal,
+  deploymentId?: string,
 ): Promise<AgglayerDeposit[]> {
+  const BRIDGES_API = `${agglayerConfig(deploymentId).bridgeServiceApi}/bridges`;
   const res = await fetch(`${BRIDGES_API}/${destAddr}?limit=${limit}&offset=0`, {
     cache: "no-store", signal,
   });
@@ -60,8 +62,10 @@ export async function findMidenToEvmDeposit(
   l1Dest: string,
   depositCnt?: string | number,
   signal?: AbortSignal,
+  deploymentId?: string,
 ): Promise<AgglayerDeposit | null> {
-  const deposits = await fetchDeposits(l1Dest, 10, signal);
+  const AGGLAYER_TESTNET = agglayerConfig(deploymentId);
+  const deposits = await fetchDeposits(l1Dest, 10, signal, deploymentId);
   const matching = deposits.filter(
     (d) => d.network_id === AGGLAYER_TESTNET.midenIndexerNetworkId &&
       d.dest_net === AGGLAYER_TESTNET.sourceNetworkId,

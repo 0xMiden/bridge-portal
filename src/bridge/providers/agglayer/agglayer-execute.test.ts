@@ -53,7 +53,6 @@ vi.mock("@miden-sdk/miden-wallet-adapter-base", () => ({
 }));
 vi.mock("../../../wallets/miden/miden-transaction", () => ({ createFeeConversionSalt: () => "fresh-salt" }));
 
-import { MIDEN_BRIDGE_ID } from "./agglayer-b2agg";
 import { runAgglayerSend } from "./agglayer-execute";
 
 const SENDER_HEX = "387149ae66116cf114eebd60bb7381";
@@ -80,7 +79,7 @@ describe("runAgglayerSend", () => {
 
     expect(createB2AggNote).toHaveBeenCalledWith(
       expect.objectContaining({ kind: "hex" }),
-      expect.objectContaining({ id: MIDEN_BRIDGE_ID }),
+      expect.objectContaining({ id: "0x187cabbc404359d16be94954ca9879" }),
       expect.anything(),
       0,
       expect.objectContaining({ evm: DEST }),

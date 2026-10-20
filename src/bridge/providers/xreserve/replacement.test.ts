@@ -1,7 +1,8 @@
 import { afterEach, expect, it, vi } from "vitest";
 import { observeXreserveDeposit } from "./status";
 import type { BridgeActivity } from "../../core/models";
-import { CCTP } from "./cctp-config";
+import { cctpConfig } from "./cctp-config";
+const CCTP = cctpConfig();
 import { ARC } from "./config";
 
 const original = `0x${"11".repeat(32)}`;

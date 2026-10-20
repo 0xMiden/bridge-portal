@@ -1,5 +1,6 @@
+import { assertMidenAccountNetwork } from "../../wallets/miden/network";
 import { validateTransferAmount } from "../../bridge/core/rules";
-import { findBridgeRoute } from "../../bridge/core/routes";
+import { findBridgeRoute, routeEnvironment } from "../../bridge/core/routes";
 import type { Activity, BridgeProvider } from "../../bridge/core/models";
 import type { TransferSubmission, SubmissionEffects } from "../../bridge/core/submission";
 import { bridgeProviders, directionFor } from "../../bridge/providers/registry";
@@ -29,12 +30,13 @@ export async function submitBridgeTransfer(
   effects: SubmissionEffects,
 ): Promise<void> {
   const route = findBridgeRoute(input.routeId);
-  if (!route || route.disabled) {
+  if (!route || route.disabled || routeEnvironment(route) !== (input.environment ?? "testnet")) {
     effects.onError("This route isn't available in this build.");
     return;
   }
   try {
     validateTransferAmount(route, input.amount);
+    assertMidenAccountNetwork(input.midenAccount, routeEnvironment(route));
   } catch (error) {
     effects.onError(errorMessage(error));
     return;
@@ -77,6 +79,7 @@ export async function submitBridgeTransfer(
         !quote ||
         quote.expiresAt <= Date.now() ||
         quote.request.routeId !== route.id ||
+        quote.request.deploymentId !== route.deploymentId ||
         quote.request.amount !== input.amount ||
         quote.request.midenAccount !== input.midenAccount ||
         quote.request.evmAddress.toLowerCase() !== input.evmAddress.toLowerCase()

@@ -1,29 +1,31 @@
-import { MIDEN_ETH } from "../../core/assets";
+import { getDeployment, deploymentEvmNetwork, deploymentMiden } from "../../../config/deployments";
+import { evmNetworks } from "../../../config/evm-networks";
 import { encodeFunctionData, parseEther, toHex } from "viem";
-import { SEPOLIA_NETWORK } from "../../../config/sepolia";
 
-export const AGGLAYER_TESTNET = {
-  sepoliaChainId: SEPOLIA_NETWORK.chainId,
-  sepoliaChainHex: SEPOLIA_NETWORK.chainHex,
-  sepoliaBridgeAddress: "0x528e26b25a34a4a5d0dbda1d57d318153d2ed582",
-  // Cardona deployment confirmed by Gateway on 2026-10-09 (see docs/agglayer-testnet.md).
-  // This is the rollup ID, not the synthetic EVM chain ID (604208969).
-  destinationNetworkId: 73,
-  // The Cardona bridge indexer reports Miden exits under the rollup ID too.
-  midenIndexerNetworkId: 73,
-  sourceNetworkId: 0,
-  nativeTokenAddress: "0x0000000000000000000000000000000000000000",
-  gasLimit: BigInt(300000),
-  bridgeServiceApi: "https://bridge.miden-testnet.gateway.fm/api",
-  sepoliaRpcUrl: SEPOLIA_NETWORK.rpcUrl,
-  sepoliaExplorer: SEPOLIA_NETWORK.explorerUrl,
-  midenExplorer: "https://testnet.midenscan.com",
-  midenEthFaucetId: "mtst1ap7x68w8ldcytyfa2f9mauqh75qhs3hh_qr7qqq9wr6w",
-  // Same account as midenEthFaucetId, hex form — this is the canonical Agglayer
-  // ETH faucet on Cardona. The Miden→Sepolia send must bridge this asset.
-  midenEthFaucetIdHex: MIDEN_ETH.faucetId,
-  midenEthDecimals: MIDEN_ETH.decimals,
-} as const;
+export function agglayerConfig(deploymentId?: string) {
+  const deployment = getDeployment(deploymentId);
+  const evmNetwork = deploymentEvmNetwork(deploymentId);
+  const chain = evmNetworks[evmNetwork];
+  const bridge = deployment.document.supportedEvmChains[evmNetwork]?.bridges.agglayer;
+  if (!bridge?.contractAddress || !bridge.midenBridgeId) throw new Error("Agglayer is not configured.");
+  return {
+    evmNetwork, chain, midenBridgeId: bridge.midenBridgeId,
+    sepoliaChainId: chain.id, sepoliaChainHex: `0x${chain.id.toString(16)}`,
+    sepoliaBridgeAddress: bridge.contractAddress,
+    destinationNetworkId: deployment.derived.rollupId,
+    midenIndexerNetworkId: deployment.derived.rollupId,
+    sourceNetworkId: 0,
+    nativeTokenAddress: "0x0000000000000000000000000000000000000000" as const,
+    gasLimit: 300000n,
+    bridgeServiceApi: deployment.document["bridge-providers"].agglayer.indexerUrl,
+    sepoliaRpcUrl: chain.rpcUrls.default.http[0],
+    sepoliaExplorer: chain.blockExplorers.default.url,
+    midenExplorer: deploymentMiden(deploymentId).explorer,
+    midenEthFaucetIdHex: deployment.derived.eth.faucetId,
+    midenEthDecimals: deployment.derived.eth.decimals,
+  };
+}
+export const AGGLAYER_TESTNET = agglayerConfig();
 
 const bridgeAssetAbi = [
   {
@@ -187,7 +189,8 @@ export function buildSepoliaDepositTransaction({
 }: {
   amountEth: string;
   midenAccountId: string;
-}) {
+}, deploymentId?: string) {
+  const AGGLAYER_TESTNET = agglayerConfig(deploymentId);
   const amountWei = parseEther(amountEth);
   if (amountWei <= BigInt(0)) {
     throw new Error("Enter an amount greater than zero.");
@@ -216,6 +219,7 @@ export function buildSepoliaDepositTransaction({
   };
 }
 
-export function bridgeStatusUrl(destinationAddress: string) {
+export function bridgeStatusUrl(destinationAddress: string, deploymentId?: string) {
+  const AGGLAYER_TESTNET = agglayerConfig(deploymentId);
   return `${AGGLAYER_TESTNET.bridgeServiceApi}/bridges/${destinationAddress}?limit=1&offset=0`;
 }
