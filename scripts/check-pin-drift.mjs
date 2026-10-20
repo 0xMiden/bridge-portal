@@ -1,79 +1,42 @@
 #!/usr/bin/env node
 import { readFile } from "node:fs/promises";
+import { isDeepStrictEqual } from "node:util";
 
-const WALLET_PKG =
-  "https://raw.githubusercontent.com/0xMiden/wallet/main/package.json";
-const WALLET_B2AGG =
-  "https://raw.githubusercontent.com/0xMiden/wallet/main/src/lib/agglayer/b2agg/constant.ts";
-const WALLET_AGGLAYER =
-  "https://raw.githubusercontent.com/0xMiden/wallet/main/src/lib/agglayer/constant.ts";
-
-function pickConst(source, name) {
-  const match = source.match(
-    new RegExp(`export const ${name} = ['"]([^'"]+)['"]`),
-  );
-  return match?.[1] ?? null;
-}
-
+const snapshots = JSON.parse(await readFile("src/config/wallet-config/snapshots.json", "utf8"));
 const portalPkg = JSON.parse(await readFile("package.json", "utf8"));
-const portalSdk = portalPkg.dependencies["@miden-sdk/miden-sdk"];
-const portalB2agg = await readFile("src/bridge/providers/agglayer/agglayer-b2agg.ts", "utf8");
-const portalBridge = pickConst(portalB2agg, "MIDEN_BRIDGE_ID");
-const portalAssets = await readFile("src/bridge/core/assets.ts", "utf8");
-const portalEthAsset = portalAssets.match(/export const MIDEN_ETH = \{([^}]+)\}/)?.[1] ?? "";
-const portalFaucet = portalEthAsset.match(/faucetId:\s*["']([^"']+)["']/)?.[1];
-
-const walletPkgRes = await fetch(WALLET_PKG);
-if (!walletPkgRes.ok) {
-  throw new Error(`wallet package.json HTTP ${walletPkgRes.status}`);
+async function json(url) {
+  const response = await fetch(url, { signal: AbortSignal.timeout(15_000) });
+  if (!response.ok) throw new Error(`${url}: HTTP ${response.status}`);
+  return response.json();
 }
-const walletPkg = await walletPkgRes.json();
-const walletSdk = walletPkg.dependencies["@miden-sdk/miden-sdk"];
-
-const walletB2aggRes = await fetch(WALLET_B2AGG);
-if (!walletB2aggRes.ok) {
-  throw new Error(`wallet b2agg/constant.ts HTTP ${walletB2aggRes.status}`);
+const environments = ["testnet", "mainnet"];
+const [walletPkg, ...documents] = await Promise.all([
+  json("https://raw.githubusercontent.com/0xMiden/wallet/main/package.json"),
+  ...environments.map(environment => json(`https://raw.githubusercontent.com/0xMiden/wallet-config/main/${environment}.json`)),
+]);
+// Ignore unrelated wallet settings (earn, swap, geography, document version).
+// Compare only the manifest inputs this portal actually consumes.
+function bridgeInputs(document) {
+  return {
+    providers: document["bridge-providers"],
+    chains: document.supportedEvmChains,
+    features: Object.fromEntries(["fastBridge", "bridgeIn", "bridgeOut"].map(key => [key, document.features[key]])),
+  };
 }
-const walletB2agg = await walletB2aggRes.text();
-const walletBridge = pickConst(walletB2agg, "MIDEN_BRIDGE_ID");
-const walletFaucet = pickConst(walletB2agg, "MIDEN_AGGLAYER_FAUCET_ID");
-
-const walletAgglayerRes = await fetch(WALLET_AGGLAYER);
-if (!walletAgglayerRes.ok) {
-  throw new Error(`wallet agglayer/constant.ts HTTP ${walletAgglayerRes.status}`);
-}
-const walletAgglayer = await walletAgglayerRes.text();
-const portalAgglayer = await readFile("src/bridge/providers/agglayer/agglayer.ts", "utf8");
-const portalNetwork = portalAgglayer.match(/destinationNetworkId:\s*(\d+)/)?.[1];
-const walletNetwork = walletAgglayer.match(/export const MIDEN_CHAIN_ID\s*=\s*(\d+)/)?.[1];
-if (!portalBridge || !walletBridge || !portalFaucet || !walletFaucet ||
-    !portalNetwork || !walletNetwork || !portalSdk || !walletSdk) {
-  throw new Error("Unable to read required deployment pins; check upstream configuration format.");
-}
-
 const drifts = [];
-if (portalNetwork !== walletNetwork) {
-  drifts.push(`Agglayer rollup ID: portal=${portalNetwork} wallet=${walletNetwork}`);
+const sdk = portalPkg.dependencies["@miden-sdk/miden-sdk"];
+if (sdk !== walletPkg.dependencies["@miden-sdk/miden-sdk"])
+  drifts.push(`SDK: portal=${sdk} wallet=${walletPkg.dependencies["@miden-sdk/miden-sdk"]}`);
+for (const [index, environment] of environments.entries()) {
+  const snapshot = snapshots.findLast(value => value.environment === environment);
+  if (!snapshot) throw new Error(`Missing ${environment} snapshot`);
+  if (!isDeepStrictEqual(bridgeInputs(snapshot.document), bridgeInputs(documents[index])))
+    drifts.push(`${environment}: imported v${snapshot.document.version} at ${snapshot.revision}; review wallet-config main v${documents[index].version}`);
 }
-if (portalSdk !== walletSdk) {
-  drifts.push(`@miden-sdk/miden-sdk: portal=${portalSdk} wallet=${walletSdk}`);
+if (drifts.length) {
+  console.error("check-pin-drift: review upstream changes before importing a new pinned revision:");
+  for (const drift of drifts) console.error(`  ${drift}`);
+  process.exitCode = 1;
+} else {
+  console.log(`check-pin-drift: ok (SDK ${sdk}, both wallet-config bridge configurations match upstream)`);
 }
-if (portalBridge && walletBridge && portalBridge !== walletBridge) {
-  drifts.push(`MIDEN_BRIDGE_ID: portal=${portalBridge} wallet=${walletBridge}`);
-}
-if (portalFaucet && walletFaucet && portalFaucet !== walletFaucet) {
-  drifts.push(
-    `MIDEN_AGGLAYER_FAUCET_ID: portal=${portalFaucet} wallet=${walletFaucet}`,
-  );
-}
-
-if (drifts.length === 0) {
-  console.log(
-    `check-pin-drift: ok (sdk ${portalSdk}, rollup ${portalNetwork}, bridge ${portalBridge}, faucet ${portalFaucet})`,
-  );
-  process.exit(0);
-}
-
-console.error("check-pin-drift: portal drifted from wallet main:");
-for (const line of drifts) console.error(`  ${line}`);
-process.exit(1);
