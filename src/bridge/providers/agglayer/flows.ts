@@ -8,11 +8,11 @@ import {
 } from "./agglayer";
 import { submitAgglayerDeposit } from "./deposit";
 
-import type { AgglayerDepositStatus } from "./agglayer";
+import { chainObservationSchema, depositStatusSchema, withdrawalStatusSchema, type ChainTxObservation } from "./status-schema";
+import type { Activity } from "../../core/models";
 import { findMidenToEvmDeposit } from "./agglayer-status";
 import {
   agglayerPatch,
-  type ChainTxObservation,
   type AgglayerObservation,
 } from "./activity-observation";
 async function sourceTransaction(hash: string, signal: AbortSignal, network: EvmNetwork = "sepolia"): Promise<ChainTxObservation> {
@@ -21,7 +21,9 @@ async function sourceTransaction(hash: string, signal: AbortSignal, network: Evm
     signal,
   });
   if (!response.ok) throw new Error("Unable to read the EVM transaction.");
-  return response.json();
+  const observation = chainObservationSchema.parse(await response.json());
+  if (observation.hash.toLowerCase() !== hash.toLowerCase()) throw new Error("EVM transaction mismatch.");
+  return observation;
 }
 
 export const flows: ProviderFlows = {
@@ -52,9 +54,7 @@ export const flows: ProviderFlows = {
     },
     monitor: {
       canPoll: (activity) =>
-        activity.status !== "failed" &&
-        !(activity.status === "complete" && activity.midenTxId) &&
-        Boolean(activity.bridgeDestinationAddress || activity.sourceTxHash),
+        needsReceiveTracking(activity) && Boolean(activity.bridgeDestinationAddress || activity.sourceTxHash),
       async observe(activity, signal) {
         const deploymentId = activityRoute(activity)?.deploymentId;
         const config = agglayerConfig(deploymentId);
@@ -66,25 +66,7 @@ export const flows: ProviderFlows = {
                 observation.sourceTx = tx;
               })
             : Promise.resolve(),
-          activity.bridgeDestinationAddress
-            ? (async () => {
-                const params = new URLSearchParams({ destinationAddress: activity.bridgeDestinationAddress! });
-                if (deploymentId) params.set("deployment", deploymentId);
-                if (activity.sourceTxHash) params.set("sourceTxHash", activity.sourceTxHash);
-                const response = await fetch(
-                  `/api/agglayer/deposits?${params}`,
-                  { cache: "no-store", signal },
-                );
-                if (!response.ok) throw new Error("Unable to read Agglayer deposits.");
-                const status: AgglayerDepositStatus = await response.json();
-                observation.deposit = activity.sourceTxHash
-                  ? (status.deposits.find(
-                      (deposit) =>
-                        deposit.tx_hash?.toLowerCase() === activity.sourceTxHash?.toLowerCase(),
-                    ) ?? null)
-                  : status.latestDeposit;
-              })()
-            : Promise.resolve(),
+          observeDeposit(activity, signal, deploymentId).then(deposit => { observation.deposit = deposit; }),
         ]);
         const errors = results.filter((result) => result.status === "rejected");
         if (errors.length === results.length) throw errors[0].reason;
@@ -150,12 +132,13 @@ export const flows: ProviderFlows = {
           if (deploymentId) params.set("deployment", deploymentId);
           const response = await fetch(`/api/agglayer/withdrawal?${params}`, { cache: "no-store", signal });
           if (!response.ok) throw new Error("Unable to recover the withdrawal's identity. Tracking will retry.");
-          const recovered: { exitHashes: string[] } = await response.json();
+          const recovered = withdrawalStatusSchema.parse(await response.json());
           exitHashes = recovered.exitHashes;
           if (!exitHashes.length) return { patch: {} };
         }
+        if (!activity.destination) throw new Error("Withdrawal destination is missing.");
         const deposit = await findMidenToEvmDeposit(
-          activity.destination!,
+          activity.destination,
           exitHashes,
           signal,
           deploymentId,
@@ -167,3 +150,23 @@ export const flows: ProviderFlows = {
     },
   },
 };
+
+function needsReceiveTracking(activity: Activity) {
+  if (activity.status === "failed") return false;
+  return !(activity.status === "complete" && activity.midenTxId);
+}
+
+async function observeDeposit(activity: Activity, signal: AbortSignal, deploymentId?: string) {
+  if (!activity.bridgeDestinationAddress) return undefined;
+  const params = new URLSearchParams({ destinationAddress: activity.bridgeDestinationAddress });
+  if (deploymentId) params.set("deployment", deploymentId);
+  if (activity.sourceTxHash) params.set("sourceTxHash", activity.sourceTxHash);
+  const response = await fetch(`/api/agglayer/deposits?${params}`, { cache: "no-store", signal });
+  if (!response.ok) throw new Error("Unable to read Agglayer deposits.");
+  const status = depositStatusSchema.parse(await response.json());
+  if (status.destinationAddress.toLowerCase() !== activity.bridgeDestinationAddress.toLowerCase())
+    throw new Error("Agglayer deposit destination mismatch.");
+  return activity.sourceTxHash
+    ? status.deposits.find(deposit => deposit.tx_hash?.toLowerCase() === activity.sourceTxHash?.toLowerCase()) ?? null
+    : status.latestDeposit;
+}

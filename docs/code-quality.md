@@ -1,8 +1,9 @@
-# Circle bridge quality gates
+# Circle and Agglayer bridge quality gates
 
 `npm run lint` enforces these gates in CI for the Circle quote and USDC approval
 implementation, withdrawal quote validation, their API handlers, the shared
-quote-validity model, CCTP/Arc status services, and the EVM deposit and transaction recovery helpers:
+quote-validity model, CCTP/Arc status services, the complete Agglayer provider and its API handlers, and the shared EVM deposit,
+approval persistence, and transaction recovery helpers:
 
 | Gate | Limit |
 | --- | --- |
@@ -72,3 +73,31 @@ The numerical checks support these review requirements:
 
 A passing lint or test run does not replace reviewing the normal flow and each
 failure path. Avoid suppressions or extra indirection solely to satisfy a metric.
+
+## Agglayer
+
+All production TypeScript under `src/bridge/providers/agglayer/` and all Agglayer
+API routes use the same gates above. New helper files inherit them. The existing
+CI `npm run lint` step enforces this scope without separate commands or exemptions.
+
+- `status-schema.ts` owns runtime schemas and inferred types for indexer pages,
+  deposit status, withdrawal identities, and chain observations. Missing optional
+  evidence does not imply delivery; malformed evidence is rejected.
+- `agglayer-status.ts` owns bounded, abortable pagination and source/exit identity
+  matching. The deposits HTTP adapter maps upstream failures to a safe 502.
+- `activity-observation.ts` keeps source, destination, and deposit transitions
+  separate. Independent source evidence survives an indexer outage.
+- `deposit.ts` owns wallet checks and submission order; `approval.ts` reconciles
+  pending approvals before any zero reset or exact approval. Empty USDT return
+  data remains supported; a returned false blocks submission.
+- Shared `evm/approval-store.ts` preserves existing Circle storage keys and parses
+  persisted records. Agglayer also saves the approved amount, including zero,
+  before metadata/receipt requests. Reloads resume that transaction; timeouts do
+  not authorize another signature. Cancelled or unrelated replacements stop the
+  attempt, while repriced approvals retain their recovery state.
+- Withdrawal recovery keeps the explorer locator separate from the node's verified
+  transaction inclusion and output commitments. Its wire codec stays private.
+
+Tests exercise malformed upstream data, bounded pagination, approval/reset recovery
+across module reloads, replacement handling, and the existing submission/monitoring
+behavior. Live wallets and network settlement remain separate integration checks.

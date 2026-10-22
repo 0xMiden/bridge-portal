@@ -1,13 +1,5 @@
-import type { AgglayerDeposit } from "./agglayer";
+import type { AgglayerDeposit, ChainTxObservation } from "./status-schema";
 import type { Activity } from "../../core/models";
-
-export type ChainTxObservation = {
-  hash: string;
-  status: "pending" | "confirmed" | "unknown";
-  confirmations?: number;
-  success?: boolean;
-  blockNumber?: string;
-};
 
 export type AgglayerObservation = {
   sourceTx?: ChainTxObservation | null;
@@ -38,26 +30,15 @@ export function agglayerPatch(
     };
   }
   if (activity.status === "claim_submitted" && destinationTx) {
-    const confirmed = destinationTx.status === "confirmed" && destinationTx.success === true;
-    return {
-      status: confirmed ? "complete" : "claim_submitted",
-      eta: confirmed ? `Settled on ${network}` : `Waiting for ${network}`,
-      destinationTxHash: destinationTx.hash,
-      claimTxHash: destinationTx.hash,
-    };
+    return claimPatch(destinationTx, network);
   }
-  if (!deposit) {
-    if (activity.mode === "send" || !sourceTx) return {};
-    return {
-      status: "source_finality",
-      eta:
-        sourceTx.status === "confirmed" && sourceTx.success === true
-          ? `${network} confirmed, waiting for Agglayer`
-          : `Waiting for ${network} confirmation`,
-      sourceTxHash: sourceTx.hash,
-    };
-  }
+  if (!deposit) return sourcePatch(activity, sourceTx);
 
+  return depositPatch(activity, deposit);
+}
+
+function depositPatch(activity: Activity, deposit: AgglayerDeposit): Partial<Activity> {
+  const network = activity.environment === "mainnet" ? "Ethereum" : "Sepolia";
   const identifiers = {
     depositCount: deposit.deposit_cnt === undefined ? undefined : String(deposit.deposit_cnt),
     destinationTxHash: deposit.claim_tx_hash || undefined,
@@ -91,5 +72,26 @@ export function agglayerPatch(
     status,
     readyForClaim: Boolean(deposit.ready_for_claim),
     eta: labels[status],
+  };
+}
+
+function sourcePatch(activity: Activity, sourceTx: ChainTxObservation | null | undefined): Partial<Activity> {
+  if (activity.mode === "send" || !sourceTx) return {};
+  const network = activity.environment === "mainnet" ? "Ethereum" : "Sepolia";
+  return {
+    status: "source_finality",
+    eta: sourceTx.status === "confirmed" && sourceTx.success === true
+      ? `${network} confirmed, waiting for Agglayer` : `Waiting for ${network} confirmation`,
+    sourceTxHash: sourceTx.hash,
+  };
+}
+
+function claimPatch(destinationTx: ChainTxObservation, network: string): Partial<Activity> {
+  const confirmed = destinationTx.status === "confirmed" && destinationTx.success === true;
+  return {
+    status: confirmed ? "complete" : "claim_submitted",
+    eta: confirmed ? `Settled on ${network}` : `Waiting for ${network}`,
+    destinationTxHash: destinationTx.hash,
+    claimTxHash: destinationTx.hash,
   };
 }

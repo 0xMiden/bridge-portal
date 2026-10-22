@@ -54,8 +54,8 @@ describe("withdrawal indexer routing", () => {
   });
 
   it("tracks Cardona network 73, excluding retired networks and other destinations", async () => {
-    const exit = { network_id: 73, dest_net: 0, dest_addr: "0xabc", deposit_cnt: 3,
-      tx_hash: `0x${"ab".repeat(32)}`, claim_tx_hash: "0xabc" };
+    const exit = { network_id: 73, dest_net: 0, dest_addr: `0x${"aa".repeat(20)}`, deposit_cnt: 3,
+      tx_hash: `0x${"ab".repeat(32)}`, claim_tx_hash: `0x${"ef".repeat(32)}` };
     vi.stubGlobal("fetch", vi.fn().mockImplementation(async () => Response.json({ deposits: [
       { ...exit, network_id: 1, deposit_cnt: 99 },
       { ...exit, network_id: 86, deposit_cnt: 100 },
@@ -63,14 +63,14 @@ describe("withdrawal indexer routing", () => {
       exit,
       { ...exit, deposit_cnt: 2, tx_hash: `0x${"cd".repeat(32)}` },
     ] })));
-    expect(await findMidenToEvmDeposit("0xabc", [exit.tx_hash])).toEqual(exit);
-    expect(await findMidenToEvmDeposit("0xabc", [`0x${"cd".repeat(32)}`])).toEqual({ ...exit, deposit_cnt: 2, tx_hash: `0x${"cd".repeat(32)}` });
+    expect(await findMidenToEvmDeposit(`0x${"aa".repeat(20)}`, [exit.tx_hash])).toEqual(exit);
+    expect(await findMidenToEvmDeposit(`0x${"aa".repeat(20)}`, [`0x${"cd".repeat(32)}`])).toEqual({ ...exit, deposit_cnt: 2, tx_hash: `0x${"cd".repeat(32)}` });
   });
 
   it("returns null when only retired rollup rows are present", async () => {
     vi.stubGlobal("fetch", vi.fn().mockImplementation(async () => Response.json({ deposits: [
       { network_id: 78, dest_net: 0, deposit_cnt: 99 },
     ] })));
-    expect(await findMidenToEvmDeposit("0xabc", [`0x${"ab".repeat(32)}`])).toBeNull();
+    expect(await findMidenToEvmDeposit(`0x${"aa".repeat(20)}`, [`0x${"ab".repeat(32)}`])).toBeNull();
   });
 });

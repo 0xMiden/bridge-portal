@@ -4,6 +4,7 @@ import { stubNetwork } from "../../fixtures/mock-network";
 
 const STORAGE_KEY = "miden.bridge.ui.activities";
 const SOURCE_TX = `0x${"ab".repeat(32)}`;
+const EXIT_HASH = `0x${"ef".repeat(32)}`;
 const DESTINATION_TX = `0x${"cd".repeat(32)}`;
 const EVM_ADDRESS = `0x${"12".repeat(20)}`;
 const MIDEN_ADDRESS = "mtst1aqk5t00kapdcnq2yyf77dz6xcyssweun_qr7qqq9wr6w";
@@ -100,6 +101,7 @@ test("Agglayer receive recovers the delayed Miden transaction after reload", asy
       deposit_cnt: 42,
     };
     return route.fulfill({ json: {
+      destinationAddress: EVM_ADDRESS,
       deposits: [unrelatedDeposit, deposit],
       latestDeposit: unrelatedDeposit,
     } });
@@ -139,17 +141,19 @@ test("Agglayer send follows the stored exit through automatic settlement", async
   let claimed = false;
   await page.route("**/api/bridges/**", (route) => route.fulfill({ json: {
     deposits: [
-      { network_id: 73, dest_net: 0, deposit_cnt: 99, claim_tx_hash: SOURCE_TX },
+      { network_id: 73, dest_net: 0, dest_addr: EVM_ADDRESS, tx_hash: SOURCE_TX, deposit_cnt: 99, claim_tx_hash: SOURCE_TX },
       {
         network_id: 73,
         dest_net: 0,
         deposit_cnt: 42,
+        dest_addr: EVM_ADDRESS,
+        tx_hash: EXIT_HASH,
         ready_for_claim: !claimed,
         claim_tx_hash: claimed ? DESTINATION_TX : "",
       },
     ],
   } }));
-  await openActivity(page, { depositCount: "42" });
+  await openActivity(page, { depositCount: "42", agglayerExitHashes: [EXIT_HASH] });
   await expect.poll(async () => (await storedActivity(page)).status).toBe("claim_available");
   expect((await storedActivity(page)).destinationTxHash).toBeUndefined();
   claimed = true;
@@ -171,7 +175,7 @@ for (const provider of ["epoch", "agglayer"] as const) {
       await pending;
       await route.fulfill({ json: provider === "epoch"
         ? [{ chainId: 999999999, status: "success", transactionHash: SOURCE_TX }]
-        : { deposits: [{ network_id: 73, dest_net: 0, deposit_cnt: 42, ready_for_claim: true }] },
+        : { deposits: [{ network_id: 73, dest_net: 0, dest_addr: EVM_ADDRESS, tx_hash: EXIT_HASH, deposit_cnt: 42, ready_for_claim: true }] },
       });
       handled.resolve();
     });
@@ -179,6 +183,7 @@ for (const provider of ["epoch", "agglayer"] as const) {
       provider,
       epochIntentNonce: provider === "epoch" ? "42" : undefined,
       epochSponsor: provider === "epoch" ? EVM_ADDRESS : undefined,
+      agglayerExitHashes: provider === "agglayer" ? [EXIT_HASH] : undefined,
     });
     await expect.poll(() => reads).toBeGreaterThan(0);
     const before = await storedActivity(page);

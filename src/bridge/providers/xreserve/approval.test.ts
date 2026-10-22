@@ -84,7 +84,7 @@ it.each([
 
   vi.resetModules();
   const resumed = await import("./approval");
-  await expect(resumed.ensureUsdcApproval(input())).rejects.toThrow("Saved USDC approval details are invalid");
+  await expect(resumed.ensureUsdcApproval(input())).rejects.toThrow("Saved token approval details are invalid");
   expect(mocks.write).toHaveBeenCalledOnce();
   expect(mocks.wait).toHaveBeenCalledOnce();
 });

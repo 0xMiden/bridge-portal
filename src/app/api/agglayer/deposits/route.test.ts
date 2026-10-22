@@ -9,7 +9,7 @@ afterEach(() => vi.unstubAllGlobals());
 
 test("queries deposits by their EVM bridge destination and rejects the account alias", async () => {
   const address = "0x00000000387149ae66116cf114eebd60bb738100";
-  const deposit = { tx_hash: "0xsource", deposit_cnt: 42 };
+  const deposit = { tx_hash: `0x${"ab".repeat(32)}`, deposit_cnt: 42 };
   const fetcher = vi.fn<typeof fetch>(async () => Response.json({ deposits: [deposit] }));
   vi.stubGlobal("fetch", fetcher);
 
@@ -70,4 +70,28 @@ test.each([
   expect(next.status).toBe(indexed ? "complete" : "message_observed");
   expect(next.midenTxId).toBe(indexed ? claimTxHash : undefined);
   expect(next.depositCount).toBe(indexed ? "42" : undefined);
+});
+
+// Malformed upstream evidence must never become a successful delivery response.
+test.each([
+  { deposits: [{ ready_for_claim: "false" }] },
+  { deposits: [{ claim_tx_hash: true }] },
+  { deposits: [{ claim_tx_hash: "not-a-transaction" }] },
+  { deposits: {} },
+  { deposits: [], total_cnt: "not-a-count" },
+])("rejects malformed indexer evidence: %j", async payload => {
+  vi.stubGlobal("fetch", vi.fn().mockResolvedValue(Response.json(payload)));
+  const response = await GET(new Request(`https://bridge.test/api/agglayer/deposits?destinationAddress=0x${"11".repeat(20)}`));
+  expect(response.status).toBe(502);
+  expect(await response.json()).toEqual({ error: "Unable to read Agglayer deposits. Tracking will retry." });
+});
+
+test("bounds an indexer that repeats a page indefinitely", async () => {
+  const fetcher = vi.fn().mockImplementation(async () => Response.json({
+    deposits: [{ tx_hash: `0x${"aa".repeat(32)}` }], total_cnt: "999999",
+  }));
+  vi.stubGlobal("fetch", fetcher);
+  const response = await GET(new Request(`https://bridge.test/api/agglayer/deposits?destinationAddress=0x${"11".repeat(20)}&sourceTxHash=0x${"bb".repeat(32)}`));
+  expect(response.status).toBe(502);
+  expect(fetcher.mock.calls.length).toBeLessThanOrEqual(100);
 });

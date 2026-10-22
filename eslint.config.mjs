@@ -12,6 +12,9 @@ const eslintConfig = defineConfig([
     // helpers added later. Consumer-only adaptations keep the shared policy here.
     files: [
       "src/bridge/core/quote.ts",
+      "src/bridge/evm/approval-store.ts",
+      "src/bridge/providers/agglayer/**/*.ts",
+      "src/app/api/agglayer/**/route.ts",
       "src/bridge/evm/deposit-wallet.ts",
       "src/bridge/evm/evm-schema.ts",
       "src/bridge/evm/source-transaction*.ts",

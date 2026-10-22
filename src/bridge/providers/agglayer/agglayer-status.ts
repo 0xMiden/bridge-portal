@@ -1,59 +1,65 @@
 import { agglayerConfig } from "./agglayer";
+import { depositPageSchema, type AgglayerDeposit } from "./status-schema";
 
-// Ported from 0xMiden/wallet@utk-bridge-integration (src/lib/agglayer/status.ts).
-// Talks to the public gateway.fm bridge indexer directly — no local Rust
-// backend proxy — so the claim flow works on a static/edge deploy (Cloudflare).
+type Lookup = { destination: string; deploymentId?: string; signal?: AbortSignal };
+const pageSize = 100;
 
-// `${bridgeServiceApi}/bridges` is the deposit indexer; the service root (with
-// `/merkle-proof`) is one level up.
-
-
-// One row from the bridge indexer's `deposits` array.
-export interface AgglayerDeposit {
-  leaf_type: number;
-  orig_net: number;
-  orig_addr: string;
-  amount: string;
-  dest_net: number;
-  dest_addr: string;
-  block_num: string;
-  deposit_cnt: number;
-  network_id: number;
-  tx_hash: string;
-  claim_tx_hash: string;
-  metadata: string;
-  ready_for_claim: boolean;
-  global_index: string;
+function isLastPage(page: ReturnType<typeof depositPageSchema.parse>, offset: number) {
+  if (!page.deposits.length) return true;
+  if (page.total_cnt !== undefined) return BigInt(offset) >= BigInt(page.total_cnt);
+  return page.deposits.length < pageSize;
 }
 
-// Only the hash of one of this transaction's output-note commitments can bind
-// an exit. A deposit count, recipient, amount or wallet transaction ID cannot.
+async function* depositPages({ destination, deploymentId, signal }: Lookup) {
+  const config = agglayerConfig(deploymentId);
+  const timeout = AbortSignal.timeout(15_000);
+  const requestSignal = signal ? AbortSignal.any([signal, timeout]) : timeout;
+  let offset = 0;
+  // Bound work even if an upstream repeats pages or reports an invalid total.
+  for (let index = 0; index < 100; index += 1) {
+    const url = `${config.bridgeServiceApi}/bridges/${encodeURIComponent(destination)}?limit=${pageSize}&offset=${offset}`;
+    const response = await fetch(url, { cache: "no-store", signal: requestSignal });
+    if (!response.ok) throw new Error(`Agglayer bridge status ${response.status}`);
+    const page = depositPageSchema.parse(await response.json());
+    yield page.deposits;
+    offset += page.deposits.length;
+    if (isLastPage(page, offset)) return;
+  }
+  throw new Error("Agglayer deposit lookup exceeded its page limit. Tracking will retry.");
+}
+
+/** Source transaction identity prevents newer deposits from hiding an older receive. */
+export async function readDepositStatus(lookup: Lookup, sourceTxHash?: string) {
+  let latestDeposit: AgglayerDeposit | null = null;
+  for await (const page of depositPages(lookup)) {
+    latestDeposit ??= page[0] ?? null;
+    const deposits = sourceTxHash
+      ? page.filter(deposit => deposit.tx_hash?.toLowerCase() === sourceTxHash.toLowerCase())
+      : page;
+    if (!sourceTxHash || deposits.length) return { destinationAddress: lookup.destination, deposits, latestDeposit };
+  }
+  return { destinationAddress: lookup.destination, deposits: [], latestDeposit };
+}
+
+function matchesWithdrawal(deposit: AgglayerDeposit, lookup: Lookup, expected: Set<string>) {
+  const config = agglayerConfig(lookup.deploymentId);
+  const correctRoute = deposit.network_id === config.midenIndexerNetworkId && deposit.dest_net === config.sourceNetworkId;
+  const correctIdentity = deposit.dest_addr?.toLowerCase() === lookup.destination.toLowerCase() &&
+    expected.has(deposit.tx_hash?.toLowerCase() ?? "");
+  return correctRoute && correctIdentity;
+}
+
+// Only output-note commitments bind an exit; recipient, amount and deposit count cannot.
 export async function findMidenToEvmDeposit(
-  l1Dest: string,
-  exitHashes: readonly string[],
-  signal?: AbortSignal,
-  deploymentId?: string,
+  l1Dest: string, exitHashes: readonly string[], signal?: AbortSignal, deploymentId?: string,
 ): Promise<AgglayerDeposit | null> {
   if (!exitHashes.length || exitHashes.some(hash => !/^0x[\da-f]{64}$/i.test(hash))) return null;
-  const config = agglayerConfig(deploymentId);
+  const lookup = { destination: l1Dest, deploymentId, signal };
   const expected = new Set(exitHashes.map(hash => hash.toLowerCase()));
-  const limit = 100;
-  let offset = 0;
-  for (;;) {
-    const response = await fetch(`${config.bridgeServiceApi}/bridges/${l1Dest}?limit=${limit}&offset=${offset}`, {
-      cache: "no-store", signal,
-    });
-    if (!response.ok) throw new Error(`Agglayer bridge status ${response.status}`);
-    const data: { deposits?: AgglayerDeposit[]; total_cnt?: string } = await response.json();
-    const deposits = data.deposits ?? [];
-    const matching = deposits.filter(d =>
-      d.network_id === config.midenIndexerNetworkId && d.dest_net === config.sourceNetworkId &&
-      d.dest_addr?.toLowerCase() === l1Dest.toLowerCase() && expected.has(d.tx_hash?.toLowerCase()),
-    );
+  for await (const page of depositPages(lookup)) {
+    const matching = page.filter(deposit => matchesWithdrawal(deposit, lookup, expected));
     if (matching.length > 1) throw new Error("Multiple exits match this withdrawal. Tracking needs verification.");
     if (matching.length === 1) return matching[0];
-    offset += deposits.length;
-    if (!deposits.length || offset >= Number(data.total_cnt) ||
-        (data.total_cnt === undefined && deposits.length < limit)) return null;
   }
+  return null;
 }

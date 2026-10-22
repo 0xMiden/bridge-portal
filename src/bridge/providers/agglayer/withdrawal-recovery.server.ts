@@ -22,29 +22,38 @@ const explorerApis = {
 // Minimal read-only wire surface from miden-node-proto 0.17.3 rpc.proto and
 // miden-objects 0.17.1 transaction/note/account/primitives.proto. This avoids
 // loading the native Node SDK or browser WASM in the Cloudflare Worker.
+function readVarint(bytes: Buffer, cursor: { offset: number }) {
+  let value = 0;
+  for (let shift = 0; shift < 35; shift += 7) {
+    if (cursor.offset >= bytes.length) throw new Error("Truncated Miden RPC response.");
+    const byte = bytes[cursor.offset++];
+    value += (byte & 127) * 2 ** shift;
+    if (!(byte & 128)) return value;
+  }
+  throw new Error("Invalid Miden RPC integer.");
+}
+
+function wireLength(wire: number, varint: () => number) {
+  if (wire === 2) return varint();
+  if (wire === 1) return 8;
+  if (wire === 5) return 4;
+  return -1;
+}
+
 function fields(bytes: Buffer): Map<number, Buffer[]> {
   const result = new Map<number, Buffer[]>();
-  let offset = 0;
-  const varint = () => {
-    let value = 0;
-    for (let shift = 0; shift < 35; shift += 7) {
-      if (offset >= bytes.length) throw new Error("Truncated Miden RPC response.");
-      const byte = bytes[offset++];
-      value += (byte & 127) * 2 ** shift;
-      if (!(byte & 128)) return value;
-    }
-    throw new Error("Invalid Miden RPC integer.");
-  };
-  while (offset < bytes.length) {
+  const cursor = { offset: 0 };
+  const varint = () => readVarint(bytes, cursor);
+  while (cursor.offset < bytes.length) {
     const tag = varint();
     const wire = tag % 8;
     if (!Math.floor(tag / 8)) throw new Error("Invalid Miden RPC field.");
     if (wire === 0) { varint(); continue; }
-    const length = wire === 2 ? varint() : wire === 1 ? 8 : wire === 5 ? 4 : -1;
-    if (length < 0 || offset + length > bytes.length) throw new Error("Invalid Miden RPC response.");
+    const length = wireLength(wire, varint);
+    if (length < 0 || cursor.offset + length > bytes.length) throw new Error("Invalid Miden RPC response.");
     const number = Math.floor(tag / 8);
-    result.set(number, [...(result.get(number) ?? []), bytes.subarray(offset, offset + length)]);
-    offset += length;
+    result.set(number, [...(result.get(number) ?? []), bytes.subarray(cursor.offset, cursor.offset + length)]);
+    cursor.offset += length;
   }
   return result;
 }
@@ -101,8 +110,7 @@ function grpcPayload(bytes: Buffer, headerStatus: string | null): Buffer {
   return payloads[0];
 }
 
-export async function recoverWithdrawalExitHashes(hash: string, deploymentId: string | undefined, signal: AbortSignal): Promise<string[]> {
-  const network = deploymentMiden(deploymentId);
+async function locateWithdrawal(hash: string, network: ReturnType<typeof deploymentMiden>, signal: AbortSignal) {
   const response = await fetch(explorerApis[network.network], {
     method: "POST", headers: { "content-type": "application/json" }, cache: "no-store", signal,
     body: JSON.stringify({
@@ -114,11 +122,19 @@ export async function recoverWithdrawalExitHashes(hash: string, deploymentId: st
   const located = locatorSchema.parse(await response.json());
   if (located.errors?.length) throw new Error("Miden transaction has not been indexed yet.");
   const transaction = located.data?.transaction;
-  if (!transaction) return [];
+  if (!transaction) return undefined;
   if (transaction.transaction_id.toLowerCase() !== hash.toLowerCase()) throw new Error("Miden transaction mismatch.");
   const block = Number(transaction.block_number);
   if (!Number.isSafeInteger(block) || block < 0 || block > 0xffffffff) throw new Error("Invalid Miden block.");
   const account = accountMessage(normalizeMidenAccountHex(transaction.account_bech));
+  return { block, account };
+}
+
+export async function recoverWithdrawalExitHashes(hash: string, deploymentId: string | undefined, signal: AbortSignal): Promise<string[]> {
+  const network = deploymentMiden(deploymentId);
+  const located = await locateWithdrawal(hash, network, signal);
+  if (!located) return [];
+  const { block, account } = located;
   const body = Buffer.concat([
     message(1, Buffer.concat([fixed(1, BigInt(block), 4), fixed(2, BigInt(block), 4)])),
     message(2, account),
@@ -131,6 +147,10 @@ export async function recoverWithdrawalExitHashes(hash: string, deploymentId: st
   });
   if (!rpc.ok) throw new Error("Miden transaction lookup is unavailable.");
   const payload = grpcPayload(Buffer.from(await rpc.arrayBuffer()), rpc.headers.get("grpc-status"));
+  return verifiedExitHashes(payload, hash, block, account);
+}
+
+function verifiedExitHashes(payload: Buffer, hash: string, block: number, account: Buffer) {
   for (const record of fields(payload).get(2) ?? []) {
     const header = requiredField(record, 2);
     if (word(requiredField(requiredField(header, 1), 1)).toLowerCase() !== hash.toLowerCase()) continue;

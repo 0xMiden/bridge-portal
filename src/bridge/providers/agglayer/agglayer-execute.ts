@@ -30,26 +30,15 @@ export interface AgglayerSendResult {
   txHash: string;
 }
 
-export async function runAgglayerSend({
-  amount,
-  faucetId,
-  destinationAddress,
-  senderAddress,
-  requestTransaction,
-  waitForTransaction,
-}: {
-  /** Bridge-out amount in the Agglayer ETH faucet's base units. */
+type SendInput = {
+  /** Bridge-out amount in the faucet's base units. */
   amount: bigint;
-  /**
-   * The Agglayer ETH faucet the sender holds (the canonical Cardona faucet,
-   * `AGGLAYER_TESTNET.midenEthFaucetIdHex`).
-   */
   faucetId: string;
-  /** Sepolia recipient, 0x-prefixed 20-byte EVM address. */
   destinationAddress: string;
-  /** Sender Miden account — bech32 (mcst1…/mtst1…) or hex. */
   senderAddress: string;
-} & AgglayerSendDeps, deploymentId?: string): Promise<AgglayerSendResult> {
+};
+
+async function buildWithdrawal({ amount, faucetId, destinationAddress, senderAddress }: SendInput, deploymentId?: string) {
   const config = agglayerConfig(deploymentId);
   const {
     AccountId,
@@ -94,10 +83,15 @@ export async function runAgglayerSend({
     request,
   );
 
-  const txId = await requestTransaction(transaction);
-  // requestTransaction returns the wallet's request id (a UUID); the real
-  // on-chain tx hash only comes back on the settled TransactionOutput. Use that
-  // for the Midenscan link — the UUID produces a broken /tx/ URL.
-  const output = await waitForTransaction(txId);
+  return transaction;
+}
+
+export async function runAgglayerSend(
+  input: SendInput & AgglayerSendDeps, deploymentId?: string,
+): Promise<AgglayerSendResult> {
+  const transaction = await buildWithdrawal(input, deploymentId);
+  const txId = await input.requestTransaction(transaction);
+  // The wallet request UUID is not an on-chain identifier.
+  const output = await input.waitForTransaction(txId);
   return { txId, txHash: output.txHash };
 }
