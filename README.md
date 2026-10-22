@@ -5,7 +5,7 @@ cross-chain Receive/Send surface.
 
 The app serves both networks at `/`. The network selector remembers the choice
 for the current tab and resets the transfer form and Miden wallet session. New
-tabs default to testnet. Mainnet supports Agglayer ETH and Circle USDCx; testnet
+tabs default to mainnet. Mainnet supports Agglayer ETH and Circle USDCx; testnet
 also retains Epoch routes. `/activity/:id` receipts automatically use their saved
 network, including existing testnet transfers.
 
