@@ -60,6 +60,22 @@ export function saveStoredMode(mode: FlowMode, environment: BridgeEnvironment = 
 }
 
 function normalizeActivity(activity: Activity): Activity {
+  // Address-only matching could pin a previous exit and permanently mark a new
+  // withdrawal complete. Discard those unbound observations before the terminal
+  // state merger runs; the monitor recovers this transaction's output commitments.
+  if (activity.provider === "agglayer" && activity.mode === "send" &&
+      activity.agglayerExitHashes === undefined && activity.status !== "failed") {
+    activity = {
+      ...activity,
+      status: activity.status === "signature" ? "signature" : "source_finality",
+      eta: "Verifying withdrawal",
+      depositCount: undefined,
+      destinationTxHash: undefined,
+      claimTxHash: undefined,
+      destinationTxAt: undefined,
+      readyForClaim: undefined,
+    };
+  }
   // Agglayer receipts predating midenAccountHex stored its encoded bridge address.
   const encodedAccount = /^0x0{8}([0-9a-fA-F]{30})00$/.exec(activity.bridgeDestinationAddress ?? "");
   const midenAccountHex = activity.midenAccountHex ??

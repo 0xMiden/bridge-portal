@@ -26,54 +26,34 @@ export interface AgglayerDeposit {
   global_index: string;
 }
 
-interface BridgesResponse {
-  deposits: AgglayerDeposit[];
-  total_cnt: string;
-}
-
-// Fetch recent deposits routed to `destAddr` (the destination account in EVM
-// form). We pull a small window rather than just the latest so we can match our
-// own deposit and not confuse it with an earlier bridge.
-export async function fetchDeposits(
-  destAddr: string,
-  limit = 10,
-  signal?: AbortSignal,
-  deploymentId?: string,
-): Promise<AgglayerDeposit[]> {
-  const BRIDGES_API = `${agglayerConfig(deploymentId).bridgeServiceApi}/bridges`;
-  const res = await fetch(`${BRIDGES_API}/${destAddr}?limit=${limit}&offset=0`, {
-    cache: "no-store", signal,
-  });
-  if (!res.ok) {
-    throw new Error(`Agglayer bridge status ${res.status}`);
-  }
-  const data: BridgesResponse = await res.json();
-  return data.deposits ?? [];
-}
-
-// The Miden→EVM (L2→L1) exit to `l1Dest` through its whole lifecycle. Gateway's
-// `bridge-autoclaim` claims ready exits on Sepolia automatically (no manual
-// claim in this UI); when it does, `claim_tx_hash` is populated. Track the exit
-// regardless of readiness to detect settlement. The Cardona indexer uses network 73
-// for Miden exits, matching the rollup ID used by bridgeAsset.
-// Matches a known `deposit_cnt` when provided (the exact exit we're tracking),
-// else the latest L2→L1 exit to this address.
+// Only the hash of one of this transaction's output-note commitments can bind
+// an exit. A deposit count, recipient, amount or wallet transaction ID cannot.
 export async function findMidenToEvmDeposit(
   l1Dest: string,
-  depositCnt?: string | number,
+  exitHashes: readonly string[],
   signal?: AbortSignal,
   deploymentId?: string,
 ): Promise<AgglayerDeposit | null> {
-  const AGGLAYER_TESTNET = agglayerConfig(deploymentId);
-  const deposits = await fetchDeposits(l1Dest, 10, signal, deploymentId);
-  const matching = deposits.filter(
-    (d) => d.network_id === AGGLAYER_TESTNET.midenIndexerNetworkId &&
-      d.dest_net === AGGLAYER_TESTNET.sourceNetworkId,
-  );
-  if (depositCnt !== undefined) {
-    return matching.find(
-      (d) => String(d.deposit_cnt) === String(depositCnt),
-    ) ?? null;
+  if (!exitHashes.length || exitHashes.some(hash => !/^0x[\da-f]{64}$/i.test(hash))) return null;
+  const config = agglayerConfig(deploymentId);
+  const expected = new Set(exitHashes.map(hash => hash.toLowerCase()));
+  const limit = 100;
+  let offset = 0;
+  for (;;) {
+    const response = await fetch(`${config.bridgeServiceApi}/bridges/${l1Dest}?limit=${limit}&offset=${offset}`, {
+      cache: "no-store", signal,
+    });
+    if (!response.ok) throw new Error(`Agglayer bridge status ${response.status}`);
+    const data: { deposits?: AgglayerDeposit[]; total_cnt?: string } = await response.json();
+    const deposits = data.deposits ?? [];
+    const matching = deposits.filter(d =>
+      d.network_id === config.midenIndexerNetworkId && d.dest_net === config.sourceNetworkId &&
+      d.dest_addr?.toLowerCase() === l1Dest.toLowerCase() && expected.has(d.tx_hash?.toLowerCase()),
+    );
+    if (matching.length > 1) throw new Error("Multiple exits match this withdrawal. Tracking needs verification.");
+    if (matching.length === 1) return matching[0];
+    offset += deposits.length;
+    if (!deposits.length || offset >= Number(data.total_cnt) ||
+        (data.total_cnt === undefined && deposits.length < limit)) return null;
   }
-  return matching.sort((a, b) => b.deposit_cnt - a.deposit_cnt)[0] ?? null;
 }

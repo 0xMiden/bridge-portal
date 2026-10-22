@@ -23,6 +23,7 @@ const activity: Activity = {
   asset: "ETH",
   txHash: "0xpending",
   depositCount: "42",
+  agglayerExitHashes: [`0x${"ab".repeat(32)}`],
   updatedAt: 1_700_000_000_000,
 };
 
@@ -44,6 +45,18 @@ afterEach(() => {
 });
 
 describe("activity persistence", () => {
+  it("reopens an unbound completed withdrawal and clears the old claim while preserving its source", () => {
+    const source = `0x${"11".repeat(32)}`;
+    const oldClaim = `0x${"bb".repeat(32)}`;
+    saveActivities([{ ...activity, agglayerExitHashes: undefined, midenTxId: source, status: "complete", depositCount: "1",
+      destinationTxHash: oldClaim, claimTxHash: oldClaim, readyForClaim: true, destinationTxAt: 123,
+    }]);
+    const [recovered] = loadStoredActivities();
+    expect(recovered).toMatchObject({ id: activity.id, status: "source_finality", midenTxId: source });
+    for (const field of ["depositCount", "destinationTxHash", "claimTxHash", "destinationTxAt", "readyForClaim"] as const)
+      expect(recovered[field]).toBeUndefined();
+  });
+
   it("resolves explicit and legacy routes without rewriting saved history or guessing unknown tokens", () => {
     const raw = JSON.stringify([
       activity,
@@ -268,7 +281,7 @@ describe("coexisting networks", () => {
     saveActivities([mainnet, ...loadStoredActivities()]);
     saveStoredRoute("agglayer", route.id, "mainnet");
     saveStoredMode("receive", "mainnet");
-    patchStoredActivity(mainnet.id, { claimTxHash: "0xmainnetclaim", status: "complete" });
+    patchStoredActivity(mainnet.id, { agglayerExitHashes: [`0x${"ab".repeat(32)}`], claimTxHash: "0xmainnetclaim", status: "complete" });
     const testnet = loadStoredActivities("testnet");
     expect(testnet).toHaveLength(1);
     expect(testnet[0]).toMatchObject({ ...activity, environment: "testnet", routeSnapshot: {

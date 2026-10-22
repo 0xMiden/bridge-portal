@@ -142,24 +142,26 @@ export const flows: ProviderFlows = {
         Boolean(activity.destination),
       async observe(activity, signal) {
         const deploymentId = activityRoute(activity)?.deploymentId;
-        const config = agglayerConfig(deploymentId);
-        if (activity.status === "claim_submitted" && activity.claimTxHash) {
-          const destinationTx = await sourceTransaction(activity.claimTxHash, signal, config.evmNetwork);
-          return {
-            patch: agglayerPatch(activity, { destinationTx }),
-          };
+        let exitHashes = activity.agglayerExitHashes;
+        if (!exitHashes?.length) {
+          const hash = activity.midenTxId ?? activity.sourceTxHash;
+          if (!hash) return { patch: {}, warning: "The Miden transaction ID is missing. This withdrawal cannot be matched yet." };
+          const params = new URLSearchParams({ sourceTxHash: hash });
+          if (deploymentId) params.set("deployment", deploymentId);
+          const response = await fetch(`/api/agglayer/withdrawal?${params}`, { cache: "no-store", signal });
+          if (!response.ok) throw new Error("Unable to recover the withdrawal's identity. Tracking will retry.");
+          const recovered: { exitHashes: string[] } = await response.json();
+          exitHashes = recovered.exitHashes;
+          if (!exitHashes.length) return { patch: {} };
         }
         const deposit = await findMidenToEvmDeposit(
           activity.destination!,
-          activity.depositCount,
+          exitHashes,
           signal,
           deploymentId,
         );
-        if (!deposit) return { patch: {} };
         return {
-          patch: agglayerPatch(activity, {
-            deposit,
-          }),
+          patch: { agglayerExitHashes: exitHashes, ...agglayerPatch(activity, { deposit }) },
         };
       },
     },
