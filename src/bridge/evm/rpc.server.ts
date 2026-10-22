@@ -5,29 +5,53 @@ import { SEPOLIA_NETWORK } from "../../config/sepolia";
 
 // Keep private RPC configuration on the server, out of browser transports.
 export function evmRpcUrls(network: EvmNetwork): string[] {
-  const privateUrls: Partial<Record<EvmNetwork, string | undefined>> = {
-    ethereum: process.env.ETHEREUM_RPC_URL,
-    arc: process.env.ARC_MAINNET_RPC_URL,
-    base: process.env.BASE_RPC_URL,
-    arbitrum: process.env.ARBITRUM_RPC_URL,
+  // Provider order is explicit; read runtime secrets when a request arrives.
+  const urlsByNetwork: Record<EvmNetwork, (string | undefined)[]> = {
+    ethereum: [
+      process.env.ETHEREUM_RPC_URL,
+      // Independent public providers; viem's Merkle default rate-limits reads.
+      "https://ethereum-rpc.publicnode.com",
+      "https://eth.drpc.org",
+    ],
+    arc: [
+      process.env.ARC_MAINNET_RPC_URL,
+      ...evmNetworks.arc.rpcUrls.default.http,
+    ],
+    base: [
+      process.env.BASE_RPC_URL,
+      ...evmNetworks.base.rpcUrls.default.http,
+    ],
+    arbitrum: [
+      process.env.ARBITRUM_RPC_URL,
+      ...evmNetworks.arbitrum.rpcUrls.default.http,
+    ],
+    sepolia: [
+      process.env.AGGLAYER_SEPOLIA_RPC_URL,
+      process.env.EVM_RPC_URL,
+      process.env.NEXT_PUBLIC_SEPOLIA_RPC_URL,
+      SEPOLIA_NETWORK.rpcUrl,
+    ],
+    "arc-testnet": [
+      process.env.ARC_TESTNET_RPC_URL,
+      ...evmNetworks["arc-testnet"].rpcUrls.default.http,
+      "https://rpc.drpc.testnet.arc.io",
+      "https://rpc.quicknode.testnet.arc.io",
+    ],
+    "base-sepolia": [
+      process.env.BASE_SEPOLIA_RPC_URL,
+      ...evmNetworks["base-sepolia"].rpcUrls.default.http,
+      "https://base-sepolia-rpc.publicnode.com",
+    ],
+    "arbitrum-sepolia": [
+      process.env.ARBITRUM_SEPOLIA_RPC_URL,
+      ...evmNetworks["arbitrum-sepolia"].rpcUrls.default.http,
+    ],
   };
-  if (network in privateUrls) return [...new Set([
-    privateUrls[network],
-    // Viem's Ethereum default can reject public reads with HTTP 429.
-    ...(network === "ethereum" ? ["https://ethereum-rpc.publicnode.com"] : []),
-    ...evmNetworks[network].rpcUrls.default.http,
-  ].filter((url): url is string => Boolean(url)))];
-  const urls = network === "sepolia"
-    ? [process.env.AGGLAYER_SEPOLIA_RPC_URL, process.env.EVM_RPC_URL,
-        process.env.NEXT_PUBLIC_SEPOLIA_RPC_URL, SEPOLIA_NETWORK.rpcUrl]
-    : network === "arc-testnet"
-      ? [...evmNetworks[network].rpcUrls.default.http,
-          "https://rpc.drpc.testnet.arc.io", "https://rpc.quicknode.testnet.arc.io"]
-      : network === "base-sepolia"
-        ? [process.env.BASE_SEPOLIA_RPC_URL, ...evmNetworks[network].rpcUrls.default.http,
-            "https://base-sepolia-rpc.publicnode.com"]
-        : evmNetworks[network].rpcUrls.default.http;
-  return [...new Set(urls.map((url) => url?.trim()).filter((url): url is string => Boolean(url)))];
+  const urls = urlsByNetwork[network]
+    .map((url) => url?.trim())
+    .filter((url): url is string => Boolean(url));
+
+  return [...new Set(urls)];
 }
 
 type RpcRequest = { jsonrpc: "2.0"; id: string | number; method: string; params?: unknown[] };
@@ -42,14 +66,17 @@ export async function forwardEvmRpc(
   body: RpcRequest,
   fetchImpl: typeof fetch = fetch,
 ): Promise<RpcResponse> {
-  for (const url of evmRpcUrls(network)) {
+  const urls = evmRpcUrls(network);
+  // Leave room within the browser's 30-second timeout even with four providers.
+  const timeoutMs = Math.min(8_000, Math.floor(24_000 / urls.length));
+  for (const url of urls) {
     try {
       const response = await fetchImpl(url, {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify(body),
         cache: "no-store",
-        signal: AbortSignal.timeout(8_000),
+        signal: AbortSignal.timeout(timeoutMs),
       });
       if (!response.ok) continue;
       const payload = await response.json();

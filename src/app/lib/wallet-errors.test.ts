@@ -1,4 +1,4 @@
-import { BaseError } from "viem";
+import { BaseError, createPublicClient, custom, erc20Abi } from "viem";
 import { expect, it } from "vitest";
 import { errorMessage } from "./wallet-errors";
 
@@ -27,3 +27,23 @@ it("bounds unfamiliar provider messages without dropping their explanation", () 
   expect(message).toMatch(/^Provider unavailable:/);
   expect(message.length).toBeLessThanOrEqual(280);
 });
+
+it.each(["Ethereum", "Arc", "Base", "Arbitrum", "Sepolia", "Arc Testnet", "Base Sepolia", "Arbitrum Sepolia"])(
+  "preserves %s retry guidance through viem contract errors and serialization", async (network) => {
+    const unavailable = `${network} RPC is temporarily unavailable. Please retry shortly.`;
+    const client = createPublicClient({
+      transport: custom({ request: async () => {
+        throw Object.assign(new Error(unavailable), { code: -32002 });
+      } }, { retryCount: 0 }),
+    });
+    const error = await client.readContract({
+      address: "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+      abi: erc20Abi,
+      functionName: "balanceOf",
+      args: ["0x0000000000000000000000000000000000000001"],
+    }).catch((error: Error) => error);
+    expect(error).toBeInstanceOf(Error);
+    expect(errorMessage(error)).toBe(unavailable);
+    expect(errorMessage((error as Error).message.replace(/\n/g, " "))).toBe(unavailable);
+  },
+);

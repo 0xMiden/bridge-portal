@@ -35,9 +35,60 @@ jobs:
       - name: Refuse E2E secrets in the production bundle
         run: node scripts/check-prod-bundle.mjs
       - name: Deploy Worker
-        run: npx opennextjs-cloudflare deploy
+        run: |
+          secrets_file="$(mktemp)"
+          trap 'rm -f "$secrets_file"' EXIT
+          export RPC_SECRETS_FILE="$secrets_file"
+          node --input-type=module <<'NODE'
+          import { writeFileSync } from "node:fs";
+          const networks = {
+            ETHEREUM_RPC_URL: 1,
+            ARC_MAINNET_RPC_URL: 5042,
+            BASE_RPC_URL: 8453,
+            ARBITRUM_RPC_URL: 42161,
+            AGGLAYER_SEPOLIA_RPC_URL: 11155111,
+            ARC_TESTNET_RPC_URL: 5042002,
+            BASE_SEPOLIA_RPC_URL: 84532,
+            ARBITRUM_SEPOLIA_RPC_URL: 421614,
+          };
+          const secrets = {};
+          const checks = await Promise.allSettled(Object.entries(networks).map(async ([name, chainId]) => {
+            const url = process.env[name]?.trim();
+            if (!url) throw new Error(`Missing ${name} repository secret.`);
+            try {
+              const response = await fetch(url, {
+                method: "POST",
+                headers: { "content-type": "application/json" },
+                body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "eth_chainId", params: [] }),
+                signal: AbortSignal.timeout(8_000),
+              });
+              const body = await response.json();
+              if (!response.ok || body.jsonrpc !== "2.0" || body.id !== 1 || body.result !== `0x${chainId.toString(16)}` || body.error)
+                throw new Error("Invalid RPC response");
+            } catch {
+              throw new Error(`${name} validation failed. Check network enablement, credentials and provider availability.`);
+            }
+            secrets[name] = url;
+          }));
+          const failures = checks.filter(check => check.status === "rejected");
+          if (failures.length) {
+            for (const failure of failures) console.error(failure.reason.message);
+            process.exit(1);
+          }
+          writeFileSync(process.env.RPC_SECRETS_FILE, JSON.stringify(secrets), { mode: 0o600 });
+          console.log("All eight EVM RPCs verified; runtime secrets prepared.");
+          NODE
+          npx opennextjs-cloudflare deploy -- --secrets-file "$secrets_file"
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          ETHEREUM_RPC_URL: ${{ secrets.ETHEREUM_RPC_URL }}
+          ARC_MAINNET_RPC_URL: ${{ secrets.ARC_MAINNET_RPC_URL }}
+          BASE_RPC_URL: ${{ secrets.BASE_RPC_URL }}
+          ARBITRUM_RPC_URL: ${{ secrets.ARBITRUM_RPC_URL }}
+          AGGLAYER_SEPOLIA_RPC_URL: ${{ secrets.AGGLAYER_SEPOLIA_RPC_URL }}
+          ARC_TESTNET_RPC_URL: ${{ secrets.ARC_TESTNET_RPC_URL }}
+          BASE_SEPOLIA_RPC_URL: ${{ secrets.BASE_SEPOLIA_RPC_URL }}
+          ARBITRUM_SEPOLIA_RPC_URL: ${{ secrets.ARBITRUM_SEPOLIA_RPC_URL }}
       - name: Canary production health
         run: |
           sleep 15

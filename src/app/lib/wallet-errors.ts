@@ -32,7 +32,7 @@ export function errorMessage(error: unknown) {
   // viem adds calldata and request metadata to .message. Our RPC's actionable
   // outage explanation survives in .details (or in a serialized error).
   const outage = `${details}\n${message}`.match(
-    /(?:Base Sepolia|Arbitrum Sepolia|Arc Testnet|Sepolia) RPC is temporarily unavailable\. Please retry shortly\./,
+    /(?:Ethereum|Base(?: Sepolia)?|Arbitrum(?: Sepolia)?|Arc(?: Testnet)?|Sepolia) RPC is temporarily unavailable\. Please retry shortly\./,
   );
   if (outage) return outage[0];
   const summary = typeof fields.shortMessage === "string" && fields.shortMessage.trim()
