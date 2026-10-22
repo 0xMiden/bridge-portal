@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { EvmProvider } from "../../../wallets/evm/evm-wallet";
 import { ARC } from "./config";
 import {
@@ -24,6 +24,9 @@ vi.mock("viem", async (importOriginal) => ({
   }),
   createWalletClient: () => ({ writeContract: mocks.write }),
 }));
+vi.mock("../../evm/source-transaction", () => ({
+  captureSourceTransaction: async () => undefined, resolveSourceTransaction: async () => ({}),
+}));
 vi.mock("@miden-sdk/miden-sdk", () => ({
   AccountId: { fromHex: mocks.fromHex },
 }));
@@ -39,8 +42,19 @@ function wallet() {
       ),
   };
 }
+let allowance: bigint;
+let approvalAmount: bigint;
+afterEach(() => vi.unstubAllGlobals());
 beforeEach(() => {
   vi.resetAllMocks();
+  const storage = new Map<string, string>();
+  vi.stubGlobal("window", { localStorage: {
+    getItem: (key: string) => storage.get(key) ?? null,
+    setItem: (key: string, value: string) => storage.set(key, value),
+    removeItem: (key: string) => storage.delete(key),
+  } });
+  allowance = 0n;
+  approvalAmount = 0n;
   mocks.fromHex.mockReturnValue({ free: vi.fn() });
   mocks.read.mockImplementation(async ({ functionName }) =>
     functionName === "isRemoteDomainRegistered"
@@ -49,11 +63,14 @@ beforeEach(() => {
         ? arcRecipient(ARC.faucetId)
       : functionName === "balanceOf"
         ? 10_000_000n
-        : 0n,
+        : allowance,
   );
   mocks.simulate.mockImplementation(async (request) => ({ request }));
-  mocks.receipt.mockResolvedValue({ status: "success" });
-  mocks.write.mockResolvedValue(hash);
+  mocks.receipt.mockImplementation(async () => { allowance = approvalAmount; return { status: "success" }; });
+  mocks.write.mockImplementation(async (request) => {
+    if (request.functionName === "approve") approvalAmount = request.args[1];
+    return hash;
+  });
 });
 describe("Arc testnet deposits", () => {
   it("matches the frontend guide recipient vectors including suffix padding", () => {
@@ -141,6 +158,7 @@ describe("Arc testnet deposits", () => {
           ? ["0x2222222222222222222222222222222222222222"]
           : `0x${ARC.chainId.toString(16)}`,
       );
+      allowance = approvalAmount;
       return { status: "success" };
     });
     await expect(

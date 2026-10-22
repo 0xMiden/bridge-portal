@@ -243,6 +243,8 @@ and ERC-20 assets. RPC accepts only public reads and simulations; signing and
 broadcasting stay with the connected wallet.
 
 Bridge-specific operations stay under their provider: `/api/xreserve/quote`
-obtains a Circle forwarding quote, `/api/xreserve/status?network=…&hash=…`
+obtains a Circle forwarding quote, `/api/xreserve/quote/validate` checks its
+signature, burn parameters and expiry against the source-chain tip, and
+`/api/xreserve/status?network=…&hash=…`
 tracks direct Arc or CCTP deposits into Miden, and `/api/agglayer/deposits`
 reads Agglayer deposits. Browser transports never import private RPC configuration.

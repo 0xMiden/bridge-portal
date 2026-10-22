@@ -29,8 +29,56 @@ injecting the minted amount into `depositToRemote` at byte offset 4. The wallet
 address is the recovery address; the Miden recipient is encoded with the suffix
 padding byte. `/api/xreserve/quote` obtains a signed PRE_FINALITY + FORWARD quote.
 Circle fees are paid separately in source USDC, and gas uses source ETH.
-The review shows the fee and total USDC. Submission refreshes the quote and
-checks its fee against `getFee`; a higher fee requires a new review.
+The review shows the fee and total USDC. Submission retains the reviewed signed
+quote and approves exactly the amount plus the reviewed fee. It checks the signed
+price with `getFee`, then validates the complete burn call with Circle through
+`POST /api/xreserve/quote/validate`. The server reconstructs the arguments from
+the allowlisted deployment and calls `/v2/quote/validate/usdc/{sourceDomain}`.
+Signature, call bindings, fee token, fee, nonce and expiry must match.
+
+Circle's `TIMESTAMP` or `BLOCK_NUMBER` expiry is preserved. `blockEstimatedAt` is
+advisory: neither the browser clock nor that estimate decides validity. The
+validation endpoint checks the source-chain tip, including the chain-specific
+block-number semantics on Arbitrum. Following Circle Bridge Kit 1.16.0, the quote
+must be claimable with more than 30 seconds remaining, after deducting validation
+round-trip and wallet-check latency. This is submission headroom, not a guarantee
+that a slow wallet confirmation or mined transaction will beat expiry.
+
+Validation runs before approval, after approval confirmation, and after simulation
+immediately before requesting the deposit signature. Only expiry or insufficient
+remaining validity triggers a refresh; invalid signatures, changed bindings and
+validation outages stop submission. A replacement fee cannot exceed the reviewed
+fee. If preparation consumes the window, one further refresh and simulation is
+allowed before stopping. An explicit `QuoteExpired` simulation revert follows the
+same bounded recovery; unrelated errors do not. Nothing automatically resubmits a
+transaction after handing it to the wallet.
+
+Approval waiting follows Circle's viem adapter: use viem's default receipt wait
+(180 seconds in the pinned version), rather than a custom 120-second timeout.
+That timeout only ends the local wait; it does not cancel a pending Ethereum
+transaction. Both direct Arc and CCTP deposits save the approval hash separately
+from bridge activity, keyed by network, token, account and spender. Retrying or
+reloading resumes the saved approval before asking for a new one. Timeout or RPC
+errors retain it; confirmed terminal outcomes clear it. Captured nonce/call data
+lets the existing source-transaction resolver find replacements after a reload.
+A gas-only replacement can continue; cancellations and different replacements
+stop the deposit. The confirmed allowance is checked again before proceeding.
+
+This follows the [Circle viem adapter](https://unpkg.com/@circle-fin/adapter-viem-v2@1.19.2/index.mjs)
+and its [CCTP provider's pending-step recovery](https://unpkg.com/@circle-fin/provider-cctp-v2@1.14.1/index.mjs).
+Persisting an approval does not create a bridge receipt: no USDC has been bridged
+until the separate deposit transaction is broadcast.
+
+The [official Circle SDK implementation](https://unpkg.com/@circle-fin/bridge-kit@1.16.0/index.mjs)
+provides this source-tip validation and the 30-second safety policy. Read-only
+mainnet checks on 2026-10-22 exercised our exact Ethereum → Arc executor hook:
+Circle returned `BLOCK_NUMBER`, validated a fresh quote as claimable, and rejected
+an expired quote with `QUOTE_EXPIRED`. Its block-time estimate changed between
+issuance and validation. No funded transaction was sent for these checks.
+
+The [Miden USDCx service](https://github.com/0xMiden/miden-usdcx/blob/78aa9a0bb4fea788a558e9debdb016b9155bf8d4/crates/usdcx-bridge/README.md)
+handles attestation and Miden delivery after the source deposit. Its relayer
+transaction expiry and withdrawal fee rules do not govern this Circle quote.
 
 Tracking retains the source burn hash. It verifies the source `MessageSent`,
 matches immutable message bytes against Circle's attestation, matches its nonce

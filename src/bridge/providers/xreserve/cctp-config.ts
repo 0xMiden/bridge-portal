@@ -34,6 +34,7 @@ export function cctpConfig(deploymentId?: string, network?: EvmNetwork) {
   };
 }
 export const cctpAbi = parseAbi([
+  "error QuoteExpired(uint8 mode,uint256 deadline,uint256 current)",
   "function depositForBurnWithHookAndFees(uint256 amount,uint32 destinationDomain,bytes32 mintRecipient,address burnToken,bytes32 destinationCaller,bytes hookData,(bytes signedQuote,address refundAddress) claim) payable",
   "function getFee(bytes signedQuote) pure returns (uint256 totalFee,address feeToken)",
 ]);

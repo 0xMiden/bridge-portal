@@ -13,6 +13,7 @@ import type { EvmProvider } from "../../../wallets/evm/evm-wallet";
 import { normalizeMidenAccountHex } from "../agglayer/agglayer";
 import { ARC, arcConfig, ARC_MAX_MIDEN_AMOUNT, xReserveAbi } from "./config";
 import { evmReadTransport } from "../../evm/transport";
+import { ensureUsdcApproval } from "./approval";
 
 export function parseArcAmount(amount: string): bigint {
   if (!/^(?:0|[1-9]\d*)(?:\.\d{1,6})?$/.test(amount.trim())) {
@@ -143,32 +144,10 @@ export async function depositOnArc({
   });
   if (balance <= value)
     throw new Error(`Keep some USDC on ${arcTestnet.name} to pay transaction fees.`);
-  const allowance = await client.readContract({
-    address: ARC.usdc,
-    abi: erc20Abi,
-    functionName: "allowance",
-    args: [account, ARC.xReserve],
+  await ensureUsdcApproval({
+    network: ARC.network, client, wallet, account, token: ARC.usdc,
+    spender: ARC.xReserve, amount: value, assertWallet, onPhase,
   });
-  if (allowance < value) {
-    await assertWallet();
-    const approval = await client.simulateContract({
-      account,
-      address: ARC.usdc,
-      abi: erc20Abi,
-      functionName: "approve",
-      args: [ARC.xReserve, value],
-    });
-    onPhase("approving");
-    await assertWallet();
-    const hash = await wallet.writeContract(approval.request);
-    onPhase("approval-confirming");
-    const receipt = await client.waitForTransactionReceipt({
-      hash,
-      timeout: 120_000,
-    });
-    if (receipt.status !== "success")
-      throw new Error("USDC approval reverted. No deposit was sent.");
-  }
   await assertWallet();
   const deposit = await client.simulateContract({
     account,

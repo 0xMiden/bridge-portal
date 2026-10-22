@@ -77,7 +77,8 @@ export async function submitBridgeTransfer(
       const quote = input.quote;
       if (
         !quote ||
-        quote.expiresAt <= Date.now() ||
+        // CCTP expiry is checked against Circle's source-chain tip by its provider.
+        (quote.kind !== "cctp" && quote.expiresAt <= Date.now()) ||
         quote.request.routeId !== route.id ||
         quote.request.deploymentId !== route.deploymentId ||
         quote.request.amount !== input.amount ||

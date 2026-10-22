@@ -6,7 +6,36 @@ import { arcConfig } from "./config";
 import { arcRecipient, parseArcAmount } from "./deposit";
 
 export type CctpQuoteRequest = { network: CctpNetwork; sender: Address; recipient: string; amount: string; deploymentId?: string };
-export type CctpQuote = CctpQuoteRequest & { signedQuote: Hex; fee: string; expiresAt: number };
+export type CctpQuoteExpiry =
+  | { mode: "TIMESTAMP"; expiresAt: number }
+  | { mode: "BLOCK_NUMBER"; expiresAtBlock: number; blockEstimatedAt?: number };
+export type CctpQuote = CctpQuoteRequest & {
+  signedQuote: Hex;
+  fee: string;
+  /** Circle server time, in Unix seconds. */
+  issuedAt: number;
+  expiry: CctpQuoteExpiry;
+  /** Display estimate in milliseconds; never authoritative for quote validity. */
+  expiresAt: number;
+};
+
+function isTimestamp(value: unknown): value is number {
+  return typeof value === "number" && value > 0 && Number.isSafeInteger(value * 1000) && Number.isSafeInteger(value);
+}
+
+function parseCircleExpiry(value: unknown, issuedAt: number): CctpQuoteExpiry {
+  if (value && typeof value === "object") {
+    const expiry = value as Record<string, unknown>;
+    if (expiry.mode === "TIMESTAMP" && isTimestamp(expiry.expiresAt) && expiry.expiresAt > issuedAt)
+      return { mode: "TIMESTAMP", expiresAt: expiry.expiresAt };
+    if (expiry.mode === "BLOCK_NUMBER" && typeof expiry.expiresAtBlock === "number" &&
+        Number.isSafeInteger(expiry.expiresAtBlock) && expiry.expiresAtBlock > 0 &&
+        (expiry.blockEstimatedAt === undefined || isTimestamp(expiry.blockEstimatedAt)))
+      return { mode: "BLOCK_NUMBER", expiresAtBlock: expiry.expiresAtBlock,
+        ...(expiry.blockEstimatedAt === undefined ? {} : { blockEstimatedAt: expiry.blockEstimatedAt }) };
+  }
+  throw new Error("Circle returned invalid quote expiry metadata. Please retry.");
+}
 
 /** Public Circle API: the signed claim binds forwarding to this exact hook. */
 export async function requestCircleQuote(input: CctpQuoteRequest): Promise<CctpQuote> {
@@ -24,12 +53,18 @@ export async function requestCircleQuote(input: CctpQuoteRequest): Promise<CctpQ
   });
   if (!response.ok) throw new Error("Circle could not quote this transfer. Please retry.");
   const quote = await response.json();
-  const expiresAt = Number(quote.expiry?.expiresAt ?? quote.expiry?.blockEstimatedAt) * 1000;
-  if (quote.burnAmount !== amount || quote.feeToken?.toLowerCase() !== source.asset.address.toLowerCase() ||
-      !/^\d+$/.test(quote.feeTotalAmount) || !/^0x(?:[\da-f]{2})+$/i.test(quote.signedQuote) ||
-      !Number.isFinite(expiresAt) || expiresAt <= Date.now())
-    throw new Error("Circle returned an invalid or expired quote. Please retry.");
-  return { ...input, signedQuote: quote.signedQuote, fee: quote.feeTotalAmount, expiresAt };
+  if (!quote || quote.burnAmount !== amount ||
+      typeof quote.feeToken !== "string" || quote.feeToken.toLowerCase() !== source.asset.address.toLowerCase() ||
+      typeof quote.feeTotalAmount !== "string" || !/^\d+$/.test(quote.feeTotalAmount) ||
+      typeof quote.signedQuote !== "string" || !/^0x(?:[\da-f]{2})+$/i.test(quote.signedQuote) ||
+      !isTimestamp(quote.issuedAt))
+    throw new Error("Circle returned an invalid quote. Please retry.");
+  const expiry = parseCircleExpiry(quote.expiry, quote.issuedAt);
+  // Keep the API's actual expiry discriminator. A block-time estimate (and the
+  // browser/server wall clock) cannot decide whether the source chain accepts it.
+  const expiresAt = (expiry.mode === "TIMESTAMP" ? expiry.expiresAt : expiry.blockEstimatedAt ?? quote.issuedAt) * 1000;
+  return { ...input, signedQuote: quote.signedQuote, fee: quote.feeTotalAmount,
+    issuedAt: quote.issuedAt, expiry, expiresAt };
 }
 
 export async function fetchCctpQuote(input: CctpQuoteRequest, signal?: AbortSignal): Promise<CctpQuote> {

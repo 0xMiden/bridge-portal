@@ -36,7 +36,15 @@ async function bridgeFrames(page: Page) {
 test.beforeEach(async ({ page }) => {
   await stubNetwork(page);
   await page.route("**/api/xreserve/withdrawal-quote", (route) => route.fulfill({ json: { ...route.request().postDataJSON(), fee: "16400", received: "1983601", expiresAt: Date.now() + 60000 } }));
-  await page.route("**/api/xreserve/quote", (route) => route.fulfill({ json: { ...route.request().postDataJSON(), signedQuote: "0x1234", fee: "250000", expiresAt: Date.now() + 120000 } }));
+  await page.route("**/api/xreserve/quote", (route) => route.fulfill({ json: {
+    ...route.request().postDataJSON(), signedQuote: "0x1234", fee: "250000",
+    issuedAt: Math.floor(Date.now() / 1000),
+    expiry: { mode: "BLOCK_NUMBER", expiresAtBlock: 26247476, blockEstimatedAt: Math.floor(Date.now() / 1000) + 168 },
+    expiresAt: Date.now() + 168000,
+  } }));
+  await page.route("**/api/xreserve/quote/validate", (route) => route.fulfill({
+    json: { claimable: true, secondsRemaining: 120 },
+  }));
   await page.route("**/api/evm/*/balance**", (route) => route.fulfill({
     json: { balance: "10.123456", balanceRaw: "10123456" },
   }));

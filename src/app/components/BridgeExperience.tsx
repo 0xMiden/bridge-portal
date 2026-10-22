@@ -677,7 +677,8 @@ function BridgeForm() {
         try { validateTransferAmount(route, amount); }
         catch (error) { setBridgeError(errorMessage(error)); return; }
         if (fees.requiresQuote) {
-          if (!quoteQuery.data || quoteQuery.data.expiresAt <= Date.now()) {
+          // CCTP's timestamp can be advisory; its provider checks source-chain validity.
+          if (!quoteQuery.data || (quoteQuery.data.kind !== "cctp" && quoteQuery.data.expiresAt <= Date.now())) {
             setBridgeError(quoteQuery.error ? errorMessage(quoteQuery.error) : "Refresh the quote before reviewing.");
             void quoteQuery.refetch();
             return;
