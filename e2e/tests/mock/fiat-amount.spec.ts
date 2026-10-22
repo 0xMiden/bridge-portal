@@ -1,7 +1,9 @@
 import { expect, test } from "@playwright/test";
 import { stubNetwork } from "../../fixtures/mock-network";
+import { startOnTestnet } from "../../fixtures/testnet";
 
 test("USD estimates follow the amount and selected token, and pricing failures stay unavailable", async ({ page }) => {
+  await startOnTestnet(page);
   await stubNetwork(page);
   await page.route("**/api/xreserve/*quote", (route) => route.fulfill({ status: 502, json: { error: "Quote unavailable" } }));
   await page.goto("/?provider=agglayer&mode=receive");

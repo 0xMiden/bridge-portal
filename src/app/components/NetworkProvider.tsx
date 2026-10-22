@@ -7,7 +7,7 @@ import { loadStoredActivities } from "../lib/bridge-persistence";
 
 const storageKey = "miden.bridge.ui.environment";
 const changeEvent = "bridge-network-change";
-let fallbackEnvironment: BridgeEnvironment = "testnet";
+let fallbackEnvironment: BridgeEnvironment = "mainnet";
 
 function selectEnvironment(environment: BridgeEnvironment) {
   fallbackEnvironment = environment;
@@ -50,7 +50,7 @@ function subscribe(listener: () => void) {
 }
 
 const NetworkContext = createContext({
-  environment: "testnet" as BridgeEnvironment,
+  environment: "mainnet" as BridgeEnvironment,
   selectEnvironment,
 });
 export const useBridgeEnvironment = () => useContext(NetworkContext).environment;

@@ -1,6 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 import type { Activity } from "../../../src/app/lib/bridge-presentation";
 import { stubNetwork } from "../../fixtures/mock-network";
+import { startOnTestnet } from "../../fixtures/testnet";
 
 const STORAGE_KEY = "miden.bridge.ui.activities";
 const SOURCE_TX = `0x${"ab".repeat(32)}`;
@@ -39,6 +40,7 @@ async function storedActivity(page: Page): Promise<Activity> {
 }
 
 test.beforeEach(async ({ page }) => {
+  await startOnTestnet(page);
   await stubNetwork(page);
   await page.goto("/");
 });

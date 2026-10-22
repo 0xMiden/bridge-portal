@@ -1,5 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import { stubNetwork } from "../../fixtures/mock-network";
+import { startOnTestnet } from "../../fixtures/testnet";
 import { BridgePage } from "../../pages/bridge-page";
 import { decodeFunctionData, encodeFunctionResult, erc20Abi, parseAbi } from "viem";
 import { ARC, cctpAbi, cctpSource, xReserveAbi } from "../../../src/bridge/providers/xreserve/config";
@@ -33,6 +34,7 @@ async function bridgeFrames(page: Page) {
 }
 
 test.beforeEach(async ({ page }) => {
+  await startOnTestnet(page);
   await stubNetwork(page);
   await page.route("**/api/xreserve/withdrawal-quote", (route) => route.fulfill({ json: { ...route.request().postDataJSON(), fee: "16400", received: "1983601", expiresAt: Date.now() + 60000 } }));
   await page.route("**/api/xreserve/quote", (route) => route.fulfill({ json: {
