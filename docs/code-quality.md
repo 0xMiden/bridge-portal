@@ -1,8 +1,8 @@
-# Quote and approval quality gates
+# Circle bridge quality gates
 
 `npm run lint` enforces these gates in CI for the Circle quote and USDC approval
 implementation, withdrawal quote validation, their API handlers, the shared
-quote-validity model, and the EVM deposit and transaction recovery helpers:
+quote-validity model, CCTP/Arc status services, and the EVM deposit and transaction recovery helpers:
 
 | Gate | Limit |
 | --- | --- |
@@ -19,11 +19,18 @@ rules; their table-driven fixtures are evaluated for behavioral coverage rather
 than production function size.
 
 The enforced file patterns are in `eslint.config.mjs`. The existing transfer UI,
-shared submission function, Epoch quote producer, and tracking code receive only
+shared submission function, Epoch quote producer, and browser activity observer receive only
 consumer or import changes in this refactor. Their pre-existing function sizes are
 outside this gate's scope; the new validity decision they call is enforced in
 `src/bridge/core/quote.ts`. Adding new quote/approval logic to those consumers to
 avoid these gates is not acceptable.
+
+CCTP status tracking has no file exemption. Its protocol codec owns binary field
+positions, its Circle client validates response schemas, and its status service
+coordinates source and destination verification. The typed Arc service consumes
+the receipt already fetched by CCTP; only the HTTP adapter constructs a `Response`.
+Temporary status failures preserve verified source details, while transfer-binding
+failures remain errors.
 
 The numerical checks support these review requirements:
 

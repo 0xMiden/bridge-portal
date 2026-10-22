@@ -1,75 +1,72 @@
-import { createPublicClient, parseEventLogs } from "viem";
-import { arcConfig, ARC_MAX_MIDEN_AMOUNT, xReserveAbi } from "./config";
+import { createPublicClient, parseEventLogs, type Hex, type PublicClient, type TransactionReceipt } from "viem";
 import { evmServerTransport } from "../../evm/rpc.server";
-import { decodeArcRecipient, parseArcDepositIntent } from "./attestation";
+import { findTransactionReceipt } from "../../evm/transaction-receipt";
+import { arcConfig, ARC_MAX_MIDEN_AMOUNT, xReserveAbi } from "./config";
+import { decodeArcRecipient } from "./attestation";
+import { getArcDepositAttestation } from "./arc-status-attestation";
+import type { ArcStatusResponse } from "./status";
 
-export async function getArcDepositStatus(hash: string, deploymentId?: string) {
-  const ARC = arcConfig(deploymentId);
-  const arcTestnet = ARC.chain;
-  if (!/^0x[\da-f]{64}$/i.test(hash))
-    return Response.json({ error: "Invalid deposit hash." }, { status: 400 });
+export class UnsupportedArcDepositError extends Error {
+  name = "UnsupportedArcDepositError";
+}
+
+function decodeDepositAccount(value: string): string {
   try {
-    const client = createPublicClient({ chain: arcTestnet, transport: evmServerTransport(ARC.network) });
-    const receipt = await client.getTransactionReceipt({ hash: hash as `0x${string}` })
-      .catch((error: Error) => {
-        if (error.name === "TransactionReceiptNotFoundError") return null;
-        throw error;
-      });
-    if (!receipt) return Response.json({ status: "submitted" });
-    if (receipt.status === "reverted") return Response.json({ status: "reverted" });
-
-    // Anchor recovery and attestation matching to the actual xReserve event.
-    // A successful unrelated transaction must never become a USDCx activity.
-    const events = parseEventLogs({
-      abi: xReserveAbi,
-      eventName: "DepositedToRemote",
-      logs: receipt.logs.filter((log) => log.address.toLowerCase() === ARC.xReserve.toLowerCase()),
-    }).filter(({ args }) => args.remoteDomain === ARC.midenDomain &&
-      args.localToken.toLowerCase() === ARC.usdc.toLowerCase());
-    if (events.length !== 1)
-      return Response.json({ error: "This transaction does not contain one supported Miden USDCx deposit." }, { status: 422 });
-    const { args } = events[0];
-    const deposit = {
-      amount: args.value.toString(),
-      recipient: decodeArcRecipient(args.remoteRecipient),
-      faucet: decodeArcRecipient(args.remoteToken),
-      sender: args.localDepositor.toLowerCase(),
-    };
-    if (deposit.faucet !== ARC.faucetId || args.value <= 0n || args.value > ARC_MAX_MIDEN_AMOUNT ||
-        args.maxFee !== 0n || args.hookData !== "0x")
-      return Response.json({ error: "This deposit targets a different faucet or unsupported deposit terms." }, { status: 422 });
-    const block = await client.getBlock({ blockHash: receipt.blockHash });
-    const sourceTxAt = Number(block.timestamp) * 1_000;
-
-    try {
-      const response = await fetch(`${ARC.attestationApi}/v1/attestations?txHash=${hash}`, {
-        cache: "no-store", signal: AbortSignal.timeout(12_000),
-      });
-      if (!response.ok) throw new Error("Circle unavailable");
-      const body = await response.json();
-      let unreadable = false;
-      for (const attestation of Array.isArray(body?.attestations) ? body.attestations : []) {
-        if (!attestation || Number(attestation.remoteDomain) !== ARC.midenDomain ||
-            typeof attestation.attestation !== "string" || !/^0x(?:[\da-f]{2})+$/i.test(attestation.attestation)) continue;
-        try {
-          const intent = parseArcDepositIntent(attestation.payload, deploymentId);
-          if (intent.amount !== deposit.amount || intent.recipient !== deposit.recipient ||
-              intent.faucet !== deposit.faucet || intent.sender !== deposit.sender) {
-            unreadable = true;
-            continue;
-          }
-          return Response.json({ status: "attested", deposit, sourceTxAt, intent });
-        } catch {
-          unreadable = true;
-        }
-      }
-      return Response.json({ status: "confirmed", deposit, sourceTxAt, ...(unreadable ? {
-        warning: "Circle returned details that do not match this deposit. Tracking will retry.",
-      } : {}) });
-    } catch {
-      return Response.json({ status: "confirmed", deposit, sourceTxAt, warning: "Circle status unavailable. Tracking will retry." });
-    }
-  } catch {
-    return Response.json({ error: "Unable to refresh this deposit. Keep its transaction hash; do not deposit again." }, { status: 502 });
+    return decodeArcRecipient(value);
+  } catch (cause) {
+    throw new UnsupportedArcDepositError("This deposit contains an unsupported Miden account.", { cause });
   }
+}
+
+/** The xReserve event is the authority for recovery and attestation matching. */
+function readDeposit(receipt: TransactionReceipt, deploymentId?: string) {
+  const arc = arcConfig(deploymentId);
+  const events = parseEventLogs({
+    abi: xReserveAbi,
+    eventName: "DepositedToRemote",
+    logs: receipt.logs.filter(log => log.address.toLowerCase() === arc.xReserve.toLowerCase()),
+  }).filter(({ args }) => args.remoteDomain === arc.midenDomain && args.localToken.toLowerCase() === arc.usdc.toLowerCase());
+  if (events.length !== 1) {
+    throw new UnsupportedArcDepositError("This transaction does not contain one supported Miden USDCx deposit.");
+  }
+  const { args } = events[0];
+  if (args.value <= 0n || args.value > ARC_MAX_MIDEN_AMOUNT) {
+    throw new UnsupportedArcDepositError("This deposit contains an unsupported amount.");
+  }
+  if (args.maxFee !== 0n || args.hookData !== "0x") {
+    throw new UnsupportedArcDepositError("This deposit contains unsupported fee or hook terms.");
+  }
+  const faucet = decodeDepositAccount(args.remoteToken);
+  if (faucet !== arc.faucetId) {
+    throw new UnsupportedArcDepositError("This deposit targets a different faucet.");
+  }
+  return {
+    amount: args.value.toString(),
+    recipient: decodeDepositAccount(args.remoteRecipient),
+    faucet,
+    sender: args.localDepositor.toLowerCase(),
+  };
+}
+
+/** Reuse the receipt already verified by the forwarding flow. */
+export async function readArcDepositStatus(
+  client: Pick<PublicClient, "getBlock">, receipt: TransactionReceipt, deploymentId?: string,
+): Promise<ArcStatusResponse> {
+  if (receipt.status === "reverted") return { status: "reverted" };
+  const deposit = readDeposit(receipt, deploymentId);
+  const block = await client.getBlock({ blockHash: receipt.blockHash });
+  const attestation = await getArcDepositAttestation(receipt.transactionHash, deposit, deploymentId);
+  return {
+    status: attestation.intent ? "attested" : "confirmed",
+    deposit,
+    sourceTxAt: Number(block.timestamp) * 1_000,
+    ...attestation,
+  };
+}
+
+export async function getArcDepositStatus(hash: Hex, deploymentId?: string): Promise<ArcStatusResponse> {
+  const arc = arcConfig(deploymentId);
+  const client = createPublicClient({ chain: arc.chain, transport: evmServerTransport(arc.network) });
+  const receipt = await findTransactionReceipt(client, hash);
+  return receipt ? readArcDepositStatus(client, receipt, deploymentId) : { status: "submitted" };
 }

@@ -24,23 +24,29 @@ const log = {
   topics: encodeEventTopics({ abi: eventAbi, eventName: "DepositedToRemote", args: { localToken: token, localDepositor: sender, remoteRecipient: recipient } }),
   data: encodeAbiParameters([{ type: "uint256" }, { type: "uint32" }, { type: "bytes32" }, { type: "uint256" }, { type: "bytes" }], [1_000_000n, 10007, faucet, 0n, "0x"]),
 };
-const request = () => new Request(`http://localhost/api/xreserve/status?network=arc-testnet&hash=0x${"a".repeat(64)}`);
+const transactionHash = `0x${"a".repeat(64)}`;
+const receipt = { status: "success", transactionHash, blockHash: `0x${"b".repeat(64)}`, logs: [log] };
+const request = () => new Request(`http://localhost/api/xreserve/status?network=arc-testnet&hash=${transactionHash}`);
 const fetchMock = vi.fn();
 beforeEach(() => {
   vi.resetAllMocks();
-  mocks.receipt.mockResolvedValue({ status: "success", logs: [log] });
+  mocks.receipt.mockResolvedValue(receipt);
   mocks.block.mockResolvedValue({ timestamp: 1791456556n });
   vi.stubGlobal("fetch", fetchMock);
+  vi.spyOn(console, "error").mockImplementation(() => {});
   fetchMock.mockResolvedValue(Response.json({ attestations: [{ remoteDomain: 10007, attestation: "0x1234", payload }] }));
 });
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => {
+  vi.unstubAllGlobals();
+  vi.restoreAllMocks();
+});
 it("anchors the Circle response to the on-chain deposit and exposes recovery details, never delivery", async () => {
   const result = await (await GET(request())).json();
   expect(result.sourceTxAt).toBe(1791456556000);
   expect(result).toMatchObject({ status: "attested", deposit: { amount: "1000000", recipient: "0x4e6fb40fd2f6a55140df2c42dfb5b7", faucet: "0x4cbdcaffe75f0a317482224dae6436", sender }, intent: { nonce: `0x${"ab".repeat(32)}` } });
 });
 it.each([{ logs: [] }, { logs: [{ ...log, address: sender }] }, { logs: [log, log] }])("rejects unrelated or ambiguous deposits", async ({ logs }) => {
-  mocks.receipt.mockResolvedValue({ status: "success", logs });
+  mocks.receipt.mockResolvedValue({ ...receipt, logs });
   expect((await GET(request())).status).toBe(422);
   expect(fetchMock).not.toHaveBeenCalled();
 });
@@ -48,11 +54,28 @@ it("does not trust a mismatched Circle amount, or confuse attestation with deliv
   fetchMock.mockResolvedValue(Response.json({ attestations: [{ remoteDomain: 10007, attestation: "0x1234", payload: payload.replace("0f4240", "1e8480") }] }));
   expect(await (await GET(request())).json()).toMatchObject({ status: "confirmed", warning: expect.any(String) });
 });
-it.each(["http", "network", "json"])("retains confirmation and recovery during Circle %s failures", async (failure) => {
+it.each(["http", "network", "json", "schema"])("retains confirmation and recovery during Circle %s failures", async (failure) => {
   if (failure === "http") fetchMock.mockResolvedValue(new Response(null, { status: 503 }));
   if (failure === "network") fetchMock.mockRejectedValue(new Error("offline"));
   if (failure === "json") fetchMock.mockResolvedValue(new Response("oops"));
+  if (failure === "schema") fetchMock.mockResolvedValue(Response.json({ attestations: [null] }));
   expect(await (await GET(request())).json()).toMatchObject({ status: "confirmed", deposit: { amount: "1000000" }, warning: expect.any(String) });
+});
+it.each([
+  { attestations: [] },
+  { attestations: [{ remoteDomain: 10007, attestation: null, payload }] },
+])("retains confirmation while attestations are pending (%j)", async ({ attestations }) => {
+  fetchMock.mockResolvedValue(Response.json({ attestations }));
+  const status = await (await GET(request())).json();
+  expect(status).toMatchObject({ status: "confirmed", deposit: { amount: "1000000" } });
+  expect(status.warning).toBeUndefined();
+  expect(status.intent).toBeUndefined();
+});
+it("retains confirmation while Circle has not indexed the deposit", async () => {
+  fetchMock.mockResolvedValue(new Response(null, { status: 404 }));
+  const status = await (await GET(request())).json();
+  expect(status).toMatchObject({ status: "confirmed", deposit: { amount: "1000000" } });
+  expect(status.warning).toBeUndefined();
 });
 it("distinguishes a missing receipt, an RPC outage, and a reverted deposit", async () => {
   mocks.receipt.mockRejectedValueOnce(Object.assign(new Error(), { name: "TransactionReceiptNotFoundError" }));
@@ -99,11 +122,11 @@ it("verifies mainnet Circle events against its faucet and production attestation
   const mainnetLog = { ...log, address: "0x8888888199b2Df864bf678259607d6D5EBb4e3Ce",
     data: encodeAbiParameters([{ type: "uint256" }, { type: "uint32" }, { type: "bytes32" }, { type: "uint256" }, { type: "bytes" }], [1_000_000n, 10007, mainnetFaucet, 0n, "0x"]),
   };
-  mocks.receipt.mockResolvedValue({ status: "success", logs: [mainnetLog] });
+  mocks.receipt.mockResolvedValue({ ...receipt, logs: [mainnetLog] });
   fetchMock.mockResolvedValue(Response.json({ attestations: [{ remoteDomain: 10007, attestation: "0x1234", payload: payload.replace(faucet.slice(2), mainnetFaucet.slice(2)) }] }));
   const request = new Request(`http://localhost/api/xreserve/status?network=arc&hash=0x${"a".repeat(64)}&deployment=${currentDeployment("mainnet").id}`);
   expect(await (await GET(request)).json()).toMatchObject({ status: "attested", deposit: { faucet: "0xe69e6ca6e39df1b10c1e5399399feb" } });
   expect(fetchMock.mock.calls[0][0]).toBe(`https://xreserve-api.circle.com/v1/attestations?txHash=0x${"a".repeat(64)}`);
-  mocks.receipt.mockResolvedValue({ status: "success", logs: [log] });
+  mocks.receipt.mockResolvedValue(receipt);
   expect((await GET(request)).status).toBe(422);
 });

@@ -10,23 +10,19 @@ function transportFailure(cause: unknown): CircleApiError {
   return new CircleApiError(reason, "Circle is unavailable. Please retry.", { cause });
 }
 
-async function sendCircleRequest(url: string, body: unknown): Promise<Response> {
+async function sendCircleRequest(url: string, init: RequestInit): Promise<Response> {
   try {
     return await fetch(url, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
       cache: "no-store",
       signal: AbortSignal.timeout(15_000),
-      body: JSON.stringify(body),
+      ...init,
     });
   } catch (cause) {
     throw transportFailure(cause);
   }
 }
 
-/** Share transport behavior without coupling the different quote response schemas. */
-export async function postCircleJson(url: string, body: unknown): Promise<unknown> {
-  const response = await sendCircleRequest(url, body);
+async function readCircleJson(response: Response): Promise<unknown> {
   if (!response.ok) {
     throw new CircleApiError("upstream_http", "Circle is unavailable. Please retry.", { status: response.status });
   }
@@ -40,6 +36,23 @@ export async function postCircleJson(url: string, body: unknown): Promise<unknow
   }
 }
 
+/** Share transport behavior without coupling the different response schemas. */
+export async function postCircleJson(url: string, body: unknown): Promise<unknown> {
+  const response = await sendCircleRequest(url, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  return readCircleJson(response);
+}
+
+/** A 404 means Circle has not indexed the transfer yet; JSON null is still validated. */
+export async function getCircleJson(url: string): Promise<unknown> {
+  const response = await sendCircleRequest(url, { signal: AbortSignal.timeout(12_000) });
+  if (response.status === 404) return undefined;
+  return readCircleJson(response);
+}
+
 function diagnosticCause(cause: unknown) {
   if (cause instanceof ZodError) {
     return { kind: "schema", issues: cause.issues.slice(0, 10).map(issue => ({ code: issue.code, path: issue.path })) };
@@ -51,7 +64,7 @@ function diagnosticCause(cause: unknown) {
 }
 
 /** Log only allowlisted metadata, never payloads, URLs, wallet addresses, or raw errors. */
-export function reportCircleFailure(operation: "quote" | "validation" | "withdrawal", error: unknown): void {
+export function reportCircleFailure(operation: "quote" | "validation" | "withdrawal" | "status", error: unknown): void {
   const failure = error instanceof CircleApiError ? error : undefined;
   console.error("[circle] request failed", {
     operation,

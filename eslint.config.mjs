@@ -8,14 +8,16 @@ const eslintConfig = defineConfig([
   ...nextVitals,
   ...nextTs,
   {
-    // Apply the gates to the complete quote/approval implementation, including
+    // Apply the gates to the quote, approval, and status implementations, including
     // helpers added later. Consumer-only adaptations keep the shared policy here.
     files: [
       "src/bridge/core/quote.ts",
       "src/bridge/evm/deposit-wallet.ts",
       "src/bridge/evm/evm-schema.ts",
       "src/bridge/evm/source-transaction*.ts",
+      "src/bridge/evm/transaction-receipt.ts",
       "src/bridge/providers/xreserve/approval*.ts",
+      "src/bridge/providers/xreserve/arc-status-*.ts",
       "src/bridge/providers/xreserve/cctp-*.ts",
       "src/bridge/providers/xreserve/circle-*.ts",
       "src/bridge/providers/xreserve/deposit*.ts",
@@ -23,8 +25,9 @@ const eslintConfig = defineConfig([
       "src/bridge/providers/xreserve/withdrawal.ts",
       "src/app/api/xreserve/quote/**/route.ts",
       "src/app/api/xreserve/withdrawal-quote/route.ts",
+      "src/app/api/xreserve/status/route.ts",
     ],
-    ignores: ["**/*.test.ts", "src/bridge/providers/xreserve/cctp-status.ts"],
+    ignores: ["**/*.test.ts"],
     plugins: {
       sonarjs,
       bridge: { rules: { "max-boolean-clauses": maxBooleanClauses } },
