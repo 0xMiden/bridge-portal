@@ -17,7 +17,7 @@ vi.mock("viem", async (original) => ({ ...await original<typeof import("viem")>(
   createWalletClient: (options: ClientOptions) => mocks.walletClient(options),
 }));
 vi.mock("../../evm/source-transaction", () => ({
-  captureSourceTransaction: async () => undefined, resolveSourceTransaction: async () => ({}),
+  captureSourceTransaction: async () => undefined, recoverSourceTransaction: async () => ({}),
 }));
 vi.mock("@miden-sdk/miden-sdk", () => ({ AccountId: { fromHex: () => ({ free() {} }) } }));
 const account = fixture.sender as `0x${string}`;

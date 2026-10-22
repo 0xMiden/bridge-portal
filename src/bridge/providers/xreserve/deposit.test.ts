@@ -22,7 +22,7 @@ vi.mock("viem", async (importOriginal) => ({
   createWalletClient: () => ({ writeContract: mocks.write }),
 }));
 vi.mock("../../evm/source-transaction", () => ({
-  captureSourceTransaction: async () => undefined, resolveSourceTransaction: async () => ({}),
+  captureSourceTransaction: async () => undefined, recoverSourceTransaction: async () => ({}),
 }));
 vi.mock("@miden-sdk/miden-sdk", () => ({
   AccountId: { fromHex: mocks.fromHex },
