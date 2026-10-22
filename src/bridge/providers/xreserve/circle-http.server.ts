@@ -1,5 +1,5 @@
 import { ZodError } from "zod";
-import { CircleApiError } from "./circle-error";
+import { CircleApiError } from "./circle-response";
 
 function isTimeout(cause: unknown): boolean {
   return cause instanceof Error && ["TimeoutError", "AbortError"].includes(cause.name);

@@ -1,12 +1,12 @@
-import { createPublicClient, parseAbi, parseEventLogs, type Hex, type TransactionReceipt } from "viem";
+import { z } from "zod";
+import { createPublicClient, parseAbi, parseEventLogs, size, type Hex, type TransactionReceipt } from "viem";
 import { evmServerTransport } from "../../evm/rpc.server";
 import { findTransactionReceipt } from "../../evm/transaction-receipt";
-import { cctpConfig, cctpSource, type CctpNetwork } from "./cctp-config";
-import { arcConfig } from "./config";
-import { parseCctpBurn, type CctpBurn } from "./cctp-message";
-import { findCctpForwarding, type CctpForwarding } from "./cctp-forwarding.server";
-import { CircleApiError } from "./circle-error";
-import { reportCircleFailure } from "./circle-http.server";
+import { hexDataSchema, transactionHashSchema } from "../../evm/evm-schema";
+import { arcConfig, cctpConfig, cctpSource, type CctpNetwork } from "./config";
+import { decodeCctpMessage, matchAttestedMessage, parseCctpBurn, type CctpBurn, type CctpMessage } from "./cctp-message";
+import { CircleApiError, parseCirclePayload } from "./circle-response";
+import { getCircleJson, reportCircleFailure } from "./circle-http.server";
 import { readArcDepositStatus, UnsupportedArcDepositError } from "./arc-status-server";
 import type { ArcStatusResponse } from "./status";
 
@@ -18,6 +18,31 @@ export type CctpStatusResponse = ArcStatusResponse & {
   arcTxHash?: Hex;
   forwarding?: boolean;
 };
+
+// Iris can report a message before attestation or forwarding is available.
+// https://developers.circle.com/api-reference/cctp/all/get-messages-v2
+const messageSchema = z.object({
+  message: hexDataSchema.or(z.literal("")).nullish(),
+  forwardTxHash: transactionHashSchema.or(z.enum(["", "0x"])).nullish(),
+});
+const messagesSchema = z.object({ messages: z.array(messageSchema) });
+
+type CctpForwarding = { message: CctpMessage; transactionHash: Hex };
+
+function decodeForwarding(entry: z.infer<typeof messageSchema>, source: CctpMessage): CctpForwarding | null {
+  if (!entry.message || size(entry.message) !== source.byteLength) return null;
+  if (!entry.forwardTxHash || entry.forwardTxHash === "0x") return null;
+  return { message: decodeCctpMessage(entry.message), transactionHash: entry.forwardTxHash };
+}
+
+/** Circle suggests a transaction; immutable source-chain fields determine whether it belongs to this burn. */
+async function findCctpForwarding(api: string, hash: Hex, source: CctpMessage): Promise<CctpForwarding | null> {
+  const body = await getCircleJson(`${api}/v2/messages/${source.transfer.sourceDomain}?transactionHash=${hash}`);
+  if (body === undefined) return null;
+  const { messages } = parseCirclePayload(messagesSchema, body, "Circle returned an invalid forwarding response.");
+  const candidates = messages.map(entry => decodeForwarding(entry, source));
+  return candidates.find(candidate => candidate !== null && matchAttestedMessage(source, candidate.message)) ?? null;
+}
 
 function readSourceBurn(receipt: TransactionReceipt, network: CctpNetwork, deploymentId?: string): CctpBurn {
   const { messageTransmitter } = cctpConfig(deploymentId, network);

@@ -2,8 +2,7 @@ import { expect, test, type Page } from "@playwright/test";
 import { stubNetwork } from "../../fixtures/mock-network";
 import { BridgePage } from "../../pages/bridge-page";
 import { decodeFunctionData, encodeFunctionResult, erc20Abi, parseAbi } from "viem";
-import { ARC, xReserveAbi } from "../../../src/bridge/providers/xreserve/config";
-import { cctpAbi, cctpSource } from "../../../src/bridge/providers/xreserve/cctp-config";
+import { ARC, cctpAbi, cctpSource, xReserveAbi } from "../../../src/bridge/providers/xreserve/config";
 import { arcRecipient } from "../../../src/bridge/providers/xreserve/deposit-terms";
 
 type BridgeFrame = { route: string; source: string; wallet: string };

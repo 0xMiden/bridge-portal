@@ -20,6 +20,7 @@ const eslintConfig = defineConfig([
       "src/bridge/providers/xreserve/arc-status-*.ts",
       "src/bridge/providers/xreserve/cctp-*.ts",
       "src/bridge/providers/xreserve/circle-*.ts",
+      "src/bridge/providers/xreserve/config.ts",
       "src/bridge/providers/xreserve/deposit*.ts",
       "src/bridge/providers/xreserve/withdrawal-quote*.ts",
       "src/bridge/providers/xreserve/withdrawal.ts",

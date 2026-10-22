@@ -2,18 +2,15 @@ import { getAbiItem, pad, toFunctionSignature, type AbiParameter, type Address }
 import { z } from "zod";
 import { assertDeploymentNetwork, getDeployment } from "../../../config/deployments";
 import { assertMidenAccountNetwork } from "../../../wallets/miden/network";
-import { cctpBurnCall, type CctpBurnAuthorization, type CctpBurnIntent } from "./cctp-burn";
-import { cctpConfig, cctpSource } from "./cctp-config";
-import { cctpDepositHook } from "./cctp-hook";
+import { cctpBurnCall, type CctpBurnAuthorization, type CctpBurnIntent, cctpDepositHook } from "./cctp-burn";
+import { cctpConfig, cctpSource, arcConfig } from "./config";
 import {
   assertQuoteExpiry, cctpAuthorizationSchema, cctpRequestSchema, circleQuoteSchema,
   circleValidationSchema,
   type CctpQuote, type CctpQuoteValidation, type CircleValidation,
 } from "./cctp-schema";
-import { CircleApiError } from "./circle-error";
+import { CircleApiError, parseCirclePayload } from "./circle-response";
 import { postCircleJson } from "./circle-http.server";
-import { parseCirclePayload } from "./circle-schema";
-import { arcConfig } from "./config";
 import { arcRecipient, parseArcAmount } from "./deposit-terms";
 
 function assertTransferTerms(input: CctpBurnIntent): void {

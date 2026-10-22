@@ -1,8 +1,7 @@
 import { formatUnits, padHex } from "viem";
 import { getDeployment } from "../../../config/deployments";
-import { CircleApiError } from "./circle-error";
+import { CircleApiError, parseCirclePayload } from "./circle-response";
 import { postCircleJson } from "./circle-http.server";
-import { parseCirclePayload } from "./circle-schema";
 import { arcConfig } from "./config";
 import { arcRecipient, parseArcAmount } from "./deposit-terms";
 import { assertWithdrawalAmounts, withdrawalDomain } from "./withdrawal";

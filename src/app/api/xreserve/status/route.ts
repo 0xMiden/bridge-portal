@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { cctpNetworks, isCctpNetwork } from "../../../../bridge/providers/xreserve/cctp-config";
+import { cctpNetworks, isCctpNetwork } from "../../../../bridge/providers/xreserve/config";
 import { getCctpStatus } from "../../../../bridge/providers/xreserve/cctp-status";
 import { getArcDepositStatus, UnsupportedArcDepositError } from "../../../../bridge/providers/xreserve/arc-status-server";
 import { assertDeploymentNetwork } from "../../../../config/deployments";

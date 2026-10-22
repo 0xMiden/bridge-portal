@@ -3,8 +3,7 @@ import { assertMidenAccountNetwork } from "../../../wallets/miden/network";
 import { assertDeploymentNetwork, getDeployment } from "../../../config/deployments";
 import type { QuoteRequest, QuoteResult } from "../../core/quote";
 import { normalizeMidenAccountHex } from "../agglayer/agglayer";
-import { CircleApiError } from "./circle-error";
-import { circleApiError, parseCirclePayload } from "./circle-schema";
+import { CircleApiError, circleApiError, parseCirclePayload } from "./circle-response";
 import { arcRecipient, parseArcAmount } from "./deposit-terms";
 import { assertWithdrawalAmounts, validateWithdrawal, withdrawalDomain, withdrawalPayload } from "./withdrawal";
 import {

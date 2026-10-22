@@ -4,8 +4,7 @@ import {
   TransactionReceiptNotFoundError, type Hex,
 } from "viem";
 import { getCctpStatus } from "./cctp-status";
-import { ARC, ARC_MAX_MIDEN_AMOUNT } from "./config";
-import { cctpConfig, cctpSource } from "./cctp-config";
+import { ARC, ARC_MAX_MIDEN_AMOUNT, cctpConfig, cctpSource } from "./config";
 import fixture from "./fixtures/cctp-hook.json";
 
 const mocks = vi.hoisted(() => ({

@@ -1,7 +1,6 @@
 import { pad, size, slice, type Hex } from "viem";
-import { arcConfig, ARC_MAX_MIDEN_AMOUNT } from "./config";
-import { cctpConfig, cctpSource, type CctpNetwork } from "./cctp-config";
-import { decodeCctpDepositHook } from "./cctp-hook";
+import { arcConfig, ARC_MAX_MIDEN_AMOUNT, cctpConfig, cctpSource, type CctpNetwork } from "./config";
+import { decodeCctpDepositHook } from "./cctp-burn";
 
 const MESSAGE_HEADER_BYTES = 148;
 const BURN_BODY_BYTES = 228;

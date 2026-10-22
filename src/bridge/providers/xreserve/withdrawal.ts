@@ -1,7 +1,7 @@
 import { hexToBytes, isAddress, padHex } from "viem";
 import type { BridgeNetwork } from "../../core/assets";
 import { parseArcAmount } from "./deposit-terms";
-import { CircleApiError } from "./circle-error";
+import { CircleApiError } from "./circle-response";
 
 export const withdrawalDomains: Partial<Record<BridgeNetwork, number>> = {
   "arc-testnet": 26, sepolia: 0, "base-sepolia": 6, "arbitrum-sepolia": 3,

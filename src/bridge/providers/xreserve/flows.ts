@@ -2,7 +2,7 @@ import type { ProviderFlows } from "../../core/provider";
 import { captureSourceTransaction } from "../../evm/source-transaction";
 import { evmNetworks } from "../../../config/evm-networks";
 import { midenAccountLink } from "../../miden-account-link";
-import { isCctpNetwork } from "./cctp-config";
+import { isCctpNetwork } from "./config";
 import { fetchWithdrawalQuote } from "./withdrawal-quote";
 
 import { observeXreserveDeposit } from "./status";

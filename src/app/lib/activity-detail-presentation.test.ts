@@ -44,12 +44,13 @@ test.each(["agglayer", "xreserve"] as const)(
     expect(model.receipt.status?.label).toBe("Delivered");
   },
 );
-test("an untracked withdrawal exposes its note without a refresh or delivery timeline", () => {
+test.each(["pending", "consuming", "confirmed"] as const)("a %s withdrawal burn stays manual until payout is verified", (xreserveBurnStatus) => {
   const model = activityDetailFor({
     ...DEMO_ACTIVITIES["demo-epoch-send"],
     provider: "xreserve",
     status: "source_finality",
     xreserveNoteId: "burn-note",
+    xreserveBurnStatus,
   });
   expect(model.progress).toMatchObject({ kind: "manual", reference: { label: "Burn note ID", value: "burn-note" } });
   expect(model.receipt.status?.label).toBe("Withdrawal submitted");

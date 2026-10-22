@@ -1,8 +1,7 @@
 import { createPublicClient, parseAbi, type PublicClient } from "viem";
 import { evmReadTransport } from "../../evm/transport";
 import { normalizeMidenAccountHex } from "../agglayer/agglayer";
-import { cctpConfig, type CctpNetwork } from "./cctp-config";
-import { arcConfig, xReserveAbi } from "./config";
+import { cctpConfig, type CctpNetwork, arcConfig, xReserveAbi } from "./config";
 import { arcRecipient } from "./deposit-terms";
 
 const pausedAbi = parseAbi(["function paused() view returns (bool)"]);

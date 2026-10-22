@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { evmAddressSchema } from "../../evm/evm-schema";
-import { cctpNetworks } from "./cctp-config";
-import { CircleApiError } from "./circle-error";
+import { cctpNetworks } from "./config";
+import { CircleApiError } from "./circle-response";
 
 const unsignedInteger = z.int().nonnegative();
 const unsignedDecimal = z.string().regex(/^\d+$/);

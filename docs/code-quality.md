@@ -26,11 +26,29 @@ outside this gate's scope; the new validity decision they call is enforced in
 avoid these gates is not acceptable.
 
 CCTP status tracking has no file exemption. Its protocol codec owns binary field
-positions, its Circle client validates response schemas, and its status service
-coordinates source and destination verification. The typed Arc service consumes
+positions; private helpers in each status service validate Circle responses and
+bind them to on-chain transfers. The typed Arc service consumes
 the receipt already fetched by CCTP; only the HTTP adapter constructs a `Response`.
 Temporary status failures preserve verified source details, while transfer-binding
 failures remain errors.
+
+File boundaries follow cohesive operations, not individual helpers:
+
+- `cctp-quote.ts` owns the browser quote lifecycle: fetching, validation, fee
+  limits and reuse. Its schemas remain shared with the server API.
+- Each server status module owns its Circle lookup and on-chain verification,
+  keeping the steps in named private functions. Protocol codecs stay separate.
+- `cctp-burn.ts` owns the canonical burn call and its executor hook encoding and
+  decoding. `config.ts` owns the provider's deployment and contract configuration.
+- `circle-response.ts` owns payload parsing and classified errors;
+  `circle-http.server.ts` owns upstream transport and safe diagnostics.
+- Approval lifecycle and durable browser storage remain separate responsibilities.
+  Browser wallet execution, server APIs and Miden delivery also remain separate.
+
+Keep single-consumer helpers private when they belong to the same operation.
+Do not add barrels or wrapper exports just to preserve obsolete file boundaries.
+Withdrawal payout tracking is manual; there is no unused network-note observer.
+Saved burn states remain readable and never establish that Circle paid out USDC.
 
 The numerical checks support these review requirements:
 

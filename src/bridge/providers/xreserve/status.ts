@@ -1,11 +1,10 @@
 import { resolveSourceTransaction } from "../../evm/source-transaction";
 import { activityRoute } from "../../core/routes";
-import { cctpConfig, isCctpNetwork } from "./cctp-config";
+import { cctpConfig, isCctpNetwork, arcConfig } from "./config";
 import type { CctpStatusResponse } from "./cctp-status";
 import type { BridgeActivity } from "../../core/models";
 import { normalizeMidenAccountHex } from "../agglayer/agglayer";
 import type { ArcDepositIntent } from "./attestation";
-import { arcConfig } from "./config";
 import { parseArcAmount } from "./deposit-terms";
 
 export type ArcStatusResponse = {

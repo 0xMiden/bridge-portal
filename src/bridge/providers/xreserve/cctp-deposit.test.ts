@@ -2,9 +2,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ContractFunctionRevertedError, WaitForTransactionReceiptTimeoutError, encodeErrorResult, type HttpTransport } from "viem";
 import type { EvmProvider } from "../../../wallets/evm/evm-wallet";
 import { depositViaCctp } from "./cctp-deposit";
-import { cctpDepositHook, decodeCctpDepositHook } from "./cctp-hook";
-import { cctpAbi, cctpConfig, cctpSource, type CctpNetwork } from "./cctp-config";
-import { ARC } from "./config";
+import { cctpDepositHook, decodeCctpDepositHook } from "./cctp-burn";
+import { cctpAbi, cctpConfig, cctpSource, type CctpNetwork, ARC } from "./config";
 import { arcRecipient } from "./deposit-terms";
 import type { CctpQuote } from "./cctp-quote";
 import fixture from "./fixtures/cctp-hook.json";
@@ -16,10 +15,6 @@ const mocks = vi.hoisted(() => ({
 vi.mock("viem", async (original) => ({ ...await original<typeof import("viem")>(),
   createPublicClient: (options: ClientOptions) => mocks.publicClient(options),
   createWalletClient: (options: ClientOptions) => mocks.walletClient(options),
-}));
-vi.mock("./cctp-quote-validation", () => ({ fetchCctpQuoteValidation: mocks.validate }));
-vi.mock("./cctp-quote", async (original) => ({
-  ...await original<typeof import("./cctp-quote")>(), fetchCctpQuote: mocks.quote,
 }));
 vi.mock("../../evm/source-transaction", () => ({
   captureSourceTransaction: async () => undefined, resolveSourceTransaction: async () => ({}),
@@ -131,6 +126,14 @@ beforeEach(() => {
     return { ...quote, ...request, fee: fee.toString(), signedQuote: "0xabcd" };
   });
   mocks.validate.mockImplementation(async () => ({ claimable: secondsRemaining > 0, secondsRemaining }));
+  // Exercise quote parsing and reuse through the real browser HTTP boundary.
+  vi.stubGlobal("fetch", vi.fn(async (url: string, init: RequestInit) => {
+    expect(init.method).toBe("POST");
+    const request: unknown = JSON.parse(String(init.body));
+    if (url === "/api/xreserve/quote") return Response.json(await mocks.quote(request));
+    if (url === "/api/xreserve/quote/validate") return Response.json(await mocks.validate(request));
+    throw new Error(`Unexpected quote endpoint: ${url}`);
+  }));
   mocks.publicClient.mockImplementation(({ chain, transport }: PublicClientOptions) => {
     const rpcNetwork = chain.id === ARC.chainId ? ARC.network : network;
     expect(transport({}).value?.url).toBe(`/api/evm/${rpcNetwork}/rpc`);
