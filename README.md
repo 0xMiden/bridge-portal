@@ -62,9 +62,15 @@ the app boots with none of them set. In brief:
 | Var | Scope | Purpose |
 | --- | --- | --- |
 | `BRIDGE_API_BASE` | server | Proxy target for `/api/bridge/*`. |
-| `AGGLAYER_SEPOLIA_RPC_URL` | server | Primary Sepolia RPC for shared EVM reads and provider tracking. |
+| `ETHEREUM_RPC_URL` | server | Ethereum mainnet RPC. |
+| `ARC_MAINNET_RPC_URL` | server | Arc mainnet RPC. |
+| `BASE_RPC_URL` | server | Base mainnet RPC. |
+| `ARBITRUM_RPC_URL` | server | Arbitrum mainnet RPC. |
+| `AGGLAYER_SEPOLIA_RPC_URL` | server | Sepolia RPC. |
 | `EVM_RPC_URL` | server | Secondary Sepolia RPC fallback. |
-| `BASE_SEPOLIA_RPC_URL` | server | Optional primary Base Sepolia RPC, with Base and PublicNode fallbacks. |
+| `ARC_TESTNET_RPC_URL` | server | Arc Testnet RPC. |
+| `BASE_SEPOLIA_RPC_URL` | server | Base Sepolia RPC. |
+| `ARBITRUM_SEPOLIA_RPC_URL` | server | Arbitrum Sepolia RPC. |
 | `NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID` | client | WalletConnect / Reown project id. |
 | `NEXT_PUBLIC_SEPOLIA_RPC_URL` | build | Public Sepolia fallback for the shared server RPC layer. |
 | `NEXT_PUBLIC_ARC_RPC_URL` | build | Primary Arc Testnet RPC, with public fallbacks. |

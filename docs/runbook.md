@@ -34,6 +34,7 @@ Repo Actions secrets (throwaway testnet only):
 Production deploy:
 
 - `CLOUDFLARE_API_TOKEN`
+- Eight primary EVM RPC URL secrets from [`.env.example`](../.env.example) (Worker runtime)
 - `NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID` (inlined at `cf:build`)
 
 Never set `NEXT_PUBLIC_E2E_*` on a production `cf:build`. `scripts/check-prod-bundle.mjs` fails the deploy if they leak into `.next` / `.open-next`.
