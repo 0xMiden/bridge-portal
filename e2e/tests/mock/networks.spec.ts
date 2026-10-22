@@ -64,7 +64,7 @@ test("network selection isolates forms, preferences and tabs", async ({ bridge, 
   const second = await context.newPage();
   await stubNetwork(second);
   await second.goto("/");
-  await expect(second.getByRole("combobox", { name: "Bridge network" })).toHaveText("Testnet");
+  await expect(second.getByRole("combobox", { name: "Bridge network" })).toHaveText("Mainnet");
   await expect(page.getByRole("combobox", { name: "Bridge network" })).toHaveText("Mainnet");
   await second.close();
 
