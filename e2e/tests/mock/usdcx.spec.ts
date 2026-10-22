@@ -4,7 +4,7 @@ import { BridgePage } from "../../pages/bridge-page";
 import { decodeFunctionData, encodeFunctionResult, erc20Abi, parseAbi } from "viem";
 import { ARC, xReserveAbi } from "../../../src/bridge/providers/xreserve/config";
 import { cctpAbi, cctpSource } from "../../../src/bridge/providers/xreserve/cctp-config";
-import { arcRecipient } from "../../../src/bridge/providers/xreserve/deposit";
+import { arcRecipient } from "../../../src/bridge/providers/xreserve/deposit-terms";
 
 type BridgeFrame = { route: string; source: string; wallet: string };
 type FrameWindow = typeof window & { bridgeFrames: BridgeFrame[] };
@@ -40,7 +40,6 @@ test.beforeEach(async ({ page }) => {
     ...route.request().postDataJSON(), signedQuote: "0x1234", fee: "250000",
     issuedAt: Math.floor(Date.now() / 1000),
     expiry: { mode: "BLOCK_NUMBER", expiresAtBlock: 26247476, blockEstimatedAt: Math.floor(Date.now() / 1000) + 168 },
-    expiresAt: Date.now() + 168000,
   } }));
   await page.route("**/api/xreserve/quote/validate", (route) => route.fulfill({
     json: { claimable: true, secondsRemaining: 120 },

@@ -1,4 +1,4 @@
-import { fetchWithdrawalQuote } from "../../bridge/providers/xreserve/withdrawal-quote";
+import { fetchWithdrawalQuote, type WithdrawalQuote } from "../../bridge/providers/xreserve/withdrawal-quote";
 import { withdrawUsdcx } from "../../bridge/providers/xreserve/withdrawal-execute";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { decodeFunctionData, parseAbi } from "viem";
@@ -7,7 +7,7 @@ import type { EvmProvider } from "../../wallets/evm/evm-wallet";
 import { SEPOLIA_NETWORK } from "../../config/sepolia";
 import { runAgglayerSend } from "../../bridge/providers/agglayer/agglayer-execute";
 import { runEpochTransfer, type EpochExecuteResult } from "../../bridge/providers/epoch/epoch-execute";
-import { captureSourceTransaction } from "../../bridge/evm/source-transaction";
+import { captureSourceTransaction, type SourceTransaction } from "../../bridge/evm/source-transaction";
 import { depositOnArc } from "../../bridge/providers/xreserve/deposit";
 import { depositViaCctp } from "../../bridge/providers/xreserve/cctp-deposit";
 import { loadStoredActivities, saveActivities } from "./bridge-persistence";
@@ -32,7 +32,7 @@ vi.mock("viem", async (importOriginal) => ({
 
 const EVM_ADDRESS = "0x1111111111111111111111111111111111111111";
 const MIDEN_ACCOUNT = "0x387149ae66116cf114eebd60bb7381";
-const TX_HASH = `0x${"ab".repeat(32)}`;
+const TX_HASH = `0x${"ab".repeat(32)}` as const;
 const history: Activity = {
   id: "existing",
   mode: "receive",
@@ -86,7 +86,7 @@ function setup(overrides: Partial<TransferSubmission> = {}) {
   };
   if (findBridgeRoute(input.routeId)?.provider === "epoch" && !("quote" in overrides)) {
     input.quote = {
-      kind: "epoch", received: "0.12", expiresAt: Date.now() + 60_000,
+      kind: "epoch", received: "0.12", validity: { kind: "time", expiresAt: Date.now() + 60_000 },
       request: { deploymentId: findBridgeRoute(input.routeId)?.deploymentId, routeId: input.routeId, amount: input.amount, evmAddress: input.evmAddress, midenAccount: input.midenAccount },
     };
   }
@@ -108,14 +108,14 @@ function setupCctp() {
   const authorization = {
     deploymentId: route.deploymentId, network: "sepolia" as const,
     sender: EVM_ADDRESS as `0x${string}`, recipient: MIDEN_ACCOUNT, amount: "1",
-    signedQuote: "0x1234" as const, fee: "250000", expiresAt,
+    signedQuote: "0x1234" as const, fee: "250000",
     issuedAt: Math.floor(expiresAt / 1000) - 168,
     expiry: { mode: "BLOCK_NUMBER" as const, expiresAtBlock: 26247476, blockEstimatedAt: Math.floor(expiresAt / 1000) },
   };
   return setup({
     routeId: route.id, amount: "1",
     quote: {
-      kind: "cctp", received: "1", fee: "0.25", expiresAt, authorization,
+      kind: "cctp", received: "1", fee: "0.25", validity: { kind: "provider" }, authorization,
       request: { deploymentId: route.deploymentId, routeId: route.id, amount: "1", evmAddress: EVM_ADDRESS, midenAccount: MIDEN_ACCOUNT },
     },
   });
@@ -129,7 +129,7 @@ describe("submission validation", () => {
     "requires another review when the $kind quote has changed $change", async ({ kind, change }) => {
       const { input, effects } = kind === "cctp" ? setupCctp() : setup();
       if (change === "missing") input.quote = undefined;
-      else if (change === "expired") input.quote!.expiresAt = Date.now() - 1;
+      else if (change === "expired") input.quote!.validity = { kind: "time", expiresAt: Date.now() - 1 };
       else input.quote!.request[change] = "changed";
       await submitBridgeTransfer(input, effects);
       expect(runEpochTransfer).not.toHaveBeenCalled();
@@ -293,7 +293,7 @@ describe("USDCx submission", () => {
 
   it("saves the actual source nonce after broadcast without overwriting a concurrent activity update", async () => {
     const { input, effects } = setup({ routeId: "xreserve-usdc-to-miden", amount: "1" });
-    const transaction = { hash: TX_HASH, from: EVM_ADDRESS, nonce: 7, to: EVM_ADDRESS, input: "0x1234", value: "0" };
+    const transaction: SourceTransaction = { hash: TX_HASH, from: EVM_ADDRESS, nonce: 7, to: EVM_ADDRESS, input: "0x1234", value: "0" };
     let resolve!: (value: typeof transaction) => void;
     vi.mocked(captureSourceTransaction).mockReturnValue(new Promise((done) => { resolve = done; }));
     vi.mocked(depositOnArc).mockImplementation(async ({ onBroadcast }) => {
@@ -339,9 +339,14 @@ describe("USDCx submission", () => {
 
 
 describe("USDCx withdrawal submission", () => {
-  const estimate = () => ({ deploymentId: findBridgeRoute("xreserve-usdc-to-arc")!.deploymentId, network: "arc-testnet" as const, amount: "2", sender: MIDEN_ACCOUNT, recipient: EVM_ADDRESS, fee: "16400", received: "1983600", expiresAt: Date.now() + 60000 });
+  const estimate = (): WithdrawalQuote => ({
+    deploymentId: findBridgeRoute("xreserve-usdc-to-arc")!.deploymentId, network: "arc-testnet",
+    amount: "2", sender: MIDEN_ACCOUNT, recipient: EVM_ADDRESS,
+    fee: "16400", received: "1983600", expiresAt: Date.now() + 60000,
+  });
   const reviewedQuote = () => ({
-    kind: "withdrawal" as const, received: "1.9836", fee: "0.0164", expiresAt: Date.now() + 60_000, authorization: estimate(),
+    kind: "withdrawal" as const, received: "1.9836", fee: "0.0164",
+    validity: { kind: "time" as const, expiresAt: Date.now() + 60_000 }, authorization: estimate(),
     request: { deploymentId: findBridgeRoute("xreserve-usdc-to-arc")!.deploymentId, routeId: "xreserve-usdc-to-arc", amount: "2", evmAddress: EVM_ADDRESS, midenAccount: MIDEN_ACCOUNT },
   });
   beforeEach(() => vi.mocked(fetchWithdrawalQuote).mockResolvedValue(estimate()));

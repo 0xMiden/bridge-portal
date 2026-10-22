@@ -29,7 +29,7 @@ import { formatUnits, parseUnits } from "viem";
 import { evmNetworks } from "../../config/evm-networks";
 import { ensureEvmNetwork } from "../../wallets/evm/ensure-network";
 import { useTransferQuote } from "../lib/use-transfer-quote";
-import type { TransferQuote } from "../../bridge/core/quote";
+import { isQuoteReviewable, type TransferQuote } from "../../bridge/core/quote";
 import {
   evmWalletIdentity,
   shortAddress,
@@ -677,8 +677,7 @@ function BridgeForm() {
         try { validateTransferAmount(route, amount); }
         catch (error) { setBridgeError(errorMessage(error)); return; }
         if (fees.requiresQuote) {
-          // CCTP's timestamp can be advisory; its provider checks source-chain validity.
-          if (!quoteQuery.data || (quoteQuery.data.kind !== "cctp" && quoteQuery.data.expiresAt <= Date.now())) {
+          if (!isQuoteReviewable(quoteQuery.data)) {
             setBridgeError(quoteQuery.error ? errorMessage(quoteQuery.error) : "Refresh the quote before reviewing.");
             void quoteQuery.refetch();
             return;

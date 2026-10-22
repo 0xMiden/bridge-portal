@@ -1,7 +1,7 @@
 import { decodeAbiParameters, decodeFunctionData, encodeAbiParameters, encodeFunctionData, encodePacked, pad, parseAbiParameters, size, slice, stringToHex, type Address, type Hex } from "viem";
 import { arcConfig, xReserveAbi } from "./config";
 import { cctpConfig } from "./cctp-config";
-import { arcRecipient } from "./deposit";
+import { arcRecipient } from "./deposit-terms";
 import { decodeArcRecipient } from "./attestation";
 
 /** Wire format from the verified GenericExecutor and DepositForHandler on Arc. */

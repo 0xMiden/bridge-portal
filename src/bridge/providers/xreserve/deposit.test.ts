@@ -1,12 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { EvmProvider } from "../../../wallets/evm/evm-wallet";
 import { ARC } from "./config";
-import {
-  arcRecipient,
-  depositOnArc,
-  ensureArc,
-  parseArcAmount,
-} from "./deposit";
+import { depositOnArc } from "./deposit";
+import { arcRecipient, parseArcAmount } from "./deposit-terms";
+import { ensureEvmNetwork } from "../../../wallets/evm/ensure-network";
 
 const mocks = vi.hoisted(() => ({
   read: vi.fn(),
@@ -170,7 +167,7 @@ describe("Arc testnet deposits", () => {
         onPhase: vi.fn(),
         onBroadcast: vi.fn(),
       }),
-    ).rejects.toThrow("account changed");
+    ).rejects.toThrow("account or network changed");
     expect(mocks.write).toHaveBeenCalledTimes(1);
   });
   it("adds Arc when missing and verifies the wallet really switched", async () => {
@@ -181,7 +178,7 @@ describe("Arc testnet deposits", () => {
       .mockResolvedValueOnce(null)
       .mockResolvedValueOnce(null)
       .mockResolvedValueOnce("0x4cef52");
-    await ensureArc({ request });
+    await ensureEvmNetwork({ request }, ARC.chain);
     expect(request).toHaveBeenCalledWith(
       expect.objectContaining({
         method: "wallet_addEthereumChain",

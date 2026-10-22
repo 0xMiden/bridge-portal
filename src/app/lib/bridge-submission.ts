@@ -1,5 +1,6 @@
 import { assertMidenAccountNetwork } from "../../wallets/miden/network";
 import { validateTransferAmount } from "../../bridge/core/rules";
+import { isQuoteReviewable } from "../../bridge/core/quote";
 import { findBridgeRoute, routeEnvironment } from "../../bridge/core/routes";
 import type { Activity, BridgeProvider } from "../../bridge/core/models";
 import type { TransferSubmission, SubmissionEffects } from "../../bridge/core/submission";
@@ -76,9 +77,7 @@ export async function submitBridgeTransfer(
     if (directionFor(route).fees(route).requiresQuote) {
       const quote = input.quote;
       if (
-        !quote ||
-        // CCTP expiry is checked against Circle's source-chain tip by its provider.
-        (quote.kind !== "cctp" && quote.expiresAt <= Date.now()) ||
+        !isQuoteReviewable(quote) ||
         quote.request.routeId !== route.id ||
         quote.request.deploymentId !== route.deploymentId ||
         quote.request.amount !== input.amount ||

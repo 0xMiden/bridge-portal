@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { WaitForTransactionReceiptTimeoutError } from "viem";
 import type { SourceTransaction } from "../../evm/source-transaction";
 
 type Input = Parameters<typeof import("./approval").ensureUsdcApproval>[0];
@@ -64,6 +65,61 @@ it("retains the hash in the current session when browser storage is unavailable"
   expect(mocks.write).toHaveBeenCalledOnce();
 });
 
+it.each([
+  { hash: "0x1234" },
+  { transaction: false },
+  { replacementReason: "unknown" },
+  { transaction: { ...transaction, nonce: 7.5 } },
+  { transaction: { ...transaction, value: "-1" } },
+  { transaction: { ...transaction, hash: "0x1234" } },
+  { transaction: { ...transaction, from: "not-an-address" } },
+  { transaction: { ...transaction, to: "0x1234" } },
+  { transaction: { ...transaction, input: "0x123" } },
+])("rejects malformed saved approval data before another wallet action: %j", async invalid => {
+  const { ensureUsdcApproval } = await import("./approval");
+  mocks.wait.mockRejectedValueOnce(new Error("Timeout"));
+  await expect(ensureUsdcApproval(input())).rejects.toThrow(hash);
+  const [key, raw] = [...storage.entries()][0];
+  storage.set(key, JSON.stringify({ ...JSON.parse(raw), ...invalid }));
+
+  vi.resetModules();
+  const resumed = await import("./approval");
+  await expect(resumed.ensureUsdcApproval(input())).rejects.toThrow("Saved USDC approval details are invalid");
+  expect(mocks.write).toHaveBeenCalledOnce();
+  expect(mocks.wait).toHaveBeenCalledOnce();
+});
+
+it.each([true, false])("reconciles an unavailable approval after reload using on-chain allowance (sufficient: %s)", async sufficient => {
+  // Exercise the real missing-transaction resolver: without a captured nonce it
+  // cannot find a wallet replacement, even when that replacement has mined.
+  const transactions = await vi.importActual<typeof import("../../evm/source-transaction")>("../../evm/source-transaction");
+  mocks.capture.mockImplementation(transactions.captureSourceTransaction);
+  mocks.resolve.mockImplementation(transactions.resolveSourceTransaction);
+  vi.stubGlobal("fetch", vi.fn().mockImplementation(async () => Response.json({ result: null })));
+  mocks.wait.mockRejectedValue(new WaitForTransactionReceiptTimeoutError({ hash }));
+  const { ensureUsdcApproval } = await import("./approval");
+  await expect(ensureUsdcApproval(input())).rejects.toThrow(hash);
+
+  vi.resetModules();
+  approved = sufficient ? amount : 0n;
+  const resumed = await import("./approval");
+  if (sufficient) await resumed.ensureUsdcApproval(input());
+  else await expect(resumed.ensureUsdcApproval(input())).rejects.toThrow(hash);
+
+  expect(mocks.write).toHaveBeenCalledOnce();
+  expect(mocks.wait).toHaveBeenCalledTimes(sufficient ? 1 : 2);
+  expect(storage.size).toBe(sufficient ? 0 : 1);
+  if (sufficient) {
+    // Once this transfer consumes its allowance, a later transfer can request
+    // its own approval instead of getting stuck on the now-obsolete record.
+    approved = 0n;
+    mocks.wait.mockImplementation(async () => { approved = amount; return { status: "success" }; });
+    await resumed.ensureUsdcApproval(input());
+    expect(mocks.write).toHaveBeenCalledTimes(2);
+    expect(storage.size).toBe(0);
+  }
+});
+
 it("skips approval when allowance already covers the requested amount", async () => {
   approved = amount;
   const { ensureUsdcApproval } = await import("./approval");
@@ -90,6 +146,9 @@ it.each(["repriced", "cancelled", "replaced"] as const)("resolves a %s approval 
   mocks.wait.mockRejectedValueOnce(new Error("Timeout"));
   await expect(ensureUsdcApproval(input())).rejects.toThrow(hash);
   mocks.resolve.mockResolvedValue({ hash: replacement, transaction, reason });
+  // A known cancellation/replacement must stop this attempt even if another
+  // approval currently covers it; a new explicit submission can use that allowance.
+  if (reason !== "repriced") approved = amount;
   if (reason === "repriced") {
     await ensureUsdcApproval(input());
     expect(mocks.wait).toHaveBeenLastCalledWith(expect.objectContaining({ hash: replacement }));

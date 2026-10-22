@@ -32,12 +32,16 @@ Circle fees are paid separately in source USDC, and gas uses source ETH.
 The review shows the fee and total USDC. Submission retains the reviewed signed
 quote and approves exactly the amount plus the reviewed fee. It checks the signed
 price with `getFee`, then validates the complete burn call with Circle through
-`POST /api/xreserve/quote/validate`. The server reconstructs the arguments from
-the allowlisted deployment and calls `/v2/quote/validate/usdc/{sourceDomain}`.
+`POST /api/xreserve/quote/validate`. One typed burn-call builder supplies the
+arguments for validation and execution; the validation signature is derived from
+the same ABI used for simulation. The server accepts allowlisted transfer terms
+and calls `/v2/quote/validate/usdc/{sourceDomain}`.
 Signature, call bindings, fee token, fee, nonce and expiry must match.
 
 Circle's `TIMESTAMP` or `BLOCK_NUMBER` expiry is preserved. `blockEstimatedAt` is
 advisory: neither the browser clock nor that estimate decides validity. The
+shared quote model explicitly distinguishes local review deadlines from provider
+validation; it does not give CCTP a synthetic `expiresAt` timestamp. The
 validation endpoint checks the source-chain tip, including the chain-specific
 block-number semantics on Arbitrum. Following Circle Bridge Kit 1.16.0, the quote
 must be claimable with more than 30 seconds remaining, after deducting validation
@@ -58,11 +62,18 @@ Approval waiting follows Circle's viem adapter: use viem's default receipt wait
 That timeout only ends the local wait; it does not cancel a pending Ethereum
 transaction. Both direct Arc and CCTP deposits save the approval hash separately
 from bridge activity, keyed by network, token, account and spender. Retrying or
-reloading resumes the saved approval before asking for a new one. Timeout or RPC
+reloading reconciles the saved approval before asking for a new one. Timeout or RPC
 errors retain it; confirmed terminal outcomes clear it. Captured nonce/call data
 lets the existing source-transaction resolver find replacements after a reload.
 A gas-only replacement can continue; cancellations and different replacements
-stop the deposit. The confirmed allowance is checked again before proceeding.
+stop the current deposit attempt. On a new submission, sufficient on-chain
+allowance also retires the saved approval requirement, even when the old hash and
+nonce are unavailable. This is evidence that the current allowance requirement
+is fulfilled, not a claim that the original transaction mined. It prevents a
+lost original hash from blocking this or later transfers. Insufficient allowance
+retains the pending hash and never silently signs another approval. Allowance is
+checked again after a receipt before proceeding. Browser persistence lives in
+`approval-store.ts`; signing and confirmation policy live in `approval.ts`.
 
 This follows the [Circle viem adapter](https://unpkg.com/@circle-fin/adapter-viem-v2@1.19.2/index.mjs)
 and its [CCTP provider's pending-step recovery](https://unpkg.com/@circle-fin/provider-cctp-v2@1.14.1/index.mjs).

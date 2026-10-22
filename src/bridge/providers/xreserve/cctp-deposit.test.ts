@@ -1,28 +1,36 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { ContractFunctionRevertedError, WaitForTransactionReceiptTimeoutError, encodeErrorResult } from "viem";
+import { ContractFunctionRevertedError, WaitForTransactionReceiptTimeoutError, encodeErrorResult, type HttpTransport } from "viem";
 import type { EvmProvider } from "../../../wallets/evm/evm-wallet";
 import { depositViaCctp } from "./cctp-deposit";
 import { cctpDepositHook, decodeCctpDepositHook } from "./cctp-hook";
 import { cctpAbi, cctpConfig, cctpSource, type CctpNetwork } from "./cctp-config";
-const CCTP = cctpConfig();
 import { ARC } from "./config";
-import { arcRecipient } from "./deposit";
+import { arcRecipient } from "./deposit-terms";
 import type { CctpQuote } from "./cctp-quote";
 import fixture from "./fixtures/cctp-hook.json";
 
-const mocks = vi.hoisted(() => ({ read: vi.fn(), simulate: vi.fn(), write: vi.fn(), receipt: vi.fn(), quote: vi.fn(), validate: vi.fn() }));
+const mocks = vi.hoisted(() => ({
+  publicClient: vi.fn(), walletClient: vi.fn(), simulate: vi.fn(), write: vi.fn(),
+  receipt: vi.fn(), quote: vi.fn(), validate: vi.fn(),
+}));
 vi.mock("viem", async (original) => ({ ...await original<typeof import("viem")>(),
-  createPublicClient: () => ({ readContract: mocks.read, simulateContract: mocks.simulate, waitForTransactionReceipt: mocks.receipt }),
-  createWalletClient: () => ({ writeContract: mocks.write }),
+  createPublicClient: (options: ClientOptions) => mocks.publicClient(options),
+  createWalletClient: (options: ClientOptions) => mocks.walletClient(options),
 }));
 vi.mock("./cctp-quote-validation", () => ({ fetchCctpQuoteValidation: mocks.validate }));
-vi.mock("./cctp-quote", () => ({ fetchCctpQuote: mocks.quote }));
+vi.mock("./cctp-quote", async (original) => ({
+  ...await original<typeof import("./cctp-quote")>(), fetchCctpQuote: mocks.quote,
+}));
 vi.mock("../../evm/source-transaction", () => ({
   captureSourceTransaction: async () => undefined, resolveSourceTransaction: async () => ({}),
 }));
 vi.mock("@miden-sdk/miden-sdk", () => ({ AccountId: { fromHex: () => ({ free() {} }) } }));
 const account = fixture.sender as `0x${string}`;
 const hash = `0x${"ab".repeat(32)}` as const;
+const CCTP = cctpConfig();
+type ContractCall = { address: string; functionName: string; args?: readonly unknown[] };
+type ClientOptions = { chain: { id: number } };
+type PublicClientOptions = ClientOptions & { transport: HttpTransport };
 let network: CctpNetwork;
 let fee: bigint;
 let chainId: number;
@@ -30,6 +38,70 @@ let walletAccount: string;
 let quote: CctpQuote;
 let secondsRemaining: number;
 let allowance: bigint;
+
+function readArcContract({ address, functionName, args }: ContractCall) {
+  switch (functionName) {
+    case "isRemoteDomainRegistered":
+      expect(address.toLowerCase()).toBe(ARC.xReserve.toLowerCase());
+      expect(args).toEqual([ARC.midenDomain]);
+      return true;
+    case "getRemoteToken":
+      expect(address.toLowerCase()).toBe(ARC.xReserve.toLowerCase());
+      expect(args).toEqual([ARC.midenDomain, ARC.usdc]);
+      return arcRecipient(ARC.faucetId);
+    case "paused":
+      expect([CCTP.executor.toLowerCase(), CCTP.handler.toLowerCase()]).toContain(address.toLowerCase());
+      return false;
+    default:
+      throw new Error(`Unexpected Arc read: ${address}.${functionName}`);
+  }
+}
+
+function readSourceContract(origin: CctpNetwork, { address, functionName, args }: ContractCall) {
+  const source = cctpSource(origin);
+  const cctp = cctpConfig(undefined, origin);
+  switch (functionName) {
+    case "getFee":
+      expect(address.toLowerCase()).toBe(cctp.tokenMessengerWithFees.toLowerCase());
+      expect(args).toHaveLength(1);
+      return [args?.[0] === quote.signedQuote ? 400_000n : fee, source.asset.address];
+    case "balanceOf":
+      expect(address.toLowerCase()).toBe(source.asset.address.toLowerCase());
+      expect(args).toEqual([account]);
+      return 10_000_000n;
+    case "allowance":
+      expect(address.toLowerCase()).toBe(source.asset.address.toLowerCase());
+      expect(args).toEqual([account, cctp.tokenMessengerWithFees]);
+      return allowance;
+    default:
+      throw new Error(`Unexpected ${origin} read: ${address}.${functionName}`);
+  }
+}
+
+function assertSourceWrite(origin: CctpNetwork, { address, functionName }: ContractCall) {
+  switch (functionName) {
+    case "approve":
+      expect(address.toLowerCase()).toBe(cctpSource(origin).asset.address.toLowerCase());
+      return;
+    case "depositForBurnWithHookAndFees":
+      expect(address.toLowerCase()).toBe(cctpConfig(undefined, origin).tokenMessengerWithFees.toLowerCase());
+      return;
+    default:
+      throw new Error(`Unexpected ${origin} write: ${functionName}`);
+  }
+}
+
+function sourceClient(origin: CctpNetwork) {
+  return {
+    readContract: async (call: ContractCall) => readSourceContract(origin, call),
+    simulateContract: (call: ContractCall) => {
+      assertSourceWrite(origin, call);
+      return mocks.simulate(call);
+    },
+    waitForTransactionReceipt: mocks.receipt,
+  };
+}
+
 function input() {
   return { network, account, amount: "1", recipient: fixture.recipient, quote,
     provider: { request: async ({ method }: { method: string }) => method === "eth_accounts" ? [walletAccount] : `0x${chainId.toString(16)}` } as EvmProvider,
@@ -53,19 +125,26 @@ beforeEach(() => {
   chainId = cctpSource(network).chain.id;
   quote = { network, sender: account, amount: "1", recipient: fixture.recipient, fee: "400000", signedQuote: "0x1234", issuedAt: 1792663778,
     expiry: { mode: "BLOCK_NUMBER", expiresAtBlock: 26247476, blockEstimatedAt: 1792663946 },
-    expiresAt: 1792663946000 };
+  };
   mocks.quote.mockImplementation(async (request) => {
     secondsRemaining = 120;
     return { ...quote, ...request, fee: fee.toString(), signedQuote: "0xabcd" };
   });
   mocks.validate.mockImplementation(async () => ({ claimable: secondsRemaining > 0, secondsRemaining }));
-  mocks.read.mockImplementation(async ({ functionName, args }) => {
-    if (functionName === "paused") return false;
-    if (functionName === "isRemoteDomainRegistered") return true;
-    if (functionName === "getRemoteToken") return arcRecipient(ARC.faucetId);
-    if (functionName === "getFee") return [args[0] === "0x1234" ? 400_000n : fee, cctpSource(network).asset.address];
-    if (functionName === "balanceOf") return 10_000_000n;
-    return allowance;
+  mocks.publicClient.mockImplementation(({ chain, transport }: PublicClientOptions) => {
+    const rpcNetwork = chain.id === ARC.chainId ? ARC.network : network;
+    expect(transport({}).value?.url).toBe(`/api/evm/${rpcNetwork}/rpc`);
+    if (chain.id === ARC.chainId) return { readContract: async (call: ContractCall) => readArcContract(call) };
+    expect(chain.id).toBe(cctpSource(network).chain.id);
+    return sourceClient(network);
+  });
+  mocks.walletClient.mockImplementation(({ chain }: ClientOptions) => {
+    expect(chain.id).toBe(cctpSource(network).chain.id);
+    const origin = network;
+    return { writeContract: (call: ContractCall) => {
+      assertSourceWrite(origin, call);
+      return mocks.write(call);
+    } };
   });
   mocks.simulate.mockImplementation(async (request) => ({ request }));
   mocks.receipt.mockImplementation(async () => { allowance = 1_400_000n; return { status: "success" }; });
@@ -102,7 +181,7 @@ describe("Circle multichain deposits", () => {
     { remaining: 30, needsApproval: false, refresh: true },
   ])("uses Circle's source-chain validity with $remaining seconds left (approval: $needsApproval)", async ({ remaining, needsApproval, refresh }) => {
     // The device clock and blockEstimatedAt cannot decide BLOCK_NUMBER validity.
-    vi.spyOn(Date, "now").mockReturnValue(quote.expiresAt + 3_600_000);
+    vi.spyOn(Date, "now").mockReturnValue(1792663946000 + 3_600_000);
     // A newer market price must not discard an original quote still claimable.
     fee = refresh ? 400_000n : 400_001n;
     if (needsApproval) {
@@ -113,8 +192,7 @@ describe("Circle multichain deposits", () => {
       });
     } else {
       secondsRemaining = remaining;
-      const read = mocks.read.getMockImplementation()!;
-      mocks.read.mockImplementation(async (request) => request.functionName === "allowance" ? 1_400_000n : read(request));
+      allowance = 1_400_000n;
     }
     const args = input();
     await depositViaCctp(args);
@@ -205,19 +283,35 @@ describe("Circle multichain deposits", () => {
     expect(mocks.write).toHaveBeenCalledTimes(1);
     expect(mocks.quote).not.toHaveBeenCalled();
   });
-  it.each(["fee", "account", "chain", "approval"])("never burns after %s changes during approval", async (change) => {
+  it.each([
+    {
+      name: "a fee increase",
+      change: () => { fee++; secondsRemaining = 0; },
+      status: "success", error: "fee increased",
+    },
+    {
+      name: "an account change",
+      change: () => { walletAccount = `0x${"22".repeat(20)}`; },
+      status: "success", error: "account or network changed",
+    },
+    {
+      name: "a chain change",
+      change: () => { chainId = 1; },
+      status: "success", error: "account or network changed",
+    },
+    {
+      name: "a reverted approval",
+      change: () => undefined,
+      status: "reverted", error: "approval reverted",
+    },
+  ])("never burns after $name during approval", async ({ change, status, error }) => {
     mocks.receipt.mockImplementation(async () => {
-      if (change === "fee") {
-        fee++;
-        secondsRemaining = 0;
-      }
-      if (change === "account") walletAccount = `0x${"22".repeat(20)}`;
-      if (change === "chain") chainId = 1;
+      change();
       allowance = 1_400_000n;
-      return { status: change === "approval" ? "reverted" : "success" };
+      return { status };
     });
     const args = input();
-    await expect(depositViaCctp(args)).rejects.toThrow(change === "fee" ? "fee increased" : change === "approval" ? "approval reverted" : "account or network changed");
+    await expect(depositViaCctp(args)).rejects.toThrow(error);
     expect(mocks.write).toHaveBeenCalledTimes(1);
     expect(args.onBroadcast).not.toHaveBeenCalled();
   });

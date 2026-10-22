@@ -6,7 +6,7 @@ import type { BridgeActivity } from "../../core/models";
 import { normalizeMidenAccountHex } from "../agglayer/agglayer";
 import type { ArcDepositIntent } from "./attestation";
 import { arcConfig } from "./config";
-import { parseArcAmount } from "./deposit";
+import { parseArcAmount } from "./deposit-terms";
 
 export type ArcStatusResponse = {
   status: "submitted" | "confirmed" | "attested" | "reverted";

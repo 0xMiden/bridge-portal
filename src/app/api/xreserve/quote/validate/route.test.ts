@@ -1,4 +1,4 @@
-import { afterEach, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { POST } from "./route";
 import { currentDeployment } from "../../../../../config/deployments";
 import fixture from "../../../../../bridge/providers/xreserve/fixtures/cctp-hook.json";
@@ -20,6 +20,7 @@ const validation = {
 const request = (body: unknown = input) => new Request("http://localhost/api/xreserve/quote/validate", {
   method: "POST", body: JSON.stringify(body),
 });
+beforeEach(() => { vi.spyOn(console, "error").mockImplementation(() => {}); });
 afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
 it("validates the exact configured burn with Circle rather than trusting client call arguments or clocks", async () => {
@@ -69,25 +70,35 @@ it.each([
 });
 
 it.each([
-  { signedQuote: "0xabcd" },
-  { feeToken: "0x0000000000000000000000000000000000000000" },
-  { feeTotalAmount: "26570" },
-  { nonce: "1" },
-  { expiry: { ...validation.expiry, mode: "UNKNOWN" } },
-  { expiry: { ...validation.expiry, secondsRemaining: -1 } },
-  { expiry: { ...validation.expiry, expiresAtBlock: "26247523" } },
-  { expiry: { ...validation.expiry, expired: true } },
-  { failedChecks: ["QUOTE_INVALID_SIGNATURE"] },
-  { items: [{ type: "FORWARD", argsMatch: false }, { type: "PRE_FINALITY", argsMatch: true }] },
-  { items: [{ type: "FORWARD", argsMatch: true }, { type: "FORWARD", argsMatch: true }] },
-  { claimable: false, failedChecks: [] },
-  { claimable: false, expiry: { ...validation.expiry, expired: true, secondsRemaining: 0 },
-    failedChecks: ["QUOTE_EXPIRED", "QUOTE_INVALID_SIGNATURE"] },
-])("fails closed for invalid or mismatched validation: %j", async (invalid) => {
+  { reason: "binding_mismatch", invalid: { signedQuote: "0xabcd" } },
+  { reason: "binding_mismatch", invalid: { feeToken: "0x0000000000000000000000000000000000000000" } },
+  { reason: "binding_mismatch", invalid: { feeTotalAmount: "26570" } },
+  { reason: "unsupported_nonce", invalid: { nonce: "1" } },
+  { reason: "invalid_response", invalid: { claimable: "true" } },
+  { reason: "invalid_response", invalid: { expiry: { ...validation.expiry, mode: "UNKNOWN" } } },
+  { reason: "invalid_response", invalid: { expiry: { ...validation.expiry, secondsRemaining: -1 } } },
+  { reason: "invalid_response", invalid: { expiry: { ...validation.expiry, expiresAtBlock: "26247523" } } },
+  { reason: "inconsistent_validation", invalid: { expiry: { ...validation.expiry, expired: true } } },
+  { reason: "inconsistent_validation", invalid: { failedChecks: ["QUOTE_INVALID_SIGNATURE"] } },
+  { reason: "invalid_response", invalid: { failedChecks: [null] } },
+  { reason: "invalid_response", invalid: { items: [null, { type: "PRE_FINALITY", argsMatch: true }] } },
+  { reason: "invalid_response", invalid: { items: [{ type: "FORWARD", argsMatch: "true" }, { type: "PRE_FINALITY", argsMatch: true }] } },
+  { reason: "invalid_services", invalid: { items: [{ type: "FORWARD", argsMatch: false }, { type: "PRE_FINALITY", argsMatch: true }] } },
+  { reason: "invalid_services", invalid: { items: [{ type: "FORWARD", argsMatch: true }, { type: "FORWARD", argsMatch: true }] } },
+  { reason: "rejected_quote", invalid: { claimable: false, failedChecks: [] } },
+  { reason: "rejected_quote", invalid: { claimable: false, expiry: { ...validation.expiry, expired: true, secondsRemaining: 0 },
+    failedChecks: ["QUOTE_EXPIRED", "QUOTE_INVALID_SIGNATURE"] } },
+])("fails closed and diagnoses $reason: $invalid", async ({ reason, invalid }) => {
   vi.stubGlobal("fetch", vi.fn().mockResolvedValue(Response.json({ ...validation, ...invalid })));
   const response = await POST(request());
   expect(response.status).toBe(502);
-  expect(await response.json()).not.toHaveProperty("claimable");
+  expect(await response.json()).toEqual({ error: "Circle quote validation unavailable. Please retry shortly." });
+  expect(console.error).toHaveBeenCalledExactlyOnceWith("[circle] request failed", expect.objectContaining({
+    operation: "validation", reason,
+  }));
+  const diagnostic = JSON.stringify(vi.mocked(console.error).mock.calls);
+  expect(diagnostic).not.toContain(input.signedQuote);
+  expect(diagnostic).not.toContain(validation.feeToken);
 });
 
 it.each([
@@ -104,11 +115,27 @@ it.each([
   vi.stubGlobal("fetch", fetch);
   expect((await POST(request({ ...input, ...invalid }))).status).toBe(400);
   expect(fetch).not.toHaveBeenCalled();
+  expect(console.error).not.toHaveBeenCalled();
 });
 
-it("does not treat a validation outage as an expired quote", async () => {
-  vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("Unavailable", { status: 503 })));
+it.each([
+  { name: "HTTP error", reason: "upstream_http", result: () => new Response("private upstream payload", { status: 503 }), status: 503, cause: undefined },
+  { name: "connection failure", reason: "upstream_network", result: () => { throw new TypeError("private upstream payload"); }, status: undefined, cause: { kind: "network" } },
+  { name: "request timeout", reason: "upstream_timeout", result: () => { throw new DOMException("private upstream payload", "TimeoutError"); }, status: undefined, cause: { kind: "timeout" } },
+  { name: "malformed JSON", reason: "invalid_response", result: () => new Response("private upstream payload"), status: undefined, cause: { kind: "json" } },
+  { name: "broken response stream", reason: "upstream_network", result: () => new Response(new ReadableStream({
+    start(controller) { controller.error(new TypeError("private upstream payload")); },
+  })), status: undefined, cause: { kind: "network" } },
+  { name: "response body timeout", reason: "upstream_timeout", result: () => new Response(new ReadableStream({
+    start(controller) { controller.error(new DOMException("private upstream payload", "AbortError")); },
+  })), status: undefined, cause: { kind: "timeout" } },
+])("diagnoses $name without treating it as expiry or exposing the raw cause", async ({ reason, result, status, cause }) => {
+  vi.stubGlobal("fetch", vi.fn().mockImplementation(result));
   const response = await POST(request());
   expect(response.status).toBe(502);
-  expect(await response.json()).not.toHaveProperty("claimable");
+  expect(await response.json()).toEqual({ error: "Circle quote validation unavailable. Please retry shortly." });
+  expect(console.error).toHaveBeenCalledExactlyOnceWith("[circle] request failed", {
+    operation: "validation", reason, status, cause,
+  });
+  expect(JSON.stringify(vi.mocked(console.error).mock.calls)).not.toContain("private upstream payload");
 });

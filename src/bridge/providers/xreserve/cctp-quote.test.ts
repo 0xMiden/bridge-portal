@@ -1,6 +1,7 @@
 import { afterEach, expect, it, vi } from "vitest";
 import { currentDeployment } from "../../../config/deployments";
-import { requestCircleQuote, type CctpQuoteRequest } from "./cctp-quote";
+import type { CctpQuoteRequest } from "./cctp-quote";
+import { requestCircleQuote } from "./circle-api.server";
 
 const input: CctpQuoteRequest = {
   network: "ethereum", deploymentId: currentDeployment("mainnet").id,
@@ -19,18 +20,18 @@ const response = {
 afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
 it.each([
-  { expiry: response.expiry, estimate: 1792663946_000 },
-  { expiry: { mode: "TIMESTAMP", expiresAt: 1792663946 }, estimate: 1792663946_000 },
-  { expiry: { mode: "BLOCK_NUMBER", expiresAtBlock: 26247476 }, estimate: 1792663778_000 },
-  { expiry: { ...response.expiry, blockEstimatedAt: 1792663777 }, estimate: 1792663777_000 },
-])("preserves $expiry.mode expiry independently of the local clock", async ({ expiry, estimate }) => {
+  { expiry: response.expiry },
+  { expiry: { mode: "TIMESTAMP", expiresAt: 1792663946 } },
+  { expiry: { mode: "BLOCK_NUMBER", expiresAtBlock: 26247476 } },
+  { expiry: { ...response.expiry, blockEstimatedAt: 1792663777 } },
+])("preserves $expiry.mode expiry independently of the local clock", async ({ expiry }) => {
   vi.spyOn(Date, "now").mockReturnValue(1792667546_000);
   const fetch = vi.fn().mockResolvedValue(Response.json({ ...response, expiry }));
   vi.stubGlobal("fetch", fetch);
   const quote = await requestCircleQuote(input);
   expect(quote).toEqual({
     ...input, signedQuote: "0x01020304", fee: "27713", issuedAt: 1792663778,
-    expiry, expiresAt: estimate,
+    expiry,
   });
   expect(fetch.mock.calls[0][0]).toBe("https://iris-api.circle.com/v2/quote/burn/usdc/0/26");
   expect(JSON.parse(fetch.mock.calls[0][1].body)).toMatchObject({
@@ -52,6 +53,7 @@ it.each([
   { expiry: { mode: "TIMESTAMP", expiresAt: Number.MAX_SAFE_INTEGER } },
   { issuedAt: undefined },
   { issuedAt: -1 },
+  { issuedAt: "1792663778" },
 ])("rejects invalid Circle expiry metadata: %j", async (invalid) => {
   // Keep the old wall-clock check satisfied, so rejection must come from metadata.
   vi.spyOn(Date, "now").mockReturnValue(response.issuedAt * 1000);
