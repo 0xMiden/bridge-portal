@@ -1,4 +1,4 @@
-import { resolveSourceTransaction } from "../../evm/source-transaction";
+import { recoverSourceTransaction } from "../../evm/source-transaction";
 import { activityRoute } from "../../core/routes";
 import { cctpConfig, isCctpNetwork, arcConfig } from "./config";
 import type { CctpStatusResponse } from "./cctp-status";
@@ -40,7 +40,7 @@ export async function observeXreserveDeposit(activity: BridgeActivity, signal?: 
   // Once a burn/deposit is mined, submitted can mean Circle forwarding rather
   // than an unmined source transaction. Only search for replacements before that.
   if (observation.status === "submitted" && !observation.source && !observation.deposit) {
-    const resolved = await resolveSourceTransaction(network, activity.sourceTxHash, activity.sourceTransaction, signal);
+    const resolved = await recoverSourceTransaction(network, activity.sourceTxHash, activity.sourceTransaction);
     if (signal?.aborted) return { patch: {} };
     if (resolved.transaction) sourcePatch.sourceTransaction = resolved.transaction;
     if (resolved.hash) {

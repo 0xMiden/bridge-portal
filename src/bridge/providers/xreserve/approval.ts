@@ -1,5 +1,5 @@
 import { erc20Abi, type PublicClient, type ReplacementReturnType, type WalletClient } from "viem";
-import { captureSourceTransaction, resolveSourceTransaction } from "../../evm/source-transaction";
+import { captureSourceTransaction, recoverSourceTransaction } from "../../evm/source-transaction";
 import { approvalStore, parsePendingApproval, type ApprovalScope, type PendingApproval } from "./approval-store";
 
 type ApprovalStore = ReturnType<typeof approvalStore>;
@@ -37,7 +37,7 @@ async function resumeApproval(request: ApprovalRequest, store: ApprovalStore) {
   if (!saved) return undefined;
   request.onPhase("approval-confirming");
   assertApprovalNotReplaced(saved, store);
-  const resolved = await resolveSourceTransaction(request.network, saved.hash, saved.transaction);
+  const resolved = await recoverSourceTransaction(request.network, saved.hash, saved.transaction);
   const pending = parsePendingApproval({
     hash: resolved.hash ?? saved.hash,
     transaction: resolved.transaction ?? saved.transaction,

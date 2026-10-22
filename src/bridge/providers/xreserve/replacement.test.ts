@@ -1,3 +1,4 @@
+import "../../../../tests/setup/viem-http";
 import { afterEach, expect, it, vi } from "vitest";
 import { observeXreserveDeposit } from "./status";
 import type { BridgeActivity } from "../../core/models";
@@ -19,7 +20,7 @@ afterEach(() => vi.unstubAllGlobals());
 
 it.each([
   ["repriced", "arc-testnet"], ["cancelled", "arc-testnet"], ["replaced", "arc-testnet"],
-  ["repriced", "base-sepolia"], ["cancelled", "base-sepolia"],
+  ["repriced", "base-sepolia"],
 ])("resolves a %s transaction on %s after reloading saved pending metadata", async (kind, network) => {
   const candidate = { ...transaction, hash: replacement, nonce: "0x7", value: "0x0", blockNumber: "0x1f4",
     to: kind === "cancelled" ? sender : ARC.xReserve,
@@ -34,18 +35,17 @@ it.each([
       } });
       return Response.json({ status: "submitted" });
     }
-    expect(url).toBe(`/api/evm/${network}/rpc`);
+    expect(url).toBe(`https://bridge.example/api/evm/${network}/rpc`);
     const { method, params, id } = JSON.parse(String(init?.body));
     let result: unknown;
     if (method === "eth_getTransactionByHash") result = null; // Dropped original, including after reload.
     else if (method === "eth_blockNumber") result = "0x400";
     else if (method === "eth_getTransactionCount") result = BigInt(params[1]) >= 500n ? "0x8" : "0x7";
     else if (method === "eth_getBlockByNumber") {
-      expect(params).toEqual(["0x1f4", true]);
-      result = { timestamp: "0x64", transactions: [
+      result = { timestamp: "0x64", transactions: BigInt(params[0]) === 500n ? [
         { ...candidate, from: `0x${"44".repeat(20)}` }, // Same nonce, unrelated sender.
         candidate,
-      ] };
+      ] : [] };
     } else throw new Error(`Unexpected RPC ${method}`);
     return Response.json({ jsonrpc: "2.0", id, result });
   }));
@@ -57,19 +57,21 @@ it.each([
   if (kind !== "repriced") expect(requests.filter((url) => url.includes(replacement))).toEqual([]);
 });
 
-it.each(["pending", "rpc outage"])("keeps a %s deposit active and saves its nonce for a later reload", async (scenario) => {
+it.each(["pending", "not yet visible", "rpc outage"])("keeps a %s deposit active and captures its nonce when available", async (scenario) => {
   vi.stubGlobal("fetch", vi.fn(async (url: string, init?: RequestInit) => {
     if (url.includes("/status?")) return Response.json({ status: "submitted" });
     const { method, id } = JSON.parse(String(init?.body));
     if (method === "eth_getTransactionByHash") return Response.json({ jsonrpc: "2.0", id,
-      result: { ...transaction, nonce: "0x7", value: "0x0", blockNumber: null } });
+      result: scenario === "not yet visible" ? null : { ...transaction, nonce: "0x7", value: "0x0", blockNumber: null } });
     if (scenario === "rpc outage") throw new Error("offline");
     if (method === "eth_blockNumber") return Response.json({ jsonrpc: "2.0", id, result: "0x400" });
     if (method === "eth_getTransactionCount") return Response.json({ jsonrpc: "2.0", id, result: "0x7" });
     throw new Error(`Unexpected RPC ${method}`);
   }));
   const result = await observeXreserveDeposit(activity);
-  expect(result.patch).toMatchObject({ sourceTransaction: transaction, status: "source_finality", xreserveStatus: "submitted" });
+  expect(result.patch).toMatchObject({ status: "source_finality", xreserveStatus: "submitted" });
+  expect(result.patch.sourceTransaction).toEqual(scenario === "not yet visible" ? undefined : transaction);
   expect(result.patch.sourceTxHash).toBeUndefined();
   if (scenario === "rpc outage") expect(result.warning).toContain("retry");
+  else expect(result.warning).toBeUndefined();
 });

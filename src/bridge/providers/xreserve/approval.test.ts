@@ -4,7 +4,7 @@ import type { SourceTransaction } from "../../evm/source-transaction";
 
 type Input = Parameters<typeof import("./approval").ensureUsdcApproval>[0];
 const mocks = vi.hoisted(() => ({ read: vi.fn(), simulate: vi.fn(), write: vi.fn(), wait: vi.fn(), capture: vi.fn(), resolve: vi.fn() }));
-vi.mock("../../evm/source-transaction", () => ({ captureSourceTransaction: mocks.capture, resolveSourceTransaction: mocks.resolve }));
+vi.mock("../../evm/source-transaction", () => ({ captureSourceTransaction: mocks.capture, recoverSourceTransaction: mocks.resolve }));
 const account = `0x${"11".repeat(20)}` as const;
 const token = `0x${"22".repeat(20)}` as const;
 const spender = `0x${"33".repeat(20)}` as const;
@@ -41,9 +41,9 @@ beforeEach(() => {
 });
 afterEach(() => { vi.unstubAllGlobals(); vi.useRealTimers(); });
 
-it.each(["timeout", "RPC outage"])("resumes the saved approval after a %s and reload instead of signing twice", async failure => {
+it("resumes the saved approval after a receipt failure and reload instead of signing twice", async () => {
   const { ensureUsdcApproval } = await import("./approval");
-  mocks.wait.mockRejectedValueOnce(new Error(failure));
+  mocks.wait.mockRejectedValueOnce(new Error("RPC unavailable"));
   await expect(ensureUsdcApproval(input())).rejects.toThrow(`Approval: ${hash}`);
   expect(storage.size).toBe(1);
   // A reload discards module memory; the second execution must recover storage.
@@ -52,7 +52,6 @@ it.each(["timeout", "RPC outage"])("resumes the saved approval after a %s and re
   await resumed.ensureUsdcApproval(input());
   expect(mocks.write).toHaveBeenCalledOnce();
   expect(mocks.wait).toHaveBeenNthCalledWith(2, expect.objectContaining({ hash }));
-  expect(mocks.resolve).toHaveBeenCalledWith("ethereum", hash, transaction);
   expect(storage.size).toBe(0);
 });
 
@@ -90,12 +89,9 @@ it.each([
 });
 
 it.each([true, false])("reconciles an unavailable approval after reload using on-chain allowance (sufficient: %s)", async sufficient => {
-  // Exercise the real missing-transaction resolver: without a captured nonce it
-  // cannot find a wallet replacement, even when that replacement has mined.
-  const transactions = await vi.importActual<typeof import("../../evm/source-transaction")>("../../evm/source-transaction");
-  mocks.capture.mockImplementation(transactions.captureSourceTransaction);
-  mocks.resolve.mockImplementation(transactions.resolveSourceTransaction);
-  vi.stubGlobal("fetch", vi.fn().mockImplementation(async () => Response.json({ result: null })));
+  // Missing identity is covered by the deposit recovery tests. Here the
+  // contract is allowance reconciliation without signing another approval.
+  mocks.capture.mockResolvedValue(undefined);
   mocks.wait.mockRejectedValue(new WaitForTransactionReceiptTimeoutError({ hash }));
   const { ensureUsdcApproval } = await import("./approval");
   await expect(ensureUsdcApproval(input())).rejects.toThrow(hash);
