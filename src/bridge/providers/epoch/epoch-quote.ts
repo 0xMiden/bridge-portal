@@ -56,5 +56,5 @@ function evmAddress(value: string): `0x${string}` {
 function result(tokenOut: unknown, decimals: number): QuoteResult {
   const received = formatUnits(BigInt(String(tokenOut ?? "0")), decimals);
   if (!(Number(received) > 0)) throw new Error("No liquidity available for this transfer.");
-  return { kind: "epoch", received, expiresAt: Date.now() + 60_000 };
+  return { kind: "epoch", received, validity: { kind: "time", expiresAt: Date.now() + 60_000 } };
 }

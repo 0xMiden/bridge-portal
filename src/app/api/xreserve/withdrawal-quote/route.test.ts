@@ -1,4 +1,4 @@
-import { afterEach, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { POST } from "./route";
 const input = {
   network: "arc-testnet", amount: "2", sender: "0x4e6fb40fd2f6a55140df2c42dfb5b7",
@@ -18,8 +18,9 @@ const intent = {
     },
   },
 };
-const request = () => new Request("http://localhost/api/xreserve/withdrawal-quote", { method: "POST", body: JSON.stringify(input) });
-afterEach(() => vi.unstubAllGlobals());
+const request = (body: unknown = input) => new Request("http://localhost/api/xreserve/withdrawal-quote", { method: "POST", body: JSON.stringify(body) });
+beforeEach(() => vi.spyOn(console, "error").mockImplementation(() => undefined));
+afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 it("returns Circle's net payout and fee without signing or submitting its prepared intent", async () => {
   const fetch = vi.fn().mockResolvedValue(Response.json({ batches: [{ burnIntents: [intent] }] }));
   vi.stubGlobal("fetch", fetch);
@@ -40,6 +41,34 @@ it.each([
 ])("refuses mismatched or unsupported payout terms", async (bad) => {
   vi.stubGlobal("fetch", vi.fn().mockResolvedValue(Response.json({ batches: [{ burnIntents: [bad] }] })));
   expect((await POST(request())).status).toBe(502);
+});
+it.each([
+  { name: "numeric fee", value: { ...intent, maxFee: 16400 } },
+  { name: "numeric payout", value: { ...intent, spec: { ...intent.spec, value: 1983600 } } },
+  { name: "non-string recipient", value: { ...intent, spec: { ...intent.spec, destinationRecipient: false } } },
+  { name: "missing hook", value: { ...intent, spec: { ...intent.spec, hookData: null } } },
+])("rejects malformed Circle response fields: $name", async ({ value }) => {
+  vi.stubGlobal("fetch", vi.fn().mockResolvedValue(Response.json({ batches: [{ burnIntents: [value] }] })));
+  const response = await POST(request());
+  expect(response.status).toBe(502);
+  expect(await response.json()).not.toHaveProperty("fee");
+});
+it.each([
+  { batches: [] },
+  { batches: [{ burnIntents: [intent, intent] }] },
+])("rejects responses that do not contain exactly one prepared withdrawal", async body => {
+  vi.stubGlobal("fetch", vi.fn().mockResolvedValue(Response.json(body)));
+  expect((await POST(request())).status).toBe(502);
+});
+it.each([
+  { amount: 2 },
+  { network: "miden-testnet" },
+  { recipient: null },
+])("rejects malformed withdrawal input before contacting Circle: %j", async invalid => {
+  const fetch = vi.fn();
+  vi.stubGlobal("fetch", fetch);
+  expect((await POST(request({ ...input, ...invalid }))).status).toBe(400);
+  expect(fetch).not.toHaveBeenCalled();
 });
 it("does not turn an upstream outage into a zero-fee quote", async () => {
   vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("Unavailable", { status: 503 })));

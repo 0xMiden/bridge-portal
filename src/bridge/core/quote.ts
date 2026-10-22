@@ -9,11 +9,16 @@ export type QuoteRequest = {
   evmAddress: string;
 };
 
+/** Review deadlines and provider authorizations have different validity rules. */
+export type QuoteValidity =
+  | { kind: "time"; expiresAt: number }
+  | { kind: "provider" };
+
 /** Decimal amounts. Fees are added in the source token or deducted from the destination payout. */
 export type QuoteResult = {
   received: string;
   fee?: string;
-  expiresAt: number;
+  validity: QuoteValidity;
 } & (
   | {
       kind: "epoch";
@@ -27,6 +32,11 @@ export type QuoteResult = {
       authorization: WithdrawalQuote;
     }
 );
+
+/** Provider authorizations are checked against their chain when submitted. */
+export function isQuoteReviewable(quote: QuoteResult | null | undefined): quote is QuoteResult {
+  return Boolean(quote && (quote.validity.kind === "provider" || quote.validity.expiresAt > Date.now()));
+}
 
 /** Bind a review to its route, amount and accounts, even if the wallet changes. */
 export type TransferQuote = QuoteResult & {

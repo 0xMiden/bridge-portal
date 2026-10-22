@@ -1,9 +1,8 @@
 import { afterEach, expect, it, vi } from "vitest";
 import { observeXreserveDeposit } from "./status";
 import type { BridgeActivity } from "../../core/models";
-import { cctpConfig } from "./cctp-config";
+import { cctpConfig, ARC } from "./config";
 const CCTP = cctpConfig();
-import { ARC } from "./config";
 
 const original = `0x${"11".repeat(32)}`;
 const replacement = `0x${"22".repeat(32)}`;
@@ -22,7 +21,7 @@ it.each([
   ["repriced", "arc-testnet"], ["cancelled", "arc-testnet"], ["replaced", "arc-testnet"],
   ["repriced", "base-sepolia"], ["cancelled", "base-sepolia"],
 ])("resolves a %s transaction on %s after reloading saved pending metadata", async (kind, network) => {
-  const candidate = { ...transaction, hash: replacement, nonce: "0x7", value: "0x0",
+  const candidate = { ...transaction, hash: replacement, nonce: "0x7", value: "0x0", blockNumber: "0x1f4",
     to: kind === "cancelled" ? sender : ARC.xReserve,
     input: kind === "cancelled" ? "0x" : kind === "replaced" ? "0xabcd" : transaction.input };
   const requests: string[] = [];

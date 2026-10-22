@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { observeXreserveDeposit } from "./status";
 import { checkArcDelivery } from "./delivery";
 import type { BridgeActivity } from "../../core/models";
-import { cctpConfig } from "./cctp-config";
+import { cctpConfig } from "./config";
 const CCTP = cctpConfig();
 
 vi.mock("./delivery", () => ({ checkArcDelivery: vi.fn() }));

@@ -1,12 +1,9 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { EvmProvider } from "../../../wallets/evm/evm-wallet";
 import { ARC } from "./config";
-import {
-  arcRecipient,
-  depositOnArc,
-  ensureArc,
-  parseArcAmount,
-} from "./deposit";
+import { depositOnArc } from "./deposit";
+import { arcRecipient, parseArcAmount } from "./deposit-terms";
+import { ensureEvmNetwork } from "../../../wallets/evm/ensure-network";
 
 const mocks = vi.hoisted(() => ({
   read: vi.fn(),
@@ -24,6 +21,9 @@ vi.mock("viem", async (importOriginal) => ({
   }),
   createWalletClient: () => ({ writeContract: mocks.write }),
 }));
+vi.mock("../../evm/source-transaction", () => ({
+  captureSourceTransaction: async () => undefined, resolveSourceTransaction: async () => ({}),
+}));
 vi.mock("@miden-sdk/miden-sdk", () => ({
   AccountId: { fromHex: mocks.fromHex },
 }));
@@ -39,8 +39,19 @@ function wallet() {
       ),
   };
 }
+let allowance: bigint;
+let approvalAmount: bigint;
+afterEach(() => vi.unstubAllGlobals());
 beforeEach(() => {
   vi.resetAllMocks();
+  const storage = new Map<string, string>();
+  vi.stubGlobal("window", { localStorage: {
+    getItem: (key: string) => storage.get(key) ?? null,
+    setItem: (key: string, value: string) => storage.set(key, value),
+    removeItem: (key: string) => storage.delete(key),
+  } });
+  allowance = 0n;
+  approvalAmount = 0n;
   mocks.fromHex.mockReturnValue({ free: vi.fn() });
   mocks.read.mockImplementation(async ({ functionName }) =>
     functionName === "isRemoteDomainRegistered"
@@ -49,11 +60,14 @@ beforeEach(() => {
         ? arcRecipient(ARC.faucetId)
       : functionName === "balanceOf"
         ? 10_000_000n
-        : 0n,
+        : allowance,
   );
   mocks.simulate.mockImplementation(async (request) => ({ request }));
-  mocks.receipt.mockResolvedValue({ status: "success" });
-  mocks.write.mockResolvedValue(hash);
+  mocks.receipt.mockImplementation(async () => { allowance = approvalAmount; return { status: "success" }; });
+  mocks.write.mockImplementation(async (request) => {
+    if (request.functionName === "approve") approvalAmount = request.args[1];
+    return hash;
+  });
 });
 describe("Arc testnet deposits", () => {
   it("matches the frontend guide recipient vectors including suffix padding", () => {
@@ -141,6 +155,7 @@ describe("Arc testnet deposits", () => {
           ? ["0x2222222222222222222222222222222222222222"]
           : `0x${ARC.chainId.toString(16)}`,
       );
+      allowance = approvalAmount;
       return { status: "success" };
     });
     await expect(
@@ -152,7 +167,7 @@ describe("Arc testnet deposits", () => {
         onPhase: vi.fn(),
         onBroadcast: vi.fn(),
       }),
-    ).rejects.toThrow("account changed");
+    ).rejects.toThrow("account or network changed");
     expect(mocks.write).toHaveBeenCalledTimes(1);
   });
   it("adds Arc when missing and verifies the wallet really switched", async () => {
@@ -163,7 +178,7 @@ describe("Arc testnet deposits", () => {
       .mockResolvedValueOnce(null)
       .mockResolvedValueOnce(null)
       .mockResolvedValueOnce("0x4cef52");
-    await ensureArc({ request });
+    await ensureEvmNetwork({ request }, ARC.chain);
     expect(request).toHaveBeenCalledWith(
       expect.objectContaining({
         method: "wallet_addEthereumChain",

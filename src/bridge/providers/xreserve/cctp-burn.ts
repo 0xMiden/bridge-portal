@@ -1,8 +1,35 @@
-import { decodeAbiParameters, decodeFunctionData, encodeAbiParameters, encodeFunctionData, encodePacked, pad, parseAbiParameters, size, slice, stringToHex, type Address, type Hex } from "viem";
-import { arcConfig, xReserveAbi } from "./config";
-import { cctpConfig } from "./cctp-config";
-import { arcRecipient } from "./deposit";
+import {
+  decodeAbiParameters, decodeFunctionData, encodeAbiParameters, encodeFunctionData,
+  encodePacked, pad, parseAbiParameters, size, slice, stringToHex, type Address, type Hex,
+} from "viem";
+import { arcConfig, cctpAbi, cctpConfig, cctpSource, xReserveAbi } from "./config";
+import { arcRecipient, parseArcAmount } from "./deposit-terms";
 import { decodeArcRecipient } from "./attestation";
+import type { CctpBurnAuthorization } from "./cctp-schema";
+
+export type { CctpBurnIntent, CctpBurnAuthorization } from "./cctp-schema";
+
+/** The same call is validated by Circle, simulated, and handed to the wallet. */
+export function cctpBurnCall(input: CctpBurnAuthorization) {
+  const arc = arcConfig(input.deploymentId);
+  const source = cctpSource(input.network, input.deploymentId);
+  const cctp = cctpConfig(input.deploymentId, input.network);
+  return {
+    account: input.sender,
+    address: cctp.tokenMessengerWithFees,
+    abi: cctpAbi,
+    functionName: "depositForBurnWithHookAndFees",
+    args: [
+      parseArcAmount(input.amount),
+      arc.circleDomain,
+      pad(cctp.executor),
+      source.asset.address,
+      pad(cctp.executor),
+      cctpDepositHook(input.sender, input.recipient, input.deploymentId),
+      { signedQuote: input.signedQuote, refundAddress: input.sender },
+    ],
+  } as const;
+}
 
 /** Wire format from the verified GenericExecutor and DepositForHandler on Arc. */
 export function cctpDepositHook(sender: Address, recipient: string, deploymentId?: string): Hex {
