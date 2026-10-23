@@ -2,7 +2,8 @@ import { z } from "zod";
 import type { bridgeConfigSchema } from "./schema";
 
 const evmNetwork = z.enum(["sepolia", "arc-testnet", "base-sepolia", "arbitrum-sepolia", "ethereum", "arc", "base", "arbitrum"]);
-const metadata = { symbol: z.string().min(1).max(11), name: z.string().min(1).max(100).optional() };
+export const tokenLogoSchema = z.string().regex(/^\/asset-logos\/[a-z0-9-]+\.(svg|png)$/);
+const metadata = { symbol: z.string().min(1).max(11), name: z.string().min(1).max(100).optional(), logo: tokenLogoSchema };
 const evmMetadata = { ...metadata, network: evmNetwork, decimals: z.int().min(0).max(255) };
 const connectionSchema = z.object({
   provider: z.enum(["epoch", "agglayer", "xreserve"]),

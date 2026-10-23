@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "version": 1,
+  "version": 2,
   "testnet": [
     {
       "provider": "epoch",
@@ -9,6 +9,7 @@
         "network": "sepolia",
         "kind": "erc20",
         "symbol": "USDC",
+        "logo": "/asset-logos/usdc.svg",
         "decimals": 18,
         "address": "0x2BB4FfD7E2c6D432b697554Efd77fA13bdbefd69"
       },
@@ -16,6 +17,7 @@
         "network": "miden-testnet",
         "kind": "miden",
         "symbol": "USDC",
+        "logo": "/asset-logos/usdc.svg",
         "decimals": 6,
         "faucetId": "0x537c15a622074e91188aa894456c52"
       },
@@ -32,6 +34,7 @@
         "network": "sepolia",
         "kind": "erc20",
         "symbol": "USDC",
+        "logo": "/asset-logos/usdc.svg",
         "decimals": 18,
         "address": "0x2BB4FfD7E2c6D432b697554Efd77fA13bdbefd69"
       },
@@ -40,6 +43,7 @@
         "network": "miden-testnet",
         "kind": "miden",
         "symbol": "USDC",
+        "logo": "/asset-logos/usdc.svg",
         "decimals": 6,
         "faucetId": "0x5b043dcb48d5721106f7a1ceb2b804"
       },
@@ -55,6 +59,7 @@
         "network": "sepolia",
         "kind": "erc20",
         "symbol": "DAI",
+        "logo": "/asset-logos/dai.svg",
         "decimals": 18,
         "address": "0xc30f1Ce05d1434d484E9A47283aA925fc8A8699a"
       },
@@ -63,6 +68,7 @@
         "network": "miden-testnet",
         "kind": "miden",
         "symbol": "DAI",
+        "logo": "/asset-logos/dai.svg",
         "decimals": 6,
         "faucetId": "0xd41499b8f142ad9119fd9da357a3b2"
       },
@@ -78,6 +84,7 @@
         "network": "sepolia",
         "kind": "erc20",
         "symbol": "USDT",
+        "logo": "/asset-logos/usdt.svg",
         "decimals": 18,
         "address": "0xc04d2869665Be874881133943523723Be5782720"
       },
@@ -86,6 +93,7 @@
         "network": "miden-testnet",
         "kind": "miden",
         "symbol": "USDT",
+        "logo": "/asset-logos/usdt.svg",
         "decimals": 6,
         "faucetId": "0x0ead4362a745e7d1790d75ea779611"
       },
@@ -101,6 +109,7 @@
         "network": "sepolia",
         "kind": "erc20",
         "symbol": "WBTC",
+        "logo": "/asset-logos/wbtc.svg",
         "decimals": 18,
         "address": "0x9b2a2754a9182fD65360E23afCDf3BeFF51796E9"
       },
@@ -109,6 +118,7 @@
         "network": "miden-testnet",
         "kind": "miden",
         "symbol": "WBTC",
+        "logo": "/asset-logos/wbtc.svg",
         "decimals": 6,
         "faucetId": "0x1b22d80328f58c5171f67a85f170a3"
       },
@@ -124,6 +134,7 @@
         "network": "sepolia",
         "kind": "erc20",
         "symbol": "USDC",
+        "logo": "/asset-logos/usdc.svg",
         "decimals": 18,
         "address": "0x2BB4FfD7E2c6D432b697554Efd77fA13bdbefd69"
       },
@@ -131,6 +142,7 @@
         "network": "miden-testnet",
         "kind": "miden",
         "symbol": "USDCx",
+        "logo": "/asset-logos/usdc.svg",
         "decimals": 6,
         "faucetId": "0x4cbdcaffe75f0a317482224dae6436"
       },
@@ -144,12 +156,14 @@
         "network": "sepolia",
         "kind": "native",
         "symbol": "ETH",
+        "logo": "/asset-logos/ethereum.svg",
         "decimals": 18
       },
       "miden": {
         "network": "miden-testnet",
         "kind": "miden",
         "symbol": "ETH",
+        "logo": "/asset-logos/ethereum.svg",
         "decimals": 8,
         "faucetId": "0x7c6d1dc7fb7045913d524bbef017f5"
       },
@@ -165,6 +179,7 @@
         "network": "arc-testnet",
         "kind": "erc20",
         "symbol": "USDC",
+        "logo": "/asset-logos/usdc.svg",
         "decimals": 6,
         "address": "0x3600000000000000000000000000000000000000"
       },
@@ -172,6 +187,7 @@
         "network": "miden-testnet",
         "kind": "miden",
         "symbol": "USDCx",
+        "logo": "/asset-logos/usdc.svg",
         "decimals": 6,
         "faucetId": "0x4cbdcaffe75f0a317482224dae6436"
       },
@@ -187,6 +203,7 @@
         "network": "sepolia",
         "kind": "erc20",
         "symbol": "USDC",
+        "logo": "/asset-logos/usdc.svg",
         "decimals": 6,
         "address": "0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238"
       },
@@ -194,6 +211,7 @@
         "network": "miden-testnet",
         "kind": "miden",
         "symbol": "USDCx",
+        "logo": "/asset-logos/usdc.svg",
         "decimals": 6,
         "faucetId": "0x4cbdcaffe75f0a317482224dae6436"
       },
@@ -209,6 +227,7 @@
         "network": "base-sepolia",
         "kind": "erc20",
         "symbol": "USDC",
+        "logo": "/asset-logos/usdc.svg",
         "decimals": 6,
         "address": "0x036CbD53842c5426634e7929541eC2318f3dCF7e"
       },
@@ -216,6 +235,7 @@
         "network": "miden-testnet",
         "kind": "miden",
         "symbol": "USDCx",
+        "logo": "/asset-logos/usdc.svg",
         "decimals": 6,
         "faucetId": "0x4cbdcaffe75f0a317482224dae6436"
       },
@@ -231,6 +251,7 @@
         "network": "arbitrum-sepolia",
         "kind": "erc20",
         "symbol": "USDC",
+        "logo": "/asset-logos/usdc.svg",
         "decimals": 6,
         "address": "0x75faf114eafb1BDbe2F0316DF893fd58CE46AA4d"
       },
@@ -238,6 +259,7 @@
         "network": "miden-testnet",
         "kind": "miden",
         "symbol": "USDCx",
+        "logo": "/asset-logos/usdc.svg",
         "decimals": 6,
         "faucetId": "0x4cbdcaffe75f0a317482224dae6436"
       },
@@ -254,6 +276,7 @@
         "network": "arc",
         "kind": "erc20",
         "symbol": "USDC",
+        "logo": "/asset-logos/usdc.svg",
         "name": "Circle USDC",
         "decimals": 6,
         "address": "0x3600000000000000000000000000000000000000"
@@ -262,6 +285,7 @@
         "network": "miden-mainnet",
         "kind": "miden",
         "symbol": "USDCx",
+        "logo": "/asset-logos/usdc.svg",
         "decimals": 6,
         "faucetId": "0xe69e6ca6e39df1b10c1e5399399feb"
       },
@@ -276,6 +300,7 @@
         "network": "ethereum",
         "kind": "erc20",
         "symbol": "USDC",
+        "logo": "/asset-logos/usdc.svg",
         "name": "Circle USDC",
         "decimals": 6,
         "address": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"
@@ -284,6 +309,7 @@
         "network": "miden-mainnet",
         "kind": "miden",
         "symbol": "USDCx",
+        "logo": "/asset-logos/usdc.svg",
         "decimals": 6,
         "faucetId": "0xe69e6ca6e39df1b10c1e5399399feb"
       },
@@ -298,12 +324,14 @@
         "network": "ethereum",
         "kind": "native",
         "symbol": "ETH",
+        "logo": "/asset-logos/ethereum.svg",
         "decimals": 18
       },
       "miden": {
         "network": "miden-mainnet",
         "kind": "miden",
         "symbol": "ETH",
+        "logo": "/asset-logos/ethereum.svg",
         "faucetId": "0x419f8f4bff72959132aa7cea15a4c1",
         "decimals": 8
       },
@@ -318,6 +346,7 @@
         "network": "ethereum",
         "kind": "erc20",
         "symbol": "WBTC",
+        "logo": "/asset-logos/wbtc.svg",
         "name": "Wrapped BTC",
         "decimals": 8,
         "address": "0x2260fac5e5542a773aa44fbcfedf7c193bc2c599"
@@ -326,6 +355,7 @@
         "network": "miden-mainnet",
         "kind": "miden",
         "symbol": "WBTC",
+        "logo": "/asset-logos/wbtc.svg",
         "name": "Wrapped BTC",
         "decimals": 8,
         "faucetId": "0x3084d3c389ececd15fda9770d18c8a"
@@ -340,6 +370,7 @@
         "network": "ethereum",
         "kind": "erc20",
         "symbol": "WSOL",
+        "logo": "/asset-logos/sol.svg",
         "name": "Wrapped SOL",
         "decimals": 9,
         "address": "0xd31a59c85ae9d8edefec411d448f90841571b89c"
@@ -348,6 +379,7 @@
         "network": "miden-mainnet",
         "kind": "miden",
         "symbol": "WSOL",
+        "logo": "/asset-logos/sol.svg",
         "name": "Wrapped SOL",
         "decimals": 8,
         "faucetId": "0xf4f3dd3678997811522164320be4be"
@@ -362,6 +394,7 @@
         "network": "ethereum",
         "kind": "erc20",
         "symbol": "NEAR",
+        "logo": "/asset-logos/near.png",
         "name": "NEAR Protocol",
         "decimals": 24,
         "address": "0x85f17cf997934a597031b2e18a9ab6ebd4b9f6a4"
@@ -370,6 +403,7 @@
         "network": "miden-mainnet",
         "kind": "miden",
         "symbol": "NEAR",
+        "logo": "/asset-logos/near.png",
         "name": "NEAR Protocol",
         "decimals": 8,
         "faucetId": "0x5fcca2d015cf44d15da1a641d4d06a"
@@ -384,6 +418,7 @@
         "network": "ethereum",
         "kind": "erc20",
         "symbol": "PAXG",
+        "logo": "/asset-logos/paxg.png",
         "name": "Pax Gold",
         "decimals": 18,
         "address": "0x45804880de22913dafe09f4980848ece6ecbaf78"
@@ -392,6 +427,7 @@
         "network": "miden-mainnet",
         "kind": "miden",
         "symbol": "PAXG",
+        "logo": "/asset-logos/paxg.png",
         "name": "Pax Gold",
         "decimals": 8,
         "faucetId": "0x24b95ee2aa5c2ad1679a0316163375"
@@ -406,6 +442,7 @@
         "network": "ethereum",
         "kind": "erc20",
         "symbol": "USDT",
+        "logo": "/asset-logos/usdt.svg",
         "name": "Tether USD",
         "decimals": 6,
         "address": "0xdac17f958d2ee523a2206206994597c13d831ec7"
@@ -414,6 +451,7 @@
         "network": "miden-mainnet",
         "kind": "miden",
         "symbol": "USDT",
+        "logo": "/asset-logos/usdt.svg",
         "name": "Tether USD",
         "decimals": 6,
         "faucetId": "0x5cb79d29507d3ad17bb6dc60279e89"
@@ -428,6 +466,7 @@
         "network": "ethereum",
         "kind": "erc20",
         "symbol": "WBNB",
+        "logo": "/asset-logos/wbnb.png",
         "name": "Wrapped BNB",
         "decimals": 18,
         "address": "0x418d75f65a02b3d53b2418fb8e1fe493759c7605"
@@ -436,6 +475,7 @@
         "network": "miden-mainnet",
         "kind": "miden",
         "symbol": "WBNB",
+        "logo": "/asset-logos/wbnb.png",
         "name": "Wrapped BNB",
         "decimals": 8,
         "faucetId": "0x79e82d69d99d9f116f43cb5c063c04"
@@ -450,6 +490,7 @@
         "network": "ethereum",
         "kind": "erc20",
         "symbol": "PYUSD",
+        "logo": "/asset-logos/pyusd.png",
         "name": "PayPal USD",
         "decimals": 6,
         "address": "0x6c3ea9036406852006290770bedfcaba0e23a0e8"
@@ -458,6 +499,7 @@
         "network": "miden-mainnet",
         "kind": "miden",
         "symbol": "PYUSD",
+        "logo": "/asset-logos/pyusd.png",
         "name": "PayPal USD",
         "decimals": 6,
         "faucetId": "0xeb4266c94493b091380b25349fddd3"
@@ -472,6 +514,7 @@
         "network": "base",
         "kind": "erc20",
         "symbol": "USDC",
+        "logo": "/asset-logos/usdc.svg",
         "name": "Circle USDC",
         "decimals": 6,
         "address": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"
@@ -480,6 +523,7 @@
         "network": "miden-mainnet",
         "kind": "miden",
         "symbol": "USDCx",
+        "logo": "/asset-logos/usdc.svg",
         "decimals": 6,
         "faucetId": "0xe69e6ca6e39df1b10c1e5399399feb"
       },
@@ -494,6 +538,7 @@
         "network": "arbitrum",
         "kind": "erc20",
         "symbol": "USDC",
+        "logo": "/asset-logos/usdc.svg",
         "name": "Circle USDC",
         "decimals": 6,
         "address": "0xaf88d065e77c8cC2239327C5EDb3A432268e5831"
@@ -502,6 +547,7 @@
         "network": "miden-mainnet",
         "kind": "miden",
         "symbol": "USDCx",
+        "logo": "/asset-logos/usdc.svg",
         "decimals": 6,
         "faucetId": "0xe69e6ca6e39df1b10c1e5399399feb"
       },

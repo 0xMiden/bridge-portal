@@ -94,8 +94,10 @@ wallet-config fetch, registry discovery, configuration cache or hot reload.
 Token pairs live in the portal-owned
 `src/config/wallet-config/token-connections.json`, beside those pinned files.
 Each connection records its provider, EVM token, Miden faucet, both precisions,
-and stable receive/send route IDs. This is the source for route assets and the
-asset exports used by faucet actions. There is no dependency on `token-list`.
+local token-logo paths, and stable receive/send route IDs. Logos are bundled in
+`public/asset-logos/`, with attribution in `SOURCES.md`. The registry is the source
+for route assets and the asset exports used by faucet actions. There is no runtime
+or build dependency on `token-list`.
 Bridge contracts, provider endpoints, and availability switches continue to
 come from the existing wallet-config documents. An absent direction is not
 implemented; `disabled` keeps retired connections addressable.

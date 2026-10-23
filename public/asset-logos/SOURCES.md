@@ -2,8 +2,13 @@ Additional token icons:
 
 - `sol.svg`: [Cryptocurrency Icons](https://github.com/spothq/cryptocurrency-icons/blob/master/svg/color/sol.svg), CC0-1.0.
 - `pyusd.png`: [Trust Wallet assets](https://github.com/trustwallet/assets/tree/master/blockchains/ethereum/assets/0x6c3ea9036406852006290770BEdFcAbA0e23A0e8), MIT. Copyright (c) 2019-2023 Trust Wallet.
+- `near.png`: [Miden token list](https://github.com/0xMiden/token-list/blob/45687dbd773cda65fab0d6d4cf83ae5ca003b0ea/logos/mm1ap0uegkszh85f52a5xnyr4xsdgtxucvm/logo.png), MIT. Copyright (c) 2026 Miden.
+- `paxg.png`: [Miden token list](https://github.com/0xMiden/token-list/blob/45687dbd773cda65fab0d6d4cf83ae5ca003b0ea/logos/mm1aqjtjhhz4fwz45t8ngp3v93nw5my0ngd/logo.png), MIT. Copyright (c) 2026 Miden.
+- `wbnb.png`: [Miden token list](https://github.com/0xMiden/token-list/blob/45687dbd773cda65fab0d6d4cf83ae5ca003b0ea/logos/mm1apu7sttfmxwe7yt0g094cp3uqsea655m/logo.png), MIT. Copyright (c) 2026 Miden.
 
-The PYUSD icon identifies the token; its brand remains the property of its owner.
+The icons identify their tokens; their brands remain the property of their owners.
+The Miden token-list images are vendored at the revision above, with no runtime or
+build-time fetch from that repository.
 
 Permission is hereby granted, free of charge, to any person obtaining a copy of
 this software and associated documentation files (the "Software"), to deal in

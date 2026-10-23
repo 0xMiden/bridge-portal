@@ -7,6 +7,7 @@ export type BridgeNetwork = EvmNetwork | MidenNetwork;
 type TokenMetadata = {
   symbol: string;
   name?: string;
+  logo?: string;
   decimals: number;
 };
 
