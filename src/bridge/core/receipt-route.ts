@@ -1,12 +1,13 @@
 import { z } from "zod";
 import { bridgeConfigSchema } from "../../config/wallet-config/schema";
+import { tokenLogoSchema } from "../../config/wallet-config/token-connections";
 import { evmAddressSchema } from "../evm/evm-schema";
 
 const network = z.enum(["sepolia", "arc-testnet", "base-sepolia", "arbitrum-sepolia", "ethereum", "arc", "base", "arbitrum"]);
-const metadata = { symbol: z.string().min(1).max(11), name: z.string().max(100).optional(), decimals: z.int().min(0).max(18) };
+const metadata = { symbol: z.string().min(1).max(11), name: z.string().max(100).optional(), logo: tokenLogoSchema.optional(), decimals: z.int().min(0).max(18) };
 const asset = z.discriminatedUnion("kind", [
   z.object({ ...metadata, kind: z.literal("native"), network }),
-  z.object({ ...metadata, kind: z.literal("erc20"), network, address: evmAddressSchema }),
+  z.object({ ...metadata, decimals: z.int().min(0).max(255), kind: z.literal("erc20"), network, address: evmAddressSchema }),
   z.object({ ...metadata, kind: z.literal("miden"), network: z.enum(["miden-testnet", "miden-mainnet"]), faucetId: z.string().regex(/^0x[\da-f]{30}$/i) }),
 ]);
 /** Receipts are self-contained. Route names and current token lists may change. */

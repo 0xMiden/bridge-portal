@@ -4,6 +4,8 @@ import type { z } from "zod";
 import { bridgeConfigSchema } from "./wallet-config/schema";
 import testnet from "./wallet-config/testnet.json";
 import mainnet from "./wallet-config/mainnet.json";
+import { tokenRegistry } from "./token-registry";
+import { assertTokenConnections } from "./wallet-config/token-connections";
 
 export type BridgeConfig = z.infer<typeof bridgeConfigSchema>;
 
@@ -13,6 +15,7 @@ const current: Record<BridgeEnvironment, BridgeConfig> = {
   testnet: bridgeConfigSchema.parse(testnet),
   mainnet: bridgeConfigSchema.parse(mainnet),
 };
+for (const environment of ["testnet", "mainnet"] as const) assertTokenConnections(current[environment], tokenRegistry[environment]);
 export function currentBridgeConfig(environment: BridgeEnvironment): BridgeConfig {
   return current[environment];
 }
