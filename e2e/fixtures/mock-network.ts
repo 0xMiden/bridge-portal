@@ -10,7 +10,6 @@ export async function stubNetwork(
   opts: { usdcBalance?: string } = {},
 ): Promise<void> {
   const usdcBalance = opts.usdcBalance ?? "1";
-
   await page.route("**/api/prices?**", (route) => {
     const symbol = new URL(route.request().url()).searchParams.get("symbol");
     return route.fulfill({ json: { symbol, usd: symbol === "ETH" ? 3200.5 : 0.9998, fetchedAt: Date.now() } });

@@ -1,17 +1,18 @@
+import { findBridgeRoute } from "../../core/routes";
 import "../../../../tests/setup/viem-http";
 import { afterEach, expect, it, vi } from "vitest";
 import { observeXreserveDeposit } from "./status";
 import type { BridgeActivity } from "../../core/models";
-import { cctpConfig, ARC } from "./config";
+import { cctpConfig, arcConfig } from "./config";
 const CCTP = cctpConfig();
 
 const original = `0x${"11".repeat(32)}`;
 const replacement = `0x${"22".repeat(32)}`;
 const sender = `0x${"33".repeat(20)}`;
 const recipient = "0x4e6fb40fd2f6a55140df2c42dfb5b7";
-const transaction = { hash: original, from: sender, nonce: 7, to: ARC.xReserve, input: "0x1234", value: "0" };
+const transaction = { hash: original, from: sender, nonce: 7, to: arcConfig().xReserve, input: "0x1234", value: "0" };
 const activity: BridgeActivity = {
-  id: "replacement", provider: "xreserve", routeId: "xreserve-usdc-to-miden", mode: "receive",
+  id: "replacement", provider: "xreserve", routeSnapshot: findBridgeRoute("xreserve-usdc-to-miden")!, routeId: "xreserve-usdc-to-miden", mode: "receive",
   amount: "1", asset: "USDC", status: "source_finality", xreserveStatus: "submitted",
   sourceTxHash: original, evmAddress: sender, destination: recipient, updatedAt: 1,
 };
@@ -23,7 +24,7 @@ it.each([
   ["repriced", "base-sepolia"],
 ])("resolves a %s transaction on %s after reloading saved pending metadata", async (kind, network) => {
   const candidate = { ...transaction, hash: replacement, nonce: "0x7", value: "0x0", blockNumber: "0x1f4",
-    to: kind === "cancelled" ? sender : ARC.xReserve,
+    to: kind === "cancelled" ? sender : arcConfig().xReserve,
     input: kind === "cancelled" ? "0x" : kind === "replaced" ? "0xabcd" : transaction.input };
   const requests: string[] = [];
   vi.stubGlobal("fetch", vi.fn(async (url: string, init?: RequestInit) => {
@@ -31,7 +32,7 @@ it.each([
     if (url.includes("/status?")) {
       if (url.includes(replacement)) return Response.json({ status: "attested",
         ...(network === "base-sepolia" ? { source: { amount: "1000000", recipient, sender } } : {}), intent: {
-        amount: "1000000", recipient, faucet: ARC.faucetId, sender: network === "base-sepolia" ? CCTP.handler : sender, nonce: `0x${"ab".repeat(32)}`,
+        amount: "1000000", recipient, faucet: arcConfig().faucetId, sender: network === "base-sepolia" ? CCTP.handler : sender, nonce: `0x${"ab".repeat(32)}`,
       } });
       return Response.json({ status: "submitted" });
     }
@@ -49,7 +50,7 @@ it.each([
     } else throw new Error(`Unexpected RPC ${method}`);
     return Response.json({ jsonrpc: "2.0", id, result });
   }));
-  const restored = JSON.parse(JSON.stringify({ ...activity, routeId: network === "base-sepolia" ? "xreserve-base-usdc-to-miden" : activity.routeId, sourceTransaction: transaction }));
+  const restored = JSON.parse(JSON.stringify({ ...activity, routeSnapshot: findBridgeRoute(network === "base-sepolia" ? "xreserve-base-usdc-to-miden" : activity.routeId!)!, routeId: network === "base-sepolia" ? "xreserve-base-usdc-to-miden" : activity.routeId, sourceTransaction: transaction }));
   const result = await observeXreserveDeposit(restored);
   expect(result.patch).toMatchObject({ sourceTxHash: replacement, sourceOriginalTxHash: original,
     status: kind === "repriced" ? "complete" : "failed",

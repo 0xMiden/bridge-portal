@@ -14,7 +14,7 @@ export async function quoteTransfer(
       ...quote,
       request: {
         routeId: input.route.id,
-        deploymentId: input.route.deploymentId,
+        recovery: input.route.recovery,
         amount: input.amount,
         midenAccount: input.midenAccount,
         evmAddress: input.evmAddress,

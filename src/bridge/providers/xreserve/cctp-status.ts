@@ -1,3 +1,4 @@
+import type { BridgeConfig } from "../../../config/bridge-config";
 import { z } from "zod";
 import { createPublicClient, parseAbi, parseEventLogs, size, type Hex, type TransactionReceipt } from "viem";
 import { evmServerTransport } from "../../evm/rpc.server";
@@ -44,26 +45,25 @@ async function findCctpForwarding(api: string, hash: Hex, source: CctpMessage): 
   return candidates.find(candidate => candidate !== null && matchAttestedMessage(source, candidate.message)) ?? null;
 }
 
-function readSourceBurn(receipt: TransactionReceipt, network: CctpNetwork, deploymentId?: string): CctpBurn {
-  const { messageTransmitter } = cctpConfig(deploymentId, network);
+function readSourceBurn(receipt: TransactionReceipt, network: CctpNetwork, recovery?: BridgeConfig): CctpBurn {
+  const { messageTransmitter } = cctpConfig(recovery, network);
   const messages = parseEventLogs({
     abi: messageAbi,
     logs: receipt.logs.filter(log => log.address.toLowerCase() === messageTransmitter.toLowerCase()),
   });
   if (messages.length !== 1) throw new Error("Expected one Circle burn message.");
-  return parseCctpBurn(messages[0].args.message, network, deploymentId);
+  return parseCctpBurn(messages[0].args.message, network, recovery);
 }
 
-function assertForwardedExecution(receipt: TransactionReceipt, forwarding: CctpForwarding, deploymentId?: string): void {
-  const arc = arcConfig(deploymentId);
-  const cctp = cctpConfig(deploymentId);
+function assertForwardedExecution(receipt: TransactionReceipt, forwarding: CctpForwarding, recovery?: BridgeConfig): void {
+  const arc = arcConfig(recovery);
   const executions = parseEventLogs({
     abi: executorAbi,
-    logs: receipt.logs.filter(log => log.address.toLowerCase() === cctp.executor.toLowerCase()),
+    logs: receipt.logs.filter(log => log.address.toLowerCase() === arc.executor.toLowerCase()),
   });
   const matchesBurn = executions.some(({ args }) => {
     if (args.version !== 1 || args.nonce.toLowerCase() !== forwarding.message.nonce) return false;
-    return args.handler.toLowerCase() === cctp.handler.toLowerCase() &&
+    return args.handler.toLowerCase() === arc.handler.toLowerCase() &&
       args.token.toLowerCase() === arc.usdc.toLowerCase() && args.amount === forwarding.message.transfer.amount;
   });
   if (receipt.status !== "success" || !matchesBurn) {
@@ -71,9 +71,9 @@ function assertForwardedExecution(receipt: TransactionReceipt, forwarding: CctpF
   }
 }
 
-function assertForwardedDeposit(deposit: ArcStatusResponse["deposit"], burn: CctpBurn, deploymentId?: string): void {
+function assertForwardedDeposit(deposit: ArcStatusResponse["deposit"], burn: CctpBurn, recovery?: BridgeConfig): void {
   if (!deposit) throw new CircleApiError("binding_mismatch", "Forwarded Miden deposit could not be verified.");
-  const { handler } = cctpConfig(deploymentId);
+  const { handler } = arcConfig(recovery);
   if (deposit.amount !== burn.deposit.amount || deposit.recipient !== burn.deposit.recipient ||
       deposit.sender.toLowerCase() !== handler.toLowerCase()) {
     throw new CircleApiError("binding_mismatch", "The forwarded deposit does not match the source transfer.");
@@ -81,26 +81,26 @@ function assertForwardedDeposit(deposit: ArcStatusResponse["deposit"], burn: Cct
 }
 
 async function readForwardedDeposit(
-  forwarding: CctpForwarding, burn: CctpBurn, pending: CctpStatusResponse, deploymentId?: string,
+  forwarding: CctpForwarding, burn: CctpBurn, pending: CctpStatusResponse, recovery?: BridgeConfig,
 ): Promise<CctpStatusResponse> {
-  const arc = arcConfig(deploymentId);
+  const arc = arcConfig(recovery);
   const client = createPublicClient({ chain: arc.chain, transport: evmServerTransport(arc.network) });
   const receipt = await findTransactionReceipt(client, forwarding.transactionHash);
   if (!receipt) return pending;
-  assertForwardedExecution(receipt, forwarding, deploymentId);
-  const status = await readArcDepositStatus(client, receipt, deploymentId);
-  assertForwardedDeposit(status.deposit, burn, deploymentId);
+  assertForwardedExecution(receipt, forwarding, recovery);
+  const status = await readArcDepositStatus(client, receipt, recovery);
+  assertForwardedDeposit(status.deposit, burn, recovery);
   return { ...status, source: burn.deposit, arcTxHash: forwarding.transactionHash, sourceTxAt: pending.sourceTxAt, forwarding: false };
 }
 
-export async function getCctpStatus(network: CctpNetwork, hash: Hex, deploymentId?: string): Promise<CctpStatusResponse> {
-  const source = cctpSource(network, deploymentId);
-  const cctp = cctpConfig(deploymentId, network);
+export async function getCctpStatus(network: CctpNetwork, hash: Hex, recovery?: BridgeConfig): Promise<CctpStatusResponse> {
+  const source = cctpSource(network, recovery);
+  const cctp = cctpConfig(recovery, network);
   const client = createPublicClient({ chain: source.chain, transport: evmServerTransport(network) });
   const receipt = await findTransactionReceipt(client, hash);
   if (!receipt) return { status: "submitted" };
   if (receipt.status === "reverted") return { status: "reverted" };
-  const burn = readSourceBurn(receipt, network, deploymentId);
+  const burn = readSourceBurn(receipt, network, recovery);
   const pending: CctpStatusResponse = {
     status: "submitted", source: burn.deposit, forwarding: true,
   };
@@ -109,7 +109,7 @@ export async function getCctpStatus(network: CctpNetwork, hash: Hex, deploymentI
     pending.sourceTxAt = Number(block.timestamp) * 1_000;
     const forwarding = await findCctpForwarding(cctp.api, hash, burn.message);
     if (!forwarding) return pending;
-    return await readForwardedDeposit(forwarding, burn, pending, deploymentId);
+    return await readForwardedDeposit(forwarding, burn, pending, recovery);
   } catch (error) {
     if (error instanceof CircleApiError && error.reason === "binding_mismatch") throw error;
     if (error instanceof UnsupportedArcDepositError) throw error;

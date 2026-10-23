@@ -75,7 +75,7 @@ export function createActivity(
     provider: route.provider,
     routeId: route.id,
     environment: routeEnvironment(route),
-    routeSnapshot: { ...route },
+    routeSnapshot: structuredClone(route),
     status: "signature",
     amount: amount || "0",
     asset: route.source.symbol,

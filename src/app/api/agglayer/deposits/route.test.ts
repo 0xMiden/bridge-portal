@@ -1,5 +1,6 @@
+import { currentBridgeConfig } from "../../../../config/bridge-config";
 import { afterEach, expect, test, vi } from "vitest";
-import { GET } from "./route";
+import { POST } from "./route";
 import { observeActivity } from "../../../../bridge/tracking";
 import { applyActivityPatch } from "../../../../bridge/activity";
 import type { Activity } from "../../../../bridge/core/models";
@@ -13,14 +14,17 @@ test("queries deposits by their EVM bridge destination and rejects the account a
   const fetcher = vi.fn<typeof fetch>(async () => Response.json({ deposits: [deposit] }));
   vi.stubGlobal("fetch", fetcher);
 
-  const response = await GET(new Request(`https://bridge.test/api/agglayer/deposits?destinationAddress=${address}`));
+  const response = await POST(new Request(`https://bridge.test/api/agglayer/deposits?destinationAddress=${address}`, { method: "POST", body: JSON.stringify({ recovery: currentBridgeConfig("testnet") }) }));
   expect(response.status).toBe(200);
   expect(await response.json()).toMatchObject({ destinationAddress: address, deposits: [deposit] });
   expect(fetcher.mock.calls[0]?.[0]).toContain(`/bridges/${address}`);
 
   fetcher.mockClear();
-  const invalid = await GET(new Request("https://bridge.test/api/agglayer/deposits?midenAccountId=0x387149ae66116cf114eebd60bb7381"));
+  const invalid = await POST(new Request("https://bridge.test/api/agglayer/deposits?midenAccountId=0x387149ae66116cf114eebd60bb7381", {
+    method: "POST", body: JSON.stringify({ recovery: currentBridgeConfig("testnet") }),
+  }));
   expect(invalid.status).toBe(400);
+  expect(await invalid.json()).toEqual({ error: "destinationAddress must be a 20-byte hex address." });
   expect(fetcher).not.toHaveBeenCalled();
 });
 
@@ -49,10 +53,10 @@ test.each([
     tx_hash: `0x${"AB".repeat(32)}`, deposit_cnt: 42,
     ready_for_claim: true, claim_tx_hash: claimTxHash,
   });
-  vi.stubGlobal("fetch", vi.fn<typeof fetch>(async (input) => {
+  vi.stubGlobal("fetch", vi.fn<typeof fetch>(async (input, init) => {
     const url = new URL(String(input), "https://bridge.test");
     if (url.origin === "https://bridge.test" && url.pathname === "/api/agglayer/deposits")
-      return GET(new Request(url));
+      return POST(new Request(url, init));
     if (url.origin === "https://bridge.test" && url.pathname === "/api/evm/ethereum/transaction")
       return Response.json({ hash: sourceTxHash, status: "confirmed", success: true });
     if (url.origin === "https://bridge-cedar-miden.eu-north-3.gateway.fm" &&

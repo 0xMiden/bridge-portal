@@ -19,10 +19,12 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+          cache: npm
+      - run: npm ci
       - id: drift
         run: |
           set +e
-          node scripts/check-pin-drift.mjs > /tmp/drift.txt 2>&1
+          npm run check:pin-drift > /tmp/drift.txt 2>&1
           status=$?
           cat /tmp/drift.txt
           if [ "$status" -eq 0 ]; then

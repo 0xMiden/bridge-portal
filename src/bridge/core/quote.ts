@@ -1,3 +1,4 @@
+import type { BridgeConfig } from "../../config/bridge-config";
 import type { BridgeRoute } from "./routes";
 import type { CctpQuote } from "../providers/xreserve/cctp-quote";
 import type { WithdrawalQuote } from "../providers/xreserve/withdrawal-quote";
@@ -40,5 +41,5 @@ export function isQuoteReviewable(quote: QuoteResult | null | undefined): quote 
 
 /** Bind a review to its route, amount and accounts, even if the wallet changes. */
 export type TransferQuote = QuoteResult & {
-  request: Omit<QuoteRequest, "route"> & { routeId: string; deploymentId?: string };
+  request: Omit<QuoteRequest, "route"> & { routeId: string; recovery?: BridgeConfig };
 };

@@ -1,4 +1,4 @@
-import { deploymentMiden } from "../../config/deployments";
+import { midenNetworks } from "../../config/environment";
 import { evmNetworks } from "../../config/evm-networks";
 import type { BridgeAsset, BridgeNetwork } from "../../bridge/core/assets";
 import { activityRoute, type BridgeRoute } from "../../bridge/core/routes";
@@ -210,7 +210,7 @@ export function sourceExplorer(activity: BridgeActivity): ExplorerLink {
   const midenTx = fullHash(directionFor(activity).activityDetails(activity).sourceHash);
   return {
     label: "View on Midenscan",
-    href: midenTx ? `${deploymentMiden(activityRoute(activity)?.deploymentId).explorer}/tx/${midenTx}` : undefined,
+    href: midenTx ? `${midenNetworks[activity.environment ?? "testnet"].explorer}/tx/${midenTx}` : undefined,
     available: !!midenTx,
   };
 }
@@ -228,7 +228,7 @@ export function destinationExplorer(activity: BridgeActivity): ExplorerLink {
       activity.status === "complete" || !!fullHash(activity.midenTxId);
     return {
       label: "View on Midenscan",
-      href: account ? `${deploymentMiden(activityRoute(activity)?.deploymentId).explorer}/account/${account}` : undefined,
+      href: account ? `${midenNetworks[activity.environment ?? "testnet"].explorer}/account/${account}` : undefined,
       available: delivered && !!account,
     };
   }
@@ -264,7 +264,7 @@ export function buildDiagnostics(
     tool: "miden-bridge-portal",
     activityId: activity.id,
     environment: activity.environment ?? "testnet",
-    deploymentId: activityRoute(activity)?.deploymentId,
+    recovery: activityRoute(activity)?.recovery,
     route: bridgeProviders[activity.provider].label,
     provider: activity.provider,
     direction: activity.mode,

@@ -1,3 +1,4 @@
+import { currentBridgeConfig } from "../../../../config/bridge-config";
 import { afterEach, expect, it, vi } from "vitest";
 import { POST } from "./route";
 
@@ -12,7 +13,7 @@ it("retains quote schema diagnostics without exposing the malformed provider pay
   })));
   const response = await POST(new Request("http://localhost/api/xreserve/quote", {
     method: "POST", body: JSON.stringify({
-      network: "sepolia", amount: "1", sender: "0x1111111111111111111111111111111111111111",
+      recovery: currentBridgeConfig("testnet"), network: "sepolia", amount: "1", sender: "0x1111111111111111111111111111111111111111",
       recipient: "0x4e6fb40fd2f6a55140df2c42dfb5b7",
     }),
   }));

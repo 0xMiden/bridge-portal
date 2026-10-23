@@ -4,7 +4,8 @@ import {
   TransactionReceiptNotFoundError, type Hex,
 } from "viem";
 import { getCctpStatus } from "./cctp-status";
-import { ARC, ARC_MAX_MIDEN_AMOUNT, cctpConfig, cctpSource } from "./config";
+import { currentBridgeConfig } from "../../../config/bridge-config";
+import { arcConfig, ARC_MAX_MIDEN_AMOUNT, cctpConfig, cctpSource } from "./config";
 import fixture from "./fixtures/cctp-hook.json";
 
 const mocks = vi.hoisted(() => ({
@@ -79,7 +80,7 @@ function sourceReceipt(payload = message()) {
   };
 }
 
-const executionFields = { nonce, version: 1, handler: CCTP.handler, token: ARC.usdc, amount: 1_000_000n };
+const executionFields = { nonce, version: 1, handler: CCTP.handler, token: arcConfig().usdc, amount: 1_000_000n };
 function executionLog(overrides: Partial<typeof executionFields> = {}) {
   const value = { ...executionFields, ...overrides };
   return {
@@ -92,12 +93,12 @@ function executionLog(overrides: Partial<typeof executionFields> = {}) {
 
 const depositFields = {
   amount: 1_000_000n, recipient: recipientWord as Hex, faucet: faucetWord as Hex,
-  sender: CCTP.handler, domain: 10007, token: ARC.usdc,
+  sender: CCTP.handler, domain: 10007, token: arcConfig().usdc,
 };
 function depositLog(overrides: Partial<typeof depositFields> = {}) {
   const value = { ...depositFields, ...overrides };
   return {
-    address: ARC.xReserve,
+    address: arcConfig().xReserve,
     topics: encodeEventTopics({ abi: depositAbi, eventName: "DepositedToRemote",
       args: { localToken: value.token, localDepositor: value.sender, remoteRecipient: value.recipient } }),
     data: encodeAbiParameters(parseAbiParameters("uint256,uint32,bytes32,uint256,bytes"),
@@ -144,7 +145,7 @@ beforeEach(() => {
   });
   mocks.fetch.mockImplementation(async (url: string) => {
     if (url === `${CCTP.api}/v2/messages/6?transactionHash=${burnHash}`) return forwardingResponse();
-    if (url === `${ARC.attestationApi}/v1/attestations?txHash=${arcHash}`) return Response.json({ attestations: [] });
+    if (url === `${arcConfig().attestationApi}/v1/attestations?txHash=${arcHash}`) return Response.json({ attestations: [] });
     throw new Error(`Unexpected request: ${url}`);
   });
 });
@@ -154,9 +155,12 @@ afterEach(() => {
 });
 
 it("binds the burn, Circle nonce, Arc execution and Miden deposit without claiming delivery or rereading the receipt", async () => {
-  expect(await getCctpStatus("base-sepolia", burnHash)).toMatchObject({
+  const recovery = structuredClone(currentBridgeConfig("testnet"));
+  // Base -> Arc must not depend on another source being configured.
+  delete recovery.document.supportedEvmChains.sepolia!.bridges.usdcx;
+  expect(await getCctpStatus("base-sepolia", burnHash, recovery)).toMatchObject({
     ...pendingSource, status: "confirmed", forwarding: false, arcTxHash: arcHash,
-    deposit: { amount: "1000000", recipient: fixture.recipient, sender: CCTP.handler.toLowerCase(), faucet: ARC.faucetId },
+    deposit: { amount: "1000000", recipient: fixture.recipient, sender: CCTP.handler.toLowerCase(), faucet: arcConfig().faucetId },
   });
   expect(mocks.arcReceipt).toHaveBeenCalledTimes(1);
 });

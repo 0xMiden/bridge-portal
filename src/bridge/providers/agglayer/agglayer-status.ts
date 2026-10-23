@@ -1,3 +1,4 @@
+import type { BridgeConfig } from "../../../config/bridge-config";
 import { agglayerConfig } from "./agglayer";
 
 // Ported from 0xMiden/wallet@utk-bridge-integration (src/lib/agglayer/status.ts).
@@ -38,9 +39,9 @@ export async function fetchDeposits(
   destAddr: string,
   limit = 10,
   signal?: AbortSignal,
-  deploymentId?: string,
+  recovery?: BridgeConfig,
 ): Promise<AgglayerDeposit[]> {
-  const BRIDGES_API = `${agglayerConfig(deploymentId).bridgeServiceApi}/bridges`;
+  const BRIDGES_API = `${agglayerConfig(recovery).bridgeServiceApi}/bridges`;
   const res = await fetch(`${BRIDGES_API}/${destAddr}?limit=${limit}&offset=0`, {
     cache: "no-store", signal,
   });
@@ -62,10 +63,10 @@ export async function findMidenToEvmDeposit(
   l1Dest: string,
   depositCnt?: string | number,
   signal?: AbortSignal,
-  deploymentId?: string,
+  recovery?: BridgeConfig,
 ): Promise<AgglayerDeposit | null> {
-  const AGGLAYER_TESTNET = agglayerConfig(deploymentId);
-  const deposits = await fetchDeposits(l1Dest, 10, signal, deploymentId);
+  const AGGLAYER_TESTNET = agglayerConfig(recovery);
+  const deposits = await fetchDeposits(l1Dest, 10, signal, recovery);
   const matching = deposits.filter(
     (d) => d.network_id === AGGLAYER_TESTNET.midenIndexerNetworkId &&
       d.dest_net === AGGLAYER_TESTNET.sourceNetworkId,

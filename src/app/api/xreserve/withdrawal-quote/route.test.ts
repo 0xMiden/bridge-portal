@@ -1,6 +1,7 @@
+import { currentBridgeConfig } from "../../../../config/bridge-config";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { POST } from "./route";
-const input = {
+const input = { recovery: currentBridgeConfig("testnet"),
   network: "arc-testnet", amount: "2", sender: "0x4e6fb40fd2f6a55140df2c42dfb5b7",
   recipient: "0x1122334455667788990011223344556677889900",
 };

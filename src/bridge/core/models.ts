@@ -15,10 +15,10 @@ export type BridgeActivity = {
   id: string;
   mode: FlowMode;
   provider: BridgeProvider;
-  /** Explicit route for new transfers; absent on legacy saved activities. */
+  /** Route selected when the transfer was created; demos may omit it. */
   routeId?: string;
   environment?: BridgeEnvironment;
-  /** Immutable route used by this transfer, including its allowlisted deployment. */
+  /** Captured assets and configuration used for recovery independently of the current release. */
   routeSnapshot?: BridgeRoute;
   status: ActivityStatus;
   /** Chain leg that failed; absent on legacy or provider-unspecified failures. */

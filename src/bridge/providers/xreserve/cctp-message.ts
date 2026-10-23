@@ -1,3 +1,4 @@
+import type { BridgeConfig } from "../../../config/bridge-config";
 import { pad, size, slice, type Hex } from "viem";
 import { arcConfig, ARC_MAX_MIDEN_AMOUNT, cctpConfig, cctpSource, type CctpNetwork } from "./config";
 import { decodeCctpDepositHook } from "./cctp-burn";
@@ -50,12 +51,12 @@ export function matchAttestedMessage(source: CctpMessage, attested: CctpMessage)
 }
 
 /** Accept only this deployment's source token, forwarding executor, and deposit hook. */
-export function parseCctpBurn(raw: Hex, network: CctpNetwork, deploymentId?: string) {
+export function parseCctpBurn(raw: Hex, network: CctpNetwork, recovery?: BridgeConfig) {
   const message = decodeCctpMessage(raw);
   const { transfer } = message;
-  const source = cctpSource(network, deploymentId);
-  const arc = arcConfig(deploymentId);
-  const cctp = cctpConfig(deploymentId, network);
+  const source = cctpSource(network, recovery);
+  const arc = arcConfig(recovery);
+  const cctp = cctpConfig(recovery, network);
   if (transfer.version !== 1) throw new Error("Unsupported Circle burn message: message version.");
   if (transfer.sourceDomain !== source.domain || transfer.destinationDomain !== arc.circleDomain) {
     throw new Error("Unsupported Circle burn message: source or destination domain.");
@@ -69,7 +70,7 @@ export function parseCctpBurn(raw: Hex, network: CctpNetwork, deploymentId?: str
     throw new Error("Unsupported Circle burn message: burn token or mint recipient.");
   }
   if (transfer.amount <= 0n || transfer.amount > ARC_MAX_MIDEN_AMOUNT) throw new Error("Unsupported burn amount.");
-  const deposit = { ...decodeCctpDepositHook(transfer.hookData, deploymentId), amount: transfer.amount.toString() };
+  const deposit = { ...decodeCctpDepositHook(transfer.hookData, recovery), amount: transfer.amount.toString() };
   return { message, deposit };
 }
 

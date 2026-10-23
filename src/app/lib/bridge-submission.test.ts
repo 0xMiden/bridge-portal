@@ -34,6 +34,7 @@ const EVM_ADDRESS = "0x1111111111111111111111111111111111111111";
 const MIDEN_ACCOUNT = "0x387149ae66116cf114eebd60bb7381";
 const TX_HASH = `0x${"ab".repeat(32)}` as const;
 const history: Activity = {
+  routeSnapshot: findBridgeRoute("epoch-test-usdc-to-miden")!, environment: "testnet",
   id: "existing",
   mode: "receive",
   provider: "epoch",
@@ -59,7 +60,7 @@ beforeEach(() => {
   saveActivities([history]);
 });
 
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 
 function setup(overrides: Partial<TransferSubmission> = {}) {
   const evmRequest = vi.fn<EvmProvider["request"]>().mockImplementation(async ({ method }) => method === "eth_accounts" ? [EVM_ADDRESS] : SEPOLIA_NETWORK.chainHex);
@@ -87,7 +88,7 @@ function setup(overrides: Partial<TransferSubmission> = {}) {
   if (findBridgeRoute(input.routeId)?.provider === "epoch" && !("quote" in overrides)) {
     input.quote = {
       kind: "epoch", received: "0.12", validity: { kind: "time", expiresAt: Date.now() + 60_000 },
-      request: { deploymentId: findBridgeRoute(input.routeId)?.deploymentId, routeId: input.routeId, amount: input.amount, evmAddress: input.evmAddress, midenAccount: input.midenAccount },
+      request: { recovery: findBridgeRoute(input.routeId)?.recovery, routeId: input.routeId, amount: input.amount, evmAddress: input.evmAddress, midenAccount: input.midenAccount },
     };
   }
   const effects = {
@@ -106,7 +107,7 @@ function setupCctp() {
   // This estimate can pass while the source block limit remains authoritative.
   const expiresAt = Date.now() - 60_000;
   const authorization = {
-    deploymentId: route.deploymentId, network: "sepolia" as const,
+    recovery: route.recovery, network: "sepolia" as const,
     sender: EVM_ADDRESS as `0x${string}`, recipient: MIDEN_ACCOUNT, amount: "1",
     signedQuote: "0x1234" as const, fee: "250000",
     issuedAt: Math.floor(expiresAt / 1000) - 168,
@@ -116,20 +117,21 @@ function setupCctp() {
     routeId: route.id, amount: "1",
     quote: {
       kind: "cctp", received: "1", fee: "0.25", validity: { kind: "provider" }, authorization,
-      request: { deploymentId: route.deploymentId, routeId: route.id, amount: "1", evmAddress: EVM_ADDRESS, midenAccount: MIDEN_ACCOUNT },
+      request: { recovery: route.recovery, routeId: route.id, amount: "1", evmAddress: EVM_ADDRESS, midenAccount: MIDEN_ACCOUNT },
     },
   });
 }
 
 describe("submission validation", () => {
   it.each([
-    ...(["missing", "expired", "amount", "routeId", "deploymentId", "midenAccount", "evmAddress"] as const).map(change => ({ kind: "epoch", change })),
-    ...(["missing", "amount", "routeId", "deploymentId", "midenAccount", "evmAddress"] as const).map(change => ({ kind: "cctp", change })),
+    ...(["missing", "expired", "amount", "routeId", "recovery", "midenAccount", "evmAddress"] as const).map(change => ({ kind: "epoch", change })),
+    ...(["missing", "amount", "routeId", "recovery", "midenAccount", "evmAddress"] as const).map(change => ({ kind: "cctp", change })),
   ])(
     "requires another review when the $kind quote has changed $change", async ({ kind, change }) => {
       const { input, effects } = kind === "cctp" ? setupCctp() : setup();
       if (change === "missing") input.quote = undefined;
       else if (change === "expired") input.quote!.validity = { kind: "time", expiresAt: Date.now() - 1 };
+      else if (change === "recovery") input.quote!.request.recovery = { ...input.quote!.request.recovery!, id: "changed" };
       else input.quote!.request[change] = "changed";
       await submitBridgeTransfer(input, effects);
       expect(runEpochTransfer).not.toHaveBeenCalled();
@@ -284,7 +286,7 @@ describe("USDCx submission", () => {
     expect(depositViaCctp).toHaveBeenCalledWith(expect.objectContaining({
       network: "sepolia", account: EVM_ADDRESS, amount: "1", recipient: MIDEN_ACCOUNT,
       quote: input.quote!.kind === "cctp" ? input.quote!.authorization : undefined,
-    }), findBridgeRoute(input.routeId)!.deploymentId);
+    }), findBridgeRoute(input.routeId)!.recovery);
     expect(effects.onError).not.toHaveBeenCalled();
     expect(loadStoredActivities()).toMatchObject([{
       provider: "xreserve", sourceTxHash: TX_HASH, xreserveFee: "250000", status: "source_finality",
@@ -340,14 +342,14 @@ describe("USDCx submission", () => {
 
 describe("USDCx withdrawal submission", () => {
   const estimate = (): WithdrawalQuote => ({
-    deploymentId: findBridgeRoute("xreserve-usdc-to-arc")!.deploymentId, network: "arc-testnet",
+    recovery: findBridgeRoute("xreserve-usdc-to-arc")!.recovery, network: "arc-testnet",
     amount: "2", sender: MIDEN_ACCOUNT, recipient: EVM_ADDRESS,
     fee: "16400", received: "1983600", expiresAt: Date.now() + 60000,
   });
   const reviewedQuote = () => ({
     kind: "withdrawal" as const, received: "1.9836", fee: "0.0164",
     validity: { kind: "time" as const, expiresAt: Date.now() + 60_000 }, authorization: estimate(),
-    request: { deploymentId: findBridgeRoute("xreserve-usdc-to-arc")!.deploymentId, routeId: "xreserve-usdc-to-arc", amount: "2", evmAddress: EVM_ADDRESS, midenAccount: MIDEN_ACCOUNT },
+    request: { recovery: findBridgeRoute("xreserve-usdc-to-arc")!.recovery, routeId: "xreserve-usdc-to-arc", amount: "2", evmAddress: EVM_ADDRESS, midenAccount: MIDEN_ACCOUNT },
   });
   beforeEach(() => vi.mocked(fetchWithdrawalQuote).mockResolvedValue(estimate()));
   it.each([false, true])("retains the burn note across wallet settlement (failure: %s)", async (fails) => {
@@ -416,7 +418,7 @@ describe("network-bound submission", () => {
     expect(sent[0]).toMatchObject({ chainId: "0x1", value: "0x2386f26fc10000" });
     const decoded = decodeFunctionData({ abi: parseAbi(["function bridgeAsset(uint32,address,uint256,address,bool,bytes) payable"]), data: sent[0].data });
     expect(decoded.args?.map(value => typeof value === "string" ? value.toLowerCase() : value)).toEqual([30, "0x00000000387149ae66116cf114eebd60bb738100", 10_000_000_000_000_000n, "0x0000000000000000000000000000000000000000", true, "0x"]);
-    expect(loadStoredActivities("mainnet")).toMatchObject([{ sourceTxHash: TX_HASH, destinationNetworkId: 30, environment: "mainnet", routeSnapshot: { deploymentId: mainnet.deploymentId } }]);
+    expect(loadStoredActivities("mainnet")).toMatchObject([{ sourceTxHash: TX_HASH, destinationNetworkId: 30, environment: "mainnet", routeSnapshot: { recovery: mainnet.recovery } }]);
     expect(loadStoredActivities("testnet")).toMatchObject([history]);
     expect(effects.navigate).toHaveBeenCalledWith(expect.stringMatching(/^\/activity\//));
   });

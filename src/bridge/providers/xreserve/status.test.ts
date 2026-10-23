@@ -1,3 +1,4 @@
+import { findBridgeRoute } from "../../core/routes";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { observeXreserveDeposit } from "./status";
 import { checkArcDelivery } from "./delivery";
@@ -12,7 +13,7 @@ const intent = {
   sender: "0x898362f24c366fdf7bb164c40a9127cc9f5119b6", nonce: `0x${"ab".repeat(32)}`,
 };
 const activity: BridgeActivity = {
-  id: "deposit", provider: "xreserve", routeId: "xreserve-usdc-to-miden", mode: "receive",
+  id: "deposit", provider: "xreserve", routeSnapshot: findBridgeRoute("xreserve-usdc-to-miden")!, routeId: "xreserve-usdc-to-miden", mode: "receive",
   amount: "1", asset: "USDC", receivedAmount: "1", status: "source_finality",
   sourceTxHash: `0x${"a".repeat(64)}`, destination: intent.recipient, evmAddress: intent.sender, updatedAt: 0,
 };
@@ -33,16 +34,18 @@ describe("USDCx delivery tracking", () => {
       intent: { ...intent, sender: CCTP.handler },
     }));
     vi.mocked(checkArcDelivery).mockResolvedValue({ noteId: `0x${"c".repeat(64)}`, block: 42 });
-    const result = await observeXreserveDeposit({ ...activity, routeId: "xreserve-base-usdc-to-miden" });
+    const result = await observeXreserveDeposit({ ...activity, routeSnapshot: findBridgeRoute("xreserve-base-usdc-to-miden")!, routeId: "xreserve-base-usdc-to-miden" });
     expect(result.patch).toMatchObject({ status: "complete", xreserveArcTxHash: arcTxHash });
     expect(result.patch.sourceTxHash).toBeUndefined();
     expect(fetchMock.mock.calls[0][0]).toContain(`/api/xreserve/status?network=base-sepolia&hash=${activity.sourceTxHash}`);
   });
-  it("keeps Circle attestation pending until the exact Miden note is included", async () => {
-    expect((await observeXreserveDeposit(activity)).patch).toMatchObject({ status: "message_observed", xreserveStatus: "attested" });
+  it("tracks an Arc deposit without requiring a Circle route on Sepolia", async () => {
+    const saved = structuredClone(activity);
+    delete saved.routeSnapshot!.recovery.document.supportedEvmChains.sepolia!.bridges.usdcx;
+    expect((await observeXreserveDeposit(saved)).patch).toMatchObject({ status: "message_observed", xreserveStatus: "attested" });
     fetchMock.mockResolvedValue(Response.json({ status: "attested", intent }));
     vi.mocked(checkArcDelivery).mockResolvedValue({ noteId: `0x${"c".repeat(64)}`, block: 42 });
-    expect((await observeXreserveDeposit(activity)).patch).toMatchObject({ status: "complete", xreserveStatus: "delivered", xreserveMidenBlock: 42, destinationTxAt: expect.any(Number) });
+    expect((await observeXreserveDeposit(saved)).patch).toMatchObject({ status: "complete", xreserveStatus: "delivered", xreserveMidenBlock: 42, destinationTxAt: expect.any(Number) });
   });
   it.each([
     { amount: "2000000" }, { recipient: "0x5024c9a49c795e4154919db81f9176" },

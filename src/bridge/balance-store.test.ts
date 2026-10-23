@@ -82,6 +82,10 @@ describe("private balance sessions", () => {
     await expect(store.requestMiden(account, network)).rejects.toThrow("User denied access");
     expect(observer.getCurrentResult().data).toBeUndefined();
     expect(requestAssets).toHaveBeenCalledOnce();
+    focusManager.setFocused(false);
+    focusManager.setFocused(true);
+    await client.refetchQueries();
+    expect(requestAssets).toHaveBeenCalledOnce();
     await store.requestMiden(account, network);
     expect(observer.getCurrentResult().data?.[midenBalanceKey(account, MIDEN_ETH)]?.balance).toBe("1.5");
     stop();

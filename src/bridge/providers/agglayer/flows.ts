@@ -30,7 +30,7 @@ export const flows: ProviderFlows = {
       return null;
     },
     async submit({ input, route, phase, record }) {
-      const AGGLAYER_TESTNET = agglayerConfig(route.deploymentId);
+      const AGGLAYER_TESTNET = agglayerConfig(route.recovery);
       const { provider, address } = input.evmWallet;
       if (!provider || !address) throw new Error("Connect your Ethereum wallet.");
       const destination = input.midenAccount;
@@ -56,8 +56,8 @@ export const flows: ProviderFlows = {
         !(activity.status === "complete" && activity.midenTxId) &&
         Boolean(activity.bridgeDestinationAddress || activity.sourceTxHash),
       async observe(activity, signal) {
-        const deploymentId = activityRoute(activity)?.deploymentId;
-        const config = agglayerConfig(deploymentId);
+        const recovery = activityRoute(activity)?.recovery;
+        const config = agglayerConfig(recovery);
         const observation: AgglayerObservation = {};
         // Source and indexer are independent. A temporary outage must not discard the other's evidence.
         const results = await Promise.allSettled([
@@ -69,11 +69,10 @@ export const flows: ProviderFlows = {
           activity.bridgeDestinationAddress
             ? (async () => {
                 const params = new URLSearchParams({ destinationAddress: activity.bridgeDestinationAddress! });
-                if (deploymentId) params.set("deployment", deploymentId);
                 if (activity.sourceTxHash) params.set("sourceTxHash", activity.sourceTxHash);
                 const response = await fetch(
                   `/api/agglayer/deposits?${params}`,
-                  { cache: "no-store", signal },
+                  { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ recovery }), cache: "no-store", signal },
                 );
                 if (!response.ok) throw new Error("Unable to read Agglayer deposits.");
                 const status: AgglayerDepositStatus = await response.json();
@@ -102,7 +101,7 @@ export const flows: ProviderFlows = {
       return null;
     },
     async submit({ input, route, phase, record }) {
-      const AGGLAYER_TESTNET = agglayerConfig(route.deploymentId);
+      const AGGLAYER_TESTNET = agglayerConfig(route.recovery);
       const wallet = input.midenWallet;
       if (!wallet.requestTransaction || !wallet.waitForTransaction || !wallet.address)
         throw new Error("Connect your Bread wallet before bridging out.");
@@ -125,7 +124,7 @@ export const flows: ProviderFlows = {
         senderAddress: wallet.address,
         requestTransaction: wallet.requestTransaction,
         waitForTransaction: wallet.waitForTransaction,
-      }, route.deploymentId);
+      }, route.recovery);
       record({
         status: "source_finality",
         eta: "10-20 min",
@@ -141,8 +140,8 @@ export const flows: ProviderFlows = {
         activity.status !== "failed" &&
         Boolean(activity.destination),
       async observe(activity, signal) {
-        const deploymentId = activityRoute(activity)?.deploymentId;
-        const config = agglayerConfig(deploymentId);
+        const recovery = activityRoute(activity)?.recovery;
+        const config = agglayerConfig(recovery);
         if (activity.status === "claim_submitted" && activity.claimTxHash) {
           const destinationTx = await sourceTransaction(activity.claimTxHash, signal, config.evmNetwork);
           return {
@@ -153,7 +152,7 @@ export const flows: ProviderFlows = {
           activity.destination!,
           activity.depositCount,
           signal,
-          deploymentId,
+          recovery,
         );
         if (!deposit) return { patch: {} };
         return {

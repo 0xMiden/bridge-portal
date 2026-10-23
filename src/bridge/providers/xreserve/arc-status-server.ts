@@ -1,3 +1,4 @@
+import type { BridgeConfig } from "../../../config/bridge-config";
 import { z } from "zod";
 import { createPublicClient, parseEventLogs, type Hex, type PublicClient, type TransactionReceipt } from "viem";
 import { evmServerTransport } from "../../evm/rpc.server";
@@ -34,8 +35,8 @@ function decodeDepositAccount(value: string): string {
 }
 
 /** The xReserve event is the authority for recovery and attestation matching. */
-function readDeposit(receipt: TransactionReceipt, deploymentId?: string) {
-  const arc = arcConfig(deploymentId);
+function readDeposit(receipt: TransactionReceipt, recovery?: BridgeConfig) {
+  const arc = arcConfig(recovery);
   const events = parseEventLogs({
     abi: xReserveAbi,
     eventName: "DepositedToRemote",
@@ -63,11 +64,11 @@ function readDeposit(receipt: TransactionReceipt, deploymentId?: string) {
   };
 }
 
-function readMatchingIntent(attestation: Attestation, deposit: Deposit, deploymentId?: string): ArcDepositIntent {
+function readMatchingIntent(attestation: Attestation, deposit: Deposit, recovery?: BridgeConfig): ArcDepositIntent {
   let intent: ArcDepositIntent;
   try {
     if (!attestation.payload) throw new Error("Missing deposit payload.");
-    intent = parseArcDepositIntent(attestation.payload, deploymentId);
+    intent = parseArcDepositIntent(attestation.payload, recovery);
   } catch (cause) {
     throw new CircleApiError("invalid_response", "Circle returned an unsupported deposit payload.", { cause });
   }
@@ -80,13 +81,13 @@ function readMatchingIntent(attestation: Attestation, deposit: Deposit, deployme
   return intent;
 }
 
-function findDepositAttestation(attestations: Attestation[], deposit: Deposit, deploymentId?: string): AttestationResult {
-  const arc = arcConfig(deploymentId);
+function findDepositAttestation(attestations: Attestation[], deposit: Deposit, recovery?: BridgeConfig): AttestationResult {
+  const arc = arcConfig(recovery);
   let unreadable = false;
   for (const attestation of attestations) {
     if (attestation.remoteDomain !== arc.midenDomain || !attestation.attestation) continue;
     try {
-      return { intent: readMatchingIntent(attestation, deposit, deploymentId) };
+      return { intent: readMatchingIntent(attestation, deposit, recovery) };
     } catch (error) {
       reportCircleFailure("status", error);
       unreadable = true;
@@ -95,13 +96,13 @@ function findDepositAttestation(attestations: Attestation[], deposit: Deposit, d
   return unreadable ? { warning: "Circle returned details that do not match this deposit. Tracking will retry." } : {};
 }
 
-async function getArcDepositAttestation(hash: Hex, deposit: Deposit, deploymentId?: string): Promise<AttestationResult> {
-  const arc = arcConfig(deploymentId);
+async function getArcDepositAttestation(hash: Hex, deposit: Deposit, recovery?: BridgeConfig): Promise<AttestationResult> {
+  const arc = arcConfig(recovery);
   try {
     const body = await getCircleJson(`${arc.attestationApi}/v1/attestations?txHash=${hash}`);
     if (body === undefined) return {};
     const { attestations } = parseCirclePayload(attestationsSchema, body, "Circle returned invalid deposit attestations.");
-    return findDepositAttestation(attestations, deposit, deploymentId);
+    return findDepositAttestation(attestations, deposit, recovery);
   } catch (error) {
     reportCircleFailure("status", error);
     return { warning: "Circle status unavailable. Tracking will retry." };
@@ -110,12 +111,12 @@ async function getArcDepositAttestation(hash: Hex, deposit: Deposit, deploymentI
 
 /** Reuse the receipt already verified by the forwarding flow. */
 export async function readArcDepositStatus(
-  client: Pick<PublicClient, "getBlock">, receipt: TransactionReceipt, deploymentId?: string,
+  client: Pick<PublicClient, "getBlock">, receipt: TransactionReceipt, recovery?: BridgeConfig,
 ): Promise<ArcStatusResponse> {
   if (receipt.status === "reverted") return { status: "reverted" };
-  const deposit = readDeposit(receipt, deploymentId);
+  const deposit = readDeposit(receipt, recovery);
   const block = await client.getBlock({ blockHash: receipt.blockHash });
-  const attestation = await getArcDepositAttestation(receipt.transactionHash, deposit, deploymentId);
+  const attestation = await getArcDepositAttestation(receipt.transactionHash, deposit, recovery);
   return {
     status: attestation.intent ? "attested" : "confirmed",
     deposit,
@@ -124,9 +125,9 @@ export async function readArcDepositStatus(
   };
 }
 
-export async function getArcDepositStatus(hash: Hex, deploymentId?: string): Promise<ArcStatusResponse> {
-  const arc = arcConfig(deploymentId);
+export async function getArcDepositStatus(hash: Hex, recovery?: BridgeConfig): Promise<ArcStatusResponse> {
+  const arc = arcConfig(recovery);
   const client = createPublicClient({ chain: arc.chain, transport: evmServerTransport(arc.network) });
   const receipt = await findTransactionReceipt(client, hash);
-  return receipt ? readArcDepositStatus(client, receipt, deploymentId) : { status: "submitted" };
+  return receipt ? readArcDepositStatus(client, receipt, recovery) : { status: "submitted" };
 }

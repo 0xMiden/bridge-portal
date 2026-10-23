@@ -1,3 +1,4 @@
+import type { BridgeConfig } from "../../../config/bridge-config";
 import { erc20Abi, type Address, type Hash } from "viem";
 import type { EvmProvider } from "../../../wallets/evm/evm-wallet";
 import { prepareDepositWallet, type DepositWallet } from "../../evm/deposit-wallet";
@@ -29,9 +30,9 @@ async function approveArcDeposit(input: ArcDepositRequest, connection: DepositWa
   });
 }
 
-export async function depositOnArc(input: ArcDepositRequest, deploymentId?: string) {
+export async function depositOnArc(input: ArcDepositRequest, recovery?: BridgeConfig) {
   const { provider, account, amount, recipient, onPhase, onBroadcast } = input;
-  const arc = arcConfig(deploymentId);
+  const arc = arcConfig(recovery);
   const value = parseArcAmount(amount);
   const remoteRecipient = arcRecipient(recipient);
   await validateMidenRecipient(recipient);

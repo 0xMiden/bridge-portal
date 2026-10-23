@@ -1,6 +1,6 @@
 import { CIRCLE_SEPOLIA_USDC, BASE_SEPOLIA_USDC, ARBITRUM_SEPOLIA_USDC, ARC_USDC, MIDEN_USDCX, MIDEN_ETH, MIDEN_USDC, SEPOLIA_ETH, SEPOLIA_USDC, EPOCH_MIDEN_USDC, EPOCH_MIDEN_DAI, EPOCH_SEPOLIA_DAI, EPOCH_MIDEN_USDT, EPOCH_SEPOLIA_USDT, EPOCH_MIDEN_WBTC, EPOCH_SEPOLIA_WBTC, sameAsset, type BridgeAsset } from "./assets";
 import type { BridgeActivity, BridgeProvider, FlowMode } from "./models";
-import { currentDeployment, getDeployment, legacyTestnetDeployment, type BridgeDeployment } from "../../config/deployments";
+import { currentBridgeConfig, type BridgeConfig } from "../../config/bridge-config";
 import type { BridgeEnvironment } from "../../config/environment";
 import type { EvmNetwork, MidenAsset } from "./assets";
 
@@ -12,11 +12,11 @@ export type BridgeRoute = {
   destination: BridgeAsset;
   /** Keep paused directions addressable for existing activity receipts. */
   disabled?: boolean;
-  deploymentId?: string;
+  recovery: BridgeConfig;
 };
 
-// Known testnet routes, including paused providers needed for activity tracking.
-const legacyRoutes: readonly BridgeRoute[] = [
+// Stable testnet route names and portal-owned Epoch test assets.
+const testnetRouteTemplates: readonly Omit<BridgeRoute, "recovery">[] = [
   { id: "epoch-usdc-to-miden", provider: "epoch", mode: "receive", source: SEPOLIA_USDC, destination: MIDEN_USDC, disabled: true },
   { id: "epoch-usdc-to-sepolia", provider: "epoch", mode: "send", source: MIDEN_USDC, destination: SEPOLIA_USDC, disabled: true },
   { id: "epoch-test-usdc-to-miden", provider: "epoch", mode: "receive", source: SEPOLIA_USDC, destination: EPOCH_MIDEN_USDC },
@@ -42,14 +42,14 @@ const legacyRoutes: readonly BridgeRoute[] = [
   { id: "xreserve-arbitrum-usdc-to-miden", provider: "xreserve", mode: "receive", source: ARBITRUM_SEPOLIA_USDC, destination: MIDEN_USDCX },
 ];
 
-function configuredRoutes(deployment: BridgeDeployment): BridgeRoute[] {
+function configuredRoutes(deployment: BridgeConfig): BridgeRoute[] {
   const { environment, document, derived } = deployment;
   const midenNetwork = environment === "mainnet" ? "miden-mainnet" : "miden-testnet";
   const routes: BridgeRoute[] = [];
   const add = (provider: BridgeProvider, evm: BridgeAsset, miden: MidenAsset, deposit: boolean, withdrawal: boolean) => {
     for (const mode of ["receive", "send"] as const) routes.push({
-      id: `${deployment.id}:${provider}:${evm.network}:${mode}`,
-      deploymentId: deployment.id, provider, mode,
+      id: `${environment}:${provider}:${evm.network}:${mode}`,
+      recovery: deployment, provider, mode,
       source: mode === "receive" ? evm : miden,
       destination: mode === "receive" ? miden : evm,
       disabled: !(mode === "receive" ? deposit : withdrawal),
@@ -61,7 +61,7 @@ function configuredRoutes(deployment: BridgeDeployment): BridgeRoute[] {
     if (usdcx?.tokens?.USDC) add("xreserve",
       { network, kind: "erc20", symbol: "USDC", name: "Circle USDC", decimals: 6, address: usdcx.tokens.USDC.contractAddress },
       { network: midenNetwork, kind: "miden", symbol: "USDCx", decimals: 6, faucetId: derived.usdcxFaucetId },
-      usdcx.depositEnabled, usdcx.withdrawalEnabled);
+      usdcx.depositEnabled && document.features.bridgeIn !== false, usdcx.withdrawalEnabled && document.features.bridgeOut !== false);
     if (agglayer) add("agglayer",
       { network, kind: "native", symbol: "ETH", decimals: 18 },
       { network: midenNetwork, kind: "miden", symbol: "ETH", ...derived.eth },
@@ -69,8 +69,8 @@ function configuredRoutes(deployment: BridgeDeployment): BridgeRoute[] {
       agglayer.withdrawalEnabled && document.features.bridgeOut !== false);
     if (agglayer && environment === "mainnet" && network === "ethereum") {
       for (const token of derived.agglayerTokens ?? []) routes.push({
-        id: `${deployment.id}:agglayer:${network}:${token.address.toLowerCase()}:receive`,
-        deploymentId: deployment.id, provider: "agglayer", mode: "receive",
+        id: `${environment}:agglayer:${network}:${token.address.toLowerCase()}:receive`,
+        recovery: deployment, provider: "agglayer", mode: "receive",
         source: { network, kind: "erc20", symbol: token.symbol, name: token.name, address: token.address, decimals: token.decimals },
         destination: { network: midenNetwork, kind: "miden", symbol: token.symbol, name: token.name, faucetId: token.faucetId, decimals: token.midenDecimals },
         disabled: !agglayer.depositEnabled || document.features.bridgeIn === false,
@@ -90,38 +90,40 @@ function configuredRoutes(deployment: BridgeDeployment): BridgeRoute[] {
       if (value.kind === "miden" && value.symbol === "USDCx") return { ...value, faucetId: derived.usdcxFaucetId };
       return value;
     };
-    routes.push(...legacyRoutes.filter(route => route.provider === "epoch").map(route => ({
-      ...route, source: asset(route.source), destination: asset(route.destination), deploymentId: deployment.id,
+    routes.push(...testnetRouteTemplates.filter(route => route.provider === "epoch").map(route => ({
+      ...route, source: asset(route.source), destination: asset(route.destination), recovery: deployment,
       disabled: route.disabled || document.features.fastBridge === false || !epoch ||
-        !(route.mode === "receive" ? epoch.depositEnabled : epoch.withdrawalEnabled),
+        !(route.mode === "receive" ? epoch.depositEnabled : epoch.withdrawalEnabled) ||
+        document.features[route.mode === "receive" ? "bridgeIn" : "bridgeOut"] === false,
     })));
   }
   return routes;
 }
 
-const currentTestnet = currentDeployment("testnet");
-const testnetConfigured = configuredRoutes(currentTestnet);
-// Keep existing testnet route ids/bookmarks and token choices. Replace deployment
-// addresses from the imported manifest without changing historical receipts.
-export const bridgeRoutes: readonly BridgeRoute[] = [
-  ...legacyRoutes.map(route => {
-    const configured = testnetConfigured.find(candidate => candidate.provider === route.provider &&
-      candidate.mode === route.mode && candidate.source.network === route.source.network &&
-      candidate.destination.network === route.destination.network &&
+function routesForConfig(config: BridgeConfig): readonly BridgeRoute[] {
+  const configured = configuredRoutes(config);
+  if (config.environment === "mainnet") return configured;
+  return testnetRouteTemplates.flatMap(route => {
+    const match = configured.find(candidate => candidate.provider === route.provider && candidate.mode === route.mode &&
+      candidate.source.network === route.source.network && candidate.destination.network === route.destination.network &&
       (route.provider !== "epoch" || candidate.id === route.id));
-    return configured ? { ...configured, id: route.id, disabled: route.disabled || configured.disabled } : {
-      ...route, deploymentId: currentTestnet.id, disabled: true,
-    };
-  }),
-  ...configuredRoutes(currentDeployment("mainnet")),
-];
+    return match ? [{ ...match, id: route.id, disabled: route.disabled || match.disabled }] : [];
+  });
+}
+
+// Release configuration is fixed for the page lifetime; derive routes once.
+const networkRoutes = {
+  testnet: routesForConfig(currentBridgeConfig("testnet")),
+  mainnet: routesForConfig(currentBridgeConfig("mainnet")),
+};
+export const bridgeRoutes: readonly BridgeRoute[] = [...networkRoutes.testnet, ...networkRoutes.mainnet];
 
 export function routeEnvironment(route: BridgeRoute): BridgeEnvironment {
   return route.source.network === "miden-mainnet" || route.destination.network === "miden-mainnet" ? "mainnet" : "testnet";
 }
 
 export function routesForEnvironment(environment: BridgeEnvironment) {
-  return bridgeRoutes.filter(route => routeEnvironment(route) === environment);
+  return networkRoutes[environment];
 }
 
 export function findBridgeRoute(id: string): BridgeRoute | undefined {
@@ -138,18 +140,8 @@ export function reverseBridgeRoute(route: BridgeRoute): BridgeRoute | undefined 
     sameAsset(candidate.source, route.destination) && sameAsset(candidate.destination, route.source));
 }
 
-/** Older saved rows have no route id; match their recorded token as well. */
+/** Receipts carry their original configuration independently of the current release. */
 export function activityRoute(activity: BridgeActivity): BridgeRoute | undefined {
-  if (activity.routeSnapshot) {
-    const route = activity.routeSnapshot;
-    // Reject unknown snapshots instead of silently using today's deployment.
-    getDeployment(route.deploymentId);
-    if (route.provider !== activity.provider || route.mode !== activity.mode) return undefined;
-    return route;
-  }
-  const legacy = activity.routeId ? legacyRoutes.find(route => route.id === activity.routeId) : legacyRoutes.find((route) =>
-    route.provider === activity.provider && route.mode === activity.mode &&
-    route.source.symbol === activity.asset,
-  );
-  return legacy ? { ...legacy, deploymentId: legacyTestnetDeployment.id } : undefined;
+  const route = activity.routeSnapshot;
+  return route?.recovery && route.provider === activity.provider && route.mode === activity.mode ? route : undefined;
 }

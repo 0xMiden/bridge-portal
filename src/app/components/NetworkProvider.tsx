@@ -20,8 +20,7 @@ function selectEnvironment(environment: BridgeEnvironment) {
 }
 
 function readEnvironment(pathname: string): BridgeEnvironment {
-  // A receipt always uses its recorded deployment, regardless of the tab's
-  // current selection. Normalization assigns pre-network receipts to testnet.
+  // A receipt always uses its recorded network, regardless of the tab's selection.
   const receipt = /^\/activity\/([^/]+)\/?$/.exec(pathname);
   if (receipt) {
     try {

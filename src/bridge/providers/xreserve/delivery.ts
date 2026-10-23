@@ -1,3 +1,4 @@
+import type { BridgeConfig } from "../../../config/bridge-config";
 import type * as MidenSdk from "@miden-sdk/miden-sdk";
 import type { ArcDepositIntent } from "./attestation";
 
@@ -57,13 +58,13 @@ export function deriveArcNoteId(
 /** Exact note lookup: an attestation or an unrelated balance change is never delivery. */
 export async function checkArcDelivery(
   intent: ArcDepositIntent,
-  deploymentId?: string,
+  recovery?: BridgeConfig,
 ): Promise<{ noteId: string; block?: number }> {
   const sdk = await import("@miden-sdk/miden-sdk");
-  const { deploymentMiden } = await import("../../../config/deployments");
+  const { configMidenNetwork } = await import("../../../config/bridge-config");
   const noteId = deriveArcNoteId(intent, sdk);
   const endpoint = new sdk.Endpoint(
-    deploymentMiden(deploymentId).rpcUrl,
+    configMidenNetwork(recovery).rpcUrl,
   );
   // These WASM APIs take ownership of the endpoint and the note ID array.
   const rpc = new sdk.RpcClient(endpoint);
