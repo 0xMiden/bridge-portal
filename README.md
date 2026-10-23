@@ -184,9 +184,9 @@ correctly at runtime via webpack's CJS interop.
 
 ### `@miden-sdk` pin
 
-`package.json` pins `@miden-sdk/miden-sdk` and `@miden-sdk/react` to `0.17.6`.
-The core SDK pin is mirrored in `overrides` so React and
-the compatible `0.17.0` wallet adapters resolve to one SDK instance. The `st`
+`package.json` pins `@miden-sdk/miden-sdk`, `@miden-sdk/react`, and both wallet
+adapters to `0.17.6`. The core SDK pin is mirrored in `overrides` so React and
+the wallet adapters resolve to one SDK instance. The `st`
 wasm is ~20 MiB, under Cloudflare's 25 MiB
 per-asset limit. `npm run check:wasm-size` fails the PR if that regresses.
 `npm run check:usdcx-note` checks the pinned browser WASM against the preserved
