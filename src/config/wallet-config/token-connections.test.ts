@@ -1,0 +1,43 @@
+import { expect, it } from "vitest";
+import { bridgeConfigSchema } from "./schema";
+import { assertTokenConnections, tokenConnectionsSchema } from "./token-connections";
+import mainnet from "./mainnet.json";
+import data from "./token-connections.json";
+
+it.each(["faucet", "source precision", "destination precision", "source contract"])(
+  "rejects a token connection whose %s differs from the verified deployment",
+  mismatch => {
+    const connections = tokenConnectionsSchema.parse(data).mainnet;
+    const pair = connections.find(pair => pair.provider === "agglayer" && pair.evm.kind === "erc20")!;
+    if (mismatch === "faucet") pair.miden.faucetId = "0x111111111111111111111111111111";
+    if (mismatch === "source precision") pair.evm.decimals += 1;
+    if (mismatch === "destination precision") pair.miden.decimals -= 1;
+    if (mismatch === "source contract" && pair.evm.kind === "erc20") pair.evm.address = "0x1111111111111111111111111111111111111111";
+    expect(() => assertTokenConnections(bridgeConfigSchema.parse(mainnet), connections)).toThrow(/does not match verified configuration/);
+  },
+);
+
+it("rejects a missing configured mainnet token instead of silently narrowing the list", () => {
+  const connections = tokenConnectionsSchema.parse(data).mainnet;
+  const index = connections.findIndex(pair => pair.provider === "agglayer" && pair.evm.kind === "erc20");
+  connections.splice(index, 1);
+  expect(() => assertTokenConnections(bridgeConfigSchema.parse(mainnet), connections)).toThrow(/Missing token connection/);
+});
+
+it.each(["network", "duplicate route", "conflicting metadata", "unsupported withdrawal"])(
+  "rejects ambiguous or unsupported token connections: %s",
+  invalid => {
+    const registry = tokenConnectionsSchema.parse(data);
+    const pair = registry.mainnet.find(pair => pair.provider === "agglayer" && pair.evm.kind === "erc20")!;
+    if (invalid === "network") pair.miden.network = "miden-testnet";
+    if (invalid === "duplicate route") pair.routes.receive = registry.testnet[0].routes.receive;
+    if (invalid === "conflicting metadata") {
+      const duplicate = structuredClone(pair);
+      duplicate.routes = { receive: "another-route" };
+      duplicate.miden.decimals += 1;
+      registry.mainnet.push(duplicate);
+    }
+    if (invalid === "unsupported withdrawal") pair.routes.send = "unsupported-erc20-withdrawal";
+    expect(() => tokenConnectionsSchema.parse(registry)).toThrow();
+  },
+);

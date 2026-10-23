@@ -91,6 +91,15 @@ upstream commit and the validated configuration, including derived token metadat
 The browser and server use these same files synchronously. There is no runtime
 wallet-config fetch, registry discovery, configuration cache or hot reload.
 
+Token pairs live in the portal-owned
+`src/config/wallet-config/token-connections.json`, beside those pinned files.
+Each connection records its provider, EVM token, Miden faucet, both precisions,
+and stable receive/send route IDs. This is the source for route assets and the
+asset exports used by faucet actions. There is no dependency on `token-list`.
+Bridge contracts, provider endpoints, and availability switches continue to
+come from the existing wallet-config documents. An absent direction is not
+implemented; `disabled` keeps retired connections addressable.
+
 To update the pin, use Node 22.18 or later and an explicit upstream commit:
 
 ```sh
@@ -100,12 +109,19 @@ npm run check:config
 
 The update command fetches both documents at that immutable revision, validates
 networks and approved services, and resolves the Miden bridge registry and Arc
-xReserve registry. Supported Ethereum tokens (USDT, WBTC, PYUSD and WSOL) must
-be listed upstream and pass Ethereum/Miden ownership and precision checks.
+xReserve registry. Every configured mainnet Agglayer token must have a local
+connection and pass Ethereum/Miden ownership, faucet, and precision checks.
+The importer rejects a missing or mismatched connection instead of silently
+filtering tokens through a second allowlist. Source and destination precision
+are independent: for example, NEAR uses 24 decimals on Ethereum and 8 on Miden.
 `ETHEREUM_RPC_URL` can override the public Ethereum RPC used by the command.
 Both networks must validate before the existing files are replaced. Review the
 generated diff and run the checks before shipping it. Additional Epoch test
-tokens remain portal-owned.
+tokens and their verified mappings remain in the local connections file.
+When changing token mappings, edit that file and rerun the import with the
+selected wallet-config revision; normal builds check it against the generated
+deployment metadata offline. Existing testnet/mainnet configuration files and
+their upstream revision are retained.
 
 Normal builds validate the checked-in files offline; they never fetch the latest
 GitHub branch or regenerate metadata. Updating contracts, supported tokens or

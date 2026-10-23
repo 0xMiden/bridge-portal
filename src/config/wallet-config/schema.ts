@@ -77,7 +77,7 @@ export const bridgeConfigSchema = z.object({
   derived: z.object({
     rollupId: z.int().positive().max(0xffffffff), eth: z.object({ faucetId: account, decimals }),
     usdcxFaucetId: account,
-    agglayerTokens: z.array(z.object({ symbol: z.string().max(11), name: z.string().max(100), address, decimals, faucetId: account, midenDecimals: decimals })).max(32).optional(),
+    agglayerTokens: z.array(z.object({ symbol: z.string().max(11), name: z.string().max(100), address, decimals: z.int().min(0).max(255), faucetId: account, midenDecimals: decimals })).max(32).optional(),
   }),
 }).superRefine((config, ctx) => {
   if (config.environment !== config.document.network || config.id !== `${config.environment}:${config.document.version}`)

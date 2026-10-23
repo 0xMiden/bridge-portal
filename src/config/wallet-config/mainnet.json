@@ -164,12 +164,36 @@
         "midenDecimals": 8
       },
       {
+        "symbol": "NEAR",
+        "name": "NEAR",
+        "address": "0x85f17cf997934a597031b2e18a9ab6ebd4b9f6a4",
+        "decimals": 24,
+        "faucetId": "0x5fcca2d015cf44d15da1a641d4d06a",
+        "midenDecimals": 8
+      },
+      {
+        "symbol": "PAXG",
+        "name": "Paxos Gold",
+        "address": "0x45804880de22913dafe09f4980848ece6ecbaf78",
+        "decimals": 18,
+        "faucetId": "0x24b95ee2aa5c2ad1679a0316163375",
+        "midenDecimals": 8
+      },
+      {
         "symbol": "USDT",
         "name": "Tether USD",
         "address": "0xdac17f958d2ee523a2206206994597c13d831ec7",
         "decimals": 6,
         "faucetId": "0x5cb79d29507d3ad17bb6dc60279e89",
         "midenDecimals": 6
+      },
+      {
+        "symbol": "WBNB",
+        "name": "Wrapped BNB",
+        "address": "0x418d75f65a02b3d53b2418fb8e1fe493759c7605",
+        "decimals": 18,
+        "faucetId": "0x79e82d69d99d9f116f43cb5c063c04",
+        "midenDecimals": 8
       },
       {
         "symbol": "PYUSD",

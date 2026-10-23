@@ -1,19 +1,15 @@
 #!/usr/bin/env node
 /** Resolve a reviewed revision once; replace the current files only after both networks validate. */
-import { writeFile, rename } from "node:fs/promises";
+import { readFile, writeFile, rename } from "node:fs/promises";
 import { arcMainnet, arcTestnet } from "../src/config/arc.ts";
 import { bridgeConfigSchema, walletDocumentSchema } from "../src/config/wallet-config/schema.ts";
 import { midenNetworks } from "../src/config/environment.ts";
 import { createPublicClient, erc20Abi, http, parseAbi } from "viem";
 import { AccountId, AccountStorageRequirements, Endpoint, RpcClient, SlotAndKeys } from "@miden-sdk/miden-sdk";
-// Portal-supported Ethereum assets; faucets and precision must be verified
-// against the configured bridge's registry before they can become routes.
-const ethereumTokens = {
-    USDT: "0xdac17f958d2ee523a2206206994597c13d831ec7",
-    WBTC: "0x2260fac5e5542a773aa44fbcfedf7c193bc2c599",
-    PYUSD: "0x6c3ea9036406852006290770bedfcaba0e23a0e8",
-    WSOL: "0xd31a59c85ae9d8edefec411d448f90841571b89c",
-};
+import { assertTokenConnections, tokenConnectionsSchema } from "../src/config/wallet-config/token-connections.ts";
+const tokenRegistry = tokenConnectionsSchema.parse(JSON.parse(await readFile(
+  new URL("../src/config/wallet-config/token-connections.json", import.meta.url), "utf8",
+)));
 function storageValue(proof, name) {
     const value = proof.getStorageSlotValue(name);
     if (!value)
@@ -66,8 +62,10 @@ async function deriveWalletConfig(source) {
         agglayerTokens = [];
         for (const [symbol, { contractAddress: listed }] of Object.entries(bridge.tokens ?? {})) {
             const address = listed.toLowerCase();
-            if (!(symbol in ethereumTokens) || ethereumTokens[symbol] !== address)
-                continue;
+            const connection = tokenRegistry[environment].find(pair => pair.provider === "agglayer" &&
+                pair.evm.network === evmNetwork && pair.evm.kind === "erc20" && pair.evm.address.toLowerCase() === address);
+            if (!connection)
+                throw new Error(`Missing local token connection for ${symbol}`);
             const matches = registered.filter(token => token.address === address);
             if (matches.length !== 1)
                 throw new Error(`Expected one registered mainnet faucet for ${symbol}`);
@@ -85,7 +83,8 @@ async function deriveWalletConfig(source) {
             // This Ethereum wrapped SOL contract publishes SOL as its symbol.
             if (chainSymbol !== (symbol === "WSOL" ? "SOL" : symbol) ||
                 !Number.isInteger(midenDecimals) || midenDecimals < 0 || midenDecimals > 18 ||
-                decimals - scale !== midenDecimals || owner[0] !== bridgeSuffix || owner[1] !== bridgePrefix)
+                decimals - scale !== midenDecimals || owner[0] !== bridgeSuffix || owner[1] !== bridgePrefix ||
+                faucetId !== connection.miden.faucetId || decimals !== connection.evm.decimals || midenDecimals !== connection.miden.decimals)
                 throw new Error(`Unexpected metadata or bridge owner for ${symbol}`);
             agglayerTokens.push({ symbol, name, address, decimals, faucetId, midenDecimals });
         }
@@ -122,6 +121,7 @@ const configs = await Promise.all(["testnet", "mainnet"].map(async environment =
     schemaVersion: 1, id: `${environment}:${document.version}`, environment, document,
     derived: { usdcxFaucetId: `0x${remote.slice(34, 64)}`.toLowerCase() },
   }));
+  assertTokenConnections(config, tokenRegistry[environment]);
   return { revision, ...config };
 }));
 // Fetching and verification finish before either existing file is replaced.

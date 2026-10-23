@@ -462,6 +462,7 @@ describe("Ethereum ERC-20 deposits", () => {
     ["WBTC", "0.12345678", 12_345_678n, "0x2260fac5e5542a773aa44fbcfedf7c193bc2c599"],
     ["PYUSD", "1.234567", 1_234_567n, "0x6c3ea9036406852006290770bedfcaba0e23a0e8"],
     ["WSOL", "0.123456780", 123_456_780n, "0xd31a59c85ae9d8edefec411d448f90841571b89c"],
+    ["NEAR", "0.123456780000000000000000", 123_456_780_000_000_000_000_000n, "0x85f17cf997934a597031b2e18a9ab6ebd4b9f6a4"],
   ] as const)("deposits %s in source units with zero ETH value and keeps its receipt", async (symbol, amount, units, token) => {
     const { input, effects, transactions } = deposit(symbol, amount);
     await submitBridgeTransfer(input, effects);
