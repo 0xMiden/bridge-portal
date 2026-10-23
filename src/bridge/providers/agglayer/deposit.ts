@@ -1,6 +1,7 @@
 import { createPublicClient, encodeFunctionData, erc20Abi, parseUnits, toHex, type Hex } from "viem";
 import type { BridgeRoute } from "../../core/routes";
 import { evmReadTransport } from "../../evm/transport";
+import { suggestEvmFees } from "../../evm/fee-suggestions";
 import type { EvmProvider } from "../../../wallets/evm/evm-wallet";
 import { ensureEvmNetwork } from "../../../wallets/evm/ensure-network";
 import { agglayerConfig, buildDepositTransaction } from "./agglayer";
@@ -20,6 +21,7 @@ export async function submitAgglayerDeposit({
   if (asset.kind === "miden" || asset.network !== config.evmNetwork) throw new Error("Invalid Agglayer deposit route.");
   const transaction = buildDepositTransaction({ amount, asset, midenAccountId: destination }, route.recovery);
   const account = address as Hex;
+  const client = createPublicClient({ chain: config.chain, transport: evmReadTransport(config.evmNetwork) });
   const assertWallet = async () => {
     const accounts = await provider.request<string[]>({ method: "eth_accounts" });
     if (accounts[0]?.toLowerCase() !== address.toLowerCase() ||
@@ -28,17 +30,20 @@ export async function submitAgglayerDeposit({
     }
   };
   const send = async (tx: { to: Hex; data: Hex; value: Hex; gas: Hex }) => {
+    const fees = await suggestEvmFees(client);
+    if (!fees) phase("Fee suggestions unavailable. Review your wallet’s fee estimate before confirming…");
     await assertWallet();
     return provider.request<Hex>({
       method: "eth_sendTransaction",
-      params: [{ from: address, chainId: config.sepoliaChainHex, ...tx }],
+      params: [{ from: address, chainId: config.sepoliaChainHex, ...tx,
+        ...(fees ? { maxFeePerGas: toHex(fees.maxFeePerGas), maxPriorityFeePerGas: toHex(fees.maxPriorityFeePerGas) } : {}),
+      }],
     });
   };
   await ensureEvmNetwork(provider, config.chain);
   await assertWallet();
   let gas = transaction.gas;
   if (asset.kind === "erc20") {
-    const client = createPublicClient({ chain: config.chain, transport: evmReadTransport(config.evmNetwork) });
     const amountRaw = parseUnits(amount, asset.decimals);
     const token = { address: asset.address, abi: erc20Abi } as const;
     const readAllowance = () => client.readContract({

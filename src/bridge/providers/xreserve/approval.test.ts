@@ -17,7 +17,7 @@ let storage: Map<string, string>;
 function input(): Input {
   return {
     network: "ethereum", account, token, spender, amount,
-    client: { readContract: mocks.read, simulateContract: mocks.simulate, waitForTransactionReceipt: mocks.wait } as Input["client"],
+    client: { getBlock: vi.fn().mockResolvedValue({ baseFeePerGas: 100n }), estimateMaxPriorityFeePerGas: vi.fn().mockResolvedValue(3n), readContract: mocks.read, simulateContract: mocks.simulate, waitForTransactionReceipt: mocks.wait } as Input["client"],
     wallet: { writeContract: mocks.write } as Input["wallet"],
     assertWallet: vi.fn().mockResolvedValue(undefined), onPhase: vi.fn(),
   };

@@ -27,8 +27,10 @@ export const flows: ProviderFlows = {
       const labels = {
         checking: "Checking deposit…",
         approving: "Approve USDC in your wallet…",
+        "approving-wallet-fees": "Fee suggestions unavailable. Review your wallet’s fee estimate before approving USDC…",
         "approval-confirming": `Confirming USDC approval on ${sourceName}…`,
         depositing: "Confirm the deposit in your wallet…",
+        "depositing-wallet-fees": "Fee suggestions unavailable. Review your wallet’s fee estimate before confirming the deposit…",
       };
       const request: Parameters<typeof depositOnArc>[0] = {
         provider,
