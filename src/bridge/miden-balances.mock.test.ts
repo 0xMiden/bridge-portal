@@ -22,16 +22,19 @@ describe("Miden balances (mock E2E)", () => {
     const balances = await fetchMidenBalances("0xabcd", [MIDEN_ETH, MIDEN_USDC, anotherRouteToken], requestAssets);
 
     expect(requestAssets).toHaveBeenCalledOnce();
-    expect(Object.keys(balances)).toHaveLength(2);
+    expect(Object.keys(balances)).toHaveLength(3);
     expect(balances[midenBalanceKey("0xABCD", anotherRouteToken)]).toEqual({
       faucetId: MIDEN_ETH.faucetId,
       amountRaw: 150000000n,
       decimals: 8,
       symbol: "ETH",
+      pricingSymbol: "ETH",
       balance: "1.5",
     });
     expect(balances[midenBalanceKey("0xabcd", MIDEN_USDC)]?.balance).toBe("2");
     expect(balances[midenBalanceKey("0xdef0", MIDEN_ETH)]).toBeUndefined();
-    expect(balances[midenBalanceKey("0xabcd", { ...MIDEN_ETH, faucetId: "0x1234" })]).toBeUndefined();
+    expect(balances[midenBalanceKey("0xabcd", { ...MIDEN_ETH, faucetId: "0x1234" })]).toMatchObject({
+      amountRaw: 999999999n, symbol: "Unknown asset",
+    });
   });
 });

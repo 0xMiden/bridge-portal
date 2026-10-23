@@ -2,25 +2,13 @@
 
 import { useBridgeEnvironment } from "./NetworkProvider";
 import { useQuery } from "@tanstack/react-query";
-import { formatUsdAmount, PRICE_REFRESH_MS, priceSymbol, type UsdPrice } from "../lib/token-pricing";
+import { formatUsdAmount, priceSymbol } from "../lib/token-pricing";
+import { usdPriceQuery } from "../lib/usd-price-query";
 
 export function FiatAmount({ amount, symbol }: { amount: string; symbol: string }) {
   const environment = useBridgeEnvironment();
   const marketSymbol = priceSymbol(symbol);
-  const price = useQuery({
-    // Both panels, networks and aliases share the same market price. Typing
-    // changes only the local calculation, never the query or its cache key.
-    queryKey: ["usd-price", marketSymbol],
-    enabled: marketSymbol !== null,
-    queryFn: async ({ signal }): Promise<UsdPrice> => {
-      const response = await fetch(`/api/prices?symbol=${marketSymbol}`, { signal });
-      if (!response.ok) throw new Error("USD price unavailable");
-      return response.json();
-    },
-    staleTime: PRICE_REFRESH_MS,
-    refetchInterval: PRICE_REFRESH_MS,
-    retry: false,
-  });
+  const price = useQuery(usdPriceQuery(marketSymbol));
 
   const unavailable = price.isError || price.fetchStatus === "paused";
   const value = formatUsdAmount(amount, unavailable ? undefined : price.data?.usd);

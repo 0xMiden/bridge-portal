@@ -15,12 +15,12 @@ async function fetchPrice(symbol: PriceSymbol): Promise<UsdPrice> {
   if (!response.ok) throw new Error("Price provider unavailable");
   const payload = await response.json();
   const data = payload?.data;
-  const usd = typeof data?.amount === "string" && /^\d+(?:\.\d+)?$/.test(data.amount)
+  const usd = typeof data?.amount === "string" && data.amount.length <= 128 && /^\d+(?:\.\d+)?$/.test(data.amount)
     ? Number(data.amount) : NaN;
   if (data?.base !== symbol || data?.currency !== "USD" || !Number.isFinite(usd) || usd <= 0) {
     throw new Error("Invalid price response");
   }
-  const quote = { symbol, usd, fetchedAt: Date.now() };
+  const quote = { symbol, usd, usdDecimal: data.amount as string, fetchedAt: Date.now() };
   prices.set(symbol, quote);
   return quote;
 }

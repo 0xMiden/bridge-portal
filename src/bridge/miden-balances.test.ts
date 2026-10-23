@@ -5,6 +5,7 @@ import { fetchMidenBalances, midenBalanceKey } from "./miden-balances";
 const sdk = vi.hoisted(() => ({
   getAccountDetails: vi.fn(),
   fromAccount: vi.fn(),
+  endpoint: vi.fn(),
 }));
 
 vi.mock("../wallets/testing/env", () => ({ isE2E: () => false }));
@@ -16,8 +17,14 @@ vi.mock("@miden-sdk/miden-sdk", () => ({
       return { toString: () => "0x7c6d1dc7fb7045913d524bbef017f5" };
     },
   },
-  Endpoint: { testnet: () => ({}) },
-  RpcClient: class { getAccountDetails = sdk.getAccountDetails; },
+  Endpoint: class {
+    constructor(readonly url: string) {}
+    static testnet() { return { url: "https://rpc.testnet.miden.io" }; }
+  },
+  RpcClient: class {
+    constructor(endpoint: { url: string }) { sdk.endpoint(endpoint.url); }
+    getAccountDetails = sdk.getAccountDetails;
+  },
   BasicFungibleFaucetComponent: { fromAccount: sdk.fromAccount },
 }));
 
@@ -39,12 +46,27 @@ describe("Miden asset resolution", () => {
     expect(sdk.getAccountDetails).toHaveBeenCalledOnce();
     expect(balances[midenBalanceKey("0xabcd", MIDEN_ETH)]).toEqual({
       faucetId: MIDEN_ETH.faucetId, amountRaw: 1545678n,
-      decimals: 6, symbol: "WETH", balance: "1.545678",
+      decimals: 6, symbol: "WETH", pricingSymbol: "ETH", balance: "1.545678",
     });
     expect(balances[midenBalanceKey("0xabcd", MIDEN_USDC)]).toEqual({
       faucetId: MIDEN_USDC.faucetId, amountRaw: 0n,
-      decimals: 6, symbol: "USDC", balance: "0",
+      decimals: 6, symbol: "USDC", pricingSymbol: "USDC", balance: "0",
     });
+    expect(Object.values(balances)).toHaveLength(3);
+    expect(balances[midenBalanceKey("0xabcd", { ...MIDEN_ETH, faucetId: "0x1234" })]).toMatchObject({
+      amountRaw: 999999999n, symbol: "Unknown asset", balance: "999999999",
+    });
+    expect(balances[midenBalanceKey("0xabcd", { ...MIDEN_ETH, faucetId: "0x1234" })]?.pricingSymbol).toBeUndefined();
+  });
+
+  it("resolves mainnet metadata against the mainnet RPC", async () => {
+    const token = { ...MIDEN_ETH, network: "miden-mainnet" as const };
+    sdk.getAccountDetails.mockResolvedValue({ account: () => undefined });
+    const balances = await fetchMidenBalances("0xabcd", [token], async () => [
+      { faucetId: token.faucetId, amount: "100000000" },
+    ], "miden-mainnet");
+    expect(sdk.endpoint).toHaveBeenCalledWith(process.env.NEXT_PUBLIC_MIDEN_MAINNET_RPC_URL ?? "https://rpc.cedar.miden.io");
+    expect(balances[midenBalanceKey("0xabcd", token)]?.balance).toBe("1");
   });
 
   it.each(["unavailable", "private"])("keeps configured precision when faucet metadata is %s", async (failure) => {

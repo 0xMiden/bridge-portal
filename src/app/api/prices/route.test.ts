@@ -22,7 +22,7 @@ it("shares one USD market quote across concurrent requests and USDCx aliases, th
   const responses = await Promise.all([read("USDC"), read(" usdcx ")]);
   for (const response of responses) {
     expect(response.status).toBe(200);
-    expect(await response.json()).toMatchObject({ symbol: "USDC", usd: 0.9998 });
+    expect(await response.json()).toMatchObject({ symbol: "USDC", usd: 0.9998, usdDecimal: "0.9998" });
   }
   await read("USDCx");
   expect(fetchMock).toHaveBeenCalledTimes(1);
@@ -31,6 +31,23 @@ it("shares one USD market quote across concurrent requests and USDCx aliases, th
   fetchMock.mockResolvedValueOnce(spot("USDC", "0.998"));
   expect(await (await read("USDCx")).json()).toMatchObject({ usd: 0.998, fetchedAt: 1_800_000_061_000 });
   expect(fetchMock).toHaveBeenCalledTimes(2);
+});
+
+it.each([
+  ["WSOL", "SOL"],
+  ["WBNB", "BNB"],
+  ["WBTC", "WBTC"],
+  ["PAXG", "PAXG"],
+  ["PYUSD", "PYUSD"],
+  ["NEAR", "NEAR"],
+  ["DAI", "DAI"],
+  ["USDT", "USDT"],
+])("prices %s through the %s USD market, preserving the provider's decimal", async (token, market) => {
+  fetchMock.mockResolvedValueOnce(spot(market, "1.00000000000000000001"));
+  const response = await read(token);
+  expect(response.status).toBe(200);
+  expect(await response.json()).toMatchObject({ symbol: market, usdDecimal: "1.00000000000000000001" });
+  expect(fetchMock.mock.calls[0]?.[0]).toBe(`https://api.coinbase.com/v2/prices/${market}-USD/spot`);
 });
 
 it("keeps different markets separate and does not return an expired quote after an outage", async () => {
