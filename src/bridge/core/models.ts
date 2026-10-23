@@ -38,6 +38,8 @@ export type BridgeActivity = {
   midenTxId?: string;
   claimTxHash?: string;
   depositCount?: string;
+  /** Indexer hashes derived from this withdrawal's own output-note commitments. */
+  agglayerExitHashes?: string[];
   readyForClaim?: boolean;
   sourceNetworkId?: number;
   destinationNetworkId?: number;

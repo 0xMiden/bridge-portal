@@ -68,6 +68,26 @@ export function saveStoredMode(mode: FlowMode, environment: BridgeEnvironment = 
   }
 }
 
+function normalizeActivity(activity: Activity): Activity {
+  // Address-only matching could pin a previous exit and permanently mark a new
+  // withdrawal complete. Discard those unbound observations before the terminal
+  // state merger runs; the monitor recovers this transaction's output commitments.
+  if (activity.provider === "agglayer" && activity.mode === "send" &&
+      activity.agglayerExitHashes === undefined && activity.status !== "failed") {
+    activity = {
+      ...activity,
+      status: activity.status === "signature" ? "signature" : "source_finality",
+      eta: "Verifying withdrawal",
+      depositCount: undefined,
+      destinationTxHash: undefined,
+      claimTxHash: undefined,
+      destinationTxAt: undefined,
+      readyForClaim: undefined,
+    };
+  }
+  return normalizeActivityState(activity);
+}
+
 export function loadStoredActivities(environment?: BridgeEnvironment): Activity[] {
   const raw = window.localStorage.getItem(activityStorageKey);
   if (!raw) return [];
@@ -83,7 +103,7 @@ export function loadStoredActivities(environment?: BridgeEnvironment): Activity[
         [activity.id, activity.amount, activity.summary, activity.eta, activity.txHash].some(value => typeof value !== "string")) return [];
     const network = routeEnvironment(routeSnapshot);
     if (environment && network !== environment) return [];
-    return [normalizeActivityState({ ...activity, environment: network, routeSnapshot })];
+    return [normalizeActivity({ ...activity, environment: network, routeSnapshot })];
   });
 }
 

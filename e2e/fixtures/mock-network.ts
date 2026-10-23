@@ -34,9 +34,13 @@ export async function stubNetwork(
     }),
   );
 
-  await page.route("**/api/agglayer/**", (route) =>
-    route.fulfill({ json: { deposits: [] } }),
-  );
+  await page.route("**/api/agglayer/**", (route) => {
+    const url = new URL(route.request().url());
+    const json = url.pathname.endsWith("/withdrawal") ? { exitHashes: [] } : {
+      destinationAddress: url.searchParams.get("destinationAddress"), deposits: [], latestDeposit: null,
+    };
+    return route.fulfill({ json });
+  });
 
   // Epoch allocator: abort so quotes don't hit the real network (the app just
   // shows "no quote" — it doesn't block the flows under test).

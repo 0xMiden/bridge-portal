@@ -9,6 +9,7 @@ import {
 
 const activity = createActivity(findBridgeRoute("agglayer-eth-to-sepolia")!, "1", {
   id: "act-test", status: "source_finality", depositCount: "42", updatedAt: 1_700_000_000_000,
+  agglayerExitHashes: [`0x${"ab".repeat(32)}`],
 });
 let storage: Map<string, string>;
 beforeEach(() => {
@@ -20,6 +21,18 @@ beforeEach(() => {
 });
 afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
+it("reopens an unbound completed withdrawal and clears the old claim while preserving its source", () => {
+  const source = `0x${"11".repeat(32)}`;
+  const oldClaim = `0x${"bb".repeat(32)}`;
+  saveActivities([{ ...activity, agglayerExitHashes: undefined, midenTxId: source, status: "complete", depositCount: "1",
+    destinationTxHash: oldClaim, claimTxHash: oldClaim, readyForClaim: true, destinationTxAt: 123,
+  }]);
+  const [recovered] = loadStoredActivities();
+  expect(recovered).toMatchObject({ id: activity.id, status: "source_finality", midenTxId: source });
+  for (const field of ["depositCount", "destinationTxHash", "claimTxHash", "destinationTxAt", "readyForClaim"] as const)
+    expect(recovered[field]).toBeUndefined();
+});
+
 it("recovers receipts from an earlier release and keeps both networks separate", () => {
   const route = routesForEnvironment("mainnet").find(route => route.provider === "agglayer" && route.mode === "send")!;
   const historical = structuredClone(route);
@@ -30,7 +43,7 @@ it("recovers receipts from an earlier release and keeps both networks separate",
   historical.source = { ...historical.source, kind: "miden", network: "miden-mainnet", faucetId: historical.recovery.derived.eth.faucetId };
   const mainnet = createActivity(historical, "0.01", { id: "mainnet-transfer" });
   saveActivities([activity, mainnet]);
-  patchStoredActivity(mainnet.id, { status: "complete", claimTxHash: "0xclaim" });
+  patchStoredActivity(mainnet.id, { status: "complete", claimTxHash: "0xclaim", agglayerExitHashes: [`0x${"ab".repeat(32)}`] });
   const restored = loadStoredActivities("mainnet")[0];
   expect(activityRoute(restored)?.source).toEqual(historical.source);
   expect(activityRoute(restored)?.source).not.toEqual(route.source);

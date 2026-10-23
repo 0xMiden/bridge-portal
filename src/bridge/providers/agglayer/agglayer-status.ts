@@ -1,80 +1,66 @@
 import type { BridgeConfig } from "../../../config/bridge-config";
 import { agglayerConfig } from "./agglayer";
+import { depositPageSchema, type AgglayerDeposit } from "./status-schema";
 
-// Ported from 0xMiden/wallet@utk-bridge-integration (src/lib/agglayer/status.ts).
-// Talks to the public gateway.fm bridge indexer directly — no local Rust
-// backend proxy — so the claim flow works on a static/edge deploy (Cloudflare).
+type Lookup = { destination: string; recovery?: BridgeConfig; signal?: AbortSignal };
+const pageSize = 100;
 
-// `${bridgeServiceApi}/bridges` is the deposit indexer; the service root (with
-// `/merkle-proof`) is one level up.
-
-
-// One row from the bridge indexer's `deposits` array.
-export interface AgglayerDeposit {
-  leaf_type: number;
-  orig_net: number;
-  orig_addr: string;
-  amount: string;
-  dest_net: number;
-  dest_addr: string;
-  block_num: string;
-  deposit_cnt: number;
-  network_id: number;
-  tx_hash: string;
-  claim_tx_hash: string;
-  metadata: string;
-  ready_for_claim: boolean;
-  global_index: string;
+function isLastPage(page: ReturnType<typeof depositPageSchema.parse>, offset: number) {
+  if (!page.deposits.length) return true;
+  if (page.total_cnt !== undefined) return BigInt(offset) >= BigInt(page.total_cnt);
+  return page.deposits.length < pageSize;
 }
 
-interface BridgesResponse {
-  deposits: AgglayerDeposit[];
-  total_cnt: string;
-}
-
-// Fetch recent deposits routed to `destAddr` (the destination account in EVM
-// form). We pull a small window rather than just the latest so we can match our
-// own deposit and not confuse it with an earlier bridge.
-export async function fetchDeposits(
-  destAddr: string,
-  limit = 10,
-  signal?: AbortSignal,
-  recovery?: BridgeConfig,
-): Promise<AgglayerDeposit[]> {
-  const BRIDGES_API = `${agglayerConfig(recovery).bridgeServiceApi}/bridges`;
-  const res = await fetch(`${BRIDGES_API}/${destAddr}?limit=${limit}&offset=0`, {
-    cache: "no-store", signal,
-  });
-  if (!res.ok) {
-    throw new Error(`Agglayer bridge status ${res.status}`);
+async function* depositPages({ destination, recovery, signal }: Lookup) {
+  const config = agglayerConfig(recovery);
+  const timeout = AbortSignal.timeout(15_000);
+  const requestSignal = signal ? AbortSignal.any([signal, timeout]) : timeout;
+  let offset = 0;
+  // Bound work even if an upstream repeats pages or reports an invalid total.
+  for (let index = 0; index < 100; index += 1) {
+    const url = `${config.bridgeServiceApi}/bridges/${encodeURIComponent(destination)}?limit=${pageSize}&offset=${offset}`;
+    const response = await fetch(url, { cache: "no-store", redirect: "manual", signal: requestSignal });
+    if (!response.ok) throw new Error(`Agglayer bridge status ${response.status}`);
+    const page = depositPageSchema.parse(await response.json());
+    yield page.deposits;
+    offset += page.deposits.length;
+    if (isLastPage(page, offset)) return;
   }
-  const data: BridgesResponse = await res.json();
-  return data.deposits ?? [];
+  throw new Error("Agglayer deposit lookup exceeded its page limit. Tracking will retry.");
 }
 
-// The Miden→EVM (L2→L1) exit to `l1Dest` through its whole lifecycle. Gateway's
-// `bridge-autoclaim` claims ready exits on Sepolia automatically (no manual
-// claim in this UI); when it does, `claim_tx_hash` is populated. Track the exit
-// regardless of readiness to detect settlement. The Cardona indexer uses network 73
-// for Miden exits, matching the rollup ID used by bridgeAsset.
-// Matches a known `deposit_cnt` when provided (the exact exit we're tracking),
-// else the latest L2→L1 exit to this address.
+/** Source transaction identity prevents newer deposits from hiding an older receive. */
+export async function readDepositStatus(lookup: Lookup, sourceTxHash?: string) {
+  let latestDeposit: AgglayerDeposit | null = null;
+  for await (const page of depositPages(lookup)) {
+    latestDeposit ??= page[0] ?? null;
+    const deposits = sourceTxHash
+      ? page.filter(deposit => deposit.tx_hash?.toLowerCase() === sourceTxHash.toLowerCase())
+      : page;
+    if (!sourceTxHash || deposits.length) return { destinationAddress: lookup.destination, deposits, latestDeposit };
+  }
+  return { destinationAddress: lookup.destination, deposits: [], latestDeposit };
+}
+
+function matchesWithdrawal(deposit: AgglayerDeposit, lookup: Lookup, expected: Set<string>) {
+  const config = agglayerConfig(lookup.recovery);
+  const correctRoute = deposit.network_id === config.midenIndexerNetworkId && deposit.dest_net === config.sourceNetworkId;
+  const correctIdentity = deposit.dest_addr?.toLowerCase() === lookup.destination.toLowerCase() &&
+    expected.has(deposit.tx_hash?.toLowerCase() ?? "");
+  return correctRoute && correctIdentity;
+}
+
+// Only output-note commitments bind an exit; recipient, amount and deposit count cannot.
 export async function findMidenToEvmDeposit(
-  l1Dest: string,
-  depositCnt?: string | number,
-  signal?: AbortSignal,
-  recovery?: BridgeConfig,
+  l1Dest: string, exitHashes: readonly string[], signal?: AbortSignal, recovery?: BridgeConfig,
 ): Promise<AgglayerDeposit | null> {
-  const AGGLAYER_TESTNET = agglayerConfig(recovery);
-  const deposits = await fetchDeposits(l1Dest, 10, signal, recovery);
-  const matching = deposits.filter(
-    (d) => d.network_id === AGGLAYER_TESTNET.midenIndexerNetworkId &&
-      d.dest_net === AGGLAYER_TESTNET.sourceNetworkId,
-  );
-  if (depositCnt !== undefined) {
-    return matching.find(
-      (d) => String(d.deposit_cnt) === String(depositCnt),
-    ) ?? null;
+  if (!exitHashes.length || exitHashes.some(hash => !/^0x[\da-f]{64}$/i.test(hash))) return null;
+  const lookup = { destination: l1Dest, recovery, signal };
+  const expected = new Set(exitHashes.map(hash => hash.toLowerCase()));
+  for await (const page of depositPages(lookup)) {
+    const matching = page.filter(deposit => matchesWithdrawal(deposit, lookup, expected));
+    if (matching.length > 1) throw new Error("Multiple exits match this withdrawal. Tracking needs verification.");
+    if (matching.length === 1) return matching[0];
   }
-  return matching.sort((a, b) => b.deposit_cnt - a.deposit_cnt)[0] ?? null;
+  return null;
 }

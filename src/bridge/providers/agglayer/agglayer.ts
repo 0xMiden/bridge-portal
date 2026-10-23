@@ -43,46 +43,6 @@ const bridgeAssetAbi = [
   },
 ] as const;
 
-export type AgglayerDeposit = {
-  ready_for_claim?: boolean;
-  tx_hash?: string;
-  // The Agglayer destination-side claim tx. For a Sepolia→Miden receive this is
-  // the Miden tx that CREATED the note in the destination account — it is NOT
-  // the note being consumed into the balance. Once present (and ready_for_claim
-  // is true), the note is sitting in the Miden wallet awaiting the user's
-  // in-wallet "Claim" (note consumption), which the deposit indexer can't see.
-  claim_tx_hash?: string;
-  amount?: string;
-  deposit_cnt?: string | number;
-  block_num?: string | number;
-  global_index?: string;
-};
-
-export type AgglayerDepositStatus = {
-  destinationAddress: string;
-  deposits: AgglayerDeposit[];
-  latestDeposit: AgglayerDeposit | null;
-};
-
-export type AgglayerClaimPlan = {
-  readyForClaim: boolean;
-  direction: "miden-to-sepolia";
-  bridgeAddress: string;
-  ethAccountId: string;
-  statusUrl: string;
-  claimsUrl: string;
-  merkleProofUrl: string | null;
-  deposit: AgglayerDeposit | null;
-  calldata: string | null;
-  transaction: {
-    to: string;
-    data: string;
-    value: string;
-    gas: string;
-  } | null;
-  warnings: string[];
-};
-
 export function isMidenAccountHex(value: string) {
   return /^[0-9a-fA-F]{30}$/.test(value.trim().replace(/^0x/, ""));
 }
@@ -97,9 +57,8 @@ function bech32Polymod(values: number[]) {
   for (const value of values) {
     const top = chk >> 25;
     chk = ((chk & 0x1ffffff) << 5) ^ value;
-    for (let i = 0; i < 5; i += 1) {
-      if ((top >> i) & 1) chk ^= generators[i];
-    }
+    chk = generators.reduce((value, generator, i) =>
+      ((top >> i) & 1) ? value ^ generator : value, chk);
   }
 
   return chk;

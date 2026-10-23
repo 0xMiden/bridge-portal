@@ -3,7 +3,9 @@ import type { FlowMode } from "../../core/models";
 import { activityPhase, type Provider, type ProviderDirections } from "../../core/provider";
 import { recoveryGuidance, consumeNoteGuidance } from "../../core/activity-presentation";
 
-function makeDirections(network: "Sepolia" | "Ethereum") {
+type NetworkLabel = "Sepolia" | "Ethereum";
+
+function commonPhases(network: NetworkLabel) {
   const phases = {
     signature: {
       status: "signature",
@@ -38,6 +40,10 @@ function makeDirections(network: "Sepolia" | "Ethereum") {
     },
   } as const;
 
+  return phases;
+}
+
+function providerFees(network: NetworkLabel) {
   const fees = {
     charging: "none",
     requiresQuote: false,
@@ -52,138 +58,71 @@ function makeDirections(network: "Sepolia" | "Ethereum") {
     sepoliaGasUnits: 140000,
   } as const;
 
-  const directions = {
-    send: {
-      activityDetails: (activity) => ({
-        sourceHash: activity.sourceTxHash ?? activity.midenTxId,
-        destinationHash: activity.claimTxHash ?? activity.destinationTxHash,
-        destinationKind: "tx",
-        received: activity.receivedAmount,
-      }),
-      steps: [
-        {
-          status: "signature",
-          label: "Sign Miden note",
-          detail: "Approve the outbound note in your Bread wallet.",
-        },
-        {
-          status: "source_finality",
-          label: "Miden confirmation",
-          detail: "The note confirms on Miden before the bridge picks it up.",
-        },
-        {
-          status: "message_observed",
-          label: "Building the proof",
-          detail: `The bridge burned your asset and is proving the exit for ${network}.`,
-        },
-        {
-          status: "claim_available",
-          label: `Ready to claim on ${network}`,
-          detail: "The exit is proven and claimable — it's auto-claimed for you, no action needed.",
-        },
-        {
-          status: "claim_submitted",
-          label: "Claim confirming",
-          detail: `The ${network} claim is confirming.`,
-        },
-        {
-          status: "complete",
-          label: `Settled on ${network}`,
-          detail: `Funds released to your ${network} address.`,
-        },
-      ],
-      phases: {
-        ...phases,
-        complete: {
-          status: "complete",
-          order: 5,
-          headline: `Funds released on ${network}`,
-        },
-        claim_available: {
-          ...phases.claim_available,
-          guidance: {
-            tone: "active",
-            icon: "wallet",
-            title: `Auto-claimed on ${network}`,
-            body: `The exit is claimed on ${network} for you automatically. Keep this page open or check back later — no manual claim is required.`,
-          },
-        },
-        claim_submitted: {
-          ...phases.claim_submitted,
-          guidance: {
-            tone: "active",
-            icon: "wallet",
-            title: `Auto-claimed on ${network}`,
-            body: `The exit is claimed on ${network} for you automatically. Keep this page open or check back later — no manual claim is required.`,
-          },
-        },
-      },
-      phaseFields: ["status", "failureLeg"],
-      resolvePhase: activityPhase,
-      consumeNote: false,
-      tracking: "automatic",
-      pollMs: 6000,
-      fees: () => ({
-        ...fees,
-        sepoliaGasUnits: 260000,
-      }),
-    },
-    receive: {
-      activityDetails: (activity) => ({
-        sourceHash: activity.sourceTxHash,
-        destinationHash: activity.midenTxId ?? activity.destinationTxHash,
-        destinationKind: "tx",
-        received: activity.receivedAmount,
-      }),
-      steps: [
-        {
-          status: "signature",
-          label: `Sign ${network} deposit`,
-          detail: "Approve the deposit in your Ethereum wallet.",
-        },
-        {
-          status: "source_finality",
-          label: `${network} confirmation`,
-          detail: `The deposit confirms on ${network} and reaches finality.`,
-        },
-        {
-          status: "message_observed",
-          label: "Observed by the bridge",
-          detail: "The bridge registered your deposit and is preparing the Miden note.",
-        },
-        {
-          status: "complete",
-          label: "Delivered on Miden",
-          detail: "The note is created on Miden — consume it in your wallet to update your balance.",
-        },
-      ],
-      phases: {
-        ...phases,
-        complete: {
-          status: "complete",
-          order: 5,
-          headline: "Delivered on Miden",
-          guidance: consumeNoteGuidance,
-        },
-        claim_available: {
-          ...phases.claim_available,
-          guidance: consumeNoteGuidance,
-        },
-      },
-      phaseFields: ["status", "failureLeg"],
-      resolvePhase: activityPhase,
-      consumeNote: true,
-      tracking: "automatic",
-      pollMs: 6000,
-      fees: (route) => route?.source.kind === "erc20" ? {
-        ...fees,
-        sepoliaGasUnits: 300000,
-        warning: "Token approval may require additional Ethereum transactions. Consume delivered notes in Bread.",
-      } : fees,
-    },
-  } satisfies ProviderDirections;
+  return fees;
+}
 
-  return directions;
+function makeDirections(network: NetworkLabel): ProviderDirections {
+  return { send: sendDirection(network), receive: receiveDirection(network) };
+}
+
+function sendDirection(network: NetworkLabel): ProviderDirections["send"] {
+  const fees = providerFees(network);
+  return {
+    activityDetails: (activity) => ({
+      sourceHash: activity.sourceTxHash ?? activity.midenTxId,
+      destinationHash: activity.claimTxHash ?? activity.destinationTxHash,
+      destinationKind: "tx",
+      received: activity.receivedAmount,
+    }),
+    steps: sendSteps(network),
+    phases: sendPhases(network),
+    phaseFields: ["status", "failureLeg"],
+    resolvePhase: activityPhase,
+    consumeNote: false,
+    tracking: "automatic",
+    pollMs: 6000,
+    fees: () => ({
+      ...fees,
+      sepoliaGasUnits: 260000,
+    }),
+  };
+}
+
+function receiveDirection(network: NetworkLabel): ProviderDirections["receive"] {
+  const phases = commonPhases(network);
+  const fees = providerFees(network);
+  return {
+    activityDetails: (activity) => ({
+      sourceHash: activity.sourceTxHash,
+      destinationHash: activity.midenTxId ?? activity.destinationTxHash,
+      destinationKind: "tx",
+      received: activity.receivedAmount,
+    }),
+    steps: receiveSteps(network),
+    phases: {
+      ...phases,
+      complete: {
+        status: "complete",
+        order: 5,
+        headline: "Delivered on Miden",
+        guidance: consumeNoteGuidance,
+      },
+      claim_available: {
+        ...phases.claim_available,
+        guidance: consumeNoteGuidance,
+      },
+    },
+    phaseFields: ["status", "failureLeg"],
+    resolvePhase: activityPhase,
+    consumeNote: true,
+    tracking: "automatic",
+    pollMs: 6000,
+    fees: (route) => route?.source.kind === "erc20" ? {
+      ...fees,
+      sepoliaGasUnits: 300000,
+      warning: "Token approval may require additional Ethereum transactions. Consume delivered notes in Bread.",
+    } : fees,
+  };
 }
 
 const testnetDirections = makeDirections("Sepolia");
@@ -198,3 +137,93 @@ export const agglayer: Provider = {
   directions: testnetDirections,
   load: () => import("./flows"),
 };
+
+function sendSteps(network: NetworkLabel): ProviderDirections["send"]["steps"] {
+  return [
+    {
+      status: "signature",
+      label: "Sign Miden note",
+      detail: "Approve the outbound note in your Bread wallet.",
+    },
+    {
+      status: "source_finality",
+      label: "Miden confirmation",
+      detail: "The note confirms on Miden before the bridge picks it up.",
+    },
+    {
+      status: "message_observed",
+      label: "Building the proof",
+      detail: `The bridge burned your asset and is proving the exit for ${network}.`,
+    },
+    {
+      status: "claim_available",
+      label: `Ready to claim on ${network}`,
+      detail: "The exit is proven and claimable — it's auto-claimed for you, no action needed.",
+    },
+    {
+      status: "claim_submitted",
+      label: "Claim confirming",
+      detail: `The ${network} claim is confirming.`,
+    },
+    {
+      status: "complete",
+      label: `Settled on ${network}`,
+      detail: `Funds released to your ${network} address.`,
+    },
+  ];
+}
+
+function sendPhases(network: NetworkLabel): ProviderDirections["send"]["phases"] {
+  const phases = commonPhases(network);
+  return {
+    ...phases,
+    complete: {
+      status: "complete",
+      order: 5,
+      headline: `Funds released on ${network}`,
+    },
+    claim_available: {
+      ...phases.claim_available,
+      guidance: {
+        tone: "active",
+        icon: "wallet",
+        title: `Auto-claimed on ${network}`,
+        body: `The exit is claimed on ${network} for you automatically. Keep this page open or check back later — no manual claim is required.`,
+      },
+    },
+    claim_submitted: {
+      ...phases.claim_submitted,
+      guidance: {
+        tone: "active",
+        icon: "wallet",
+        title: `Auto-claimed on ${network}`,
+        body: `The exit is claimed on ${network} for you automatically. Keep this page open or check back later — no manual claim is required.`,
+      },
+    },
+  };
+}
+
+function receiveSteps(network: NetworkLabel): ProviderDirections["receive"]["steps"] {
+  return [
+    {
+      status: "signature",
+      label: `Sign ${network} deposit`,
+      detail: "Approve the deposit in your Ethereum wallet.",
+    },
+    {
+      status: "source_finality",
+      label: `${network} confirmation`,
+      detail: `The deposit confirms on ${network} and reaches finality.`,
+    },
+    {
+      status: "message_observed",
+      label: "Observed by the bridge",
+      detail: "The bridge registered your deposit and is preparing the Miden note.",
+    },
+    {
+      status: "complete",
+      label: "Delivered on Miden",
+      detail: "The note is created on Miden — consume it in your wallet to update your balance.",
+    },
+  ];
+}

@@ -1,8 +1,8 @@
 import { z } from "zod";
 import type { Address } from "viem";
-import type { EvmNetwork } from "../../core/assets";
-import { transactionHashSchema } from "../../evm/evm-schema";
-import { sourceTransactionSchema } from "../../evm/source-transaction-schema";
+import type { EvmNetwork } from "../core/assets";
+import { transactionHashSchema } from "./evm-schema";
+import { sourceTransactionSchema } from "./source-transaction-schema";
 
 export type ApprovalScope = {
   network: EvmNetwork;
@@ -13,6 +13,7 @@ export type ApprovalScope = {
 
 const pendingApprovalSchema = z.object({
   hash: transactionHashSchema,
+  amount: z.string().regex(/^\d+$/).optional(),
   transaction: sourceTransactionSchema.optional(),
   replacementReason: z.enum(["repriced", "cancelled", "replaced"]).optional(),
 });
@@ -21,7 +22,7 @@ export type PendingApproval = z.infer<typeof pendingApprovalSchema>;
 
 const memory = new Map<string, PendingApproval>();
 const unsaved = new Set<string>();
-const invalidApprovalMessage = "Saved USDC approval details are invalid. Check the approval in your wallet before trying again.";
+const invalidApprovalMessage = "Saved token approval details are invalid. Check the approval in your wallet before trying again.";
 
 export function parsePendingApproval(value: unknown): PendingApproval {
   const parsed = pendingApprovalSchema.safeParse(value);

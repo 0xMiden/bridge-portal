@@ -1,6 +1,6 @@
 import { erc20Abi, type PublicClient, type ReplacementReturnType, type WalletClient } from "viem";
 import { captureSourceTransaction, recoverSourceTransaction } from "../../evm/source-transaction";
-import { approvalStore, parsePendingApproval, type ApprovalScope, type PendingApproval } from "./approval-store";
+import { approvalStore, parsePendingApproval, type ApprovalScope, type PendingApproval } from "../../evm/approval-store";
 
 type ApprovalStore = ReturnType<typeof approvalStore>;
 type ApprovalClient = Pick<PublicClient, "readContract" | "simulateContract" | "waitForTransactionReceipt">;
