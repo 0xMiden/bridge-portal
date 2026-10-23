@@ -1,6 +1,7 @@
 import { createPublicClient, erc20Abi, parseUnits, toHex, type Hex } from "viem";
 import type { BridgeRoute } from "../../core/routes";
 import type { EvmAsset } from "../../core/assets";
+import { suggestEvmFees } from "../../evm/fee-suggestions";
 import { evmReadTransport } from "../../evm/transport";
 import type { EvmProvider } from "../../../wallets/evm/evm-wallet";
 import { ensureEvmNetwork } from "../../../wallets/evm/ensure-network";
@@ -14,7 +15,8 @@ type DepositRequest = {
 };
 type Transaction = ReturnType<typeof buildDepositTransaction>;
 
-function depositWallet({ provider, address }: DepositRequest, config: ReturnType<typeof agglayerConfig>) {
+function depositWallet({ provider, address, phase }: DepositRequest, config: ReturnType<typeof agglayerConfig>) {
+  const client = createPublicClient({ chain: config.chain, transport: evmReadTransport(config.evmNetwork) });
   const assertWallet = async () => {
     const accounts = evmAddressSchema.array().parse(await provider.request({ method: "eth_accounts" }));
     const chainId = Number(await provider.request({ method: "eth_chainId" }));
@@ -22,9 +24,13 @@ function depositWallet({ provider, address }: DepositRequest, config: ReturnType
       throw new Error("Your wallet account or network changed. Review the transfer again.");
   };
   const send = async (tx: { to: Hex; data: Hex; value: Hex; gas: Hex }) => {
+    const fees = await suggestEvmFees(client);
+    if (!fees) phase("Fee suggestions unavailable. Review your wallet’s fee estimate before confirming…");
     await assertWallet();
     const hash = await provider.request({
-      method: "eth_sendTransaction", params: [{ from: address, chainId: config.sepoliaChainHex, ...tx }],
+      method: "eth_sendTransaction", params: [{ from: address, chainId: config.sepoliaChainHex, ...tx,
+        ...(fees ? { maxFeePerGas: toHex(fees.maxFeePerGas), maxPriorityFeePerGas: toHex(fees.maxPriorityFeePerGas) } : {}),
+      }],
     });
     return transactionHashSchema.parse(hash);
   };

@@ -22,7 +22,7 @@ vi.mock("../../bridge/providers/xreserve/cctp-deposit", () => ({ depositViaCctp:
 vi.mock("../../bridge/providers/agglayer/agglayer-execute", () => ({ runAgglayerSend: vi.fn() }));
 vi.mock("../../bridge/providers/epoch/epoch-execute", () => ({ runEpochTransfer: vi.fn() }));
 const { tokenRpc, allowance } = vi.hoisted(() => ({
-  tokenRpc: { readContract: vi.fn(), call: vi.fn(), estimateGas: vi.fn(), waitForTransactionReceipt: vi.fn() },
+  tokenRpc: { getBlock: vi.fn(), estimateMaxPriorityFeePerGas: vi.fn(), readContract: vi.fn(), call: vi.fn(), estimateGas: vi.fn(), waitForTransactionReceipt: vi.fn() },
   allowance: vi.fn(),
 }));
 vi.mock("viem", async (importOriginal) => ({
@@ -49,6 +49,8 @@ const history: Activity = {
 
 beforeEach(() => {
   vi.resetAllMocks();
+  tokenRpc.getBlock.mockResolvedValue({ baseFeePerGas: 100n });
+  tokenRpc.estimateMaxPriorityFeePerGas.mockResolvedValue(3n);
   vi.mocked(captureSourceTransaction).mockResolvedValue(undefined);
   const storage = new Map<string, string>();
   vi.stubGlobal("window", {
@@ -504,6 +506,7 @@ describe("Ethereum ERC-20 deposits", () => {
     await submission;
     expect(effects.onError).not.toHaveBeenCalled();
     expect(transactions()).toHaveLength(3);
+    for (const tx of transactions()) expect(tx).toMatchObject({ maxFeePerGas: "0xcb", maxPriorityFeePerGas: "0x3", gas: "0x1d4c0" });
     expect(transactions()[2].to).toBe(bridge);
     expect(loadStoredActivities("mainnet")[0].sourceTxHash).toBe(TX_HASH);
   });
