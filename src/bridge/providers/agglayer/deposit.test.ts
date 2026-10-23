@@ -5,7 +5,7 @@ import type { EvmProvider } from "../../../wallets/evm/evm-wallet";
 
 const rpc = vi.hoisted(() => ({ read: vi.fn(), call: vi.fn(), estimate: vi.fn(), wait: vi.fn(), capture: vi.fn(), resolve: vi.fn() }));
 vi.mock("../../evm/transport", () => ({ evmReadTransport: (network: string) => ({ network }) }));
-vi.mock("../../evm/source-transaction", () => ({ captureSourceTransaction: rpc.capture, resolveSourceTransaction: rpc.resolve }));
+vi.mock("../../evm/source-transaction", () => ({ captureSourceTransaction: rpc.capture, recoverSourceTransaction: rpc.resolve }));
 vi.mock("viem", async original => ({
   ...await original<typeof import("viem")>(),
   createPublicClient: ({ chain, transport }: { chain: { id: number }; transport: { network: string } }) => {
@@ -72,9 +72,9 @@ beforeEach(() => {
 });
 afterEach(() => vi.unstubAllGlobals());
 
-async function submit() {
+async function submit(amount = input.amount) {
   const { submitAgglayerDeposit } = await import("./deposit");
-  return submitAgglayerDeposit({ ...input, provider });
+  return submitAgglayerDeposit({ ...input, amount, provider });
 }
 
 describe("durable Agglayer approvals", () => {
@@ -98,9 +98,23 @@ describe("durable Agglayer approvals", () => {
     await expect(submit()).rejects.toThrow();
     expect(storage.size).toBe(1);
     vi.resetModules();
+    approved = 1_000_000n;
     rpc.resolve.mockResolvedValue({ hash: replacementHash, reason });
     await expect(submit()).rejects.toThrow(/cancelled or replaced/);
     expect(signed).toHaveLength(1);
+    expect(storage.size).toBe(0);
+  });
+
+  it("uses sufficient allowance after an approval hash disappears without captured metadata", async () => {
+    rpc.wait.mockRejectedValue(new Error("Original approval unavailable"));
+    await expect(submit()).rejects.toThrow(/confirmation is not verified/);
+    expect(storage.size).toBe(1);
+    vi.resetModules();
+    // A repriced approval mined while this page was closed; its original hash is gone.
+    approved = 1_000_000n;
+    await expect(submit()).resolves.toMatchObject({ sourceTxHash: depositHash });
+    expect(signed.map(tx => tx.to.toLowerCase())).toEqual([token, bridge]);
+    expect(rpc.wait).toHaveBeenCalledTimes(1);
     expect(storage.size).toBe(0);
   });
 
@@ -136,10 +150,10 @@ describe("durable Agglayer approvals", () => {
     expect(signed).toHaveLength(1);
   });
 
-  it("waits for a pending zero reset even when the current allowance could fund the deposit", async () => {
-    approved = 1n;
+  it.each(["zero reset", "smaller approval"])("waits for a pending %s even when the current allowance could fund the deposit", async stage => {
+    approved = stage === "zero reset" ? 1n : 0n;
     rpc.wait.mockRejectedValueOnce(new Error("Receipt unavailable"));
-    await expect(submit()).rejects.toThrow();
+    await expect(submit(stage === "zero reset" ? "1" : "0.5")).rejects.toThrow();
     expect(storage.size).toBe(1);
     vi.resetModules();
     approved = 2_000_000n;
@@ -148,9 +162,9 @@ describe("durable Agglayer approvals", () => {
     const retry = submit();
     await vi.waitFor(() => expect(rpc.wait).toHaveBeenCalledTimes(2));
     expect(signed).toHaveLength(1);
-    approved = 0n;
+    approved = stage === "zero reset" ? 0n : 500_000n;
     receipt.resolve({ status: "success" });
     await expect(retry).resolves.toMatchObject({ sourceTxHash: depositHash });
-    expect(signed).toHaveLength(3);
+    expect(signed).toHaveLength(stage === "zero reset" ? 3 : 4);
   });
 });

@@ -1,3 +1,4 @@
+import type { BridgeConfig } from "../../../config/bridge-config";
 import type { ProviderFlows } from "../../core/provider";
 import { parseUnits } from "viem";
 import { activityRoute } from "../../core/routes";
@@ -32,7 +33,7 @@ export const flows: ProviderFlows = {
       return null;
     },
     async submit({ input, route, phase, record }) {
-      const AGGLAYER_TESTNET = agglayerConfig(route.deploymentId);
+      const AGGLAYER_TESTNET = agglayerConfig(route.recovery);
       const { provider, address } = input.evmWallet;
       if (!provider || !address) throw new Error("Connect your Ethereum wallet.");
       const destination = input.midenAccount;
@@ -56,8 +57,8 @@ export const flows: ProviderFlows = {
       canPoll: (activity) =>
         needsReceiveTracking(activity) && Boolean(activity.bridgeDestinationAddress || activity.sourceTxHash),
       async observe(activity, signal) {
-        const deploymentId = activityRoute(activity)?.deploymentId;
-        const config = agglayerConfig(deploymentId);
+        const recovery = activityRoute(activity)?.recovery;
+        const config = agglayerConfig(recovery);
         const observation: AgglayerObservation = {};
         // Source and indexer are independent. A temporary outage must not discard the other's evidence.
         const results = await Promise.allSettled([
@@ -66,7 +67,7 @@ export const flows: ProviderFlows = {
                 observation.sourceTx = tx;
               })
             : Promise.resolve(),
-          observeDeposit(activity, signal, deploymentId).then(deposit => { observation.deposit = deposit; }),
+          observeDeposit(activity, signal, recovery).then(deposit => { observation.deposit = deposit; }),
         ]);
         const errors = results.filter((result) => result.status === "rejected");
         if (errors.length === results.length) throw errors[0].reason;
@@ -84,7 +85,7 @@ export const flows: ProviderFlows = {
       return null;
     },
     async submit({ input, route, phase, record }) {
-      const AGGLAYER_TESTNET = agglayerConfig(route.deploymentId);
+      const AGGLAYER_TESTNET = agglayerConfig(route.recovery);
       const wallet = input.midenWallet;
       if (!wallet.requestTransaction || !wallet.waitForTransaction || !wallet.address)
         throw new Error("Connect your Bread wallet before bridging out.");
@@ -107,7 +108,7 @@ export const flows: ProviderFlows = {
         senderAddress: wallet.address,
         requestTransaction: wallet.requestTransaction,
         waitForTransaction: wallet.waitForTransaction,
-      }, route.deploymentId);
+      }, route.recovery);
       record({
         status: "source_finality",
         eta: "10-20 min",
@@ -123,14 +124,13 @@ export const flows: ProviderFlows = {
         activity.status !== "failed" &&
         Boolean(activity.destination),
       async observe(activity, signal) {
-        const deploymentId = activityRoute(activity)?.deploymentId;
+        const recovery = activityRoute(activity)?.recovery;
         let exitHashes = activity.agglayerExitHashes;
         if (!exitHashes?.length) {
           const hash = activity.midenTxId ?? activity.sourceTxHash;
           if (!hash) return { patch: {}, warning: "The Miden transaction ID is missing. This withdrawal cannot be matched yet." };
           const params = new URLSearchParams({ sourceTxHash: hash });
-          if (deploymentId) params.set("deployment", deploymentId);
-          const response = await fetch(`/api/agglayer/withdrawal?${params}`, { cache: "no-store", signal });
+          const response = await fetch(`/api/agglayer/withdrawal?${params}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ recovery }), cache: "no-store", signal });
           if (!response.ok) throw new Error("Unable to recover the withdrawal's identity. Tracking will retry.");
           const recovered = withdrawalStatusSchema.parse(await response.json());
           exitHashes = recovered.exitHashes;
@@ -141,7 +141,7 @@ export const flows: ProviderFlows = {
           activity.destination,
           exitHashes,
           signal,
-          deploymentId,
+          recovery,
         );
         return {
           patch: { agglayerExitHashes: exitHashes, ...agglayerPatch(activity, { deposit }) },
@@ -156,12 +156,11 @@ function needsReceiveTracking(activity: Activity) {
   return !(activity.status === "complete" && activity.midenTxId);
 }
 
-async function observeDeposit(activity: Activity, signal: AbortSignal, deploymentId?: string) {
+async function observeDeposit(activity: Activity, signal: AbortSignal, recovery?: BridgeConfig) {
   if (!activity.bridgeDestinationAddress) return undefined;
   const params = new URLSearchParams({ destinationAddress: activity.bridgeDestinationAddress });
-  if (deploymentId) params.set("deployment", deploymentId);
   if (activity.sourceTxHash) params.set("sourceTxHash", activity.sourceTxHash);
-  const response = await fetch(`/api/agglayer/deposits?${params}`, { cache: "no-store", signal });
+  const response = await fetch(`/api/agglayer/deposits?${params}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ recovery }), cache: "no-store", signal });
   if (!response.ok) throw new Error("Unable to read Agglayer deposits.");
   const status = depositStatusSchema.parse(await response.json());
   if (status.destinationAddress.toLowerCase() !== activity.bridgeDestinationAddress.toLowerCase())

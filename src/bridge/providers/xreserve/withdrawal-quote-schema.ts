@@ -1,3 +1,4 @@
+import { bridgeConfigSchema } from "../../../config/wallet-config/schema";
 import { z } from "zod";
 import { isEvmNetwork } from "../../../config/evm-networks";
 import { evmAddressSchema, hexDataSchema } from "../../evm/evm-schema";
@@ -15,7 +16,7 @@ export const withdrawalQuoteRequestSchema = z.object({
   amount: z.string(),
   sender: z.string(),
   recipient: evmAddressSchema,
-  deploymentId: z.string().optional(),
+  recovery: bridgeConfigSchema,
 });
 
 export const withdrawalQuoteSchema = withdrawalQuoteRequestSchema.extend({

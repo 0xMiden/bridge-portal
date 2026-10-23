@@ -1,5 +1,4 @@
-import { AGGLAYER_TESTNET, bridgeStatusUrl } from "../../bridge/providers/agglayer/agglayer";
-import { EPOCH_ALLOCATOR_URL } from "../../bridge/providers/epoch/config";
+import { currentBridgeConfig } from "../../config/bridge-config";
 import { SEPOLIA_NETWORK } from "../../config/sepolia";
 import { evmRpc } from "../../bridge/evm/rpc.server";
 
@@ -70,11 +69,13 @@ async function checkHttpUp(
 export async function checkDeepHealth(
   fetchImpl: typeof fetch = fetch,
 ): Promise<DeepHealth> {
+  const config = currentBridgeConfig("testnet");
+  const unavailable = { ok: false, detail: "Bridge configuration unavailable" };
   const [sepolia, miden, epoch, agglayer] = await Promise.all([
     checkSepolia(fetchImpl),
     checkHttpUp(MIDEN_RPC_URL, fetchImpl),
-    checkHttpUp(EPOCH_ALLOCATOR_URL, fetchImpl),
-    checkHttpUp(bridgeStatusUrl(AGGLAYER_TESTNET.nativeTokenAddress), fetchImpl),
+    config.document["bridge-providers"].epoch ? checkHttpUp(config.document["bridge-providers"].epoch.allocatorUrl, fetchImpl) : unavailable,
+    checkHttpUp(`${config.document["bridge-providers"].agglayer.indexerUrl}/bridges/0x0000000000000000000000000000000000000000`, fetchImpl),
   ]);
   const checks = { sepolia, miden, epoch, agglayer };
   return {

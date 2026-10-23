@@ -1,3 +1,4 @@
+import type { BridgeConfig } from "../../../config/bridge-config";
 import { arcConfig, ARC_MAX_MIDEN_AMOUNT } from "./config";
 
 export type ArcDepositIntent = {
@@ -15,8 +16,8 @@ export function decodeArcRecipient(value: string): string {
 }
 
 /** Circle DepositIntent v1; offsets match miden-usdcx's deposit_intent codec. */
-export function parseArcDepositIntent(payload: string, deploymentId?: string): ArcDepositIntent {
-  const ARC = arcConfig(deploymentId);
+export function parseArcDepositIntent(payload: string, recovery?: BridgeConfig): ArcDepositIntent {
+  const ARC = arcConfig(recovery);
   if (!/^0x(?:[\da-f]{2})+$/i.test(payload))
     throw new Error("Invalid Circle payload.");
   const hex = payload.slice(2).toLowerCase();

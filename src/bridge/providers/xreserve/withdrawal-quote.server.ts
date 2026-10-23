@@ -1,5 +1,4 @@
 import { formatUnits, padHex } from "viem";
-import { getDeployment } from "../../../config/deployments";
 import { CircleApiError, parseCirclePayload } from "./circle-response";
 import { postCircleJson } from "./circle-http.server";
 import { arcConfig } from "./config";
@@ -11,8 +10,8 @@ import {
 } from "./withdrawal-quote-schema";
 
 function withdrawalTerms(input: ValidatedWithdrawalQuoteRequest) {
-  const arc = arcConfig(input.deploymentId);
-  const destination = getDeployment(input.deploymentId).document.supportedEvmChains[input.network]?.bridges.usdcx?.tokens?.USDC;
+  const arc = arcConfig(input.recovery);
+  const destination = input.recovery.document.supportedEvmChains[input.network]?.bridges.usdcx?.tokens?.USDC;
   if (!destination) throw new Error("The withdrawal destination is unavailable.");
   return {
     arc,

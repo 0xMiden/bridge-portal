@@ -35,7 +35,7 @@ async function prepareTokenDeposit(
   request: DepositRequest, asset: Extract<EvmAsset, { kind: "erc20" }>,
   transaction: Transaction, wallet: ReturnType<typeof depositWallet>,
 ) {
-  const config = agglayerConfig(request.route.deploymentId);
+  const config = agglayerConfig(request.route.recovery);
   const client = createPublicClient({ chain: config.chain, transport: evmReadTransport(config.evmNetwork) });
   const account = evmAddressSchema.parse(request.address);
   const amount = parseUnits(request.amount, asset.decimals);
@@ -52,10 +52,10 @@ async function prepareTokenDeposit(
 
 export async function submitAgglayerDeposit(request: DepositRequest) {
   const { route, amount, destination, provider, phase } = request;
-  const config = agglayerConfig(route.deploymentId);
+  const config = agglayerConfig(route.recovery);
   const asset = route.source;
   if (asset.kind === "miden" || asset.network !== config.evmNetwork) throw new Error("Invalid Agglayer deposit route.");
-  const transaction = buildDepositTransaction({ amount, asset, midenAccountId: destination }, route.deploymentId);
+  const transaction = buildDepositTransaction({ amount, asset, midenAccountId: destination }, route.recovery);
   const wallet = depositWallet(request, config);
   await ensureEvmNetwork(provider, config.chain);
   await wallet.assertWallet();

@@ -1,8 +1,10 @@
+import { findBridgeRoute } from "../../../src/bridge/core/routes";
 import { expect, test, type Page } from "@playwright/test";
 import { stubNetwork } from "../../fixtures/mock-network";
+import { startOnTestnet } from "../../fixtures/testnet";
 import { BridgePage } from "../../pages/bridge-page";
 import { decodeFunctionData, encodeFunctionResult, erc20Abi, parseAbi } from "viem";
-import { ARC, cctpAbi, cctpSource, xReserveAbi } from "../../../src/bridge/providers/xreserve/config";
+import { arcConfig, cctpAbi, cctpSource, xReserveAbi } from "../../../src/bridge/providers/xreserve/config";
 import { arcRecipient } from "../../../src/bridge/providers/xreserve/deposit-terms";
 
 type BridgeFrame = { route: string; source: string; wallet: string };
@@ -33,6 +35,7 @@ async function bridgeFrames(page: Page) {
 }
 
 test.beforeEach(async ({ page }) => {
+  await startOnTestnet(page);
   await stubNetwork(page);
   await page.route("**/api/xreserve/withdrawal-quote", (route) => route.fulfill({ json: { ...route.request().postDataJSON(), fee: "16400", received: "1983601", expiresAt: Date.now() + 60000 } }));
   await page.route("**/api/xreserve/quote", (route) => route.fulfill({ json: {
@@ -47,6 +50,7 @@ test.beforeEach(async ({ page }) => {
     json: { balance: "10.123456", balanceRaw: "10123456" },
   }));
 });
+
 
 test("Base simulation outages leave a readable error and a retryable, contained form", async ({ page }, info) => {
   await page.emulateMedia({ colorScheme: "dark" });
@@ -69,7 +73,7 @@ test("Base simulation outages leave a readable error and a retryable, contained 
     }
     const values: Record<string, unknown> = {
       isRemoteDomainRegistered: true,
-      getRemoteToken: arcRecipient(ARC.faucetId),
+      getRemoteToken: arcRecipient(arcConfig().faucetId),
       paused: false,
       getFee: [250000n, cctpSource("base-sepolia").asset.address],
       balanceOf: 10000000n,
@@ -243,23 +247,23 @@ test("a saved deposit resumes tracking after reload without claiming delivery du
       } });
   });
   await page.goto("/?provider=xreserve");
-  await page.evaluate(({ hash, recipient }) => {
-    localStorage.setItem("miden.bridge.ui.activities", JSON.stringify([{
-      id: "act-usdcx", provider: "xreserve", routeId: "xreserve-usdc-to-miden", mode: "receive",
+  await page.evaluate(({ hash, recipient, routeSnapshot }) => {
+    localStorage.setItem("miden.bridge.ui.activities.v2", JSON.stringify([{
+      id: "act-usdcx", routeSnapshot, environment: "testnet", provider: "xreserve", routeId: "xreserve-usdc-to-miden", mode: "receive",
       amount: "1.000001", asset: "USDC", receivedAmount: "1.000001", status: "source_finality",
       summary: "Receive 1.000001 USDCx on Miden", eta: "Delivery time varies",
       sourceTxHash: hash, txHash: hash, sourceTxAt: 1791456556000,
       destination: recipient, midenAccountHex: recipient, evmAddress: `0x${"12".repeat(20)}`,
       updatedAt: Date.now(), xreserveStatus: "submitted",
     }]));
-  }, { hash, recipient });
+  }, { hash, recipient, routeSnapshot: findBridgeRoute("xreserve-usdc-to-miden")! });
   await page.goto("/activity/act-usdcx");
   const receipt = page.getByRole("article", { name: "Transfer receipt" });
   await expect(receipt).toContainText("Arc Testnet tx");
   await expect(receipt).toContainText("1.000001 USDCx");
   await expect(receipt.getByRole("link", { name: /Arc explorer/i })).toHaveAttribute("href", `https://explorer.testnet.arc.io/tx/${hash}`);
   await expect(receipt.getByText("Miden note", { exact: true }).locator("..")).toContainText("Pending");
-  const stored = () => page.evaluate(() => JSON.parse(localStorage.getItem("miden.bridge.ui.activities")!)[0]);
+  const stored = () => page.evaluate(() => JSON.parse(localStorage.getItem("miden.bridge.ui.activities.v2")!)[0]);
   await expect.poll(async () => (await stored()).xreserveStatus).toBe("confirmed");
 
   unavailable = true;

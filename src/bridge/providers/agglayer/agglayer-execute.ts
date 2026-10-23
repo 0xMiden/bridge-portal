@@ -1,3 +1,4 @@
+import type { BridgeConfig } from "../../../config/bridge-config";
 import type { MidenFiWalletContextState } from "@miden-sdk/miden-wallet-adapter-react";
 import { normalizeMidenAccountHex } from "./agglayer";
 import { agglayerConfig } from "./agglayer";
@@ -38,8 +39,8 @@ type SendInput = {
   senderAddress: string;
 };
 
-async function buildWithdrawal({ amount, faucetId, destinationAddress, senderAddress }: SendInput, deploymentId?: string) {
-  const config = agglayerConfig(deploymentId);
+async function buildWithdrawal({ amount, faucetId, destinationAddress, senderAddress }: SendInput, recovery?: BridgeConfig) {
+  const config = agglayerConfig(recovery);
   const {
     AccountId,
     EthAddress,
@@ -87,9 +88,9 @@ async function buildWithdrawal({ amount, faucetId, destinationAddress, senderAdd
 }
 
 export async function runAgglayerSend(
-  input: SendInput & AgglayerSendDeps, deploymentId?: string,
+  input: SendInput & AgglayerSendDeps, recovery?: BridgeConfig,
 ): Promise<AgglayerSendResult> {
-  const transaction = await buildWithdrawal(input, deploymentId);
+  const transaction = await buildWithdrawal(input, recovery);
   const txId = await input.requestTransaction(transaction);
   // The wallet request UUID is not an on-chain identifier.
   const output = await input.waitForTransaction(txId);

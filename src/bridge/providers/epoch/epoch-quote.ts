@@ -9,7 +9,7 @@ import { getEpochReadOnlySdk, getEpochSdk } from "./sdk";
 export async function quoteEpochSend(input: QuoteRequest): Promise<QuoteResult> {
   const { miden, evm } = epochRouteAssets(input.route);
   const address = evmAddress(input.evmAddress);
-  const sdk = await getEpochReadOnlySdk(address, input.route.deploymentId);
+  const sdk = await getEpochReadOnlySdk(address, input.route.recovery);
   const quote = await getCrossChainQuote(
     sdk,
     {
@@ -29,7 +29,7 @@ export async function quoteEpochSend(input: QuoteRequest): Promise<QuoteResult> 
 export async function quoteEpochReceive(input: QuoteRequest): Promise<QuoteResult> {
   const { miden, evm } = epochRouteAssets(input.route);
   const address = evmAddress(input.evmAddress);
-  const sdk = await getEpochSdk(input.route.deploymentId);
+  const sdk = await getEpochSdk(input.route.recovery);
   if (!sdk) throw new Error("Connect a Sepolia wallet to quote the Epoch route.");
   const quote = await getEVMToMidenQuote(
     sdk,

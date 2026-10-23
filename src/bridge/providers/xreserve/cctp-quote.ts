@@ -1,3 +1,4 @@
+import { configKey } from "../../../config/bridge-config";
 import { formatUnits, type PublicClient } from "viem";
 import type { QuoteRequest, QuoteResult } from "../../core/quote";
 import { normalizeMidenAccountHex } from "../agglayer/agglayer";
@@ -18,7 +19,7 @@ const QUOTE_HEADROOM_SECONDS = 30;
 
 /** A quote authorizes one route, wallet pair, and amount. */
 export function assertCctpQuoteMatches(candidate: CctpBurnIntent, request: CctpBurnIntent): void {
-  if (candidate.network !== request.network || candidate.deploymentId !== request.deploymentId) {
+  if (candidate.network !== request.network || configKey(candidate.recovery) !== configKey(request.recovery)) {
     throw new Error("The transfer changed. Review the route and fee again.");
   }
   if (candidate.sender.toLowerCase() !== request.sender.toLowerCase() ||
@@ -73,8 +74,8 @@ export class CctpQuotePolicy {
 
   async verifyAuthorization(quote: CctpQuote) {
     assertCctpQuoteMatches(quote, this.request);
-    const cctp = cctpConfig(this.request.deploymentId, this.request.network);
-    const source = cctpSource(this.request.network, this.request.deploymentId);
+    const cctp = cctpConfig(this.request.recovery, this.request.network);
+    const source = cctpSource(this.request.network, this.request.recovery);
     const [fee, token] = await this.client.readContract({
       address: cctp.tokenMessengerWithFees, abi: cctpAbi,
       functionName: "getFee", args: [quote.signedQuote],
@@ -117,7 +118,7 @@ export class CctpQuotePolicy {
 
 export async function quoteTransfer(input: QuoteRequest, signal: AbortSignal): Promise<QuoteResult> {
   const request = parseCirclePayload(cctpRequestSchema, {
-    deploymentId: input.route.deploymentId,
+    recovery: input.route.recovery,
     network: input.route.source.network,
     amount: input.amount,
     sender: input.evmAddress,

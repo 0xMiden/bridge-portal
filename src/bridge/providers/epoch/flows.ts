@@ -99,7 +99,7 @@ function intentMonitor(destinationChainId: number): ActivityMonitor {
       Boolean(activity.epochSponsor && activity.epochIntentNonce),
     async observe(activity) {
       const { getEpochReadOnlySdk } = await import("./sdk");
-      const sdk = await getEpochReadOnlySdk(activity.epochSponsor as `0x${string}`, activityRoute(activity)?.deploymentId);
+      const sdk = await getEpochReadOnlySdk(activity.epochSponsor as `0x${string}`, activityRoute(activity)?.recovery);
       const statuses = await sdk.getIntentStatus(
         activity.epochSponsor!,
         activity.epochIntentNonce!,

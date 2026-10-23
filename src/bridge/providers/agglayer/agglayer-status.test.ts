@@ -2,9 +2,11 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { findMidenToEvmDeposit } from "./agglayer-status";
 import { observeActivity } from "../../tracking";
 import { applyActivityPatch } from "../../activity";
+import { findBridgeRoute } from "../../core/routes";
 import type { Activity } from "../../core/models";
 
 afterEach(() => vi.unstubAllGlobals());
+const routeSnapshot = findBridgeRoute("agglayer-eth-to-sepolia")!;
 
 describe("withdrawal indexer routing", () => {
   it("waits for this withdrawal's exit instead of settling against an older claim to the same address", async () => {
@@ -13,7 +15,7 @@ describe("withdrawal indexer routing", () => {
     const destination = `0x${"aa".repeat(20)}`;
     const activity = {
       id: "new-withdrawal", provider: "agglayer", mode: "send", amount: "1", asset: "ETH",
-      status: "source_finality", destination,
+      status: "source_finality", routeSnapshot, destination,
       midenTxId: `0x${"11".repeat(32)}`,
       agglayerExitHashes: [exitHash], updatedAt: 1, summary: "", eta: "Waiting", txHash: "",
     } satisfies Activity & { agglayerExitHashes: string[] };
@@ -42,7 +44,7 @@ describe("withdrawal indexer routing", () => {
     ] })));
     const activity: Activity = {
       id: "known-exit", provider: "agglayer", mode: "send", amount: "1", asset: "ETH",
-      status: "source_finality", destination: "0x1111111111111111111111111111111111111111",
+      status: "source_finality", routeSnapshot, destination: "0x1111111111111111111111111111111111111111",
       depositCount: "42", updatedAt: 1, summary: "", eta: "Waiting", txHash: "",
       agglayerExitHashes: [`0x${"cd".repeat(32)}`],
     };

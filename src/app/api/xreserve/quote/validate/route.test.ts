@@ -1,9 +1,10 @@
+import * as configs from "../../../../../config/bridge-config";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { POST } from "./route";
-import { currentDeployment } from "../../../../../config/deployments";
+import { currentBridgeConfig } from "../../../../../config/bridge-config";
 import fixture from "../../../../../bridge/providers/xreserve/fixtures/cctp-hook.json";
 
-const input = {
+const input = { recovery: currentBridgeConfig("testnet"),
   network: "sepolia", amount: "100", sender: fixture.sender, recipient: fixture.recipient,
   signedQuote: "0x01020304", fee: "26569",
 };
@@ -24,7 +25,6 @@ beforeEach(() => { vi.spyOn(console, "error").mockImplementation(() => {}); });
 afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
 it("validates the exact configured burn with Circle rather than trusting client call arguments or clocks", async () => {
-  vi.spyOn(Date, "now").mockReturnValue(1792664514_000 + 86_400_000);
   const fetch = vi.fn().mockResolvedValue(Response.json(validation));
   vi.stubGlobal("fetch", fetch);
   const response = await POST(request({ ...input, abiSignature: "malicious()", args: ["untrusted"], expiresAt: 0 }));
@@ -46,7 +46,7 @@ it("selects the production service and contracts for an allowlisted mainnet depl
   const fetch = vi.fn().mockResolvedValue(Response.json({ ...validation,
     feeToken: "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48" }));
   vi.stubGlobal("fetch", fetch);
-  const response = await POST(request({ ...input, network: "ethereum", deploymentId: currentDeployment("mainnet").id,
+  const response = await POST(request({ ...input, network: "ethereum", recovery: currentBridgeConfig("mainnet"),
     recipient: "mm1aqu8zjdwvcgkeug5a67kpwmnsyv2qgp7" }));
   expect(response.status).toBe(200);
   expect(fetch.mock.calls[0][0]).toBe("https://iris-api.circle.com/v2/quote/validate/usdc/0");
@@ -104,7 +104,7 @@ it.each([
 it.each([
   { network: "unsupported" },
   { network: "ethereum" },
-  { deploymentId: "https://untrusted.example" },
+  { recovery: "https://untrusted.example" },
   { sender: "0x1234" },
   { recipient: "mm1aqu8zjdwvcgkeug5a67kpwmnsyv2qgp7" },
   { fee: "1.1" },
@@ -119,6 +119,7 @@ it.each([
 });
 
 it.each([
+  { name: "redirect", reason: "upstream_http", result: () => new Response(null, { status: 302, headers: { location: "http://127.0.0.1/private" } }), status: 302, cause: undefined },
   { name: "HTTP error", reason: "upstream_http", result: () => new Response("private upstream payload", { status: 503 }), status: 503, cause: undefined },
   { name: "connection failure", reason: "upstream_network", result: () => { throw new TypeError("private upstream payload"); }, status: undefined, cause: { kind: "network" } },
   { name: "request timeout", reason: "upstream_timeout", result: () => { throw new DOMException("private upstream payload", "TimeoutError"); }, status: undefined, cause: { kind: "timeout" } },
@@ -138,4 +139,27 @@ it.each([
     operation: "validation", reason, status, cause,
   });
   expect(JSON.stringify(vi.mocked(console.error).mock.calls)).not.toContain("private upstream payload");
+});
+
+it.each(["version", "contract", "faucet", "direction", "token metadata"])("rejects edited %s context before contacting Circle", async change => {
+  const recovery = structuredClone(currentBridgeConfig("testnet"));
+  if (change === "version") { recovery.document.version--; recovery.id = `testnet:${recovery.document.version}`; }
+  if (change === "contract") recovery.document.supportedEvmChains["arc-testnet"]!.bridges.usdcx!.executor!.handler = `0x${"aa".repeat(20)}`;
+  if (change === "faucet") recovery.derived.usdcxFaucetId = "0x179f749ee2329e317d96fe3ed5aaf9";
+  if (change === "token metadata") recovery.derived.eth.decimals--;
+  if (change === "direction") recovery.document.supportedEvmChains.sepolia!.bridges.usdcx!.depositEnabled = false;
+  const fetch = vi.fn();
+  vi.stubGlobal("fetch", fetch);
+  expect((await POST(request({ ...input, recovery }))).status).toBe(409);
+  expect(fetch).not.toHaveBeenCalled();
+});
+
+it("rejects a disabled release direction even when the client matches the current config", async () => {
+  const recovery = structuredClone(currentBridgeConfig("testnet"));
+  recovery.document.features.bridgeIn = false;
+  vi.spyOn(configs, "currentBridgeConfig").mockReturnValue(recovery);
+  const fetch = vi.fn();
+  vi.stubGlobal("fetch", fetch);
+  expect((await POST(request({ ...input, recovery }))).status).toBe(409);
+  expect(fetch).not.toHaveBeenCalled();
 });

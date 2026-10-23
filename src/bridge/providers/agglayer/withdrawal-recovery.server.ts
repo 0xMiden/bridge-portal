@@ -1,6 +1,6 @@
 import { Buffer } from "node:buffer";
 import { z } from "zod";
-import { deploymentMiden } from "../../../config/deployments";
+import { configMidenNetwork, type BridgeConfig } from "../../../config/bridge-config";
 import { normalizeMidenAccountHex } from "./agglayer";
 import { agglayerExitHash } from "./exit-hash";
 
@@ -110,9 +110,9 @@ function grpcPayload(bytes: Buffer, headerStatus: string | null): Buffer {
   return payloads[0];
 }
 
-async function locateWithdrawal(hash: string, network: ReturnType<typeof deploymentMiden>, signal: AbortSignal) {
+async function locateWithdrawal(hash: string, network: ReturnType<typeof configMidenNetwork>, signal: AbortSignal) {
   const response = await fetch(explorerApis[network.network], {
-    method: "POST", headers: { "content-type": "application/json" }, cache: "no-store", signal,
+    method: "POST", headers: { "content-type": "application/json" }, cache: "no-store", redirect: "manual", signal,
     body: JSON.stringify({
       query: "query($input: TransactionInput!) { transaction(input: $input) { transaction_id account_bech block_number } }",
       variables: { input: { transaction_id: hash } },
@@ -130,8 +130,8 @@ async function locateWithdrawal(hash: string, network: ReturnType<typeof deploym
   return { block, account };
 }
 
-export async function recoverWithdrawalExitHashes(hash: string, deploymentId: string | undefined, signal: AbortSignal): Promise<string[]> {
-  const network = deploymentMiden(deploymentId);
+export async function recoverWithdrawalExitHashes(hash: string, recovery: BridgeConfig, signal: AbortSignal): Promise<string[]> {
+  const network = configMidenNetwork(recovery);
   const located = await locateWithdrawal(hash, network, signal);
   if (!located) return [];
   const { block, account } = located;
@@ -143,7 +143,7 @@ export async function recoverWithdrawalExitHashes(hash: string, deploymentId: st
   frame.writeUInt32BE(body.length, 1);
   const rpc = await fetch(`${network.rpcUrl.replace(/\/$/, "")}/miden.node.v1.NodeService/SyncTransactions`, {
     method: "POST", headers: { "content-type": "application/grpc-web+proto", "x-grpc-web": "1" },
-    body: Buffer.concat([frame, body]), cache: "no-store", signal,
+    body: Buffer.concat([frame, body]), cache: "no-store", redirect: "manual", signal,
   });
   if (!rpc.ok) throw new Error("Miden transaction lookup is unavailable.");
   const payload = grpcPayload(Buffer.from(await rpc.arrayBuffer()), rpc.headers.get("grpc-status"));

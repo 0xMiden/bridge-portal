@@ -66,6 +66,7 @@
 .bridge-portal .chain-select-trigger .network-logo { width: 20px; height: 20px; }
 .bridge-portal .token-logo { display: inline-flex; position: relative; flex: none; width: 32px; height: 32px; }
 .bridge-portal .token-logo img { display: block; width: 100%; height: 100%; object-fit: contain; }
+.dark .bridge-portal .token-logo img[src="/asset-logos/near.svg"] { filter: invert(1); }
 .bridge-portal .token-logo-variant { position: absolute; right: -3px; bottom: -2px; display: grid; place-items: center; width: 15px; height: 15px; border: 2px solid var(--surface); border-radius: 50%; background: var(--foreground); color: var(--surface); font: 600 10px/1 system-ui, sans-serif; }
 .bridge-portal .chain-value > strong { margin: 0; font-size: 14px; font-weight: 500; }
 .bridge-portal .panel-wallet { grid-column: 2; grid-row: 1; justify-self: end; min-width: 0; max-width: 172px; }

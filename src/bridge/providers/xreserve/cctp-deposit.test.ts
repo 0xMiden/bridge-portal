@@ -1,9 +1,10 @@
+import { currentBridgeConfig } from "../../../config/bridge-config";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ContractFunctionRevertedError, WaitForTransactionReceiptTimeoutError, encodeErrorResult, type HttpTransport } from "viem";
 import type { EvmProvider } from "../../../wallets/evm/evm-wallet";
 import { depositViaCctp } from "./cctp-deposit";
 import { cctpDepositHook, decodeCctpDepositHook } from "./cctp-burn";
-import { cctpAbi, cctpConfig, cctpSource, type CctpNetwork, ARC } from "./config";
+import { cctpAbi, cctpConfig, cctpSource, type CctpNetwork, arcConfig } from "./config";
 import { arcRecipient } from "./deposit-terms";
 import type { CctpQuote } from "./cctp-quote";
 import fixture from "./fixtures/cctp-hook.json";
@@ -17,7 +18,7 @@ vi.mock("viem", async (original) => ({ ...await original<typeof import("viem")>(
   createWalletClient: (options: ClientOptions) => mocks.walletClient(options),
 }));
 vi.mock("../../evm/source-transaction", () => ({
-  captureSourceTransaction: async () => undefined, resolveSourceTransaction: async () => ({}),
+  captureSourceTransaction: async () => undefined, recoverSourceTransaction: async () => ({}),
 }));
 vi.mock("@miden-sdk/miden-sdk", () => ({ AccountId: { fromHex: () => ({ free() {} }) } }));
 const account = fixture.sender as `0x${string}`;
@@ -37,13 +38,13 @@ let allowance: bigint;
 function readArcContract({ address, functionName, args }: ContractCall) {
   switch (functionName) {
     case "isRemoteDomainRegistered":
-      expect(address.toLowerCase()).toBe(ARC.xReserve.toLowerCase());
-      expect(args).toEqual([ARC.midenDomain]);
+      expect(address.toLowerCase()).toBe(arcConfig().xReserve.toLowerCase());
+      expect(args).toEqual([arcConfig().midenDomain]);
       return true;
     case "getRemoteToken":
-      expect(address.toLowerCase()).toBe(ARC.xReserve.toLowerCase());
-      expect(args).toEqual([ARC.midenDomain, ARC.usdc]);
-      return arcRecipient(ARC.faucetId);
+      expect(address.toLowerCase()).toBe(arcConfig().xReserve.toLowerCase());
+      expect(args).toEqual([arcConfig().midenDomain, arcConfig().usdc]);
+      return arcRecipient(arcConfig().faucetId);
     case "paused":
       expect([CCTP.executor.toLowerCase(), CCTP.handler.toLowerCase()]).toContain(address.toLowerCase());
       return false;
@@ -118,7 +119,7 @@ beforeEach(() => {
   fee = 400_000n;
   walletAccount = account;
   chainId = cctpSource(network).chain.id;
-  quote = { network, sender: account, amount: "1", recipient: fixture.recipient, fee: "400000", signedQuote: "0x1234", issuedAt: 1792663778,
+  quote = { recovery: currentBridgeConfig("testnet"), network, sender: account, amount: "1", recipient: fixture.recipient, fee: "400000", signedQuote: "0x1234", issuedAt: 1792663778,
     expiry: { mode: "BLOCK_NUMBER", expiresAtBlock: 26247476, blockEstimatedAt: 1792663946 },
   };
   mocks.quote.mockImplementation(async (request) => {
@@ -135,9 +136,9 @@ beforeEach(() => {
     throw new Error(`Unexpected quote endpoint: ${url}`);
   }));
   mocks.publicClient.mockImplementation(({ chain, transport }: PublicClientOptions) => {
-    const rpcNetwork = chain.id === ARC.chainId ? ARC.network : network;
+    const rpcNetwork = chain.id === arcConfig().chainId ? arcConfig().network : network;
     expect(transport({}).value?.url).toBe(`/api/evm/${rpcNetwork}/rpc`);
-    if (chain.id === ARC.chainId) return { readContract: async (call: ContractCall) => readArcContract(call) };
+    if (chain.id === arcConfig().chainId) return { readContract: async (call: ContractCall) => readArcContract(call) };
     expect(chain.id).toBe(cctpSource(network).chain.id);
     return sourceClient(network);
   });
@@ -159,7 +160,7 @@ describe("Circle multichain deposits", () => {
     expect(cctpDepositHook(account, fixture.recipient)).toBe(fixture.hook);
     expect(decodeCctpDepositHook(fixture.hook as `0x${string}`)).toEqual({ sender: account, recipient: fixture.recipient });
     // Repointing the handler or xReserve target must never be accepted for tracking.
-    const changed = fixture.hook.replace(ARC.xReserve.slice(2).toLowerCase(), "22".repeat(20));
+    const changed = fixture.hook.replace(arcConfig().xReserve.slice(2).toLowerCase(), "22".repeat(20));
     expect(() => decodeCctpDepositHook(changed as `0x${string}`)).toThrow("Unsupported deposit hook");
   });
   it.each<CctpNetwork>(["sepolia", "base-sepolia", "arbitrum-sepolia"])("burns the full amount from %s and separately approves the reviewed fee", async (origin) => {

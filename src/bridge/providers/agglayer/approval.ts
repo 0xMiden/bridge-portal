@@ -1,6 +1,6 @@
 import { encodeFunctionData, erc20Abi, toHex, type Hex, type PublicClient, type ReplacementReturnType } from "viem";
 import { approvalStore, parsePendingApproval, type ApprovalScope, type PendingApproval } from "../../evm/approval-store";
-import { captureSourceTransaction, resolveSourceTransaction } from "../../evm/source-transaction";
+import { captureSourceTransaction, recoverSourceTransaction } from "../../evm/source-transaction";
 
 type ApprovalRequest = ApprovalScope & {
   symbol: string;
@@ -58,12 +58,23 @@ async function resume(request: ApprovalRequest, store: Store) {
   const saved = store.load();
   if (!saved) return;
   assertNotReplaced(saved, store);
-  const resolved = await resolveSourceTransaction(request.network, saved.hash, saved.transaction);
+  const resolved = await recoverSourceTransaction(request.network, saved.hash, saved.transaction);
   const pending = parsePendingApproval({
     ...saved, hash: resolved.hash ?? saved.hash, transaction: resolved.transaction ?? saved.transaction,
     replacementReason: resolved.reason ?? saved.replacementReason,
   });
   store.save(pending);
+  assertNotReplaced(pending, store);
+  const approvedAmount = BigInt(pending.amount ?? "0");
+  // A vanished original hash need not block an already satisfied allowance.
+  // Pending resets or smaller approvals can still reduce it, so wait for those.
+  if (approvedAmount > 0n && approvedAmount >= request.amount) {
+    await request.assertWallet();
+    if (await allowance(request) >= request.amount) {
+      store.clear();
+      return;
+    }
+  }
   await confirm(request, store, pending);
 }
 

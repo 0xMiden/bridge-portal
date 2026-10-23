@@ -1,5 +1,5 @@
 import { afterEach, expect, test, vi } from "vitest";
-import { GET } from "./route";
+import { POST } from "./route";
 import { routesForEnvironment } from "../../../../bridge/core/routes";
 import { observeActivity } from "../../../../bridge/tracking";
 import { loadStoredActivities, patchStoredActivity, saveActivities } from "../../../lib/bridge-persistence";
@@ -7,7 +7,7 @@ import fixture from "../../../../bridge/providers/agglayer/fixtures/synthetic-wi
 
 afterEach(() => vi.unstubAllGlobals());
 const route = routesForEnvironment("mainnet").find(route => route.provider === "agglayer" && route.mode === "send")!;
-const request = () => new Request(`https://bridge.test/api/agglayer/withdrawal?sourceTxHash=${fixture.sourceTxHash}&deployment=${route.deploymentId}`);
+const request = (hash = fixture.sourceTxHash, recovery: unknown = route.recovery) => new Request(`https://bridge.test/api/agglayer/withdrawal?sourceTxHash=${hash}`, { method: "POST", body: JSON.stringify({ recovery }) });
 const locator = () => Response.json({ data: { transaction: {
   transaction_id: fixture.sourceTxHash, account_bech: fixture.account, block_number: String(fixture.block),
 } } });
@@ -22,7 +22,7 @@ test("recovers a saved withdrawal from its public header, persists exit #42 and 
   let syncRequest: string | undefined;
   vi.stubGlobal("fetch", vi.fn<typeof fetch>(async (input, init) => {
     const url = new URL(String(input), "https://bridge.test");
-    if (url.pathname === "/api/agglayer/withdrawal") return GET(new Request(url));
+    if (url.pathname === "/api/agglayer/withdrawal") return POST(new Request(url, init));
     if (url.pathname === "/graphql") return locator();
     if (url.pathname === "/miden.node.v1.NodeService/SyncTransactions") {
       syncRequest = Buffer.from(init!.body as Uint8Array).toString("hex");
@@ -69,15 +69,17 @@ test.each(["wrong transaction", "wrong account", "wrong block", "RPC error", "tr
   vi.stubGlobal("fetch", vi.fn<typeof fetch>(async input => String(input).endsWith("/graphql")
     ? locator() : failure === "RPC error" ? new Response(null, { headers: { "grpc-status": "14" } })
       : new Response(failure === "truncated" ? bytes.subarray(0, bytes.length - 5) : bytes)));
-  const response = await GET(request());
+  const response = await POST(request());
   if (failure === "wrong transaction") expect(await response.json()).toEqual({ exitHashes: [] });
   else expect(response.status).toBe(502);
 });
 
-test("rejects untrusted deployments and invalid transaction IDs before contacting a server", async () => {
+test("rejects untrusted recovery data and invalid transaction IDs before contacting a server", async () => {
   const fetcher = vi.fn();
   vi.stubGlobal("fetch", fetcher);
-  for (const params of ["sourceTxHash=bad", `sourceTxHash=${fixture.sourceTxHash}&deployment=https://evil.example`])
-    expect((await GET(new Request(`https://bridge.test/api/agglayer/withdrawal?${params}`))).status).toBe(400);
+  const untrusted = structuredClone(route.recovery);
+  untrusted.document["bridge-providers"].agglayer.indexerUrl = "https://evil.example";
+  for (const input of [request("bad"), request(fixture.sourceTxHash, untrusted), request(fixture.sourceTxHash, null)])
+    expect((await POST(input)).status).toBe(400);
   expect(fetcher).not.toHaveBeenCalled();
 });

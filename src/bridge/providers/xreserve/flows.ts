@@ -1,3 +1,4 @@
+import { configKey } from "../../../config/bridge-config";
 import type { ProviderFlows } from "../../core/provider";
 import { captureSourceTransaction } from "../../evm/source-transaction";
 import { evmNetworks } from "../../../config/evm-networks";
@@ -55,7 +56,7 @@ export const flows: ProviderFlows = {
               .catch(() => undefined);
         },
       };
-      if (["arc-testnet", "arc"].includes(route.source.network)) await depositOnArc(request, route.deploymentId);
+      if (["arc-testnet", "arc"].includes(route.source.network)) await depositOnArc(request, route.recovery);
       else {
         if (!isCctpNetwork(route.source.network) || input.quote?.kind !== "cctp")
           throw new Error("Review the Circle fee before sending.");
@@ -64,7 +65,7 @@ export const flows: ProviderFlows = {
           ...request,
           network: route.source.network,
           quote: input.quote.authorization,
-        }, route.deploymentId);
+        }, route.recovery);
       }
     },
     monitor: {
@@ -90,7 +91,7 @@ export const flows: ProviderFlows = {
       if (
         !reviewed ||
         reviewed.network !== route.destination.network ||
-        reviewed.deploymentId !== route.deploymentId ||
+        configKey(reviewed.recovery) !== configKey(route.recovery) ||
         reviewed.amount !== input.amount ||
         reviewed.sender !== wallet.address ||
         reviewed.recipient.toLowerCase() !== recipient.toLowerCase() ||
@@ -99,7 +100,7 @@ export const flows: ProviderFlows = {
         throw new Error("Refresh and review the withdrawal estimate before sending.");
       }
       const fresh = await fetchWithdrawalQuote({
-        deploymentId: route.deploymentId,
+        recovery: route.recovery,
         network: route.destination.network,
         amount: input.amount,
         sender: wallet.address,
@@ -129,7 +130,7 @@ export const flows: ProviderFlows = {
             xreserveWithdrawalFeeEstimate: fresh.fee,
             xreserveWithdrawalReceivedEstimate: fresh.received,
           }),
-      }, route.deploymentId);
+      }, route.recovery);
       update({ sourceTxHash: result.txHash });
     },
     monitor: { canPoll: () => false, observe: async () => ({ patch: {} }) },

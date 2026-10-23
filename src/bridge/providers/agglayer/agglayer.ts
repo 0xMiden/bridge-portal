@@ -1,11 +1,10 @@
-import { getDeployment, deploymentEvmNetwork, deploymentMiden } from "../../../config/deployments";
+import { currentBridgeConfig, configMidenNetwork, type BridgeConfig } from "../../../config/bridge-config";
 import { evmNetworks } from "../../../config/evm-networks";
 import { encodeFunctionData, parseUnits, toHex } from "viem";
 import type { EvmAsset } from "../../core/assets";
 
-export function agglayerConfig(deploymentId?: string) {
-  const deployment = getDeployment(deploymentId);
-  const evmNetwork = deploymentEvmNetwork(deploymentId);
+export function agglayerConfig(deployment: BridgeConfig = currentBridgeConfig("testnet")) {
+  const evmNetwork: "ethereum" | "sepolia" = deployment.environment === "mainnet" ? "ethereum" : "sepolia";
   const chain = evmNetworks[evmNetwork];
   const bridge = deployment.document.supportedEvmChains[evmNetwork]?.bridges.agglayer;
   if (!bridge?.contractAddress || !bridge.midenBridgeId) throw new Error("Agglayer is not configured.");
@@ -21,12 +20,11 @@ export function agglayerConfig(deploymentId?: string) {
     bridgeServiceApi: deployment.document["bridge-providers"].agglayer.indexerUrl,
     sepoliaRpcUrl: chain.rpcUrls.default.http[0],
     sepoliaExplorer: chain.blockExplorers.default.url,
-    midenExplorer: deploymentMiden(deploymentId).explorer,
+    midenExplorer: configMidenNetwork(deployment).explorer,
     midenEthFaucetIdHex: deployment.derived.eth.faucetId,
     midenEthDecimals: deployment.derived.eth.decimals,
   };
 }
-export const AGGLAYER_TESTNET = agglayerConfig();
 
 const bridgeAssetAbi = [
   {
@@ -151,8 +149,8 @@ export function buildDepositTransaction({
   amount: string;
   asset: EvmAsset;
   midenAccountId: string;
-}, deploymentId?: string) {
-  const AGGLAYER_TESTNET = agglayerConfig(deploymentId);
+}, recovery?: BridgeConfig) {
+  const AGGLAYER_TESTNET = agglayerConfig(recovery);
   const amountRaw = parseUnits(amount, asset.decimals);
   if (amountRaw <= 0n) {
     throw new Error("Enter an amount greater than zero.");
@@ -181,7 +179,7 @@ export function buildDepositTransaction({
   };
 }
 
-export function bridgeStatusUrl(destinationAddress: string, deploymentId?: string) {
-  const AGGLAYER_TESTNET = agglayerConfig(deploymentId);
+export function bridgeStatusUrl(destinationAddress: string, recovery?: BridgeConfig) {
+  const AGGLAYER_TESTNET = agglayerConfig(recovery);
   return `${AGGLAYER_TESTNET.bridgeServiceApi}/bridges/${destinationAddress}?limit=1&offset=0`;
 }
