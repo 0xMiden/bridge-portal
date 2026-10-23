@@ -244,7 +244,8 @@ test("a receipt from an earlier release sends its saved recovery data when track
   historical.recovery.document.supportedEvmChains.sepolia!.bridges.agglayer!.contractAddress = `0x${"22".repeat(20)}`;
   await page.route("**/api/agglayer/deposits**", route => {
     expect(route.request().postDataJSON().recovery).toEqual(historical.recovery);
-    return route.fulfill({ json: { deposits: [{ tx_hash: SOURCE_TX, ready_for_claim: true, claim_tx_hash: DESTINATION_TX, deposit_cnt: 42 }] } });
+    const deposit = { tx_hash: SOURCE_TX, ready_for_claim: true, claim_tx_hash: DESTINATION_TX, deposit_cnt: 42 };
+    return route.fulfill({ json: { destinationAddress: EVM_ADDRESS, deposits: [deposit], latestDeposit: deposit } });
   });
   await openActivity(page, { routeSnapshot: historical, mode: "receive", destination: MIDEN_ADDRESS, bridgeDestinationAddress: EVM_ADDRESS });
   await expect.poll(async () => (await storedActivity(page)).status).toBe("complete");
