@@ -6,6 +6,8 @@ import { arcRecipient, parseArcAmount } from "./deposit-terms";
 import { ensureEvmNetwork } from "../../../wallets/evm/ensure-network";
 
 const mocks = vi.hoisted(() => ({
+  block: vi.fn(),
+  tip: vi.fn(),
   read: vi.fn(),
   simulate: vi.fn(),
   write: vi.fn(),
@@ -15,6 +17,8 @@ const mocks = vi.hoisted(() => ({
 vi.mock("viem", async (importOriginal) => ({
   ...(await importOriginal<typeof import("viem")>()),
   createPublicClient: () => ({
+    getBlock: mocks.block,
+    estimateMaxPriorityFeePerGas: mocks.tip,
     readContract: mocks.read,
     simulateContract: mocks.simulate,
     waitForTransactionReceipt: mocks.receipt,
@@ -44,6 +48,8 @@ let approvalAmount: bigint;
 afterEach(() => vi.unstubAllGlobals());
 beforeEach(() => {
   vi.resetAllMocks();
+  mocks.block.mockResolvedValue({ baseFeePerGas: 100n });
+  mocks.tip.mockResolvedValue(3n);
   const storage = new Map<string, string>();
   vi.stubGlobal("window", { localStorage: {
     getItem: (key: string) => storage.get(key) ?? null,
@@ -127,6 +133,7 @@ describe("Arc testnet deposits", () => {
       2,
       expect.objectContaining({
         functionName: "depositToRemote",
+        maxFeePerGas: 203n, maxPriorityFeePerGas: 3n,
         args: [1_250_000n, 10007, arcRecipient(recipient), arcConfig().usdc, 0n, "0x"],
       }),
     );

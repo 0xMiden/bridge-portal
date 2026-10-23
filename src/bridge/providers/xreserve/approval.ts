@@ -1,15 +1,16 @@
 import { erc20Abi, type PublicClient, type ReplacementReturnType, type WalletClient } from "viem";
 import { captureSourceTransaction, recoverSourceTransaction } from "../../evm/source-transaction";
 import { approvalStore, parsePendingApproval, type ApprovalScope, type PendingApproval } from "./approval-store";
+import { suggestEvmFees, type FeeSuggestionClient } from "../../evm/fee-suggestions";
 
 type ApprovalStore = ReturnType<typeof approvalStore>;
-type ApprovalClient = Pick<PublicClient, "readContract" | "simulateContract" | "waitForTransactionReceipt">;
+type ApprovalClient = Pick<PublicClient, "readContract" | "simulateContract" | "waitForTransactionReceipt"> & FeeSuggestionClient;
 type ApprovalRequest = ApprovalScope & {
   client: ApprovalClient;
   wallet: Pick<WalletClient, "writeContract">;
   amount: bigint;
   assertWallet: () => Promise<void>;
-  onPhase: (phase: "approving" | "approval-confirming") => void;
+  onPhase: (phase: "approving" | "approving-wallet-fees" | "approval-confirming") => void;
 };
 
 const active = new Set<string>();
@@ -57,9 +58,10 @@ async function signApproval(request: ApprovalRequest, store: ApprovalStore): Pro
     functionName: "approve",
     args: [spender, amount],
   });
-  onPhase("approving");
+  const fees = await suggestEvmFees(client);
+  onPhase(fees ? "approving" : "approving-wallet-fees");
   await assertWallet();
-  const hash = await wallet.writeContract(approval.request);
+  const hash = await wallet.writeContract({ ...approval.request, ...fees, type: undefined, gasPrice: undefined });
   store.save({ hash }); // Save before any metadata or receipt RPC can fail.
   onPhase("approval-confirming");
   const transaction = await captureSourceTransaction(network, hash).catch(() => undefined);

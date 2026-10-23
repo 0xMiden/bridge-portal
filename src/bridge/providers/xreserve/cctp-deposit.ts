@@ -9,6 +9,7 @@ import { assertCctpQuoteMatches, type CctpQuote, CctpQuotePolicy } from "./cctp-
 import type { ArcDepositPhase } from "./deposit";
 import { assertCctpRouteAvailable, validateMidenRecipient } from "./deposit-preflight";
 import { parseArcAmount } from "./deposit-terms";
+import { suggestEvmFees } from "../../evm/fee-suggestions";
 
 type CctpDepositRequest = {
   network: CctpNetwork;
@@ -29,7 +30,11 @@ function isQuoteExpiredRevert(error: unknown): boolean {
 
 async function prepareBurn(connection: DepositWallet, policy: CctpQuotePolicy, quote: CctpQuote) {
   try {
-    return await connection.client.simulateContract(cctpBurnCall(quote));
+    const deposit = await connection.client.simulateContract(cctpBurnCall(quote));
+    // Fee RPC latency must precede the final Circle validity and wallet checks.
+    const fees = await suggestEvmFees(connection.client);
+    const deadline = await policy.submissionDeadline(quote);
+    return { request: deposit.request, fees, deadline };
   } catch (error) {
     if (!isQuoteExpiredRevert(error)) throw error;
     const deadline = await policy.submissionDeadline(quote);
@@ -42,11 +47,10 @@ async function submitBurn(connection: DepositWallet, policy: CctpQuotePolicy, qu
   let currentQuote = quote;
   for (let attempt = 0; attempt < 2; attempt++) {
     const deposit = await prepareBurn(connection, policy, currentQuote);
-    const deadline = deposit ? await policy.submissionDeadline(currentQuote) : -Infinity;
     await connection.assertWallet();
-    if (deposit && policy.hasSubmissionWindow(deadline)) {
-      onPhase("depositing");
-      const hash = await connection.wallet.writeContract(deposit.request);
+    if (deposit && policy.hasSubmissionWindow(deposit.deadline)) {
+      onPhase(deposit.fees ? "depositing" : "depositing-wallet-fees");
+      const hash = await connection.wallet.writeContract({ ...deposit.request, ...deposit.fees, type: undefined, gasPrice: undefined });
       return { hash, fee: currentQuote.fee };
     }
     if (attempt === 0) currentQuote = await policy.refresh();
