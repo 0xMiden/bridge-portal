@@ -1,3 +1,4 @@
+import { currentBridgeConfig, type BridgeConfig } from "../../../config/bridge-config";
 import { BaseError, ContractFunctionRevertedError, erc20Abi, type Address, type Hash } from "viem";
 import type { EvmProvider } from "../../../wallets/evm/evm-wallet";
 import { prepareDepositWallet, type DepositWallet } from "../../evm/deposit-wallet";
@@ -53,9 +54,9 @@ async function submitBurn(connection: DepositWallet, policy: CctpQuotePolicy, qu
   throw new Error("Circle's quote expired while preparing the deposit. Please review the transfer again.");
 }
 
-async function approveCctpDeposit(input: CctpDepositRequest, connection: DepositWallet, deploymentId?: string) {
-  const token = cctpSource(input.network, deploymentId).asset.address;
-  const spender = cctpConfig(deploymentId, input.network).tokenMessengerWithFees;
+async function approveCctpDeposit(input: CctpDepositRequest, connection: DepositWallet, recovery?: BridgeConfig) {
+  const token = cctpSource(input.network, recovery).asset.address;
+  const spender = cctpConfig(recovery, input.network).tokenMessengerWithFees;
   const amount = parseArcAmount(input.amount) + BigInt(input.quote.fee);
   const balance = await connection.client.readContract({
     address: token, abi: erc20Abi, functionName: "balanceOf", args: [input.account],
@@ -67,18 +68,18 @@ async function approveCctpDeposit(input: CctpDepositRequest, connection: Deposit
   });
 }
 
-export async function depositViaCctp(input: CctpDepositRequest, deploymentId?: string) {
+export async function depositViaCctp(input: CctpDepositRequest, recovery: BridgeConfig = currentBridgeConfig("testnet")) {
   const { network, provider, account, amount, recipient, quote, onPhase, onBroadcast } = input;
-  const request = { network, sender: account, amount, recipient, deploymentId };
+  const request = { network, sender: account, amount, recipient, recovery };
   assertCctpQuoteMatches(quote, request);
   await validateMidenRecipient(recipient);
   onPhase("checking");
-  await assertCctpRouteAvailable(network, deploymentId);
+  await assertCctpRouteAvailable(network, recovery);
   const connection = await prepareDepositWallet(network, provider, account);
   const policy = new CctpQuotePolicy(request, BigInt(quote.fee), connection.client);
   await policy.verifyAuthorization(quote);
   let selectedQuote = await policy.reuseOrRefresh(quote);
-  await approveCctpDeposit(input, connection, deploymentId);
+  await approveCctpDeposit(input, connection, recovery);
   await connection.assertWallet();
   selectedQuote = await policy.reuseOrRefresh(selectedQuote);
   const result = await submitBurn(connection, policy, selectedQuote, onPhase);

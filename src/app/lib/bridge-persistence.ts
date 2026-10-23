@@ -1,14 +1,15 @@
+import { receiptRouteSchema } from "../../bridge/core/receipt-route";
 import { bridgeProviders } from "../../bridge/providers/registry";
 import { applyActivityPatch, normalizeActivityState } from "../../bridge/activity";
 import { shortAddress } from "../../wallets/identity";
-import { activityRoute, routeEnvironment, findBridgeRoute } from "../../bridge/core/routes";
+import { routeEnvironment, routesForEnvironment } from "../../bridge/core/routes";
 import { isFlowMode, type BridgeProvider, type FlowMode } from "../../bridge/core/models";
 import { isBridgeProvider } from "../../bridge/providers/registry";
 import { type Activity } from "./bridge-presentation";
 
 import type { BridgeEnvironment } from "../../config/environment";
 
-export const activityStorageKey = "miden.bridge.ui.activities";
+export const activityStorageKey = "miden.bridge.ui.activities.v2";
 
 // Persist the last-selected route so a refresh returns to it (e.g. Agglayer)
 // instead of snapping back to the default every time.
@@ -25,7 +26,15 @@ export function loadStoredRoute(environment: BridgeEnvironment = "testnet"): Bri
 }
 
 export function loadStoredRouteId(environment: BridgeEnvironment = "testnet") {
-  try { const route = findBridgeRoute(window.localStorage.getItem(`${routeStorageKey}.${environment}.id`) ?? (environment === "testnet" ? window.localStorage.getItem(`${routeStorageKey}.id`) : null) ?? ""); return route && routeEnvironment(route) === environment ? route : undefined; } catch { return undefined; }
+  try {
+    const id = window.localStorage.getItem(`${routeStorageKey}.${environment}.id`) ??
+      (environment === "testnet" ? window.localStorage.getItem(`${routeStorageKey}.id`) : null);
+    // Older preferences included the revision; token and direction identities are stable.
+    const stableId = id?.replace(/^(testnet|mainnet)-[a-f0-9]{40}:/, "$1:");
+    return routesForEnvironment(environment).find(route => route.id === stableId);
+  } catch {
+    return undefined;
+  }
 }
 
 export function saveStoredRoute(provider: BridgeProvider, routeId?: string, environment: BridgeEnvironment = "testnet") {
@@ -59,46 +68,23 @@ export function saveStoredMode(mode: FlowMode, environment: BridgeEnvironment = 
   }
 }
 
-function normalizeActivity(activity: Activity): Activity {
-  // Agglayer receipts predating midenAccountHex stored its encoded bridge address.
-  const encodedAccount = /^0x0{8}([0-9a-fA-F]{30})00$/.exec(activity.bridgeDestinationAddress ?? "");
-  const midenAccountHex = activity.midenAccountHex ??
-    (encodedAccount ? `0x${encodedAccount[1].toLowerCase()}` : undefined);
-  // Before failureLeg was persisted, the monitor stored this information in eta.
-  const failureLeg = activity.failureLeg ?? (activity.status === "failed"
-    ? (/destination/i.test(activity.eta) ? "destination" : "source")
-    : undefined);
-  // Migrate pre-timestamp rows: `updatedAt` used to be a display string ("Just
-  // now"). Coerce any non-number to 0, then backfill from the id — createActivity
-  // stamps `act-<base36 creation-ms>`, so old rows can still show a real time
-  // instead of "—".
-  let updatedAt =
-    typeof activity.updatedAt === "number" ? activity.updatedAt : 0;
-  if (!updatedAt) {
-    const match = /^act-([0-9a-z]+)$/.exec(activity.id);
-    const fromId = match ? parseInt(match[1], 36) : NaN;
-    // Guard against non-timestamp ids: only accept a plausible epoch-ms value.
-    if (Number.isFinite(fromId) && fromId > 1_600_000_000_000) updatedAt = fromId;
-  }
-  // Older rows stored the SDK's decimal amount followed by the token symbol.
-  // Normalize that legacy representation only at the storage boundary.
-  const suffix = ` ${activity.asset}`;
-  const receivedAmount = activity.receivedAmount?.endsWith(suffix)
-    ? activity.receivedAmount.slice(0, -suffix.length)
-    : activity.receivedAmount;
-  const routeSnapshot = activityRoute(activity);
-  return normalizeActivityState({ ...activity, environment: routeSnapshot ? routeEnvironment(routeSnapshot) : "testnet", routeSnapshot, midenAccountHex, failureLeg, updatedAt, receivedAmount });
-}
-
 export function loadStoredActivities(environment?: BridgeEnvironment): Activity[] {
   const raw = window.localStorage.getItem(activityStorageKey);
   if (!raw) return [];
-  const parsed = JSON.parse(raw) as Activity[];
+  const parsed: unknown = JSON.parse(raw);
   if (!Array.isArray(parsed)) return [];
-  return parsed
-    .filter((activity) => activity && isBridgeProvider(activity.provider) && isFlowMode(activity.mode))
-    .map(normalizeActivity)
-    .filter(activity => !environment || activity.environment === environment);
+  return parsed.flatMap((activity: Activity) => {
+    if (!activity || !isBridgeProvider(activity.provider) || !isFlowMode(activity.mode)) return [];
+    const route = receiptRouteSchema.safeParse(activity.routeSnapshot);
+    if (!route.success) return [];
+    const routeSnapshot = route.data;
+    if (routeSnapshot.provider !== activity.provider || routeSnapshot.mode !== activity.mode ||
+        activity.asset !== routeSnapshot.source.symbol || typeof activity.updatedAt !== "number" ||
+        [activity.id, activity.amount, activity.summary, activity.eta, activity.txHash].some(value => typeof value !== "string")) return [];
+    const network = routeEnvironment(routeSnapshot);
+    if (environment && network !== environment) return [];
+    return [normalizeActivityState({ ...activity, environment: network, routeSnapshot })];
+  });
 }
 
 export function saveActivities(activities: Activity[]) {

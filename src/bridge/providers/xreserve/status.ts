@@ -1,6 +1,6 @@
 import { recoverSourceTransaction } from "../../evm/source-transaction";
 import { activityRoute } from "../../core/routes";
-import { cctpConfig, isCctpNetwork, arcConfig } from "./config";
+import { isCctpNetwork, arcConfig } from "./config";
 import type { CctpStatusResponse } from "./cctp-status";
 import type { BridgeActivity } from "../../core/models";
 import { normalizeMidenAccountHex } from "../agglayer/agglayer";
@@ -23,14 +23,13 @@ export async function observeXreserveDeposit(activity: BridgeActivity, signal?: 
   if (activity.provider !== "xreserve" || !activity.sourceTxHash ||
       activity.status === "complete" || activity.status === "failed") return { patch: {} };
   const route = activityRoute(activity);
-  const deploymentId = route?.deploymentId;
-  const ARC = arcConfig(deploymentId);
-  const CCTP = cctpConfig(deploymentId);
+  const recovery = route?.recovery;
+  const ARC = arcConfig(recovery);
   const network = route?.source.kind !== "miden" ? route?.source.network : undefined;
   const cctp = network && isCctpNetwork(network);
   if (!network) throw new Error("Unknown deposit origin.");
   const fetchStatus = async (hash: string) => {
-    const response = await fetch(`/api/xreserve/status?network=${network}&hash=${encodeURIComponent(hash)}${deploymentId ? `&deployment=${encodeURIComponent(deploymentId)}` : ""}`, { cache: "no-store", signal });
+    const response = await fetch(`/api/xreserve/status?network=${network}&hash=${encodeURIComponent(hash)}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ recovery }), cache: "no-store", signal });
     const observation: CctpStatusResponse & { error?: string } = await response.json();
     if (!response.ok) throw new Error(observation.error ?? "Unable to verify this deposit. Tracking will retry.");
     return observation;
@@ -79,13 +78,13 @@ export async function observeXreserveDeposit(activity: BridgeActivity, signal?: 
   if (observation.status !== "attested" || !intent) return { patch, warning: observation.warning };
   if (intent.amount !== parseArcAmount(activity.amount).toString() ||
       intent.recipient !== `0x${normalizeMidenAccountHex(activity.midenAccountHex ?? activity.destination ?? "")}` ||
-      intent.sender.toLowerCase() !== (cctp ? CCTP.handler.toLowerCase() : activity.evmAddress?.toLowerCase()) ||
+      intent.sender.toLowerCase() !== (cctp ? ARC.handler.toLowerCase() : activity.evmAddress?.toLowerCase()) ||
       intent.faucet !== ARC.faucetId || !/^0x[\da-f]{64}$/i.test(intent.nonce)) {
     throw new Error("Circle attestation does not match the saved deposit. Keep the transaction hash and contact support.");
   }
   const { checkArcDelivery } = await import("./delivery");
   try {
-    const delivery = await checkArcDelivery(intent, deploymentId);
+    const delivery = await checkArcDelivery(intent, recovery);
     if (signal?.aborted) return { patch: {} };
     patch.xreserveNoteId = delivery.noteId;
     if (delivery.block !== undefined) {

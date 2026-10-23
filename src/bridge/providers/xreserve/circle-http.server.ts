@@ -16,6 +16,7 @@ async function sendCircleRequest(url: string, init: RequestInit): Promise<Respon
       cache: "no-store",
       signal: AbortSignal.timeout(15_000),
       ...init,
+      redirect: "manual",
     });
   } catch (cause) {
     throw transportFailure(cause);

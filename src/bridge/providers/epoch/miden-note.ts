@@ -1,4 +1,5 @@
 "use client";
+import type { BridgeConfig } from "../../../config/bridge-config";
 
 import type { SolveIntentParams } from "@epoch-protocol/epoch-intents-sdk";
 import {
@@ -36,7 +37,7 @@ export interface MidenNoteDeps {
  * Build a custom transaction: requestSend cannot carry a note attachment.
  * The current block is read at note creation, after the quote has resolved.
  */
-export function createBridgeP2IDENoteCallback(deps: MidenNoteDeps, deploymentId?: string): CreateMidenP2IDENote {
+export function createBridgeP2IDENoteCallback(deps: MidenNoteDeps, recovery?: BridgeConfig): CreateMidenP2IDENote {
   return async (faucetId, amount, allocatorId, recallBlocks, bindingAttachmentFelts) => {
     try {
       const amountBaseUnits = BigInt(amount);
@@ -51,7 +52,7 @@ export function createBridgeP2IDENoteCallback(deps: MidenNoteDeps, deploymentId?
       )) {
         throw new Error("Epoch mandate-binding attachment is missing or invalid.");
       }
-      const currentBlock = await getCurrentMidenBlock(deploymentId);
+      const currentBlock = await getCurrentMidenBlock(recovery);
       const reclaimHeight = currentBlock + recallBlocks;
       if (!Number.isSafeInteger(currentBlock) || currentBlock < 0 || reclaimHeight > 0xffff_ffff) {
         throw new Error("Invalid Epoch reclaim height.");

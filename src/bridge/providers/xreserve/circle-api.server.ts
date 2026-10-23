@@ -1,6 +1,6 @@
 import { getAbiItem, pad, toFunctionSignature, type AbiParameter, type Address } from "viem";
 import { z } from "zod";
-import { assertDeploymentNetwork, getDeployment } from "../../../config/deployments";
+import { assertConfigNetwork } from "../../../config/bridge-config";
 import { assertMidenAccountNetwork } from "../../../wallets/miden/network";
 import { cctpBurnCall, type CctpBurnAuthorization, type CctpBurnIntent, cctpDepositHook } from "./cctp-burn";
 import { cctpConfig, cctpSource, arcConfig } from "./config";
@@ -15,8 +15,8 @@ import { arcRecipient, parseArcAmount } from "./deposit-terms";
 
 function assertTransferTerms(input: CctpBurnIntent): void {
   parseArcAmount(input.amount);
-  assertDeploymentNetwork(input.deploymentId, input.network);
-  assertMidenAccountNetwork(input.recipient, getDeployment(input.deploymentId).environment);
+  assertConfigNetwork(input.recovery, input.network);
+  assertMidenAccountNetwork(input.recipient, input.recovery.environment);
   arcRecipient(input.recipient);
 }
 
@@ -34,21 +34,21 @@ export function parseCctpValidationRequest(value: unknown): CctpBurnAuthorizatio
 }
 
 function circleQuoteServices(input: CctpBurnIntent) {
-  const cctp = cctpConfig(input.deploymentId, input.network);
+  const cctp = cctpConfig(input.recovery, input.network);
   return [
     { type: "PRE_FINALITY" },
     { type: "FORWARD", params: {
       destinationCaller: pad(cctp.executor),
-      hookData: cctpDepositHook(input.sender, input.recipient, input.deploymentId),
+      hookData: cctpDepositHook(input.sender, input.recipient, input.recovery),
     } },
   ];
 }
 
 /** Public Circle API: the signed claim binds forwarding to this exact hook. */
 export async function requestCircleQuote(input: CctpBurnIntent): Promise<CctpQuote> {
-  const arc = arcConfig(input.deploymentId);
-  const source = cctpSource(input.network, input.deploymentId);
-  const cctp = cctpConfig(input.deploymentId, input.network);
+  const arc = arcConfig(input.recovery);
+  const source = cctpSource(input.network, input.recovery);
+  const cctp = cctpConfig(input.recovery, input.network);
   const amount = parseArcAmount(input.amount).toString();
   const body = await postCircleJson(`${cctp.api}/v2/quote/burn/usdc/${source.domain}/${arc.circleDomain}`, {
     amount, feeToken: source.asset.address, requests: circleQuoteServices(input),
@@ -125,8 +125,8 @@ function assertValidationOutcome(result: CircleValidation): void {
 
 /** Validate the canonical burn against Circle's source-chain tip. */
 export async function requestCircleQuoteValidation(quote: CctpBurnAuthorization): Promise<CctpQuoteValidation> {
-  const source = cctpSource(quote.network, quote.deploymentId);
-  const cctp = cctpConfig(quote.deploymentId, quote.network);
+  const source = cctpSource(quote.network, quote.recovery);
+  const cctp = cctpConfig(quote.recovery, quote.network);
   const call = cctpBurnCall(quote);
   const method = getAbiItem({ abi: call.abi, name: call.functionName });
   const body = await postCircleJson(`${cctp.api}/v2/quote/validate/usdc/${source.domain}`, {

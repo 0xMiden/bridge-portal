@@ -15,10 +15,10 @@ export async function submitAgglayerDeposit({
   address: string;
   phase: (message: string) => void;
 }) {
-  const config = agglayerConfig(route.deploymentId);
+  const config = agglayerConfig(route.recovery);
   const asset = route.source;
   if (asset.kind === "miden" || asset.network !== config.evmNetwork) throw new Error("Invalid Agglayer deposit route.");
-  const transaction = buildDepositTransaction({ amount, asset, midenAccountId: destination }, route.deploymentId);
+  const transaction = buildDepositTransaction({ amount, asset, midenAccountId: destination }, route.recovery);
   const account = address as Hex;
   const assertWallet = async () => {
     const accounts = await provider.request<string[]>({ method: "eth_accounts" });

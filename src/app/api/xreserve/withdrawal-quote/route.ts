@@ -1,3 +1,4 @@
+import { assertCurrentConfig, ConfigRequestError } from "../../../../config/wallet-config/server";
 import { reportCircleFailure } from "../../../../bridge/providers/xreserve/circle-http.server";
 import { parseWithdrawalQuoteRequest } from "../../../../bridge/providers/xreserve/withdrawal-quote";
 import { requestWithdrawalQuote } from "../../../../bridge/providers/xreserve/withdrawal-quote.server";
@@ -10,10 +11,10 @@ const invalidRequest = () => Response.json(
 export async function POST(request: Request) {
   let input: ReturnType<typeof parseWithdrawalQuoteRequest>;
   try {
-    const raw = await request.text();
-    if (raw.length > 2048) return invalidRequest();
-    input = parseWithdrawalQuoteRequest(JSON.parse(raw));
-  } catch {
+    input = parseWithdrawalQuoteRequest(await request.json());
+    assertCurrentConfig(input.recovery, input.network, "send");
+  } catch (error) {
+    if (error instanceof ConfigRequestError) return Response.json({ error: error.message }, { status: 409, headers: { "Cache-Control": "no-store" } });
     return invalidRequest();
   }
   try {

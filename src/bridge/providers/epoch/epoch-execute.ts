@@ -129,7 +129,7 @@ async function runEpochSend(
   const evmRecipient = args.evmAddress.trim() as `0x${string}`;
   const senderAddress = args.midenAccount.trim();
 
-  const sdk = await getEpochReadOnlySdk(evmRecipient, args.route.deploymentId);
+  const sdk = await getEpochReadOnlySdk(evmRecipient, args.route.recovery);
 
   const { miden, evm } = epochRouteAssets(args.route);
   const params: CrossChainIntentParams = {
@@ -157,7 +157,7 @@ async function runEpochSend(
         args.onSubmitted?.({ sourceTxHash: info.txHash, midenNoteId: info.noteId });
       },
     },
-    args.route.deploymentId,
+    args.route.recovery,
   );
 
   const quote = await getCrossChainQuote(sdk, params, evmRecipient);
@@ -187,7 +187,7 @@ async function runEpochReceive(
   const evmSource = args.evmAddress.trim() as `0x${string}`;
   const midenRecipient = args.midenAccount.trim();
 
-  const sdk = await getEpochSdk(args.route.deploymentId);
+  const sdk = await getEpochSdk(args.route.recovery);
   if (!sdk) throw new Error("Connect a Sepolia wallet to bridge via Epoch.");
 
   const { miden, evm } = epochRouteAssets(args.route);

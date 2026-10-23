@@ -1,3 +1,4 @@
+import type { BridgeConfig } from "../../../config/bridge-config";
 import { createPublicClient, parseAbi, type PublicClient } from "viem";
 import { evmReadTransport } from "../../evm/transport";
 import { normalizeMidenAccountHex } from "../agglayer/agglayer";
@@ -25,9 +26,9 @@ export async function assertArcRouteAvailable(client: Pick<PublicClient, "readCo
   }
 }
 
-export async function assertCctpRouteAvailable(network: CctpNetwork, deploymentId?: string) {
-  const arc = arcConfig(deploymentId);
-  const cctp = cctpConfig(deploymentId, network);
+export async function assertCctpRouteAvailable(network: CctpNetwork, recovery?: BridgeConfig) {
+  const arc = arcConfig(recovery);
+  const cctp = cctpConfig(recovery, network);
   const client = createPublicClient({ chain: arc.chain, transport: evmReadTransport(arc.network) });
   const [, executorPaused, handlerPaused] = await Promise.all([
     assertArcRouteAvailable(client, arc),

@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { EvmProvider } from "../../../wallets/evm/evm-wallet";
-import { ARC } from "./config";
+import { arcConfig } from "./config";
 import { depositOnArc } from "./deposit";
 import { arcRecipient, parseArcAmount } from "./deposit-terms";
 import { ensureEvmNetwork } from "../../../wallets/evm/ensure-network";
@@ -35,7 +35,7 @@ function wallet() {
     request: vi
       .fn<EvmProvider["request"]>()
       .mockImplementation(async ({ method }) =>
-        method === "eth_accounts" ? [account] : `0x${ARC.chainId.toString(16)}`,
+        method === "eth_accounts" ? [account] : `0x${arcConfig().chainId.toString(16)}`,
       ),
   };
 }
@@ -57,7 +57,7 @@ beforeEach(() => {
     functionName === "isRemoteDomainRegistered"
       ? true
       : functionName === "getRemoteToken"
-        ? arcRecipient(ARC.faucetId)
+        ? arcRecipient(arcConfig().faucetId)
       : functionName === "balanceOf"
         ? 10_000_000n
         : allowance,
@@ -120,14 +120,14 @@ describe("Arc testnet deposits", () => {
       1,
       expect.objectContaining({
         functionName: "approve",
-        args: [ARC.xReserve, 1_250_000n],
+        args: [arcConfig().xReserve, 1_250_000n],
       }),
     );
     expect(mocks.write).toHaveBeenNthCalledWith(
       2,
       expect.objectContaining({
         functionName: "depositToRemote",
-        args: [1_250_000n, 10007, arcRecipient(recipient), ARC.usdc, 0n, "0x"],
+        args: [1_250_000n, 10007, arcRecipient(recipient), arcConfig().usdc, 0n, "0x"],
       }),
     );
     expect(onBroadcast).toHaveBeenCalledWith(hash);
@@ -153,7 +153,7 @@ describe("Arc testnet deposits", () => {
       provider.request.mockImplementation(async ({ method }) =>
         method === "eth_accounts"
           ? ["0x2222222222222222222222222222222222222222"]
-          : `0x${ARC.chainId.toString(16)}`,
+          : `0x${arcConfig().chainId.toString(16)}`,
       );
       allowance = approvalAmount;
       return { status: "success" };
@@ -178,7 +178,7 @@ describe("Arc testnet deposits", () => {
       .mockResolvedValueOnce(null)
       .mockResolvedValueOnce(null)
       .mockResolvedValueOnce("0x4cef52");
-    await ensureEvmNetwork({ request }, ARC.chain);
+    await ensureEvmNetwork({ request }, arcConfig().chain);
     expect(request).toHaveBeenCalledWith(
       expect.objectContaining({
         method: "wallet_addEthereumChain",
@@ -205,7 +205,7 @@ it("rejects a stale Circle faucet mapping before any approval or deposit", async
 });
 it.each([0n, 10_000_000n])("rejects a network change during approval or deposit simulation (allowance %s)", async (allowance) => {
   const provider = wallet();
-  mocks.read.mockImplementation(async ({ functionName }) => functionName === "isRemoteDomainRegistered" ? true : functionName === "getRemoteToken" ? arcRecipient(ARC.faucetId) : functionName === "allowance" ? allowance : 10_000_000n);
+  mocks.read.mockImplementation(async ({ functionName }) => functionName === "isRemoteDomainRegistered" ? true : functionName === "getRemoteToken" ? arcRecipient(arcConfig().faucetId) : functionName === "allowance" ? allowance : 10_000_000n);
   mocks.simulate.mockImplementation(async (request) => {
     provider.request.mockImplementation(async ({ method }) => method === "eth_accounts" ? [account] : "0xaa36a7");
     return { request };

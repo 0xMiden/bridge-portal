@@ -1,9 +1,10 @@
+import { findBridgeRoute } from "../../../src/bridge/core/routes";
 import { expect, test, type Page } from "@playwright/test";
 import type { Activity } from "../../../src/app/lib/bridge-presentation";
 import { stubNetwork } from "../../fixtures/mock-network";
 import { startOnTestnet } from "../../fixtures/testnet";
 
-const STORAGE_KEY = "miden.bridge.ui.activities";
+const STORAGE_KEY = "miden.bridge.ui.activities.v2";
 const SOURCE_TX = `0x${"ab".repeat(32)}`;
 const DESTINATION_TX = `0x${"cd".repeat(32)}`;
 const EVM_ADDRESS = `0x${"12".repeat(20)}`;
@@ -27,6 +28,12 @@ async function openActivity(page: Page, overrides: Partial<Activity>) {
     updatedAt: Date.now(),
     ...overrides,
   };
+  const provider = activity.provider;
+  const routeId = provider === "epoch" ? `epoch-test-usdc-to-${activity.mode === "receive" ? "miden" : "sepolia"}`
+    : `agglayer-eth-to-${activity.mode === "receive" ? "miden" : "sepolia"}`;
+  activity.routeSnapshot ??= findBridgeRoute(routeId)!;
+  activity.asset = activity.routeSnapshot.source.symbol;
+  activity.environment = "testnet";
   await page.evaluate(({ key, activity }) => {
     localStorage.setItem(key, JSON.stringify([activity]));
   }, { key: STORAGE_KEY, activity });
@@ -223,4 +230,19 @@ test("diagnostics copies the displayed activity and resets its confirmation", as
   expect(bundle.activityId).toBe("demo-failed");
   expect(bundle.status).toBe("failed");
   await expect(page.getByRole("button", { name: "Copy diagnostics" })).toBeVisible();
+});
+
+test("a receipt from an earlier release sends its saved recovery data when tracking", async ({ page }) => {
+  const historical = structuredClone(findBridgeRoute("agglayer-eth-to-miden")!);
+  historical.recovery.document.version--;
+  historical.recovery.id = `testnet:${historical.recovery.document.version}`;
+  historical.recovery.document.supportedEvmChains.sepolia!.bridges.agglayer!.contractAddress = `0x${"22".repeat(20)}`;
+  await page.route("**/api/agglayer/deposits**", route => {
+    expect(route.request().postDataJSON().recovery).toEqual(historical.recovery);
+    return route.fulfill({ json: { deposits: [{ tx_hash: SOURCE_TX, ready_for_claim: true, claim_tx_hash: DESTINATION_TX, deposit_cnt: 42 }] } });
+  });
+  await openActivity(page, { routeSnapshot: historical, mode: "receive", destination: MIDEN_ADDRESS, bridgeDestinationAddress: EVM_ADDRESS });
+  await expect.poll(async () => (await storedActivity(page)).status).toBe("complete");
+  await expect(page.getByRole("article", { name: "Transfer receipt" })).toBeVisible();
+  expect((await storedActivity(page)).routeSnapshot?.recovery).toEqual(historical.recovery);
 });

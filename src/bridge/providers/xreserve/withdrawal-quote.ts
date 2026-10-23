@@ -1,6 +1,6 @@
+import { assertConfigNetwork, configKey } from "../../../config/bridge-config";
 import { formatUnits } from "viem";
 import { assertMidenAccountNetwork } from "../../../wallets/miden/network";
-import { assertDeploymentNetwork, getDeployment } from "../../../config/deployments";
 import type { QuoteRequest, QuoteResult } from "../../core/quote";
 import { normalizeMidenAccountHex } from "../agglayer/agglayer";
 import { CircleApiError, circleApiError, parseCirclePayload } from "./circle-response";
@@ -15,16 +15,16 @@ export type { WithdrawalQuote, WithdrawalQuoteRequest } from "./withdrawal-quote
 
 export function parseWithdrawalQuoteRequest(value: unknown): ValidatedWithdrawalQuoteRequest {
   const request = parseCirclePayload(withdrawalQuoteRequestSchema, value, "Invalid withdrawal terms.");
-  assertDeploymentNetwork(request.deploymentId, request.network);
+  assertConfigNetwork(request.recovery, request.network);
   validateWithdrawal(request.amount, request.network);
   withdrawalPayload(request.recipient, withdrawalDomain(request.network));
-  assertMidenAccountNetwork(request.sender, getDeployment(request.deploymentId).environment);
+  assertMidenAccountNetwork(request.sender, request.recovery.environment);
   arcRecipient(request.sender);
   return request;
 }
 
 function assertQuoteBindings(quote: WithdrawalQuote, request: ValidatedWithdrawalQuoteRequest) {
-  if (quote.network !== request.network || quote.deploymentId !== request.deploymentId) {
+  if (quote.network !== request.network || configKey(quote.recovery) !== configKey(request.recovery)) {
     throw new CircleApiError("binding_mismatch", "The withdrawal route changed. Review the estimate again.");
   }
   if (normalizeMidenAccountHex(quote.sender) !== normalizeMidenAccountHex(request.sender) ||
@@ -52,7 +52,7 @@ export async function fetchWithdrawalQuote(input: WithdrawalQuoteRequest, signal
 
 export async function quoteTransfer(input: QuoteRequest, signal: AbortSignal): Promise<QuoteResult> {
   const quote = await fetchWithdrawalQuote({
-    deploymentId: input.route.deploymentId,
+    recovery: input.route.recovery,
     network: input.route.destination.network,
     amount: input.amount,
     sender: input.midenAccount,

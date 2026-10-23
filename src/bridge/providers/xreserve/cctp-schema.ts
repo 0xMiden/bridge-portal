@@ -1,3 +1,4 @@
+import { bridgeConfigSchema } from "../../../config/wallet-config/schema";
 import { z } from "zod";
 import { evmAddressSchema } from "../../evm/evm-schema";
 import { cctpNetworks } from "./config";
@@ -7,14 +8,14 @@ const unsignedInteger = z.int().nonnegative();
 const unsignedDecimal = z.string().regex(/^\d+$/);
 const unixTimestamp = z.int().positive().max(Math.floor(Number.MAX_SAFE_INTEGER / 1000));
 const hexPrefix = z.templateLiteral(["0x", z.string()]);
-const signedQuote = z.string().regex(/^0x(?:[\da-f]{2})+$/i).pipe(hexPrefix);
+const signedQuote = z.string().max(16_384).regex(/^0x(?:[\da-f]{2})+$/i).pipe(hexPrefix);
 
 export const cctpRequestSchema = z.object({
   network: z.enum(cctpNetworks),
   sender: evmAddressSchema,
   recipient: z.string(),
   amount: z.string(),
-  deploymentId: z.string().optional(),
+  recovery: bridgeConfigSchema,
 });
 
 export const cctpAuthorizationSchema = cctpRequestSchema.extend({

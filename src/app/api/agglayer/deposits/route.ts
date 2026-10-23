@@ -1,5 +1,6 @@
+import { bridgeConfigSchema } from "../../../../config/wallet-config/schema";
+import type { BridgeConfig } from "../../../../config/bridge-config";
 import { NextResponse } from "next/server";
-import { getDeployment } from "../../../../config/deployments";
 import {
   type AgglayerDeposit,
   type AgglayerDepositStatus,
@@ -8,13 +9,15 @@ import {
 
 export const dynamic = "force-dynamic";
 
-export async function GET(request: Request) {
+export async function POST(request: Request) {
   const { searchParams } = new URL(request.url);
   const destinationAddress = searchParams.get("destinationAddress") ?? "";
-  const deploymentId = searchParams.get("deployment") ?? undefined;
+  let recovery: BridgeConfig;
+  try {
+    const body = await request.json();
+    recovery = bridgeConfigSchema.parse(body.recovery);
+  } catch { return NextResponse.json({ error: "Invalid recovery context." }, { status: 400 }); }
   const sourceTxHash = searchParams.get("sourceTxHash")?.toLowerCase();
-  try { getDeployment(deploymentId); }
-  catch { return NextResponse.json({ error: "Invalid bridge deployment." }, { status: 400 }); }
 
   if (!/^0x[0-9a-fA-F]{40}$/.test(destinationAddress)) {
     return NextResponse.json({ error: "destinationAddress must be a 20-byte hex address." }, { status: 400 });
@@ -23,21 +26,25 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "sourceTxHash must be a 32-byte transaction hash." }, { status: 400 });
   }
 
-  const url = new URL(bridgeStatusUrl(destinationAddress, deploymentId));
+  const url = new URL(bridgeStatusUrl(destinationAddress, recovery));
   const pageSize = sourceTxHash ? 100 : 1;
   url.searchParams.set("limit", String(pageSize));
   let offset = 0;
   let deposits: AgglayerDeposit[] = [];
   let latestDeposit: AgglayerDeposit | null = null;
 
+  const signal = AbortSignal.any([request.signal, AbortSignal.timeout(15_000)]);
+  let pages = 0;
   // Later deposits must not hide the transfer being tracked. Search by its
   // source transaction, including older pages, instead of assuming the latest.
   for (;;) {
+    if (++pages > 50) return NextResponse.json({ error: "Deposit search limit reached. Retry later." }, { status: 502 });
     url.searchParams.set("offset", String(offset));
     const response = await fetch(url.toString(), {
       headers: { accept: "application/json" },
       cache: "no-store",
-      signal: request.signal,
+      redirect: "manual",
+      signal,
     });
     if (!response.ok) {
       return NextResponse.json(

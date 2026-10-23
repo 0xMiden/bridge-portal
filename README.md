@@ -85,48 +85,55 @@ runtime.
 ## Network configuration and upgrades
 
 Both environments reuse [0xMiden/wallet-config](https://github.com/0xMiden/wallet-config).
-Reviewed snapshots live in `src/config/wallet-config/snapshots.json`; the browser
-never downloads mutable configuration at runtime. Contracts, Circle domains and
-services, Epoch outputs, and provider direction switches come from that repo.
-The import script resolves missing ETH faucet/precision and rollup information
-from the Miden bridge registry, and the USDCx faucet from Arc's xReserve contract.
-Mainnet USDT, WBTC, PYUSD and WSOL metadata is verified against Ethereum and the
-Miden registry, including faucet ownership and destination precision, then saved
-in the same snapshot. These tokens support Ethereum → Miden deposits through
-Agglayer. Native ETH uses the zero token address and retains both directions.
-ERC-20 deposits use zero ETH value, exact-amount approvals when needed, and a
-confirmed zero reset for existing insufficient allowances (including USDT).
-Amounts must fit the destination precision: 6 decimals for USDT/PYUSD and 8 for
-WBTC/WSOL/ETH. Ethereum's WSOL contract reports symbol `SOL` and 9 decimals;
-the portal displays `WSOL` and rejects nonzero ninth-decimal amounts.
-RPC and explorer URLs live in the local network registry.
+Each release bundles one generated file per network:
+`src/config/wallet-config/testnet.json` and `mainnet.json`. Each file records its
+upstream commit and the validated configuration, including derived token metadata.
+The browser and server use these same files synchronously. There is no runtime
+wallet-config fetch, registry discovery, configuration cache or hot reload.
 
-To import a reviewed upstream revision:
+To update the pin, use Node 22.18 or later and an explicit upstream commit:
 
-```bash
-npm run sync:wallet-config -- <full-40-character-commit-sha>
-npm run typecheck
-npm test
-npm run build
+```sh
+npm run config:update -- <40-character-wallet-config-commit-sha>
+npm run check:config
 ```
 
-Review the resulting JSON diff before deployment. The importer requires both
-networks to validate and keeps earlier snapshots. **Do not delete or reorder old
-snapshots**: legacy transfers resolve to the first testnet deployment; new
-receipts save their route, assets, and deployment ID. New transfers use the last
-snapshot for their environment. API calls accept only bundled deployment IDs;
-old calls without one still target the original testnet deployment. A rollback
-of active configuration should be deliberate and preserve all receipt snapshots.
-The additional verified Epoch test tokens remain portal-owned; canonical Epoch
-USDC and availability follow wallet-config.
+The update command fetches both documents at that immutable revision, validates
+networks and approved services, and resolves the Miden bridge registry and Arc
+xReserve registry. Supported Ethereum tokens (USDT, WBTC, PYUSD and WSOL) must
+be listed upstream and pass Ethereum/Miden ownership and precision checks.
+`ETHEREUM_RPC_URL` can override the public Ethereum RPC used by the command.
+Both networks must validate before the existing files are replaced. Review the
+generated diff and run the checks before shipping it. Additional Epoch test
+tokens remain portal-owned.
 
-Activity storage retains the existing JSON array and key, with history filtered
-by the selected network. Reading old history adds testnet metadata in memory; the
-original data is kept until an activity is saved. Route and direction preferences
-are separate per environment. Network choice uses session storage, survives
-reloads, and can differ across tabs without adding a network prefix to URLs. Switching clears amount, quote, review, and
-Miden balances; EVM submission checks the required chain and account. Quotes
-are bound to their deployment as well as route, amount, and recipients.
+Normal builds validate the checked-in files offline; they never fetch the latest
+GitHub branch or regenerate metadata. Updating contracts, supported tokens or
+route-disable switches requires a new portal deployment. Upstream wallet-config
+changes do not automatically alter a running portal.
+
+Each transfer saves its original assets and validated bridge configuration in
+its receipt. Recovery uses that context after a deployment changes or removes a
+route; historical deployments are not accumulated in the bundle. The activity
+key is `miden.bridge.ui.activities.v2`; earlier transfers are intentionally not
+migrated. Status APIs accept bounded recovery payloads and validate network,
+chain, domain and approved service roots. New Circle quote/validation requests
+must match the server's bundled configuration and an enabled direction; a stale
+client is asked to reload and review again. On-chain preflight checks still run
+before submission.
+
+RPC and explorer URLs live in the local network registry. ERC-20 deposits use
+exact-amount approvals, including a zero reset when required by USDT. Amounts
+must fit the verified destination precision. `npm run check:pin-drift` compares
+the pinned documents against wallet-config and the SDK version against the wallet.
+This advisory check reports changes; it does not update files.
+
+Route IDs remain stable across releases, preserving saved token selections.
+Configuration stays fixed for the lifetime of the page. Provider and direction
+preferences are separate per environment. Network choice uses
+session storage and can differ across tabs. EVM submission checks the required
+chain and account; every new submission checks the reviewed config, including
+transfers without fee quotes. Quotes also bind the route, amount and recipients.
 
 Bread must support the selected network. The installed adapter forwards the
 `mainnet` connection string even though its published enum omits it; network
@@ -177,9 +184,9 @@ correctly at runtime via webpack's CJS interop.
 
 ### `@miden-sdk` pin
 
-`package.json` pins `@miden-sdk/miden-sdk` and `@miden-sdk/react` to `0.17.4`,
-matching the wallet. The core SDK pin is mirrored in `overrides` so React and
-the compatible `0.17.0` wallet adapters resolve to one SDK instance. The `st`
+`package.json` pins `@miden-sdk/miden-sdk`, `@miden-sdk/react`, and both wallet
+adapters to `0.17.6`. The core SDK pin is mirrored in `overrides` so React and
+the wallet adapters resolve to one SDK instance. The `st`
 wasm is ~20 MiB, under Cloudflare's 25 MiB
 per-asset limit. `npm run check:wasm-size` fails the PR if that regresses.
 `npm run check:usdcx-note` checks the pinned browser WASM against the preserved
@@ -190,6 +197,7 @@ Rust `0.17.1` note-ID reference so upgrades keep recognizing existing deposits.
 ```bash
 npm run typecheck        # tsc --noEmit
 npm run lint             # eslint
+npm run check:config     # generated network configs validate offline
 npm run check:wasm-size  # st wasm under 24 MiB
 npm run test             # vitest run
 npm run build            # next build --webpack

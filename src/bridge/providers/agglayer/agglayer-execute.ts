@@ -1,3 +1,4 @@
+import type { BridgeConfig } from "../../../config/bridge-config";
 import type { MidenFiWalletContextState } from "@miden-sdk/miden-wallet-adapter-react";
 import { normalizeMidenAccountHex } from "./agglayer";
 import { agglayerConfig } from "./agglayer";
@@ -49,8 +50,8 @@ export async function runAgglayerSend({
   destinationAddress: string;
   /** Sender Miden account — bech32 (mcst1…/mtst1…) or hex. */
   senderAddress: string;
-} & AgglayerSendDeps, deploymentId?: string): Promise<AgglayerSendResult> {
-  const config = agglayerConfig(deploymentId);
+} & AgglayerSendDeps, recovery?: BridgeConfig): Promise<AgglayerSendResult> {
+  const config = agglayerConfig(recovery);
   const {
     AccountId,
     EthAddress,

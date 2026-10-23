@@ -1,10 +1,10 @@
 import { afterEach, expect, it, vi } from "vitest";
-import { currentDeployment } from "../../../config/deployments";
+import { currentBridgeConfig } from "../../../config/bridge-config";
 import type { CctpQuoteRequest } from "./cctp-quote";
 import { requestCircleQuote } from "./circle-api.server";
 
 const input: CctpQuoteRequest = {
-  network: "ethereum", deploymentId: currentDeployment("mainnet").id,
+  network: "ethereum", recovery: currentBridgeConfig("mainnet"),
   sender: "0x1111111111111111111111111111111111111111",
   recipient: "0x4e6fb40fd2f6a55140df2c42dfb5b7", amount: "100",
 };

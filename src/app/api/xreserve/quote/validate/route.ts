@@ -1,3 +1,4 @@
+import { assertCurrentConfig, ConfigRequestError } from "../../../../../config/wallet-config/server";
 import { parseCctpValidationRequest, requestCircleQuoteValidation } from "../../../../../bridge/providers/xreserve/circle-api.server";
 import { reportCircleFailure } from "../../../../../bridge/providers/xreserve/circle-http.server";
 
@@ -9,10 +10,10 @@ const invalidRequest = () => Response.json(
 export async function POST(request: Request) {
   let input: ReturnType<typeof parseCctpValidationRequest>;
   try {
-    const raw = await request.text();
-    if (new TextEncoder().encode(raw).length > 16_384) return invalidRequest();
-    input = parseCctpValidationRequest(JSON.parse(raw));
-  } catch {
+    input = parseCctpValidationRequest(await request.json());
+    assertCurrentConfig(input.recovery, input.network, "receive");
+  } catch (error) {
+    if (error instanceof ConfigRequestError) return Response.json({ error: error.message }, { status: 409, headers: { "Cache-Control": "no-store" } });
     return invalidRequest();
   }
   try {

@@ -1,3 +1,4 @@
+import { configKey } from "../../config/bridge-config";
 import { assertMidenAccountNetwork } from "../../wallets/miden/network";
 import { validateTransferAmount } from "../../bridge/core/rules";
 import { isQuoteReviewable } from "../../bridge/core/quote";
@@ -79,7 +80,7 @@ export async function submitBridgeTransfer(
       if (
         !isQuoteReviewable(quote) ||
         quote.request.routeId !== route.id ||
-        quote.request.deploymentId !== route.deploymentId ||
+        configKey(quote.request.recovery) !== configKey(route.recovery) ||
         quote.request.amount !== input.amount ||
         quote.request.midenAccount !== input.midenAccount ||
         quote.request.evmAddress.toLowerCase() !== input.evmAddress.toLowerCase()

@@ -1,4 +1,4 @@
-import { getDeployment } from "../../../config/deployments";
+import { currentBridgeConfig, type BridgeConfig } from "../../../config/bridge-config";
 /**
  * Epoch Protocol integration config.
  *
@@ -8,13 +8,11 @@ import { getDeployment } from "../../../config/deployments";
  * submitter; the allocator is hosted by Epoch.
  */
 
-export function epochAllocatorUrl(deploymentId?: string) {
-  const deployment = getDeployment(deploymentId);
+export function epochAllocatorUrl(deployment: BridgeConfig = currentBridgeConfig("testnet")) {
   const provider = deployment.document["bridge-providers"].epoch;
   if (deployment.environment !== "testnet" || !provider) throw new Error("Epoch is unavailable on this network.");
   return process.env.NEXT_PUBLIC_EPOCH_ALLOCATOR_URL ?? provider.allocatorUrl;
 }
-export const EPOCH_ALLOCATOR_URL = epochAllocatorUrl();
 
 /**
  * Virtual chain id used by the SDK when an intent's origin / destination
