@@ -75,7 +75,8 @@ export async function submitBridgeTransfer(
       throw new Error("Your connected wallet changed. Review the transfer again.");
     }
     const { flows } = await bridgeProviders[route.provider].load();
-    if (directionFor(route).fees(route).requiresQuote) {
+    const requiresQuote = directionFor(route).fees(route).requiresQuote;
+    if (requiresQuote) {
       const quote = input.quote;
       if (
         !isQuoteReviewable(quote) ||
@@ -87,6 +88,16 @@ export async function submitBridgeTransfer(
       ) {
         throw new Error("Refresh and review the quote before sending.");
       }
+    }
+    if (route.mode === "receive") {
+      if (!effects.verifyBalanceCap) {
+        throw new Error("Unable to verify the $1,232.462 balance limit. Refresh the page and try again.");
+      }
+      await effects.verifyBalanceCap(route, input.amount, input.midenAccount);
+    }
+    // Account and price reads can outlast a reviewed quote's validity window.
+    if (requiresQuote && !isQuoteReviewable(input.quote)) {
+      throw new Error("Refresh and review the quote before sending.");
     }
     await flows[route.mode].submit({
       input,

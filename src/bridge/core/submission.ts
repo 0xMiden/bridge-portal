@@ -32,6 +32,8 @@ export interface TransferSubmission {
 
 export interface SubmissionEffects {
   openEvmWallet: () => Promise<unknown>;
+  /** Fresh account valuation before a bridge-in can reach a signing flow. */
+  verifyBalanceCap?: (route: BridgeRoute, amount: string, account: string) => Promise<void>;
   onError: (message: string) => void;
   onSubmittingChange: (submitting: boolean) => void;
   onPhaseChange: (phase: string) => void;

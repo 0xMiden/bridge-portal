@@ -1874,6 +1874,31 @@ a {
   z-index: 1;
 }
 
+.balance-cap-status {
+  margin: 16px 2px 0;
+  color: var(--muted-foreground);
+  font-size: 14px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.balance-cap-retry {
+  display: block;
+  min-height: 44px;
+  margin-top: 4px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--foreground);
+  font: inherit;
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+
+.balance-cap-retry:hover { color: var(--accent-foreground); }
+
 .form-error {
   display: flex;
   align-items: center;

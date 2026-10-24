@@ -48,7 +48,7 @@ function createMockMidenSigner(): E2EMidenSigner {
     // Canonical testnet faucets so "Show balance" and AggLayer send can resolve
     // assets without hitting the Miden RPC.
     requestAssets: (async () => [
-      { faucetId: MIDEN_ETH.faucetId, amount: "100000000" },
+      { faucetId: MIDEN_ETH.faucetId, amount: "10000000" },
       { faucetId: EPOCH_MIDEN_USDC.faucetId, amount: "1000000" },
     ]) as unknown as E2EMidenSigner["requestAssets"],
     requestConsumableNotes: (async () =>

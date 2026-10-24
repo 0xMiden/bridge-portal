@@ -2,7 +2,7 @@ import { QueryClient, queryOptions, skipToken } from "@tanstack/react-query";
 import { formatUnits } from "viem";
 import type { MidenFiWalletContextState } from "@miden-sdk/miden-wallet-adapter-react";
 import type { EvmAsset, MidenAsset } from "./core/assets";
-import { bridgeRoutes } from "./core/routes";
+import { tokenRegistry } from "../config/token-registry";
 import { midenBalanceScope, type MidenBalances } from "./miden-balances";
 
 export type SepoliaAsset = EvmAsset & { network: "sepolia" };
@@ -20,9 +20,7 @@ type MidenSession = {
 };
 
 const midenQueryPrefix = ["balances", "miden"] as const;
-const midenAssets = bridgeRoutes
-  .flatMap((route) => [route.source, route.destination])
-  .filter((asset): asset is MidenAsset => asset.kind === "miden");
+const midenAssets = [...tokenRegistry.testnet, ...tokenRegistry.mainnet].map(({ miden }) => miden);
 
 function evmKey(account: string, asset: EvmAsset) {
   return ["balances", asset.network, account.toLowerCase(), asset.kind,
@@ -55,7 +53,7 @@ export class BalanceStore {
         predicate: (query) => query.getObserversCount() === 0,
       });
     }
-    if (session?.requestAssets && (changed || assetsBecameAvailable)) {
+    if (session && (changed || assetsBecameAvailable)) {
       // One automatic read per session. The query retains errors for the UI;
       // retry is explicit so denied access never becomes a prompt loop.
       void this.requestMiden(session.account, session.network).catch(() => {});
@@ -77,7 +75,7 @@ export class BalanceStore {
   /** Connection, refresh, and wallet-menu sync share the same in-flight read. */
   requestMiden(account: string, network: MidenAsset["network"], refresh = false): Promise<MidenBalances> {
     const session = this.midenSession;
-    if (!session?.requestAssets ||
+    if (!session ||
         midenBalanceScope(account, network) !== midenBalanceScope(session.account, session.network)) {
       return Promise.reject(new Error("Connect your Miden wallet before reading its balance."));
     }
@@ -89,14 +87,40 @@ export class BalanceStore {
       ...options,
       staleTime: refresh || retry ? 0 : Infinity,
       queryFn: async () => {
-        const { fetchMidenBalances } = await import("./miden-balances");
-        return fetchMidenBalances(account, midenAssets.filter((asset) => asset.network === network), () => {
-          // Loading the SDK is asynchronous. Do not open a popup for a session
-          // that ended while it was loading, even if the same account reconnects.
+        if (!requestAssets) throw new Error("Your Miden wallet does not support balance access. Reconnect with Bread wallet.");
+        let expired = false;
+        let timeout: ReturnType<typeof setTimeout> | undefined;
+        const timeoutError = new Error("Balance check timed out. Sync your Bread wallet and try again.");
+        const assertCurrent = () => {
+          if (expired) throw timeoutError;
           if (version !== this.midenSessionVersion) throw new Error("Miden account changed");
-          return requestAssets();
-        });
+        };
+        const read = async () => {
+          const { fetchMidenBalances } = await import("./miden-balances");
+          assertCurrent();
+          const balances = await fetchMidenBalances(account, midenAssets.filter((asset) => asset.network === network), () => {
+            // SDK loading can outlive the timeout or wallet session. Never open
+            // an obsolete permission prompt or publish its eventual response.
+            assertCurrent();
+            return requestAssets();
+          }, network);
+          assertCurrent();
+          return balances;
+        };
+        try {
+          return await Promise.race([
+            read(),
+            new Promise<never>((_, reject) => {
+              timeout = setTimeout(() => { expired = true; reject(timeoutError); }, 45_000);
+            }),
+          ]);
+        } finally {
+          if (timeout) clearTimeout(timeout);
+        }
       },
+    }).then((balances) => {
+      if (version !== this.midenSessionVersion) throw new Error("Miden account changed");
+      return balances;
     });
   }
 

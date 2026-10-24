@@ -153,6 +153,19 @@ session storage and can differ across tabs. EVM submission checks the required
 chain and account; every new submission checks the reviewed config, including
 transfers without fee quotes. Quotes also bind the route, amount and recipients.
 
+Bridge-in deposits are capped at a projected connected-account balance of
+**$1,232.462**. The portal sums wallet holdings with available prices using trusted
+faucet identities, then adds the gross deposit value before fees. Unknown or
+unpriced holdings are excluded from the total and do not block deposits.
+Comparisons preserve token and price decimal precision. Unavailable balances or
+a missing/stale price for the deposit itself show an error with an explicit retry.
+The cap notice appears only when the amount exceeds the limit.
+Confirmation refreshes the account balance and prices
+before any provider submission. This is a frontend safeguard, applied on both
+network selections (testnet uses equivalent market estimates); withdrawals and
+incoming note consumption are unrestricted by this cap. Pending deposits are
+not reserved against the allowance until they appear in the wallet balance.
+
 Bread must support the selected network. The installed adapter forwards the
 `mainnet` connection string even though its published enum omits it; network
 prefix checks reject wrong-network accounts before signing. Mainnet requires an
