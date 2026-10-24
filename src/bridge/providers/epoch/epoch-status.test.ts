@@ -1,5 +1,6 @@
 import type { IntentTransactionStatus } from "@epoch-protocol/epoch-intents-sdk";
 import { describe, expect, test, vi } from "vitest";
+import { defaultBridgeRoute, findBridgeRoute } from "../../core/routes";
 import { observeActivity } from "../../tracking";
 import { getEpochReadOnlySdk } from "./sdk";
 
@@ -25,11 +26,16 @@ function row(
   return { status, chainId, transactionHash };
 }
 
-test.each(["send", "receive"] as const)("%s tracking attributes a failed payout to the destination leg", async (mode) => {
-  const destination = mode === "send" ? SEPOLIA_DEST : MIDEN_DEST;
+test.each([
+  ...(["send", "receive"] as const).map(mode => ({ route: defaultBridgeRoute("epoch", mode)!, destination: mode === "send" ? SEPOLIA_DEST : MIDEN_DEST })),
+  ...[["ethereum", 1], ["base", 8453], ["arbitrum", 42161], ["polygon", 137]].flatMap(([network, chainId]) =>
+    (["send", "receive"] as const).map(mode => ({ route: findBridgeRoute(`mainnet:epoch:${network}:${mode}`)!, destination: mode === "send" ? Number(chainId) : MIDEN_DEST }))),
+])("$route.id tracking attributes a failed payout to the destination leg", async ({ route, destination }) => {
+  const { mode } = route;
   const sdk = { getIntentStatus: vi.fn().mockResolvedValue([row("reverted", destination)]) };
   vi.mocked(getEpochReadOnlySdk).mockResolvedValue(sdk as unknown as Awaited<ReturnType<typeof getEpochReadOnlySdk>>);
   const observation = await observeActivity({
+    routeSnapshot: route, environment: route.recovery.environment,
     id: "failed-payout", provider: "epoch", mode, asset: "USDC", amount: "1", status: "message_observed",
     epochSponsor: "0x1111111111111111111111111111111111111111", epochIntentNonce: "42",
     updatedAt: 1, summary: "", eta: "", txHash: "",

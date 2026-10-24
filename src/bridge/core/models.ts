@@ -47,6 +47,11 @@ export type BridgeActivity = {
   epochIntentNonce?: string;
   /** Epoch sponsor / user address the intent status is keyed on (EVM 0x). */
   epochSponsor?: string;
+  /** Compact collateral evidence survives an allocator error or lost response. */
+  epochDepositId?: string;
+  epochClaimHash?: string;
+  epochDepositConfirmed?: boolean;
+  epochError?: string;
   /** Circle attestation is separate from inclusion of the recipient's Miden note. */
   xreserveStatus?: "submitted" | "confirmed" | "attested" | "delivered" | "reverted" | "cancelled" | "replaced";
   xreserveNoteId?: string;

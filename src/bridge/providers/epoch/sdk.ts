@@ -1,36 +1,36 @@
 "use client";
 import type { BridgeConfig } from "../../../config/bridge-config";
+import { assertConfigNetwork } from "../../../config/bridge-config";
+import type { EvmNetwork } from "../../core/assets";
 
 import { EpochIntentSDK } from "@epoch-protocol/epoch-intents-sdk";
 import { buildEpochReadOnlyWalletClient, buildEpochWalletClient, getEvmConnection } from "./client";
 import { epochAllocatorUrl } from "./config";
+import type { EpochDepositTracking } from "./deposit-tracking";
 
 type SdkCache = { key: string; sdk: EpochIntentSDK };
-let connectedCache: SdkCache | null = null;
 let readOnlyCache: SdkCache | null = null;
 
-/** Receive uses the connected Sepolia wallet to sign the collateral deposit. */
-export async function getEpochSdk(recovery?: BridgeConfig): Promise<EpochIntentSDK | null> {
+/** Resolve the current connection again before signing a collateral deposit. */
+export async function getEpochSdk(recovery: BridgeConfig, network: EvmNetwork, tracking?: EpochDepositTracking): Promise<EpochIntentSDK | null> {
+  assertConfigNetwork(recovery, network);
   const { address } = await getEvmConnection();
-  if (!address) {
-    connectedCache = null;
-    return null;
-  }
+  if (!address) return null;
+  if (tracking && tracking.sponsor.toLowerCase() !== address.toLowerCase())
+    throw new Error("Your connected wallet changed. Review the transfer again.");
   const apiBaseUrl = epochAllocatorUrl(recovery);
-  const key = `${apiBaseUrl}:${address.toLowerCase()}`;
-  if (connectedCache?.key === key) return connectedCache.sdk;
-  const walletClient = await buildEpochWalletClient(address as `0x${string}`);
-  const sdk = new EpochIntentSDK({ apiBaseUrl, walletClient });
-  connectedCache = { key, sdk };
-  return sdk;
+  const walletClient = await buildEpochWalletClient(address as `0x${string}`, network, tracking);
+  return new EpochIntentSDK({ apiBaseUrl, walletClient });
 }
 
 /** Miden sends and status reads need a sponsor address, without an EVM signer. */
-export async function getEpochReadOnlySdk(destinationAddress: `0x${string}`, recovery?: BridgeConfig): Promise<EpochIntentSDK> {
+export async function getEpochReadOnlySdk(destinationAddress: `0x${string}`, recovery?: BridgeConfig, sourceNetwork?: EvmNetwork): Promise<EpochIntentSDK> {
   const apiBaseUrl = epochAllocatorUrl(recovery);
-  const key = `${apiBaseUrl}:${destinationAddress.toLowerCase()}`;
+  const network = sourceNetwork ?? (recovery?.environment === "mainnet" ? "ethereum" : "sepolia");
+  if (recovery) assertConfigNetwork(recovery, network);
+  const key = `${apiBaseUrl}:${destinationAddress.toLowerCase()}:${sourceNetwork ?? "miden"}`;
   if (readOnlyCache?.key === key) return readOnlyCache.sdk;
-  const walletClient = buildEpochReadOnlyWalletClient(destinationAddress);
+  const walletClient = buildEpochReadOnlyWalletClient(destinationAddress, network, !sourceNetwork);
   const sdk = new EpochIntentSDK({ apiBaseUrl, walletClient });
   readOnlyCache = { key, sdk };
   return sdk;

@@ -74,3 +74,64 @@ test("Epoch cannot reach review when the allocator has no estimate", async ({ br
   await expect(bridge.preflight()).toBeHidden();
   expect(await bridge.readActivities()).toEqual([]);
 });
+
+
+for (const [network, chainId] of [["ethereum", 1], ["base", 8453], ["arbitrum", 42161], ["polygon", 137]] as const) {
+  for (const mode of ["receive", "send"] as const) {
+    test(`Cedar Epoch ${network} ${mode}: quotes the selected chain and invalidates a changed amount`, async ({ bridge, page }) => {
+      // Mainnet uses the real adapter. Mock its public extension interface,
+      // leaving the production wallet/network checks in place.
+      await page.addInitScript(() => {
+        let address: string | undefined;
+        Object.defineProperty(window, "midenWallet", { value: {
+          get address() { return address; },
+          connect: async (_permission: string, network: string) => {
+            if (network !== "mainnet") throw new Error("Expected Cedar wallet connection");
+            address = "mm1aqu8zjdwvcgkeug5a67kpwmnsyv2qgp7";
+          },
+          disconnect: async () => { address = undefined; },
+          on: () => {}, off: () => {},
+          requestAssets: async () => ({ assets: [] }),
+          requestConsumableNotes: async () => ({ notes: [] }),
+        } });
+      });
+      await page.reload();
+      await bridge.waitForReady();
+      const endpoint = "https://miden-smallocator.epochprotocol.xyz";
+      await page.route(`${endpoint}/suggested-nonce/**`, route => route.fulfill({ json: { nonce: "1" } }));
+      await page.route(`${endpoint}/checkIfDepositNeeded`, route => {
+        const amount = route.request().postDataJSON().compact.mandate.tokenInAmount;
+        return route.fulfill({ json: { tokenOut: amount === "1000000" ? "991878" : "0" } });
+      });
+      await page.route("**/api/evm/*/gas**", route => route.fulfill({ json: { gasPriceWei: "1200000000", gwei: "1.2" } }));
+      await page.evaluate(({ network, mode }) => {
+        localStorage.setItem("miden.bridge.ui.route.mainnet", "epoch");
+        localStorage.setItem("miden.bridge.ui.mode.mainnet", mode);
+        localStorage.setItem("miden.bridge.ui.route.mainnet.id", `mainnet:epoch:${network}:${mode}`);
+      }, { network, mode });
+      await page.getByRole("combobox", { name: "Bridge network" }).click();
+      await page.getByRole("option", { name: "Mainnet", exact: true }).click();
+      await expect(bridge.selectedProvider()).toContainText("Epoch");
+      await page.locator('[data-wallet="miden"] .wallet-pill').click();
+      await page.getByRole("menuitem", { name: "Connect wallet", exact: true }).click();
+      await expect(page.locator('[data-wallet="miden"] .wallet-pill')).toHaveClass(/connected/);
+      const request = page.waitForRequest(`${endpoint}/checkIfDepositNeeded`, { timeout: 20_000 });
+      await bridge.fillAmount("1");
+      const payload = (await request).postDataJSON();
+      expect(payload.chainId).toBe(String(mode === "send" ? 999999999 : chainId));
+      expect(payload.compact.mandate).toMatchObject({
+        destinationChainId: String(mode === "send" ? chainId : 999999999),
+        midenFaucetId: "0xe69e6ca6e39df1b10c1e5399399feb", tokenInAmount: "1000000",
+      });
+      await bridge.openPreflight();
+      await expect(bridge.preflight()).toContainText("0.991878");
+      if (network === "polygon" && mode === "receive") await expect(bridge.preflight()).toContainText("POL");
+      await bridge.cancelPreflight();
+      await bridge.fillAmount("0.5");
+      await expect(page.locator(".form-error")).toContainText("No liquidity available");
+      await bridge.primaryButton().click();
+      await expect(bridge.preflight()).toBeHidden();
+      expect(await bridge.readActivities()).toEqual([]);
+    });
+  }
+}

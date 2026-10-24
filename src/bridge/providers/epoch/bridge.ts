@@ -211,7 +211,9 @@ export async function buildEVMToMidenIntent(
       taskTypeString,
       intentData: intentData as Record<string, unknown>,
       error:
-        err instanceof Error ? err.message : "Failed to solve EVM→Miden intent",
+        err instanceof Error
+          ? [err.message, "status" in err && typeof err.status === "number" ? `HTTP ${err.status}` : undefined, "code" in err ? err.code : undefined].filter(Boolean).join(" · ")
+          : "Failed to solve EVM→Miden intent",
     };
   }
 }

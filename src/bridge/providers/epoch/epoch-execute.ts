@@ -13,7 +13,6 @@ import {
   getEVMToMidenQuote,
 } from "./bridge";
 import {
-  EPOCH_DESTINATION_CHAIN_ID,
   epochRouteAssets,
 } from "./bridgeable-token";
 import { MIDEN_DESTINATION_CHAIN_ID } from "./config";
@@ -38,8 +37,8 @@ import { e2eNetwork, isE2E } from "../../../wallets/testing/env";
  * Two directions:
  *  - send (Miden→EVM): mint a recallable P2IDE collateral note on Miden (the
  *    user's only signature) via the connected MidenFi adapter, then have the
- *    allocator/solver fulfil the destination token on Sepolia. No EVM signature.
- *  - receive (EVM→Miden): the connected Sepolia wallet signs a deposit into The
+ *    allocator/solver fulfil the destination token on the selected EVM chain. No EVM signature.
+ *  - receive (EVM→Miden): the connected EVM wallet signs a deposit into The
  *    Compact (handled inside the SDK's solveIntent), then the solver mints the
  *    Miden output token. No Miden signature.
  */
@@ -58,7 +57,7 @@ export interface RunEpochTransferArgs {
   requestTransaction?: MidenNoteDeps["requestTransaction"];
   waitForTransaction?: MidenNoteDeps["waitForTransaction"];
   /** Publish the source evidence immediately, before awaiting the solver. */
-  onSubmitted?: (source: { sourceTxHash: string; midenNoteId?: string }) => void;
+  onSubmitted?: (source: { sourceTxHash: string; midenNoteId?: string; epochDepositId?: string; epochClaimHash?: string }) => void;
   /**
    * Live execution status (phase + the deposit tx hash once broadcast) for UI
    * progress on receive. The caller uses the hash to jump to the detail page as
@@ -98,15 +97,15 @@ function epochOutputAmount(
 }
 
 function assertCommonArgs(args: RunEpochTransferArgs) {
-  epochRouteAssets(args.route);
+  const { chain } = epochRouteAssets(args.route);
   if (!isValidAmount(args.amount)) {
     throw new Error("Enter an amount greater than zero.");
   }
   if (!EVM_ADDRESS_RE.test(args.evmAddress.trim())) {
     throw new Error(
       args.route.mode === "send"
-        ? "Add a valid 0x recipient address on Sepolia."
-        : "Connect a Sepolia wallet before bridging.",
+        ? `Add a valid 0x recipient address on ${chain.name}.`
+        : `Connect a ${chain.name} wallet before bridging.`,
     );
   }
   if (!args.midenAccount.trim()) {
@@ -131,7 +130,7 @@ async function runEpochSend(
 
   const sdk = await getEpochReadOnlySdk(evmRecipient, args.route.recovery);
 
-  const { miden, evm } = epochRouteAssets(args.route);
+  const { miden, evm, chain } = epochRouteAssets(args.route);
   const params: CrossChainIntentParams = {
     midenAccountId: senderAddress,
     midenFaucetId: miden.faucetId,
@@ -140,7 +139,7 @@ async function runEpochSend(
       miden.decimals,
     ).toString(),
     evmRecipient,
-    destinationChainId: EPOCH_DESTINATION_CHAIN_ID,
+    destinationChainId: chain.id,
     outputTokenAddress: evm.address,
     minTokenOut: "0",
   };
@@ -187,10 +186,12 @@ async function runEpochReceive(
   const evmSource = args.evmAddress.trim() as `0x${string}`;
   const midenRecipient = args.midenAccount.trim();
 
-  const sdk = await getEpochSdk(args.route.recovery);
-  if (!sdk) throw new Error("Connect a Sepolia wallet to bridge via Epoch.");
-
-  const { miden, evm } = epochRouteAssets(args.route);
+  const { miden, evm, chain } = epochRouteAssets(args.route);
+  const sdk = await getEpochSdk(args.route.recovery, evm.network, {
+    sponsor: evmSource, token: evm.address, amount: parseUnits(args.amount, evm.decimals).toString(),
+    onSubmitted: source => args.onSubmitted?.(source),
+  });
+  if (!sdk) throw new Error(`Connect a ${chain.name} wallet to bridge via Epoch.`);
   const params: EVMToMidenIntentParams = {
     destinationChainId: MIDEN_DESTINATION_CHAIN_ID,
     evmSourceAddress: evmSource,

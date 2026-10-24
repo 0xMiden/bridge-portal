@@ -6,6 +6,7 @@ import testnet from "./wallet-config/testnet.json";
 import mainnet from "./wallet-config/mainnet.json";
 import { tokenRegistry } from "./token-registry";
 import { assertTokenConnections } from "./wallet-config/token-connections";
+import { withPortalEpochRoutes } from "./wallet-config/epoch-mainnet";
 
 export type BridgeConfig = z.infer<typeof bridgeConfigSchema>;
 
@@ -13,7 +14,7 @@ export type BridgeConfig = z.infer<typeof bridgeConfigSchema>;
 // transfers carry their own recovery context, independently of these files.
 const current: Record<BridgeEnvironment, BridgeConfig> = {
   testnet: bridgeConfigSchema.parse(testnet),
-  mainnet: bridgeConfigSchema.parse(mainnet),
+  mainnet: bridgeConfigSchema.parse(withPortalEpochRoutes(bridgeConfigSchema.parse(mainnet))),
 };
 for (const environment of ["testnet", "mainnet"] as const) assertTokenConnections(current[environment], tokenRegistry[environment]);
 export function currentBridgeConfig(environment: BridgeEnvironment): BridgeConfig {

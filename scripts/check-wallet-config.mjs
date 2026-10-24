@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { withPortalEpochRoutes } from "../src/config/wallet-config/epoch-mainnet.ts";
 import { readFile } from "node:fs/promises";
 import { bridgeConfigSchema } from "../src/config/wallet-config/schema.ts";
 import { assertTokenConnections, tokenConnectionsSchema } from "../src/config/wallet-config/token-connections.ts";
@@ -13,7 +14,7 @@ for (const environment of ["testnet", "mainnet"]) {
   const file = new URL(`../src/config/wallet-config/${environment}.json`, import.meta.url);
   const value = JSON.parse(await readFile(file, "utf8"));
   const config = bridgeConfigSchema.parse(value);
-  assertTokenConnections(config, registry[environment]);
+  assertTokenConnections(bridgeConfigSchema.parse(withPortalEpochRoutes(config)), registry[environment]);
   if (config.environment !== environment || !/^[a-f0-9]{40}$/.test(value.revision ?? "")) {
     throw new Error(`Invalid generated ${environment} configuration`);
   }

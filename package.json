@@ -28,7 +28,7 @@
     "check:config": "node --experimental-strip-types scripts/check-wallet-config.mjs"
   },
   "dependencies": {
-    "@epoch-protocol/epoch-intents-sdk": "1.0.39",
+    "@epoch-protocol/epoch-intents-sdk": "1.0.40-mainnet.0",
     "@gsap/react": "^2.1.2",
     "@miden-sdk/miden-sdk": "0.17.6",
     "@miden-sdk/miden-wallet-adapter-base": "0.17.6",
@@ -43,14 +43,15 @@
     "next-themes": "^0.4.6",
     "react": "19.2.4",
     "react-dom": "19.2.4",
-    "viem": "^2.51.0",
+    "viem": "^2.56.3",
     "wagmi": "^2.19.5",
     "zod": "4.4.3"
   },
   "overrides": {
     "@wagmi/core": "2.22.1",
     "@wagmi/connectors": "6.2.0",
-    "@miden-sdk/miden-sdk": "0.17.6"
+    "@miden-sdk/miden-sdk": "0.17.6",
+    "@epoch-protocol/epoch-commons-sdk": "0.1.21-mainnet.0"
   },
   "devDependencies": {
     "@opennextjs/cloudflare": "^1.20.1",

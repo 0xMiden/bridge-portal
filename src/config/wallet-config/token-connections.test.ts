@@ -1,6 +1,7 @@
 import { expect, it } from "vitest";
 import { bridgeConfigSchema } from "./schema";
 import { assertTokenConnections, tokenConnectionsSchema } from "./token-connections";
+import { withPortalEpochRoutes } from "./epoch-mainnet";
 import mainnet from "./mainnet.json";
 import data from "./token-connections.json";
 
@@ -13,7 +14,7 @@ it.each(["faucet", "source precision", "destination precision", "source contract
     if (mismatch === "source precision") pair.evm.decimals += 1;
     if (mismatch === "destination precision") pair.miden.decimals -= 1;
     if (mismatch === "source contract" && pair.evm.kind === "erc20") pair.evm.address = "0x1111111111111111111111111111111111111111";
-    expect(() => assertTokenConnections(bridgeConfigSchema.parse(mainnet), connections)).toThrow(/does not match verified configuration/);
+    expect(() => assertTokenConnections(bridgeConfigSchema.parse(withPortalEpochRoutes(bridgeConfigSchema.parse(mainnet))), connections)).toThrow(/does not match verified configuration/);
   },
 );
 
@@ -21,7 +22,7 @@ it("rejects a missing configured mainnet token instead of silently narrowing the
   const connections = tokenConnectionsSchema.parse(data).mainnet;
   const index = connections.findIndex(pair => pair.provider === "agglayer" && pair.evm.kind === "erc20");
   connections.splice(index, 1);
-  expect(() => assertTokenConnections(bridgeConfigSchema.parse(mainnet), connections)).toThrow(/Missing token connection/);
+  expect(() => assertTokenConnections(bridgeConfigSchema.parse(withPortalEpochRoutes(bridgeConfigSchema.parse(mainnet))), connections)).toThrow(/Missing token connection/);
 });
 
 it.each(["network", "duplicate route", "conflicting metadata", "unsupported withdrawal"])(

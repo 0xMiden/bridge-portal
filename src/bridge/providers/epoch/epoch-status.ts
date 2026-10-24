@@ -46,7 +46,7 @@ export function epochActivityState(
 
 /**
  * The settled destination-chain transaction hash, once Epoch's solver has
- * fulfilled that leg — the real bridging tx (Sepolia for Send, Miden for
+ * fulfilled that leg — the real bridging tx (the selected EVM chain for Send, Miden for
  * Receive). Lets the detail page deep-link the explorer to the actual tx
  * instead of a tx list / a broken abbreviated hash.
  */
@@ -61,5 +61,5 @@ export function epochDestinationTx(
       typeof s.transactionHash === "string" &&
       s.transactionHash.length > 0,
   );
-  return row?.transactionHash;
+  return row?.transactionHash ?? undefined;
 }
