@@ -228,7 +228,6 @@ describe("Epoch activity lifecycle", () => {
     execution.resolve({
       direction: mode, intentNonce: "42", sponsorAddress: EVM_ADDRESS,
       sourceTxHash: TX_HASH, outputAmount: "0.123456789012345678",
-      raw: { taskTypeString: "test", intentData: {} },
     });
     await submission;
 
@@ -577,7 +576,7 @@ describe("Cedar Epoch deposits", () => {
         expect(chain).toBe(`0x${Number(chainId).toString(16)}`);
         onSubmitted!({ sourceTxHash: TX_HASH });
         return { direction: "receive", intentNonce: "42", sponsorAddress: EVM_ADDRESS,
-          sourceTxHash: TX_HASH, outputAmount: "9.9", raw: { taskTypeString: "test", intentData: {} } };
+          sourceTxHash: TX_HASH, outputAmount: "9.9" };
       });
       await submitBridgeTransfer(input, effects);
       expect(effects.onError).not.toHaveBeenCalled();

@@ -22,7 +22,6 @@ import { getEpochReadOnlySdk, getEpochSdk } from "./sdk";
 import type {
   CrossChainIntentParams,
   EVMToMidenIntentParams,
-  IntentResult,
 } from "./types";
 import { e2eNetwork, isE2E } from "../../../wallets/testing/env";
 
@@ -30,7 +29,7 @@ import { e2eNetwork, isE2E } from "../../../wallets/testing/env";
  * Epoch execute/submit orchestration — the half the quote layer didn't cover.
  *
  * IMPORTANT: this module transitively imports the eager-WASM `@miden-sdk/miden-sdk`
- * (via chain.ts / miden-note.ts / bridge.ts), so it MUST only ever be reached
+ * (via miden-note.ts / bridge.ts), so it MUST only ever be reached
  * through a client-side dynamic `import()` (BridgeExperience does this at click
  * time). Never import it statically from an SSR-rendered component.
  *
@@ -80,8 +79,6 @@ export interface EpochExecuteResult {
   midenNoteId?: string;
   /** Real quoted output amount (human units) from the Epoch API, if available. */
   outputAmount?: string;
-  /** Raw intent result for debugging / detail surfaces. */
-  raw: IntentResult;
 }
 
 /** Human-format the Epoch quote's output amount (tokenOut, base units). */
@@ -192,7 +189,6 @@ async function runEpochSend(
     sourceTxHash: noteOutcome?.txHash,
     midenNoteId: noteOutcome?.noteId,
     outputAmount: epochOutputAmount(quote, evm.decimals),
-    raw: result,
   };
 }
 
@@ -242,7 +238,6 @@ async function runEpochReceive(
     sponsorAddress: evmSource,
     sourceTxHash: result.solveResult?.depositResult?.transactionHash,
     outputAmount: epochOutputAmount(quote, miden.decimals),
-    raw: result,
   };
 }
 
@@ -262,7 +257,6 @@ export async function runEpochTransfer(
       sourceTxHash,
       midenNoteId: args.route.mode === "send" ? `0x${"cd".repeat(32)}` : undefined,
       outputAmount: "0.99",
-      raw: {} as IntentResult,
     };
   }
   return args.route.mode === "send" ? runEpochSend(args, minTokenOut) : runEpochReceive(args, minTokenOut);

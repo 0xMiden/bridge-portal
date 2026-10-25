@@ -19,14 +19,14 @@ vi.mock("@miden-sdk/miden-sdk", async (importOriginal) => ({
 // The adapter only declares a bundler entry point; use its real transaction
 // implementation directly in Node so assertions cover the submitted payload.
 vi.mock("@miden-sdk/miden-wallet-adapter-base", () => import("@miden-sdk/miden-wallet-adapter-base/dist/transaction.js"));
-vi.mock("./chain", () => ({ getCurrentMidenBlock: vi.fn(async () => 12_000) }));
+vi.mock("../../miden-rpc", () => ({ getCurrentMidenBlock: vi.fn(async () => 12_000) }));
 vi.mock("../../../wallets/miden/miden-transaction", () => ({ createFeeConversionSalt: vi.fn() }));
 
 import { Note } from "@miden-sdk/miden-sdk";
 import { Transaction } from "@miden-sdk/miden-wallet-adapter-base";
 import { currentBridgeConfig, type BridgeConfig } from "../../../config/bridge-config";
 import { createFeeConversionSalt } from "../../../wallets/miden/miden-transaction";
-import { getCurrentMidenBlock } from "./chain";
+import { getCurrentMidenBlock } from "../../miden-rpc";
 import { createBridgeP2IDENoteCallback, type MidenNoteDeps } from "./miden-note";
 
 const TEST_ACCOUNT_ID = "0x387149ae66116cf114eebd60bb7381";

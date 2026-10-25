@@ -2,7 +2,7 @@ import { assertConfigNetwork, configKey } from "../../../config/bridge-config";
 import { formatUnits } from "viem";
 import { assertMidenAccountNetwork } from "../../../wallets/miden/network";
 import type { QuoteRequest, QuoteResult } from "../../core/quote";
-import { normalizeMidenAccountHex } from "../agglayer/agglayer";
+import { normalizeMidenAccountHex } from "../../miden-address";
 import { CircleApiError, circleApiError, parseCirclePayload } from "./circle-response";
 import { arcRecipient, parseArcAmount } from "./deposit-terms";
 import { assertWithdrawalAmounts, validateWithdrawal, withdrawalDomain, withdrawalPayload } from "./withdrawal";

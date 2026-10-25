@@ -3,7 +3,7 @@ import { activityRoute } from "../../core/routes";
 import { isCctpNetwork, arcConfig } from "./config";
 import type { CctpStatusResponse } from "./cctp-status";
 import type { BridgeActivity } from "../../core/models";
-import { normalizeMidenAccountHex } from "../agglayer/agglayer";
+import { normalizeMidenAccountHex } from "../../miden-address";
 import type { ArcDepositIntent } from "./attestation";
 import { parseArcAmount } from "./deposit-terms";
 

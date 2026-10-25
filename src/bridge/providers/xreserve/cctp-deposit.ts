@@ -1,3 +1,4 @@
+import { validateMidenRecipient } from "../../miden-address";
 import { currentBridgeConfig, type BridgeConfig } from "../../../config/bridge-config";
 import { BaseError, ContractFunctionRevertedError, erc20Abi, type Address, type Hash } from "viem";
 import type { EvmProvider } from "../../../wallets/evm/evm-wallet";
@@ -7,7 +8,7 @@ import { cctpBurnCall } from "./cctp-burn";
 import { cctpConfig, cctpSource, type CctpNetwork } from "./config";
 import { assertCctpQuoteMatches, type CctpQuote, CctpQuotePolicy } from "./cctp-quote";
 import type { ArcDepositPhase } from "./deposit";
-import { assertCctpRouteAvailable, validateMidenRecipient } from "./deposit-preflight";
+import { assertCctpRouteAvailable } from "./deposit-preflight";
 import { parseArcAmount } from "./deposit-terms";
 import { suggestEvmFees } from "../../evm/fee-suggestions";
 

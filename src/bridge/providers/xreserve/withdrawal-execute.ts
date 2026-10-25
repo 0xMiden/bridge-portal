@@ -1,7 +1,6 @@
 import type { BridgeConfig } from "../../../config/bridge-config";
 import type { MidenFiWalletContextState } from "@miden-sdk/miden-wallet-adapter-react";
 import type { BridgeNetwork } from "../../core/assets";
-import { normalizeMidenAccountHex } from "../agglayer/agglayer";
 import { arcConfig } from "./config";
 import { validateWithdrawal, withdrawalDomains, withdrawalPayload } from "./withdrawal";
 import { configMidenNetwork } from "../../../config/bridge-config";
@@ -21,6 +20,7 @@ export async function withdrawUsdcx(input: {
   const amount = validateWithdrawal(input.amount, input.network);
   const payload = withdrawalPayload(input.destination, withdrawalDomains[input.network]!);
   const sdk = await import("@miden-sdk/miden-sdk");
+  const { parseMidenAccountId } = await import("../../miden-address-sdk");
   const { Transaction } = await import("@miden-sdk/miden-wallet-adapter-base");
   const faucet = sdk.AccountId.fromHex(ARC.faucetId);
   const rpc = new sdk.RpcClient(new sdk.Endpoint(configMidenNetwork(recovery).rpcUrl));
@@ -59,7 +59,7 @@ export async function withdrawUsdcx(input: {
   const asset = new sdk.FungibleAsset(faucet, amount);
   const storage = new sdk.NoteStorage(new sdk.FeltArray([...asset.vaultKey().toFelts(), ...asset.intoWord().toFelts()]));
   const recipient = sdk.NoteRecipient.fromScript(sdk.NoteScript.burn(), storage);
-  const sender = sdk.AccountId.fromHex(`0x${normalizeMidenAccountHex(input.sender)}`);
+  const sender = parseMidenAccountId(input.sender);
   const metadata = new sdk.NoteMetadata(sender, sdk.NoteType.Public, new sdk.NoteTag(0x4255524e));
   const words = [0, 4, 8].map(i => new sdk.Word(new BigUint64Array(payload.slice(i, i + 4))));
   const withdrawal = sdk.NoteAttachment.fromWords(new sdk.NoteAttachmentScheme(5), words);

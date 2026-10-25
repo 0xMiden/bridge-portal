@@ -1,17 +1,10 @@
 import type { BridgeConfig } from "../../../config/bridge-config";
 import { createPublicClient, parseAbi, type PublicClient } from "viem";
 import { evmReadTransport } from "../../evm/transport";
-import { normalizeMidenAccountHex } from "../agglayer/agglayer";
 import { cctpConfig, type CctpNetwork, arcConfig, xReserveAbi } from "./config";
 import { arcRecipient } from "./deposit-terms";
 
 const pausedAbi = parseAbi(["function paused() view returns (bool)"]);
-
-export async function validateMidenRecipient(recipient: string) {
-  const { AccountId } = await import("@miden-sdk/miden-sdk");
-  const id = AccountId.fromHex(`0x${normalizeMidenAccountHex(recipient)}`);
-  id.free();
-}
 
 export async function assertArcRouteAvailable(client: Pick<PublicClient, "readContract">, arc: ReturnType<typeof arcConfig>) {
   const [registered, remoteToken] = await Promise.all([

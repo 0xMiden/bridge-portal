@@ -1,6 +1,7 @@
 import type { MidenFiWalletContextState } from "@miden-sdk/miden-wallet-adapter-react";
 import type { MidenAsset } from "./core/assets";
 import { e2eNetwork, isE2E } from "../wallets/testing/env";
+import { getMidenFaucetMetadata } from "./miden-rpc";
 
 type RequestAssets = NonNullable<MidenFiWalletContextState["requestAssets"]>;
 
@@ -46,30 +47,18 @@ export async function fetchMidenBalances(
 
   // Mock E2E must not load the browser-only WASM SDK.
   if (!(isE2E() && e2eNetwork() === "mock")) {
-    const { AccountId, RpcClient, Endpoint, BasicFungibleFaucetComponent } =
-      await import("@miden-sdk/miden-sdk");
-    const accountId = (id: string) => {
-      const normalized = normalizeId(id);
-      return /^[0-9a-f]+$/.test(normalized)
-        ? AccountId.fromHex(`0x${normalized}`)
-        : AccountId.fromBech32(id.trim());
-    };
+    const { normalizeMidenIdToHex } = await import("./miden-address-sdk");
     canon = (id) => {
       try {
-        return normalizeId(accountId(id).toString());
+        return normalizeId(normalizeMidenIdToHex(id));
       } catch {
         return normalizeId(id);
       }
     };
-    const rpc = new RpcClient(Endpoint.testnet());
     resolveMetadata = async (asset) => {
       try {
-        const fetched = await rpc.getAccountDetails(accountId(asset.faucetId));
-        const account = fetched.account();
-        if (account) {
-          const faucet = BasicFungibleFaucetComponent.fromAccount(account);
-          return { decimals: faucet.decimals(), symbol: faucet.symbol().toString() };
-        }
+        const metadata = await getMidenFaucetMetadata(asset.faucetId, asset.network);
+        if (metadata) return metadata;
       } catch {
         // Unavailable or private faucet metadata uses the configured precision.
       }

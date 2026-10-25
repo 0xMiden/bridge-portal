@@ -22,7 +22,7 @@ vi.mock("./bridge", () => ({
   getEVMToMidenQuote: vi.fn(),
 }));
 
-vi.mock("./chain", () => ({ getCurrentMidenBlock: vi.fn() }));
+vi.mock("../../miden-rpc", () => ({ getCurrentMidenBlock: vi.fn() }));
 
 vi.mock("@epoch-protocol/epoch-intents-sdk", () => ({
   TaskType: { GetTokenOut: "gettokenout" },
