@@ -1,61 +1,48 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import type { Activity } from "../../bridge/core/models";
 import { directionFor } from "../../bridge/providers/registry";
-import { normalizeActivityState } from "../../bridge/activity";
 import { observeActivity } from "../../bridge/tracking";
-import { loadStoredActivities, patchStoredActivity } from "./bridge-persistence";
+import { useActivitySnapshot, useActivityStore } from "../components/ActivityProvider";
 import { DEMO_ACTIVITIES } from "./activity-demo";
 import { useBridgeEnvironment } from "../components/NetworkProvider";
 import { errorMessage } from "./wallet-errors";
 
-/** One polling lifecycle for every provider: read latest, observe, merge, publish. */
+/** Polling owns observation timing; the shared store owns receipt state. */
 export function useActivityTracking(id: string) {
   const environment = useBridgeEnvironment();
+  const store = useActivityStore();
+  const { ready, receipts } = useActivitySnapshot();
+  const demo = environment === "testnet" ? DEMO_ACTIVITIES[id] : undefined;
+  const receipt = receipts.find(item => item.activity.id === id && item.activity.environment === environment);
   const [view, setView] = useState<{
     id: string;
-    activity?: Activity;
-    loaded: boolean;
     monitorError: string;
     lastCheckedAt: number;
   }>({
     id,
-    loaded: false,
     monitorError: "",
     lastCheckedAt: 0,
   });
   const [version, setVersion] = useState(0);
 
   useEffect(() => {
+    if (!ready || demo) return;
     const controller = new AbortController();
     let timer: ReturnType<typeof setTimeout>;
-    const demo = environment === "testnet" ? DEMO_ACTIVITIES[id] : undefined;
     async function poll() {
       let delay = 3_000;
       try {
-        const activity = demo ?? loadStoredActivities(environment).find((item) => item.id === id);
-        if (controller.signal.aborted) return;
-        const current = activity ? normalizeActivityState(activity) : undefined;
-        setView((previous) => ({
-          id,
-          activity: current,
-          loaded: true,
-          monitorError: previous.id === id ? previous.monitorError : "",
-          lastCheckedAt: previous.id === id ? previous.lastCheckedAt : 0,
-        }));
-        if (!current || demo) return;
+        const current = store.get(id)?.activity;
+        if (controller.signal.aborted || !current || current.environment !== environment) return;
         delay = directionFor(current).pollMs;
         const observation = await observeActivity(current, controller.signal);
         if (controller.signal.aborted) return;
         if (observation) {
-          // Patch the newest persisted row, never the snapshot captured before the request.
-          patchStoredActivity(id, observation.patch);
-          const updated = loadStoredActivities(environment).find((item) => item.id === id);
+          // Patch the newest receipt, never the snapshot captured before the request.
+          store.patch(id, observation.patch);
           setView({
             id,
-            activity: updated,
-            loaded: true,
             monitorError: observation.warning ?? "",
             lastCheckedAt: Date.now(),
           });
@@ -69,13 +56,12 @@ export function useActivityTracking(id: string) {
       } catch (error) {
         if (!controller.signal.aborted)
           setView((previous) => ({
-            ...(previous.id === id ? previous : { activity: undefined, lastCheckedAt: 0 }),
+            ...(previous.id === id ? previous : { lastCheckedAt: 0 }),
             id,
-            loaded: true,
             monitorError: errorMessage(error),
           }));
       } finally {
-        if (!controller.signal.aborted && !demo) timer = setTimeout(poll, delay);
+        if (!controller.signal.aborted) timer = setTimeout(poll, delay);
       }
     }
     queueMicrotask(() => {
@@ -95,13 +81,13 @@ export function useActivityTracking(id: string) {
       window.removeEventListener("storage", refresh);
       document.removeEventListener("visibilitychange", onVisible);
     };
-  }, [id, version, environment]);
+  }, [id, version, environment, store, ready, demo]);
 
   const current = view.id === id;
-  const demo = environment === "testnet" ? DEMO_ACTIVITIES[id] : undefined;
   return {
-    activity: demo ?? (current ? view.activity : undefined),
-    isLoading: !demo && (!current || !view.loaded),
+    activity: demo ?? receipt?.activity,
+    receiptSaved: Boolean(demo) || (receipt !== undefined && !receipt.unsavedChanges),
+    isLoading: !demo && !ready,
     monitorError: current ? view.monitorError : "",
     lastCheckedAt: current ? view.lastCheckedAt : 0,
     refresh: () => setVersion((value) => value + 1),

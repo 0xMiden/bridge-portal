@@ -14,7 +14,7 @@ import { ThemeToggle } from "./ThemeToggle";
 import { ActivityJourney } from "./ActivityJourney";
 
 type Tracking = ReturnType<typeof useActivityTracking>;
-type LoadedActivityProps = Pick<Tracking, "monitorError" | "lastCheckedAt" | "refresh"> & {
+type LoadedActivityProps = Pick<Tracking, "monitorError" | "lastCheckedAt" | "refresh" | "receiptSaved"> & {
   activity: Activity;
 };
 
@@ -50,7 +50,7 @@ export function ActivityDetail({ id }: { id: string }) {
   );
 }
 
-function LoadedActivity({ activity, monitorError, lastCheckedAt, refresh }: LoadedActivityProps) {
+function LoadedActivity({ activity, monitorError, lastCheckedAt, refresh, receiptSaved }: LoadedActivityProps) {
   const model = activityDetailFor(activity);
   const needsClaim = model.progress.kind === "tracked" && model.progress.milestones.some((step) => step.status === "consume" && step.state === "current");
   return (
@@ -58,8 +58,17 @@ function LoadedActivity({ activity, monitorError, lastCheckedAt, refresh }: Load
       <p className="sr-only activity-status-announcement" role="status" aria-live="polite" aria-atomic="true">
         {model.announcement}
       </p>
+      {!receiptSaved && (
+        <div className="action-panel warning" role="alert">
+          <p>This receipt could not be saved in your browser. Download it before refreshing or closing this tab. Do not submit the transfer again.</p>
+          <a className="secondary-button" download={`miden-bridge-${activity.id}.json`}
+            href={`data:application/json;charset=utf-8,${encodeURIComponent(JSON.stringify(activity, null, 2))}`}>
+            Download receipt
+          </a>
+        </div>
+      )}
       <ActivityJourney receipt={model.receipt} needsClaim={needsClaim}>
-        <ActivityProgress progress={model.progress} lastCheckedAt={lastCheckedAt} refresh={refresh} claimGuidance={needsClaim ? model.guidance : null} />
+        <ActivityProgress progress={model.progress} lastCheckedAt={lastCheckedAt} refresh={refresh} receiptSaved={receiptSaved} claimGuidance={needsClaim ? model.guidance : null} />
         {model.guidance && !needsClaim && <ActivityGuidance guidance={model.guidance} />}
       </ActivityJourney>
       {monitorError && model.progress.kind === "tracked" && (
@@ -72,11 +81,12 @@ function LoadedActivity({ activity, monitorError, lastCheckedAt, refresh }: Load
   );
 }
 
-function ActivityProgress({ progress, lastCheckedAt, refresh, claimGuidance }: {
+function ActivityProgress({ progress, lastCheckedAt, refresh, claimGuidance, receiptSaved }: {
   claimGuidance: ActivityDetailModel["guidance"];
   progress: ActivityDetailModel["progress"];
   lastCheckedAt: number;
   refresh: () => void;
+  receiptSaved: boolean;
 }) {
   if (progress.kind === "manual") {
     return (
@@ -112,7 +122,7 @@ function ActivityProgress({ progress, lastCheckedAt, refresh, claimGuidance }: {
             </li>
           ))}
         </ol>
-        {progress.live && <LiveProgress lastCheckedAt={lastCheckedAt} deliveryWarningAt={progress.deliveryWarningAt} />}
+        {progress.live && <LiveProgress lastCheckedAt={lastCheckedAt} deliveryWarningAt={progress.deliveryWarningAt} receiptSaved={receiptSaved} />}
       </div>
       {(progress.canRefresh || progress.midenBlock !== undefined) && (
         <div className="support-row">
@@ -125,9 +135,10 @@ function ActivityProgress({ progress, lastCheckedAt, refresh, claimGuidance }: {
 }
 
 /** The clock updates only live monitoring copy, not the receipt or route model. */
-function LiveProgress({ lastCheckedAt, deliveryWarningAt }: {
+function LiveProgress({ lastCheckedAt, deliveryWarningAt, receiptSaved }: {
   lastCheckedAt: number;
   deliveryWarningAt?: number;
+  receiptSaved: boolean;
 }) {
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
@@ -139,7 +150,7 @@ function LiveProgress({ lastCheckedAt, deliveryWarningAt }: {
     <>
       <p className="steps-note">
         <ShieldCheck size={13} aria-hidden="true" />
-        Safe to leave. Tracking resumes when you return.
+        {receiptSaved ? "Safe to leave. Tracking resumes when you return." : "Keep this tab open to continue tracking."}
         {checked ? ` Updated ${checked}.` : ""}
       </p>
       {deliveryWarningAt !== undefined && now > deliveryWarningAt && (
@@ -168,7 +179,7 @@ function ActivityGuidance({ guidance }: { guidance: NonNullable<ActivityDetailMo
   );
 }
 
-function DiagnosticsButton({ activity, monitorError, lastCheckedAt }: Omit<LoadedActivityProps, "refresh">) {
+function DiagnosticsButton({ activity, monitorError, lastCheckedAt }: Pick<LoadedActivityProps, "activity" | "monitorError" | "lastCheckedAt">) {
   const [state, setState] = useState<"idle" | "copying" | "copied" | "failed">("idle");
   const request = useRef(0);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);

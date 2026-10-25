@@ -1,3 +1,4 @@
+import { ActivityStore } from "../../activity";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { EpochIntentSDK } from "@epoch-protocol/epoch-intents-sdk";
 import { createWalletClient, http } from "viem";
@@ -5,7 +6,7 @@ import { sepolia } from "viem/chains";
 import { findBridgeRoute } from "../../core/routes";
 import { quoteTransfer } from "../../quotes";
 import { submitBridgeTransfer, type TransferSubmission } from "../../../app/lib/bridge-submission";
-import { loadStoredActivities } from "../../../app/lib/bridge-persistence";
+import { activityPersistence, loadStoredActivities } from "../../../app/lib/bridge-persistence";
 import { getEpochReadOnlySdk, getEpochSdk } from "./sdk";
 
 // Exercise review, submission, execution and SDK task encoding together. Only
@@ -55,7 +56,7 @@ describe.each([
       evmWallet: { connected: true, address: SPONSOR, provider: { request: vi.fn().mockResolvedValue("0xaa36a7") } },
       midenWallet: { connected: true, address: MIDEN, requestTransaction: vi.fn(), waitForTransaction: vi.fn() },
     };
-    const effects = { openEvmWallet: vi.fn(), verifyBalanceCap: vi.fn(async () => {}), onError: vi.fn(), onSubmittingChange: vi.fn(), onPhaseChange: vi.fn(), onActivitiesChange: vi.fn(), navigate: vi.fn() };
+    const effects = { openEvmWallet: vi.fn(), verifyBalanceCap: vi.fn(async () => {}), onError: vi.fn(), onSubmittingChange: vi.fn(), onPhaseChange: vi.fn(), activities: new ActivityStore(activityPersistence), navigate: vi.fn() };
     return { input, effects, getQuote };
   }
 

@@ -1,7 +1,6 @@
 import { receiptRouteSchema } from "../../bridge/core/receipt-route";
 import { bridgeProviders } from "../../bridge/providers/registry";
-import { applyActivityPatch, normalizeActivityState } from "../../bridge/activity";
-import { shortAddress } from "../../wallets/identity";
+import { normalizeActivityState, type ActivityPersistence } from "../../bridge/activity";
 import { routeEnvironment, routesForEnvironment } from "../../bridge/core/routes";
 import { isFlowMode, type BridgeProvider, type FlowMode } from "../../bridge/core/models";
 import { isBridgeProvider } from "../../bridge/providers/registry";
@@ -88,10 +87,7 @@ function normalizeActivity(activity: Activity): Activity {
   return normalizeActivityState(activity);
 }
 
-export function loadStoredActivities(environment?: BridgeEnvironment): Activity[] {
-  const raw = window.localStorage.getItem(activityStorageKey);
-  if (!raw) return [];
-  const parsed: unknown = JSON.parse(raw);
+function normalizeActivities(parsed: unknown): Activity[] {
   if (!Array.isArray(parsed)) return [];
   return parsed.flatMap((activity: Activity) => {
     if (!activity || !isBridgeProvider(activity.provider) || !isFlowMode(activity.mode)) return [];
@@ -102,29 +98,22 @@ export function loadStoredActivities(environment?: BridgeEnvironment): Activity[
         activity.asset !== routeSnapshot.source.symbol || typeof activity.updatedAt !== "number" ||
         [activity.id, activity.amount, activity.summary, activity.eta, activity.txHash].some(value => typeof value !== "string")) return [];
     const network = routeEnvironment(routeSnapshot);
-    if (environment && network !== environment) return [];
     return [normalizeActivity({ ...activity, environment: network, routeSnapshot })];
   });
+}
+
+/** Validate and migrate untrusted historical receipts at the storage boundary. */
+export function loadStoredActivities(environment?: BridgeEnvironment): Activity[] {
+  const raw = window.localStorage.getItem(activityStorageKey);
+  const activities = raw ? normalizeActivities(JSON.parse(raw)) : [];
+  return activities.filter(activity => !environment || activity.environment === environment);
 }
 
 export function saveActivities(activities: Activity[]) {
   window.localStorage.setItem(activityStorageKey, JSON.stringify(activities));
 }
 
-/**
- * Merge a patch into one stored activity by id and persist. Used by the submit
- * flow to update an already-navigated-to activity as the (backgrounded)
- * execution progresses, so the detail page reflects it on its next re-read.
- */
-export function patchStoredActivity(id: string, patch: Partial<Activity>) {
-  try {
-    const activities = loadStoredActivities();
-    saveActivities(
-      activities.map((item) =>
-        item.id === id ? applyActivityPatch(item, { ...patch, ...(patch.sourceTxHash ? { txHash: shortAddress(patch.sourceTxHash) } : {}) }) : item,
-      ),
-    );
-  } catch {
-    // ignore transient storage errors
-  }
-}
+export const activityPersistence: ActivityPersistence = {
+  read: loadStoredActivities,
+  write: saveActivities,
+};

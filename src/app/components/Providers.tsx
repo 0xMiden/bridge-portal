@@ -6,6 +6,7 @@ import { AppKitProvider } from "../../wallets/evm/AppKitProvider";
 import { RejectionGuard } from "../../wallets/RejectionGuard";
 import { ThemeProvider } from "./ThemeProvider";
 import { BalanceProvider } from "../../bridge/BalanceProvider";
+import { ActivityProvider } from "./ActivityProvider";
 import { NetworkProvider, useBridgeEnvironment } from "./NetworkProvider";
 
 // E2E-only: auto-connect the headless test wallet. ssr:false + flag-gated so it
@@ -42,9 +43,11 @@ export function Providers({
   return (
     <ThemeProvider>
       <AppKitProvider cookies={cookies}>
-        <NetworkProvider>
-          <NetworkWalletProviders>{children}</NetworkWalletProviders>
-        </NetworkProvider>
+        <ActivityProvider>
+          <NetworkProvider>
+            <NetworkWalletProviders>{children}</NetworkWalletProviders>
+          </NetworkProvider>
+        </ActivityProvider>
       </AppKitProvider>
     </ThemeProvider>
   );
