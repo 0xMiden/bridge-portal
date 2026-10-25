@@ -1,3 +1,5 @@
+import { isUserRejection } from "../../../wallets/errors";
+import { normalizeMidenIdToHex } from "../../miden-address-sdk";
 import {
   CollateralType,
   EpochIntentSDK,
@@ -8,7 +10,6 @@ import {
   SolveIntentParams,
   TaskType,
 } from "@epoch-protocol/epoch-intents-sdk";
-import { AccountId, Address } from "@miden-sdk/miden-sdk";
 import { parseUnits } from "viem";
 
 import { MIDEN_DESTINATION_CHAIN_ID } from "./config";
@@ -17,27 +18,6 @@ import type {
   EVMToMidenIntentParams,
   IntentResult,
 } from "./types";
-
-/** True when an error is the user declining a wallet prompt (code 4001 / text). */
-function isUserRejectionError(err: unknown): boolean {
-  if (
-    typeof err === "object" &&
-    err !== null &&
-    "code" in err &&
-    (err as { code?: unknown }).code === 4001
-  ) {
-    return true;
-  }
-  const message = (
-    err instanceof Error ? err.message : String(err ?? "")
-  ).toLowerCase();
-  return (
-    message.includes("user rejected") ||
-    message.includes("user denied") ||
-    message.includes("denied transaction") ||
-    message.includes("rejected the request")
-  );
-}
 
 export interface CrossChainQuote {
   taskTypeString: string;
@@ -82,16 +62,6 @@ function requireEstimate(quote: IntentQuoteResult, minTokenOut: string): void {
 const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
 const ZERO_HASH =
   "0x0000000000000000000000000000000000000000000000000000000000000000";
-
-export function normalizeMidenIdToHex(id: string): string {
-  const raw = id.trim();
-  if (/^(?:0x)?[0-9a-f]+$/i.test(raw)) {
-    return AccountId.fromHex(`0x${raw.replace(/^0x/i, "")}`).toString();
-  }
-  return raw.includes("_")
-    ? Address.fromBech32(raw).accountId().toString()
-    : AccountId.fromBech32(raw).toString();
-}
 
 export function buildEpochTaskDataParams(
   params: CrossChainIntentParams,
@@ -207,7 +177,7 @@ export async function buildEVMToMidenIntent(
     };
   } catch (err) {
     // A wallet rejection is expected user behaviour — don't log it as an error.
-    if (!isUserRejectionError(err)) {
+    if (!isUserRejection(err)) {
       console.error("[EpochBridge] EVM→Miden solveIntent failed:", err);
     }
     return {
@@ -272,7 +242,7 @@ export async function buildCrossChainIntent(
       solveResult, // Include the full execution result
     };
   } catch (err) {
-    if (!isUserRejectionError(err)) {
+    if (!isUserRejection(err)) {
       console.error("[EpochBridge] solveIntent failed:", err);
     }
     // Still return the task data even if solve fails

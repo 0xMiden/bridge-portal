@@ -1,6 +1,5 @@
 import type { BridgeConfig } from "../../../config/bridge-config";
 import type { MidenFiWalletContextState } from "@miden-sdk/miden-wallet-adapter-react";
-import { normalizeMidenAccountHex } from "./agglayer";
 import { agglayerConfig } from "./agglayer";
 import { createFeeConversionSalt } from "../../../wallets/miden/miden-transaction";
 
@@ -44,7 +43,6 @@ type SendInput = {
 async function buildWithdrawal({ amount, faucetId, destinationAddress, senderAddress }: SendInput, recovery?: BridgeConfig) {
   const config = agglayerConfig(recovery);
   const {
-    AccountId,
     EthAddress,
     FungibleAsset,
     Note,
@@ -52,13 +50,12 @@ async function buildWithdrawal({ amount, faucetId, destinationAddress, senderAdd
     NoteAssets,
     TransactionRequestBuilder,
   } = await import("@miden-sdk/miden-sdk");
+  const { parseMidenAccountId } = await import("../../miden-address-sdk");
   const { Transaction } = await import("@miden-sdk/miden-wallet-adapter-base");
 
-  const sender = AccountId.fromHex(`0x${normalizeMidenAccountHex(senderAddress)}`);
-  const bridge = AccountId.fromHex(config.midenBridgeId);
-  const faucet = faucetId.startsWith("0x")
-    ? AccountId.fromHex(faucetId)
-    : AccountId.fromBech32(faucetId);
+  const sender = parseMidenAccountId(senderAddress);
+  const bridge = parseMidenAccountId(config.midenBridgeId);
+  const faucet = parseMidenAccountId(faucetId);
 
   // 0.17: the callback flag is intrinsic to the faucet account id. Do not call
   // withCallbacks (removed). The Cardona ETH faucet id already encodes Enabled.

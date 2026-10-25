@@ -25,7 +25,7 @@ vi.mock("@miden-sdk/miden-sdk", () => ({
   NetworkId: { testnet: () => "testnet" },
   Endpoint: class {},
   RpcClient: class {
-    getBlockHeaderByNumber = async () => ({ blockNum: () => 12000 });
+    getBlockHeaderByNumber = async () => ({ blockNum: () => 12000, free() {} });
     getNotesById = rpc.getNotes;
     free() {}
   },

@@ -11,6 +11,7 @@ import { evmReadTransport } from "../../evm/transport";
 import { findTransactionReceipt } from "../../evm/transaction-receipt";
 import type { Activity } from "../../core/models";
 import type { BridgeConfig } from "../../../config/bridge-config";
+import { getMidenNoteBlock } from "../../miden-rpc";
 
 // Navigation keeps the submit promise alive; a reload loses it. Do not label a
 // healthy in-page confirmation as interrupted or attempt to submit it again.
@@ -176,7 +177,6 @@ async function recoverWithdrawal(activity: Activity, recovery: BridgeConfig) {
   let warning = activity.epochError;
   if (activity.midenNoteId && activity.epochMidenBlock === undefined && !activity.sourceTxHash && !activity.midenTxId) {
     try {
-      const { getMidenNoteBlock } = await import("./chain");
       patch.epochMidenBlock = await getMidenNoteBlock(activity.midenNoteId, recovery);
     } catch {
       warning = "Miden confirmation could not be checked. Keep this receipt and check the transfer in Bread; do not submit again.";

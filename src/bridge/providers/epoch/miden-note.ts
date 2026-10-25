@@ -3,7 +3,6 @@ import type { BridgeConfig } from "../../../config/bridge-config";
 
 import type { SolveIntentParams } from "@epoch-protocol/epoch-intents-sdk";
 import {
-  AccountId,
   AccountInterface,
   FungibleAsset,
   NetworkId,
@@ -16,8 +15,8 @@ import {
 import { Transaction } from "@miden-sdk/miden-wallet-adapter-base";
 import type { MidenFiWalletContextState } from "@miden-sdk/miden-wallet-adapter-react";
 
-import { normalizeMidenIdToHex } from "./bridge";
-import { getCurrentMidenBlock } from "./chain";
+import { parseMidenAccountId } from "../../miden-address-sdk";
+import { getCurrentMidenBlock } from "../../miden-rpc";
 import { createFeeConversionSalt } from "../../../wallets/miden/miden-transaction";
 
 export type CreateMidenP2IDENote = NonNullable<SolveIntentParams["createMidenP2IDENote"]>;
@@ -60,9 +59,9 @@ export function createBridgeP2IDENoteCallback(deps: MidenNoteDeps, recovery?: Br
         throw new Error("Invalid Epoch reclaim height.");
       }
 
-      const sender = AccountId.fromHex(normalizeMidenIdToHex(deps.senderAddress));
-      const allocator = AccountId.fromHex(normalizeMidenIdToHex(allocatorId));
-      const faucet = AccountId.fromHex(normalizeMidenIdToHex(faucetId));
+      const sender = parseMidenAccountId(deps.senderAddress);
+      const allocator = parseMidenAccountId(allocatorId);
+      const faucet = parseMidenAccountId(faucetId);
       const note = Note.createP2IDENote(
         sender,
         allocator,

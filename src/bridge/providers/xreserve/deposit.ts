@@ -1,10 +1,11 @@
+import { validateMidenRecipient } from "../../miden-address";
 import type { BridgeConfig } from "../../../config/bridge-config";
 import { erc20Abi, type Address, type Hash } from "viem";
 import type { EvmProvider } from "../../../wallets/evm/evm-wallet";
 import { prepareDepositWallet, type DepositWallet } from "../../evm/deposit-wallet";
 import { arcConfig, xReserveAbi } from "./config";
 import { arcRecipient, parseArcAmount } from "./deposit-terms";
-import { assertArcRouteAvailable, validateMidenRecipient } from "./deposit-preflight";
+import { assertArcRouteAvailable } from "./deposit-preflight";
 import { ensureUsdcApproval } from "./approval";
 import { suggestEvmFees } from "../../evm/fee-suggestions";
 
