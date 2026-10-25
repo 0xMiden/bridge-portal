@@ -56,6 +56,10 @@ export type BridgeActivity = {
   epochClaimHash?: string;
   epochDepositConfirmed?: boolean;
   epochError?: string;
+  /** Submission was interrupted before Epoch returned a delivery tracking reference. */
+  epochRecoveryRequired?: boolean;
+  /** Inclusion of this withdrawal's collateral note; not evidence of EVM delivery. */
+  epochMidenBlock?: number;
   /** Circle attestation is separate from inclusion of the recipient's Miden note. */
   xreserveStatus?: "submitted" | "confirmed" | "attested" | "delivered" | "reverted" | "cancelled" | "replaced";
   xreserveNoteId?: string;

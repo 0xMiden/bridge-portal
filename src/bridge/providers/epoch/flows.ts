@@ -9,6 +9,12 @@ import { midenAccountLink } from "../../miden-account-link";
 import { createPublicClient, type Hex } from "viem";
 import { evmReadTransport } from "../../evm/transport";
 import { findTransactionReceipt } from "../../evm/transaction-receipt";
+import type { Activity } from "../../core/models";
+import type { BridgeConfig } from "../../../config/bridge-config";
+
+// Navigation keeps the submit promise alive; a reload loses it. Do not label a
+// healthy in-page confirmation as interrupted or attempt to submit it again.
+const pendingWithdrawals = new Set<string>();
 
 const phaseLabels: Record<string, string> = {
   starting: "Preparing your Epoch deposit…",
@@ -64,6 +70,7 @@ async function execute(
     epochSponsor: input.evmAddress,
   };
   let submitted = false;
+  let pendingRequestId: string | undefined;
   const result = await runEpochTransfer({
     route,
     amount: input.amount,
@@ -74,6 +81,10 @@ async function execute(
     waitForTransaction: input.midenWallet.waitForTransaction,
     onSubmitted: (source) => {
       submitted = true;
+      if (route.mode === "send" && source.midenWalletRequestId) {
+        pendingRequestId = source.midenWalletRequestId;
+        pendingWithdrawals.add(pendingRequestId);
+      }
       record({
         ...accounts,
         status: "source_finality",
@@ -88,9 +99,12 @@ async function execute(
   }).catch((error: unknown) => {
     if (submitted) update({
       epochError: error instanceof Error ? error.message : "Epoch execution interrupted",
+      epochRecoveryRequired: route.mode === "send" ? true : undefined,
       eta: "Delivery unconfirmed",
     });
     throw error;
+  }).finally(() => {
+    if (pendingRequestId) pendingWithdrawals.delete(pendingRequestId);
   });
   record({
     ...accounts,
@@ -99,6 +113,7 @@ async function execute(
     sourceTxHash: result.sourceTxHash,
     midenNoteId: route.mode === "send" ? result.midenNoteId : undefined,
     epochIntentNonce: result.intentNonce,
+    epochRecoveryRequired: false,
     epochSponsor: result.sponsorAddress,
     receivedAmount: result.outputAmount,
   });
@@ -109,11 +124,16 @@ function intentMonitor(): ActivityMonitor {
     canPoll: (activity) =>
       activity.status !== "complete" &&
       activity.status !== "failed" &&
-      Boolean(activity.epochSponsor && (activity.epochIntentNonce ||
-        (activity.mode === "receive" && activity.sourceTxHash && !activity.epochDepositConfirmed))),
+      Boolean((activity.epochSponsor && activity.epochIntentNonce) ||
+        (activity.mode === "send" && (activity.midenWalletRequestId || activity.midenNoteId || activity.sourceTxHash || activity.midenTxId)) ||
+        (activity.epochSponsor && activity.mode === "receive" && activity.sourceTxHash && !activity.epochDepositConfirmed)),
     async observe(activity) {
       const route = activityRoute(activity);
       if (!route) throw new Error("Missing Epoch route recovery data.");
+      if (route.mode === "send" && !(activity.epochIntentNonce && activity.epochSponsor)) {
+        if (activity.midenWalletRequestId && pendingWithdrawals.has(activity.midenWalletRequestId)) return { patch: {} };
+        return recoverWithdrawal(activity, route.recovery);
+      }
       // Allocation may fail after the deposit, before solveIntent returns its
       // nonce. The source receipt remains independently verifiable on reload.
       if (!activity.epochIntentNonce && route.mode === "receive" && activity.sourceTxHash) {
@@ -147,4 +167,20 @@ function intentMonitor(): ActivityMonitor {
       };
     },
   };
+}
+
+async function recoverWithdrawal(activity: Activity, recovery: BridgeConfig) {
+  // The SDK exposes the nonce only after allocation. There is no public lookup
+  // by note ID, so confirmation must never be presented as solver acceptance.
+  const patch: Partial<Activity> = { epochRecoveryRequired: true };
+  let warning = activity.epochError;
+  if (activity.midenNoteId && activity.epochMidenBlock === undefined && !activity.sourceTxHash && !activity.midenTxId) {
+    try {
+      const { getMidenNoteBlock } = await import("./chain");
+      patch.epochMidenBlock = await getMidenNoteBlock(activity.midenNoteId, recovery);
+    } catch {
+      warning = "Miden confirmation could not be checked. Keep this receipt and check the transfer in Bread; do not submit again.";
+    }
+  }
+  return { patch, warning };
 }

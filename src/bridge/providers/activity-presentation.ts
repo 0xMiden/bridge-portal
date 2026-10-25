@@ -14,8 +14,8 @@ export function presentActivity(activity: BridgeActivity): ProviderActivityPrese
   const direction = directionFor(activity);
   const state = activityState(activity);
   const details = direction.activityDetails(activity);
-  const guidance = activity.midenWalletRequestId && !details.sourceHash && state.status === "source_finality"
-    ? pendingMidenRequestGuidance : state.guidance;
+  const guidance = state.guidance ?? (activity.midenWalletRequestId && !details.sourceHash && state.status === "source_finality"
+    ? pendingMidenRequestGuidance : undefined);
   const asset = activityRoute(activity)?.destination.symbol ?? activity.asset;
   const walletClaimUnverified = direction.consumeNote && (state.status === "complete" || state.status === "claim_available");
   const headline = state.headline.replaceAll("{asset}", asset);
@@ -24,7 +24,7 @@ export function presentActivity(activity: BridgeActivity): ProviderActivityPrese
     kind: details.destinationKind,
     at: activity.destinationTxAt,
   };
-  if (direction.tracking === "manual")
+  if (direction.tracking === "manual" || state.tracking === "manual")
     return {
       status: state.status,
       headline,

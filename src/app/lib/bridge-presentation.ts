@@ -303,6 +303,8 @@ export function buildDiagnostics(
       epochClaimHash: activity.epochClaimHash,
       epochDepositConfirmed: activity.epochDepositConfirmed,
       epochError: activity.epochError,
+      epochRecoveryRequired: activity.epochRecoveryRequired,
+      epochMidenBlock: activity.epochMidenBlock,
       sourceOriginalTxHash: activity.sourceOriginalTxHash,
       sourceTransaction: activity.sourceTransaction,
       xreserveStatus: activity.xreserveStatus,

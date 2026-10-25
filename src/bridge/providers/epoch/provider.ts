@@ -1,7 +1,18 @@
 import { activityPhase, type Provider, type ProviderDirections } from "../../core/provider";
 import type { BridgeRoute } from "../../core/routes";
 import { evmNetworks } from "../../../config/evm-networks";
-import { recoveryGuidance } from "../../core/activity-presentation";
+import { recoveryGuidance, type ActivityGuidance } from "../../core/activity-presentation";
+
+const withdrawalRecoveryGuidance: ActivityGuidance = {
+  tone: "active",
+  icon: "alert",
+  title: "Recover this withdrawal",
+  body: "Epoch did not return a delivery tracking reference. Automatic delivery tracking is unavailable for this receipt. Do not submit another withdrawal.",
+  steps: [
+    "Check this transfer in your Bread wallet.",
+    "Copy diagnostics and share them with Epoch support to recover the existing transfer or discuss reclaiming the collateral note.",
+  ],
+};
 
 const phases = {
   signature: {
@@ -67,6 +78,7 @@ const directions = {
       destinationHash: activity.claimTxHash ?? activity.destinationTxHash,
       destinationKind: "tx",
       received: activity.receivedAmount,
+      reference: activity.midenNoteId ? { label: "Collateral note ID", value: activity.midenNoteId } : undefined,
     }),
     steps: [
       {
@@ -92,14 +104,47 @@ const directions = {
     ],
     phases: {
       ...phases,
+      awaiting_tracking: {
+        status: "source_finality",
+        order: 1,
+        tracking: "manual",
+        headline: "Waiting for Epoch confirmation",
+        guidance: {
+          tone: "active",
+          icon: "wallet",
+          title: "Keep this page open",
+          body: "Epoch has not returned a delivery tracking reference yet. Keep this page open while submission finishes. You don’t need to send it again.",
+        },
+      },
+      recovery_unconfirmed: {
+        status: "source_finality",
+        order: 1,
+        tracking: "manual",
+        headline: "Miden confirmation unverified; recovery needed",
+        guidance: withdrawalRecoveryGuidance,
+      },
+      recovery_confirmed: {
+        status: "source_finality",
+        order: 1,
+        tracking: "manual",
+        headline: "Miden confirmed; delivery unconfirmed",
+        guidance: withdrawalRecoveryGuidance,
+      },
       complete: {
         status: "complete",
         order: 5,
         headline: "Funds delivered",
       },
     },
-    phaseFields: ["status", "failureLeg"],
-    resolvePhase: activityPhase,
+    phaseFields: ["status", "failureLeg", "epochRecoveryRequired"],
+    resolvePhase: (activity) => {
+      if (activity.status === "complete" || activity.status === "failed" ||
+          (activity.epochIntentNonce && activity.epochSponsor)) return activityPhase(activity);
+      if (!(activity.midenWalletRequestId || activity.midenNoteId || activity.sourceTxHash || activity.midenTxId)) return activityPhase(activity);
+      if (!activity.epochRecoveryRequired) return "awaiting_tracking";
+      return activity.epochMidenBlock !== undefined || activity.sourceTxHash || activity.midenTxId
+        ? "recovery_confirmed" : "recovery_unconfirmed";
+    },
     consumeNote: false,
     tracking: "automatic",
     pollMs: 5000,
