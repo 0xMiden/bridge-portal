@@ -31,6 +31,10 @@ export type BridgeActivity = {
    * Epoch receives do not have an Agglayer bridge destination. */
   midenAccountHex?: string;
   sourceTxHash?: string;
+  /** Accepted Miden wallet request; retained before an on-chain hash is known. */
+  midenWalletRequestId?: string;
+  /** Expected source output note, distinct from the wallet request and tx hash. */
+  midenNoteId?: string;
   /** Actual wallet transaction identity, retained across fee replacements and reloads. */
   sourceTransaction?: SourceTransaction;
   sourceOriginalTxHash?: string;

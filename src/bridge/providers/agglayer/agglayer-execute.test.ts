@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const createB2AggNote = vi.fn(() => "b2agg-note");
+const createB2AggNote = vi.fn(() => ({ id: () => ({ toString: () => "b2agg-note" }) }));
 const fromHex = vi.fn((value: string) => ({ id: value, kind: "hex" }));
 const fromBech32 = vi.fn((value: string) => ({ id: value, kind: "bech32" }));
 const ethFromHex = vi.fn((value: string) => ({ evm: value }));
@@ -75,6 +75,7 @@ describe("runAgglayerSend", () => {
       senderAddress: `0x${SENDER_HEX}`,
       requestTransaction: requestTransaction as never,
       waitForTransaction: waitForTransaction as never,
+      onSubmitted: vi.fn(),
     });
 
     expect(createB2AggNote).toHaveBeenCalledWith(

@@ -22,6 +22,8 @@ export interface AgglayerSendDeps {
   waitForTransaction: NonNullable<
     MidenFiWalletContextState["waitForTransaction"]
   >;
+  /** Persist the accepted request before waiting for on-chain confirmation. */
+  onSubmitted: (source: { requestId: string; noteId: string }) => void;
 }
 
 export interface AgglayerSendResult {
@@ -69,6 +71,7 @@ async function buildWithdrawal({ amount, faucetId, destinationAddress, senderAdd
     config.sourceNetworkId,
     EthAddress.fromHex(destinationAddress),
   );
+  const noteId = note.id().toString();
 
   const request = new TransactionRequestBuilder()
     .withFeeConversionSalt(createFeeConversionSalt())
@@ -84,14 +87,15 @@ async function buildWithdrawal({ amount, faucetId, destinationAddress, senderAdd
     request,
   );
 
-  return transaction;
+  return { transaction, noteId };
 }
 
 export async function runAgglayerSend(
   input: SendInput & AgglayerSendDeps, recovery?: BridgeConfig,
 ): Promise<AgglayerSendResult> {
-  const transaction = await buildWithdrawal(input, recovery);
+  const { transaction, noteId } = await buildWithdrawal(input, recovery);
   const txId = await input.requestTransaction(transaction);
+  input.onSubmitted({ requestId: txId, noteId });
   // The wallet request UUID is not an on-chain identifier.
   const output = await input.waitForTransaction(txId);
   return { txId, txHash: output.txHash };

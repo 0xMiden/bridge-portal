@@ -292,6 +292,8 @@ export function buildDiagnostics(
     }),
     transactions: prune({
       sourceTxHash: activity.sourceTxHash,
+      midenWalletRequestId: activity.midenWalletRequestId,
+      midenNoteId: activity.midenNoteId,
       destinationTxHash: activity.destinationTxHash,
       midenTxId: activity.midenTxId,
       claimTxHash: activity.claimTxHash,

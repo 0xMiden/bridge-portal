@@ -58,8 +58,8 @@ export interface RunEpochTransferArgs {
   /** Miden write primitives from the connected MidenFi adapter. REQUIRED for send. */
   requestTransaction?: MidenNoteDeps["requestTransaction"];
   waitForTransaction?: MidenNoteDeps["waitForTransaction"];
-  /** Publish the source evidence immediately, before awaiting the solver. */
-  onSubmitted?: (source: { sourceTxHash: string; midenNoteId?: string; epochDepositId?: string; epochClaimHash?: string }) => void;
+  /** Publish wallet acceptance, then confirmed source evidence, before awaiting the solver. */
+  onSubmitted?: (source: { sourceTxHash?: string; midenWalletRequestId?: string; midenNoteId?: string; epochDepositId?: string; epochClaimHash?: string }) => void;
   /**
    * Live execution status (phase + the deposit tx hash once broadcast) for UI
    * progress on receive. The caller uses the hash to jump to the detail page as
@@ -165,6 +165,9 @@ async function runEpochSend(
       requestTransaction: args.requestTransaction,
       waitForTransaction: args.waitForTransaction,
       senderAddress,
+      onNoteSubmitted: ({ requestId, noteId }) => {
+        args.onSubmitted?.({ midenWalletRequestId: requestId, midenNoteId: noteId });
+      },
       onNoteCreated: (info) => {
         noteOutcome = info;
         args.onSubmitted?.({ sourceTxHash: info.txHash, midenNoteId: info.noteId });

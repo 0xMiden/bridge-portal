@@ -72,13 +72,12 @@ async function execute(
     evmAddress: input.evmAddress,
     requestTransaction: input.midenWallet.requestTransaction,
     waitForTransaction: input.midenWallet.waitForTransaction,
-    onSubmitted: ({ midenNoteId, ...source }) => {
+    onSubmitted: (source) => {
       submitted = true;
       record({
         ...accounts,
         status: "source_finality",
         ...source,
-        midenTxId: midenNoteId,
       });
     },
     onStatus: (observation) => {
@@ -98,7 +97,7 @@ async function execute(
     status: "message_observed",
     eta: "1-3 min",
     sourceTxHash: result.sourceTxHash,
-    midenTxId: route.mode === "send" ? result.midenNoteId : undefined,
+    midenNoteId: route.mode === "send" ? result.midenNoteId : undefined,
     epochIntentNonce: result.intentNonce,
     epochSponsor: result.sponsorAddress,
     receivedAmount: result.outputAmount,
