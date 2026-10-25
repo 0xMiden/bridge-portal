@@ -1,3 +1,4 @@
+import { ActivityStore } from "../../bridge/activity";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { EpochIntentSDK } from "@epoch-protocol/epoch-intents-sdk";
 import { createWalletClient, http } from "viem";
@@ -6,7 +7,7 @@ import { defaultBridgeRoute } from "../../bridge/core/routes";
 import { observeActivity } from "../../bridge/tracking";
 import { getEpochReadOnlySdk } from "../../bridge/providers/epoch/sdk";
 import { submitBridgeTransfer, type TransferSubmission } from "./bridge-submission";
-import { loadStoredActivities, patchStoredActivity } from "./bridge-persistence";
+import { activityPersistence, loadStoredActivities } from "./bridge-persistence";
 import { buildDiagnostics } from "./bridge-presentation";
 import { activityDetailFor } from "./activity-detail-presentation";
 
@@ -87,7 +88,7 @@ function setup(provider: "agglayer" | "epoch") {
     quote: { kind: "epoch", received: "1", validity: { kind: "time", expiresAt: Date.now() + 60000 },
       request: { routeId: route.id, recovery: route.recovery, amount: "1", midenAccount: MIDEN, evmAddress: SPONSOR } },
   };
-  const effects = { openEvmWallet: vi.fn(), onError: vi.fn(), onSubmittingChange: vi.fn(), onPhaseChange: vi.fn(), onActivitiesChange: vi.fn(), navigate: vi.fn() };
+  const effects = { openEvmWallet: vi.fn(), onError: vi.fn(), onSubmittingChange: vi.fn(), onPhaseChange: vi.fn(), activities: new ActivityStore(activityPersistence), navigate: vi.fn() };
   return { input, effects, requestTransaction, waitForTransaction };
 }
 
@@ -197,7 +198,7 @@ describe("Epoch withdrawal recovery after reload", () => {
       const observation = await observeAfterReload(restored, new AbortController().signal);
       expect(observation).not.toBeNull();
       if (interruption === "rpc unavailable") expect(observation?.warning).toContain("Miden confirmation could not be checked");
-      patchStoredActivity(restored.id, observation!.patch);
+      effects.activities.patch(restored.id, observation!.patch);
       let [recovered] = loadStoredActivities();
       let detail = activityDetailFor(recovered);
       expect(detail.progress.kind).toBe("manual");
@@ -215,7 +216,7 @@ describe("Epoch withdrawal recovery after reload", () => {
         expect(recovered.sourceTxHash).toBeUndefined();
         rpc.getNotes.mockReset().mockResolvedValueOnce([fetchedNote(NOTE)]);
         const confirmed = await observeAfterReload(recovered, new AbortController().signal);
-        patchStoredActivity(restored.id, confirmed!.patch);
+        effects.activities.patch(restored.id, confirmed!.patch);
         [recovered] = loadStoredActivities();
         expect(buildDiagnostics(recovered)).toMatchObject({ transactions: { epochMidenBlock: 12001 } });
         expect(recovered.sourceTxHash).toBeUndefined();
@@ -242,7 +243,7 @@ describe("Epoch withdrawal recovery after reload", () => {
       ]);
       const { observeActivity: observeAfterReload } = await import("../../bridge/tracking");
       const delivered = await observeAfterReload(completedSubmission, new AbortController().signal);
-      patchStoredActivity(completedSubmission.id, delivered!.patch);
+      effects.activities.patch(completedSubmission.id, delivered!.patch);
       expect(getStatus).toHaveBeenCalledWith(SPONSOR, "42");
       expect(activityDetailFor(loadStoredActivities()[0]).receipt.pending).toBe(false);
       expect(requestTransaction).toHaveBeenCalledOnce();

@@ -4,6 +4,7 @@ import type { ResolvedMidenAsset } from "../miden-balances";
 import type { EvmProvider } from "../../wallets/evm/evm-wallet";
 import type { Activity } from "./models";
 import type { BridgeRoute } from "./routes";
+import type { ActivityStore } from "../activity";
 
 export interface TransferSubmission {
   environment?: import("../../config/environment").BridgeEnvironment;
@@ -37,7 +38,7 @@ export interface SubmissionEffects {
   onError: (message: string) => void;
   onSubmittingChange: (submitting: boolean) => void;
   onPhaseChange: (phase: string) => void;
-  onActivitiesChange: (activities: Activity[]) => void;
+  activities: Pick<ActivityStore, "record" | "patch">;
   navigate: (path: string) => void;
 }
 
@@ -45,7 +46,7 @@ export type SubmissionContext = {
   input: TransferSubmission;
   route: BridgeRoute;
   phase: (message: string) => void;
-  /** Persist only after the provider acknowledges the source submission. */
+  /** Retain a receipt only after the provider acknowledges the source submission. */
   record: (patch: Partial<Activity>) => Activity;
   update: (patch: Partial<Activity>) => void;
 };

@@ -5,9 +5,9 @@ import { arbitrum } from "viem/chains";
 import { getWalletClient } from "@wagmi/core";
 import { findBridgeRoute } from "../../core/routes";
 import { submitBridgeTransfer, type TransferSubmission } from "../../../app/lib/bridge-submission";
-import { loadStoredActivities, patchStoredActivity, saveActivities } from "../../../app/lib/bridge-persistence";
+import { activityPersistence, loadStoredActivities, saveActivities } from "../../../app/lib/bridge-persistence";
 import { observeActivity } from "../../tracking";
-import { activityState } from "../../activity";
+import { ActivityStore, activityState } from "../../activity";
 import { createActivity, buildDiagnostics } from "../../../app/lib/bridge-presentation";
 import type { EvmProvider } from "../../../wallets/evm/evm-wallet";
 
@@ -119,7 +119,7 @@ function setup(mode: "sequential" | "batch" | "rejected") {
     quote: { kind: "epoch", received: "0.918687", validity: { kind: "time", expiresAt: Date.now() + 60000 },
       request: { routeId: route.id, recovery: route.recovery, amount: "1", evmAddress: SPONSOR, midenAccount: MIDEN } },
   };
-  const effects = { openEvmWallet: vi.fn(), verifyBalanceCap: vi.fn(async () => {}), onError: vi.fn(), onSubmittingChange: vi.fn(), onPhaseChange: vi.fn(), onActivitiesChange: vi.fn(), navigate: vi.fn() };
+  const effects = { openEvmWallet: vi.fn(), verifyBalanceCap: vi.fn(async () => {}), onError: vi.fn(), onSubmittingChange: vi.fn(), onPhaseChange: vi.fn(), activities: new ActivityStore(activityPersistence), navigate: vi.fn() };
   return { input, effects, allocation, sent, beforeConfirmation, allocationEvidence: () => ({ activities: beforeAllocation, claimHash }) };
 }
 
@@ -143,7 +143,7 @@ it.each(["sequential", "batch"] as const)("retains the real SDK's %s deposit acr
   expect(effects.onError).toHaveBeenCalledWith(expect.stringContaining("do not submit again"));
   rpc.getTransactionReceipt.mockResolvedValue({ status: "success" });
   const observation = await observeActivity(stored, new AbortController().signal);
-  patchStoredActivity(stored.id, observation!.patch);
+  effects.activities.patch(stored.id, observation!.patch);
   const [reloaded] = loadStoredActivities();
   expect(reloaded).toMatchObject({ epochDepositConfirmed: true, status: "source_finality", epochError: stored.epochError });
   expect(activityState(reloaded).headline).toBe("Deposit confirmed; delivery unconfirmed");

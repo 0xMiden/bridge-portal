@@ -1,3 +1,4 @@
+import { ActivityStore } from "../../bridge/activity";
 import { fetchWithdrawalQuote, type WithdrawalQuote } from "../../bridge/providers/xreserve/withdrawal-quote";
 import { withdrawUsdcx } from "../../bridge/providers/xreserve/withdrawal-execute";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -10,7 +11,7 @@ import { runEpochTransfer, type EpochExecuteResult } from "../../bridge/provider
 import { captureSourceTransaction, type SourceTransaction } from "../../bridge/evm/source-transaction";
 import { depositOnArc } from "../../bridge/providers/xreserve/deposit";
 import { depositViaCctp } from "../../bridge/providers/xreserve/cctp-deposit";
-import { loadStoredActivities, saveActivities } from "./bridge-persistence";
+import { activityPersistence, activityStorageKey, loadStoredActivities, saveActivities } from "./bridge-persistence";
 import type { Activity } from "./bridge-presentation";
 import { submitBridgeTransfer, type TransferSubmission } from "./bridge-submission";
 
@@ -100,9 +101,10 @@ function setup(overrides: Partial<TransferSubmission> = {}) {
     onError: vi.fn(),
     onSubmittingChange: vi.fn(),
     onPhaseChange: vi.fn(),
-    onActivitiesChange: vi.fn(),
+    activities: new ActivityStore(activityPersistence),
     navigate: vi.fn(),
   };
+  effects.activities.sync();
   return { input, effects, evmRequest };
 }
 
@@ -259,6 +261,50 @@ describe("Agglayer submission", () => {
 });
 
 describe("Epoch activity lifecycle", () => {
+  it.each(["full", "blocked reads", "blocked access", "corrupted"] as const)(
+    "opens and updates the acknowledged receipt when local storage is %s",
+    async (failure) => {
+      const { input, effects } = setup();
+      if (failure === "full") {
+        vi.spyOn(window.localStorage, "setItem").mockImplementation(() => { throw new DOMException("Storage full", "QuotaExceededError"); });
+      } else if (failure === "blocked reads") {
+        vi.spyOn(window.localStorage, "getItem").mockImplementation(() => { throw new DOMException("Storage blocked", "SecurityError"); });
+      } else if (failure === "blocked access") {
+        Object.defineProperty(window, "localStorage", { configurable: true, get() { throw new DOMException("Storage blocked", "SecurityError"); } });
+      } else {
+        window.localStorage.setItem(activityStorageKey, "{broken");
+      }
+      const published = vi.fn();
+      effects.activities.subscribe(() => published(effects.activities.getSnapshot().receipts.map(receipt => receipt.activity)));
+      let receiptAtNavigation: Activity | undefined;
+      effects.navigate.mockImplementation((path: string) => {
+        receiptAtNavigation = effects.activities.getSnapshot().receipts.map(receipt => receipt.activity).find(activity => path === `/activity/${activity.id}`);
+      });
+      vi.mocked(runEpochTransfer).mockImplementation(async ({ onSubmitted }) => {
+        onSubmitted!({ sourceTxHash: TX_HASH });
+        return { direction: "receive", intentNonce: "42", sponsorAddress: EVM_ADDRESS, sourceTxHash: TX_HASH, outputAmount: "0.12" };
+      });
+
+      await submitBridgeTransfer(input, effects);
+
+      expect(effects.navigate).toHaveBeenCalledOnce();
+      expect(receiptAtNavigation).toMatchObject({ status: "source_finality", sourceTxHash: TX_HASH, midenAccount: MIDEN_ACCOUNT, evmAddress: EVM_ADDRESS, routeSnapshot: findBridgeRoute(input.routeId) });
+      const activities: Activity[] = published.mock.lastCall![0];
+      expect(activities).toMatchObject([
+        { id: receiptAtNavigation!.id, epochIntentNonce: "42", receivedAmount: "0.12", sourceTxHash: TX_HASH }, history,
+      ]);
+      expect(effects.activities.getSnapshot().receipts.map(receipt => receipt.activity)).toEqual(activities);
+      expect(activities.every(activity => activity.environment === "testnet")).toBe(true);
+      // The receipt monitor must be able to merge progress after navigation too.
+      effects.activities.patch(receiptAtNavigation!.id, { status: "complete", destinationTxHash: "0xarrival" });
+      effects.activities.patch(receiptAtNavigation!.id, { status: "source_finality", sourceTxHash: undefined });
+      expect(effects.activities.getSnapshot().receipts.map(receipt => receipt.activity)[0]).toMatchObject({ status: "complete", destinationTxHash: "0xarrival", sourceTxHash: TX_HASH, epochIntentNonce: "42" });
+      expect(effects.onError).not.toHaveBeenCalled();
+      expect(effects.onSubmittingChange).toHaveBeenLastCalledWith(false);
+      expect(effects.onPhaseChange).toHaveBeenLastCalledWith("");
+    },
+  );
+
   it.each([
     { routeId: "epoch-test-usdc-to-miden", mode: "receive", destination: MIDEN_ACCOUNT },
     { routeId: "epoch-usdcx-to-sepolia", mode: "send", destination: EVM_ADDRESS },
@@ -301,7 +347,7 @@ describe("Epoch activity lifecycle", () => {
       sourceTxHash: TX_HASH, receivedAmount: "0.123456789012345678",
       midenAccount: MIDEN_ACCOUNT, evmAddress: EVM_ADDRESS,
     });
-    expect(effects.onActivitiesChange).toHaveBeenLastCalledWith(loadStoredActivities());
+    expect(effects.activities.getSnapshot().receipts.map(receipt => receipt.activity)).toEqual(loadStoredActivities());
     expect(effects.onSubmittingChange).toHaveBeenLastCalledWith(false);
     expect(effects.onPhaseChange).toHaveBeenLastCalledWith("");
   });

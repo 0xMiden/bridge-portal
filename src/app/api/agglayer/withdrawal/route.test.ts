@@ -1,8 +1,9 @@
+import { ActivityStore } from "../../../../bridge/activity";
 import { afterEach, expect, test, vi } from "vitest";
 import { POST } from "./route";
 import { routesForEnvironment } from "../../../../bridge/core/routes";
 import { observeActivity } from "../../../../bridge/tracking";
-import { loadStoredActivities, patchStoredActivity, saveActivities } from "../../../lib/bridge-persistence";
+import { activityPersistence, loadStoredActivities, saveActivities } from "../../../lib/bridge-persistence";
 import fixture from "../../../../bridge/providers/agglayer/fixtures/synthetic-withdrawal.json";
 
 afterEach(() => vi.unstubAllGlobals());
@@ -43,11 +44,13 @@ test("recovers a saved withdrawal from its public header, persists exit #42 and 
     sourceTxAt: 1_700_000_000_000, destinationTxAt: 1_700_000_001_000,
     updatedAt: 1_700_000_001_000, eta: "Settled on Ethereum", txHash: "", summary: "",
   }]);
+  const activities = new ActivityStore(activityPersistence);
+  activities.sync();
   const [pending] = loadStoredActivities();
   const observation = await observeActivity(pending, new AbortController().signal);
   // Protocol request for synthetic account 0x102030405060704108090a0b0c0d0e at block 1000.
   expect(syncRequest).toBe("00000000260a0a0de803000015e803000012180a160a0909000e0d0c0b0a09081209094170605040302010");
-  patchStoredActivity(pending.id, observation!.patch);
+  activities.patch(pending.id, observation!.patch);
   const [repaired] = loadStoredActivities();
   expect(repaired).toMatchObject({ status: "message_observed", depositCount: "42", midenTxId: fixture.sourceTxHash });
   expect(repaired.agglayerExitHashes).toContain(fixture.deposits[0].tx_hash);
@@ -56,7 +59,7 @@ test("recovers a saved withdrawal from its public header, persists exit #42 and 
   expect(repaired.destinationTxAt).toBeUndefined();
   expect(repaired.sourceTxAt).toBe(1_700_000_000_000);
   claimed = true;
-  patchStoredActivity(repaired.id, (await observeActivity(repaired, new AbortController().signal))!.patch);
+  activities.patch(repaired.id, (await observeActivity(repaired, new AbortController().signal))!.patch);
   expect(loadStoredActivities()[0]).toMatchObject({ status: "complete", depositCount: "42", destinationTxHash: `0x${"ef".repeat(32)}` });
   expect(await observeActivity(loadStoredActivities()[0], new AbortController().signal)).toBeNull();
 });

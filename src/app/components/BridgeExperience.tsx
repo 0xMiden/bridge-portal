@@ -36,7 +36,6 @@ import {
   shortAddress,
 } from "../../wallets/identity";
 import {
-  type Activity,
   deriveCtaState,
   quoteFor,
   providerFee,
@@ -49,7 +48,6 @@ import { flowModes, isFlowMode, type FlowMode } from "../../bridge/core/models";
 import { bridgeProviders, isBridgeProvider } from "../../bridge/providers/registry";
 import { activityStartedAt, isValidAmount, routeSwitchChangesAsset, validateTransferAmount } from "../../bridge/core/rules";
 import {
-  loadStoredActivities,
   loadStoredMode,
   loadStoredRoute,
   loadStoredRouteId,
@@ -71,6 +69,7 @@ import { WalletMenu } from "../../wallets/WalletMenu";
 import { WalletBrandIcon } from "../../wallets/WalletBrandIcon";
 import { FaucetMenu } from "./FaucetMenu";
 import { useBridgeEnvironment } from "./NetworkProvider";
+import { useActivitySnapshot, useActivityStore } from "./ActivityProvider";
 import { NetworkSelect } from "./NetworkSelect";
 import type { BridgeEnvironment } from "../../config/environment";
 import { ThemeToggle } from "./ThemeToggle";
@@ -249,7 +248,9 @@ function BridgeForm() {
   const preflightConfirmRef = useRef<HTMLButtonElement>(null);
   const primaryActionRef = useRef<HTMLButtonElement>(null);
   const preflightPreviousFocusRef = useRef<HTMLElement | null>(null);
-  const [activities, setActivities] = useState<Activity[]>([]);
+  const activityStore = useActivityStore();
+  const { receipts } = useActivitySnapshot();
+  const activities = receipts.map(receipt => receipt.activity).filter(activity => activity.environment === environment);
   const [evmMenuOpen, setEvmMenuOpen] = useState(false);
   const [evmCopied, setEvmCopied] = useState(false);
   const evmMenuRef = useRef<HTMLDivElement>(null);
@@ -409,15 +410,6 @@ function BridgeForm() {
     (next: MidenWalletSnapshot) => setMidenWallet(next),
     [],
   );
-
-  useEffect(() => {
-    try {
-      const stored = loadStoredActivities(environment);
-      queueMicrotask(() => setActivities(stored));
-    } catch {
-      queueMicrotask(() => setActivities([]));
-    }
-  }, [environment]);
 
   useEffect(() => {
     saveStoredRoute(initialForm.route.provider, initialForm.route.id, environment);
@@ -810,7 +802,7 @@ function BridgeForm() {
         onError: setBridgeError,
         onSubmittingChange: setIsSubmitting,
         onPhaseChange: setSubmitPhase,
-        onActivitiesChange: all => setActivities(all.filter(activity => (activity.environment ?? "testnet") === environment)),
+        activities: activityStore,
         navigate: (path) => router.push(path),
       },
     );
