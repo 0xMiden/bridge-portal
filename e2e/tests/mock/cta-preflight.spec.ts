@@ -1,15 +1,5 @@
+import { EVM_ADDRESS, MIDEN_ADDRESS, walletRequests } from "../../fixtures/wallets";
 import { test, expect } from "../../fixtures/bridge";
-import type { Route, Mode } from "../../pages/bridge-page";
-
-// Issue #55: the primary CTA is a deterministic progression (incomplete form →
-// ready-to-review), and a valid transfer opens a preflight review before any
-// wallet is invoked. In the mock tier both wallets are already connected and the
-// destination comes from the receiving wallet, so the observable CTA sequence is:
-//   empty amount → disabled "Enter amount"  →  valid amount → "Review <dir>".
-
-const combos: Array<{ route: Route; mode: Mode; label: RegExp }> = [
-  { route: "USDCx", mode: "Receive", label: /Review transfer/i },
-];
 
 test("Miden balances load on connection, stay visible across origins, and reload automatically", async ({ bridge, page }) => {
   const midenBalance = page.locator(".swap-box").last();
@@ -23,40 +13,14 @@ test("Miden balances load on connection, stay visible across origins, and reload
   await expect(midenBalance).toContainText("Available 0 USDCx");
 });
 
-for (const { route, mode, label } of combos) {
-  test(`${route} ${mode}: CTA gates on a valid amount, then offers review`, async ({
-    bridge,
-  }) => {
-    await test.step("wallets ready", () => bridge.waitForReady());
-
-    await test.step("select route + direction", async () => {
-      await bridge.setRoute(route);
-      await bridge.setMode(mode);
-    });
-
-    await test.step("empty amount → disabled 'Enter amount'", async () => {
-      const cta = bridge.primaryButton();
-      await expect(cta).toContainText(/Enter amount/i);
-      await expect(cta).toBeDisabled();
-    });
-
-    await test.step("valid amount → 'Review' CTA appears (enabled)", async () => {
-      await bridge.fillAmount("0.05");
-      const cta = bridge.primaryButton();
-      await expect(cta).toContainText(label);
-      await expect(cta).toBeEnabled();
-    });
-  });
-}
-
 test("invalid amounts never open the preflight or call a wallet", async ({
-  bridge,
+  bridge, page,
 }) => {
   await test.step("wallets ready", () => bridge.waitForReady());
   await bridge.setRoute("USDCx");
   await bridge.setMode("Receive");
 
-  for (const bad of ["0", "-1", "abc"]) {
+  for (const bad of ["", "0", "-1", "abc"]) {
     await test.step(`amount "${bad}" keeps the CTA disabled`, async () => {
       await bridge.fillAmount(bad);
       const cta = bridge.primaryButton();
@@ -65,6 +29,7 @@ test("invalid amounts never open the preflight or call a wallet", async ({
       // No review surface, and nothing was submitted.
       await expect(bridge.preflight()).toBeHidden();
       expect((await bridge.readActivities()).length).toBe(0);
+      expect(await walletRequests(page)).toEqual([]);
     });
   }
 });
@@ -88,7 +53,7 @@ test("cancelling the preflight preserves entered data and calls no wallet", asyn
     await expect(panel.locator(".preflight-quantity")).toHaveText("0.001 ETH");
     await expect(panel.locator(".fiat-amount")).toHaveText("$3.20");
     await expect(panel.locator(".preflight-stop .network-logo")).toHaveCount(2);
-    const accounts = await page.evaluate(() => ({ from: window.__E2E__!.evmAddress!, to: window.__E2E__!.midenAddress! }));
+    const accounts = { from: EVM_ADDRESS, to: MIDEN_ADDRESS };
     for (const [side, account] of [["source", accounts.from], ["destination", accounts.to]]) {
       const address = panel.locator(`#preflight-${side}-value`);
       await expect(address).toHaveAttribute("title", account);
@@ -125,9 +90,10 @@ test("cancelling the preflight preserves entered data and calls no wallet", asyn
       page.locator(".swap-box input[aria-label='Amount']"),
     ).toHaveValue("0.001");
     expect((await bridge.readActivities()).length).toBe(0);
+    expect(await walletRequests(page)).toEqual([]);
     await bridge.openPreflight();
     await expect(page.locator("#preflight-destination-value")).toHaveAttribute(
-      "title", await page.evaluate(() => window.__E2E__!.midenAddress!),
+      "title", MIDEN_ADDRESS,
     );
   });
 });

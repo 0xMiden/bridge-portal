@@ -55,9 +55,9 @@ local extension testing through `window.ethereum`.
 ### Environment variables
 
 All variables and their defaults are documented in
-[`.env.example`](.env.example); the E2E harness knobs live in
-[`.env.e2e.example`](.env.e2e.example). Every var has an in-code fallback, so
-the app boots with none of them set. In brief:
+[`.env.example`](.env.example). Every var has an in-code fallback, so the app
+boots with none of them set. Browser tests configure their mock wallets
+automatically and require no wallet credentials. In brief:
 
 | Var | Scope | Purpose |
 | --- | --- | --- |
@@ -186,7 +186,7 @@ Bread must support the selected network. The installed adapter forwards the
 prefix checks reject wrong-network accounts before signing. Mainnet requires an
 `mm1…` address; raw account IDs remain supported only for legacy testnet callers.
 Use a mainnet-capable Bread release for manual end-to-end validation. The automated
-suite uses mock signatures and does not transfer mainnet funds.
+suite supplies extension responses and does not sign or transfer mainnet funds.
 
 `GET /health/deep` remains the legacy testnet upstream check; it does not attest
 to mainnet availability. Network-specific quote/status endpoints validate the
@@ -249,16 +249,26 @@ npm run test             # vitest run
 npm run build            # next build --webpack
 ```
 
-### End-to-end (Playwright)
+### Browser integration tests (Playwright)
 
 ```bash
 npm run playwright:install     # one-time: chromium + deps
-npm run test:e2e:mock          # mock tier: no secrets, network stubbed
-npm run test:e2e:testnet       # live Sepolia + Miden; needs .env.e2e
+npm run test:browser           # production app; simulated external wallets and responses
 ```
 
-CI runs that suite on `main` / `workflow_dispatch` (serialized, one funded key).
-It skips cleanly until the `E2E_*` repo secrets exist. See `docs/runbook.md`.
+CI runs the browser suite on pull requests and pushes to `main`. Production
+deployment follows successful CI on `main`. Playwright runs the ordinary production build with the real wallet providers.
+Fixtures inject extension transports and intercept remote responses. Transaction
+checks inspect calldata or deserialize Miden wallet requests using the shipped
+browser WASM; simulated acceptance is supplied only after checking the request.
+The browser runner supplies a placeholder public WalletConnect project ID and
+intercepts wallet discovery responses. No private keys, seeds, funded accounts,
+Reown account, or live signing are used.
+
+Passing CI verifies UI, lifecycle, transaction construction and recovery under
+controlled external responses. It does not verify live proving, broadcasting,
+liquidity or settlement. Run the manual testnet release check in
+[`docs/runbook.md`](docs/runbook.md) for that evidence.
 
 ## Docker
 

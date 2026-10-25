@@ -9,7 +9,6 @@ const sdk = vi.hoisted(() => ({
   endpoint: vi.fn(),
 }));
 
-vi.mock("../wallets/testing/env", () => ({ isE2E: () => false }));
 vi.mock("@miden-sdk/miden-sdk", () => ({
   AccountId: {
     fromHex: (hex: string) => ({ toString: () => hex }),
@@ -75,6 +74,7 @@ describe("Miden asset resolution", () => {
       decimals: 6, symbol: "USDC", pricingSymbol: "USDC", balance: "0",
     });
     expect(Object.values(balances)).toHaveLength(3);
+    expect(balances[midenBalanceKey("0xdef0", MIDEN_ETH)]).toBeUndefined();
     expect(balances[midenBalanceKey("0xabcd", { ...MIDEN_ETH, faucetId: "0x1234" })]).toMatchObject({
       amountRaw: 999999999n, symbol: "Unknown asset", balance: "999999999",
     });

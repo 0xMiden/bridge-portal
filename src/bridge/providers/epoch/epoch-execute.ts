@@ -23,7 +23,6 @@ import type {
   CrossChainIntentParams,
   EVMToMidenIntentParams,
 } from "./types";
-import { e2eNetwork, isE2E } from "../../../wallets/testing/env";
 
 /**
  * Epoch execute/submit orchestration — the half the quote layer didn't cover.
@@ -247,17 +246,5 @@ export async function runEpochTransfer(
 ): Promise<EpochExecuteResult> {
   assertCommonArgs(args);
   const minTokenOut = reviewedMinTokenOut(args.minReceived, args.route.destination.decimals);
-  if (isE2E() && e2eNetwork() === "mock") {
-    const sourceTxHash = `0x${"ab".repeat(32)}`;
-    args.onSubmitted?.({ sourceTxHash });
-    return {
-      direction: args.route.mode,
-      intentNonce: "42",
-      sponsorAddress: args.evmAddress.trim(),
-      sourceTxHash,
-      midenNoteId: args.route.mode === "send" ? `0x${"cd".repeat(32)}` : undefined,
-      outputAmount: "0.99",
-    };
-  }
   return args.route.mode === "send" ? runEpochSend(args, minTokenOut) : runEpochReceive(args, minTokenOut);
 }

@@ -5,6 +5,7 @@ import { BalanceStore } from "../../bridge/balance-store";
 import { EPOCH_MIDEN_USDC, MIDEN_ETH } from "../../bridge/core/assets";
 import { findBridgeRoute } from "../../bridge/core/routes";
 import { useBalanceCap } from "./use-balance-cap";
+vi.mock("../../bridge/miden-rpc", () => ({ getMidenFaucetMetadata: vi.fn(async () => null) }));
 
 // Mock only React's observation boundary; confirmation uses the real store,
 // query cache, wallet asset loader, price request, and cap evaluator.
@@ -17,7 +18,6 @@ vi.mock("../../bridge/BalanceProvider", () => ({
   useBalanceStore: vi.fn(),
   useMidenBalances: vi.fn(),
 }));
-vi.mock("../../wallets/testing/env", () => ({ isE2E: () => true, e2eNetwork: () => "mock" }));
 
 afterEach(() => {
   vi.unstubAllGlobals();

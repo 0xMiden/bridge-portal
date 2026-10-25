@@ -3,8 +3,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { BalanceStore } from "./balance-store";
 import { ARC_USDC, MIDEN_ETH, MIDEN_USDC, SEPOLIA_ETH, SEPOLIA_USDC } from "./core/assets";
 import { midenBalanceKey } from "./miden-balances";
+vi.mock("./miden-rpc", () => ({ getMidenFaucetMetadata: vi.fn(async () => null) }));
 
-vi.mock("../wallets/testing/env", () => ({ isE2E: () => true, e2eNetwork: () => "mock" }));
 
 const account = "0xabcd";
 const network = "miden-testnet";

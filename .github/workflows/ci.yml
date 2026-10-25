@@ -44,16 +44,17 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npx playwright install --with-deps chromium
-      - run: npm run test:e2e:mock
+      - name: Browser integration tests against the production app
+        run: npm run test:browser
       - uses: actions/upload-artifact@v4
         if: failure()
         with:
-          name: mock-results
+          name: browser-results
           path: test-results/
           retention-days: 7
 
-  prod-scan:
-    name: prod-bundle-scan
+  cloudflare:
+    name: Cloudflare build
     needs: [check, mock]
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -67,7 +68,6 @@ jobs:
       - run: npm run cf:build
         env:
           NEXT_PUBLIC_APP_URL: https://bridge.miden.xyz
-      - run: node scripts/check-prod-bundle.mjs
 
   docker:
     runs-on: ubuntu-latest

@@ -1,13 +1,10 @@
 import { defineConfig } from "@playwright/test";
 
-// Mock tier: deterministic, every-PR, no real network (MSW intercepts). The
-// webServer bakes the matched E2E flags into the SUT so build+harness can't
-// drift (§3.1).
+// Browser integration tests run the ordinary production build without wallet keys.
 const PORT = 3020;
 
 export default defineConfig({
   testDir: "./e2e/tests/mock",
-  // Generous: the first spec pays the cold `next dev` Miden-WASM compile.
   timeout: 240_000,
   expect: { timeout: 20_000 },
   fullyParallel: false,
@@ -15,8 +12,8 @@ export default defineConfig({
   retries: 0,
   maxFailures: 1,
   workers: 1,
-  reporter: [["list"], ["json", { outputFile: "test-results/mock-results.json" }]],
-  outputDir: "test-results/mock",
+  reporter: [["list"], ["json", { outputFile: "test-results/browser-results.json" }]],
+  outputDir: "test-results/browser",
   use: {
     baseURL: `http://localhost:${PORT}`,
     headless: true,
@@ -31,10 +28,8 @@ export default defineConfig({
     url: `http://localhost:${PORT}`,
     reuseExistingServer: !process.env.CI,
     timeout: 420_000,
-    env: {
-      NEXT_PUBLIC_E2E_TEST: "true",
-      NEXT_PUBLIC_E2E_NETWORK: "mock",
-      NEXT_PUBLIC_E2E_SIGNER_MODE: process.env.NEXT_PUBLIC_E2E_SIGNER_MODE ?? "sign",
-    },
+    // Public application configuration, not a wallet credential. Discovery's
+    // remote responses are intercepted by Playwright, so CI needs no account.
+    env: { NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID: "00000000000000000000000000000000" },
   },
 });

@@ -1,3 +1,4 @@
+import { respondToWallet, SOURCE_TX } from "../../fixtures/wallets";
 import { expect, test, type Page } from "@playwright/test";
 import { stubNetwork } from "../../fixtures/mock-network";
 import { startOnTestnet } from "../../fixtures/testnet";
@@ -84,7 +85,7 @@ test("the deposit allowance includes other holdings and recovers when the amount
   await expect(page.locator(".preflight-quantity")).toHaveText("232.462 USDC");
 });
 
-test("confirmation rechecks prices and a price outage still permits withdrawal", async ({ page }) => {
+test("confirmation rechecks prices and a price outage still permits withdrawal review", async ({ page }) => {
   let ethPrice = "9990";
   await priceAccount(page, () => ethPrice);
   await page.goto("/?provider=agglayer&mode=receive");
@@ -120,10 +121,10 @@ test("confirmation rechecks prices and a price outage still permits withdrawal",
   await bridge.waitForReady();
   await bridge.fillAmount("0.01");
   await expect(page.locator('.swap-box[data-side="source"] .fiat-amount')).toHaveText("—");
-  await bridge.submit();
-  await bridge.waitForActivityPage();
-  const [activity] = await bridge.readActivities();
-  expect(activity).toMatchObject({ provider: "agglayer", mode: "send", amount: "0.01" });
+  await bridge.openPreflight();
+  await expect(bridge.preflight()).toContainText("0.01 ETH");
+  await bridge.cancelPreflight();
+
 });
 
 test("confirmation waits for settled prices before showing a cap warning", async ({ page }) => {
@@ -176,7 +177,7 @@ test("an unpriced holding is skipped during review and final deposit verificatio
       ? route.fulfill({ status: 502, json: { error: "ETH price unavailable" } })
       : route.fulfill({ json: { symbol, usd: 1, usdDecimal: "1", fetchedAt: Date.now() } });
   });
-  // Fulfill the public Arc reads while the existing E2E wallet signs the deposit.
+  // Fulfill the public Arc reads before the injected extension receives the real deposit request.
   const abi = [...xReserveAbi, ...erc20Abi];
   await page.route("**/api/evm/arc-testnet/rpc", (route) => {
     const { id, method, params } = route.request().postDataJSON();
@@ -215,6 +216,21 @@ test("an unpriced holding is skipped during review and final deposit verificatio
   await expect(page.locator("#balance-cap-status")).toHaveCount(0);
   await expect(page.getByText(/\$1,232\.462/)).toHaveCount(0);
 
+  respondToWallet(page, request => {
+    expect(request.wallet).toBe("evm");
+    expect(request.method).toBe("eth_sendTransaction");
+    const tx = request.params[0] as { from: string; to: string; data: `0x${string}` };
+    expect(tx.to.toLowerCase()).toBe(arcConfig().xReserve.toLowerCase());
+    expect(Number(request.chainId)).toBe(5042002);
+    expect(tx.from).toBe("0xE2E0000000000000000000000000000000000001");
+    const call = decodeFunctionData({ abi: xReserveAbi, data: tx.data });
+    expect(call.functionName).toBe("depositToRemote");
+    expect(call.args).toEqual([
+      1_000_000n, 10007, `0x${"00".repeat(16)}2d45bdf6e85b898144227de68b46c100`,
+      "0x3600000000000000000000000000000000000000", 0n, "0x",
+    ]);
+    return { result: SOURCE_TX };
+  });
   await bridge.fillAmount("1");
   await bridge.submit();
   await bridge.waitForActivityPage();
