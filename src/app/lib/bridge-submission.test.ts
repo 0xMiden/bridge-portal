@@ -96,6 +96,7 @@ function setup(overrides: Partial<TransferSubmission> = {}) {
   }
   const effects = {
     openEvmWallet: vi.fn(async () => {}),
+    verifyBalanceCap: vi.fn(async () => {}),
     onError: vi.fn(),
     onSubmittingChange: vi.fn(),
     onPhaseChange: vi.fn(),
@@ -126,6 +127,69 @@ function setupCctp() {
 }
 
 describe("submission validation", () => {
+  it.each([true, false])("waits for a fresh balance-cap check before any deposit wallet call (allowed: %s)", async (allowed) => {
+    const { input, effects, evmRequest } = setup({ routeId: "agglayer-eth-to-miden" });
+    const valuation = Promise.withResolvers<void>();
+    effects.verifyBalanceCap.mockReturnValue(valuation.promise);
+    evmRequest.mockImplementation(async ({ method }) => method === "eth_accounts"
+      ? [EVM_ADDRESS] : method === "eth_sendTransaction" ? TX_HASH : SEPOLIA_NETWORK.chainHex);
+
+    const submission = submitBridgeTransfer(input, effects);
+    await vi.waitFor(() => expect(effects.verifyBalanceCap).toHaveBeenCalledWith(
+      findBridgeRoute(input.routeId), input.amount, MIDEN_ACCOUNT,
+    ));
+    expect(effects.onSubmittingChange).toHaveBeenLastCalledWith(true);
+    expect(evmRequest).not.toHaveBeenCalled();
+    expect(loadStoredActivities()).toMatchObject([history]);
+
+    if (allowed) valuation.resolve();
+    else valuation.reject(new Error("This deposit exceeds the $1,232.462 balance limit."));
+    await submission;
+
+    if (allowed) {
+      expect(evmRequest.mock.calls.some(([request]) => request.method === "eth_sendTransaction")).toBe(true);
+      expect(loadStoredActivities()[0]).toMatchObject({ provider: "agglayer", sourceTxHash: TX_HASH });
+      expect(effects.onError).not.toHaveBeenCalled();
+    } else {
+      expect(evmRequest).not.toHaveBeenCalled();
+      expect(effects.onError).toHaveBeenCalledWith("This deposit exceeds the $1,232.462 balance limit.");
+      expect(loadStoredActivities()).toMatchObject([history]);
+      expect(effects.navigate).not.toHaveBeenCalled();
+    }
+    expect(effects.onSubmittingChange).toHaveBeenLastCalledWith(false);
+    expect(effects.onPhaseChange).toHaveBeenLastCalledWith("");
+  });
+
+  it("blocks deposits when no balance-cap verifier is available", async () => {
+    const { input, effects, evmRequest } = setup({ routeId: "agglayer-eth-to-miden" });
+    await submitBridgeTransfer(input, { ...effects, verifyBalanceCap: undefined });
+    expect(effects.onError).toHaveBeenCalledWith(expect.stringContaining("Unable to verify the $1,232.462 balance limit"));
+    expect(evmRequest).not.toHaveBeenCalled();
+    expect(loadStoredActivities()).toMatchObject([history]);
+    expect(effects.navigate).not.toHaveBeenCalled();
+  });
+
+  it("requires another review if the quote expires while the account valuation is pending", async () => {
+    const now = Date.now();
+    const clock = vi.spyOn(Date, "now").mockReturnValue(now);
+    const { input, effects, evmRequest } = setup();
+    const valuation = Promise.withResolvers<void>();
+    effects.verifyBalanceCap.mockReturnValue(valuation.promise);
+    const submission = submitBridgeTransfer(input, effects);
+    await vi.waitFor(() => expect(effects.verifyBalanceCap).toHaveBeenCalledOnce());
+
+    clock.mockReturnValue(now + 60_001);
+    valuation.resolve();
+    await submission;
+
+    expect(effects.onError).toHaveBeenCalledWith("Refresh and review the quote before sending.");
+    expect(evmRequest).not.toHaveBeenCalled();
+    expect(runEpochTransfer).not.toHaveBeenCalled();
+    expect(loadStoredActivities()).toMatchObject([history]);
+    expect(effects.navigate).not.toHaveBeenCalled();
+    expect(effects.onSubmittingChange).toHaveBeenLastCalledWith(false);
+  });
+
   it.each([
     ...(["missing", "expired", "amount", "routeId", "recovery", "midenAccount", "evmAddress"] as const).map(change => ({ kind: "epoch", change })),
     ...(["missing", "amount", "routeId", "recovery", "midenAccount", "evmAddress"] as const).map(change => ({ kind: "cctp", change })),
@@ -359,6 +423,8 @@ describe("USDCx withdrawal submission", () => {
       routeId: "xreserve-usdc-to-arc", amount: "2", evmAddress: EVM_ADDRESS, quote: reviewedQuote(),
       evmWallet: { connected: true, address: EVM_ADDRESS },
     });
+    // A failed deposit valuation must never keep users from withdrawing funds.
+    effects.verifyBalanceCap.mockRejectedValue(new Error("Balance limit exceeded"));
     const noteId = `0x${"cd".repeat(32)}`;
     vi.mocked(withdrawUsdcx).mockImplementation(async ({ onSubmitted }) => {
       onSubmitted(noteId, "wallet-request-id");
@@ -374,6 +440,7 @@ describe("USDCx withdrawal submission", () => {
     expect(loadStoredActivities()[0].sourceTxHash).toBe(fails ? undefined : TX_HASH);
     expect(effects.navigate).toHaveBeenCalledOnce();
     expect(effects.openEvmWallet).not.toHaveBeenCalled();
+    expect(effects.verifyBalanceCap).not.toHaveBeenCalled();
     expect(evmRequest).not.toHaveBeenCalled();
     if (fails) expect(effects.onError).toHaveBeenCalledWith(expect.stringContaining("do not submit again"));
   });

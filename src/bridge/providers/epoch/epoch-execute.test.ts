@@ -9,7 +9,7 @@ import { loadStoredActivities } from "../../../app/lib/bridge-persistence";
 import { getEpochReadOnlySdk, getEpochSdk } from "./sdk";
 
 // Exercise review, submission, execution and SDK task encoding together. Only
-// wallet setup, Miden WASM and the SDK's quote/signing boundaries are replaced.
+// wallet setup, balance-cap valuation, Miden WASM and the SDK's quote/signing boundaries are replaced.
 vi.mock("../../../wallets/testing/env", () => ({ isE2E: () => false }));
 vi.mock("./sdk", () => ({ getEpochReadOnlySdk: vi.fn(), getEpochSdk: vi.fn() }));
 vi.mock("./miden-note", () => ({ createBridgeP2IDENoteCallback: vi.fn() }));
@@ -55,7 +55,7 @@ describe.each([
       evmWallet: { connected: true, address: SPONSOR, provider: { request: vi.fn().mockResolvedValue("0xaa36a7") } },
       midenWallet: { connected: true, address: MIDEN, requestTransaction: vi.fn(), waitForTransaction: vi.fn() },
     };
-    const effects = { openEvmWallet: vi.fn(), onError: vi.fn(), onSubmittingChange: vi.fn(), onPhaseChange: vi.fn(), onActivitiesChange: vi.fn(), navigate: vi.fn() };
+    const effects = { openEvmWallet: vi.fn(), verifyBalanceCap: vi.fn(async () => {}), onError: vi.fn(), onSubmittingChange: vi.fn(), onPhaseChange: vi.fn(), onActivitiesChange: vi.fn(), navigate: vi.fn() };
     return { input, effects, getQuote };
   }
 

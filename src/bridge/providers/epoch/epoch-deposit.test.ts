@@ -12,7 +12,7 @@ import { createActivity, buildDiagnostics } from "../../../app/lib/bridge-presen
 import type { EvmProvider } from "../../../wallets/evm/evm-wallet";
 
 // Keep the SDK, wallet client, execution, submission and persistence real. Only
-// the external wallet/RPC/HTTP and unrelated Miden WASM boundary are simulated.
+// the external wallet/RPC/HTTP, balance-cap valuation and unrelated Miden WASM boundaries are simulated.
 vi.mock("@wagmi/core", () => ({ getAccount: () => ({ address: SPONSOR, chainId: 42161 }), getWalletClient: vi.fn() }));
 vi.mock("../../../wallets/evm/appkit-config", () => ({ wagmiAdapter: { wagmiConfig: {} } }));
 vi.mock("../../../wallets/testing/env", () => ({ isE2E: () => false }));
@@ -119,7 +119,7 @@ function setup(mode: "sequential" | "batch" | "rejected") {
     quote: { kind: "epoch", received: "0.918687", validity: { kind: "time", expiresAt: Date.now() + 60000 },
       request: { routeId: route.id, recovery: route.recovery, amount: "1", evmAddress: SPONSOR, midenAccount: MIDEN } },
   };
-  const effects = { openEvmWallet: vi.fn(), onError: vi.fn(), onSubmittingChange: vi.fn(), onPhaseChange: vi.fn(), onActivitiesChange: vi.fn(), navigate: vi.fn() };
+  const effects = { openEvmWallet: vi.fn(), verifyBalanceCap: vi.fn(async () => {}), onError: vi.fn(), onSubmittingChange: vi.fn(), onPhaseChange: vi.fn(), onActivitiesChange: vi.fn(), navigate: vi.fn() };
   return { input, effects, allocation, sent, beforeConfirmation, allocationEvidence: () => ({ activities: beforeAllocation, claimHash }) };
 }
 

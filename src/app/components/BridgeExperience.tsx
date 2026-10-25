@@ -29,6 +29,7 @@ import { formatUnits, parseUnits } from "viem";
 import { evmNetworks } from "../../config/evm-networks";
 import { ensureEvmNetwork } from "../../wallets/evm/ensure-network";
 import { useTransferQuote } from "../lib/use-transfer-quote";
+import { useBalanceCap } from "../lib/use-balance-cap";
 import { isQuoteReviewable, type TransferQuote } from "../../bridge/core/quote";
 import {
   evmWalletIdentity,
@@ -322,6 +323,10 @@ function BridgeForm() {
   const midenAddress = midenWallet.connected ? midenWallet.address : "";
   const evmAddress = walletConnected ? walletAccount : "";
   const midenAccount = midenAddress;
+  const balanceCap = useBalanceCap(route, amount, midenAccount);
+  const capError = balanceCap.enabled && hasRouteAmount && !balanceCap.checking ? balanceCap.error : "";
+  const amountError = amountValidation.error || capError;
+  const capBlocked = balanceCap.enabled && (balanceCap.checking || Boolean(balanceCap.error));
   const quoteQuery = useTransferQuote({ route, amount, midenAccount, evmAddress }, showPreflight || isSubmitting);
   const liveQuote = showPreflight || isSubmitting ? reviewedQuote : quoteQuery.data;
   const fees = quote.fees;
@@ -676,6 +681,10 @@ function BridgeForm() {
         setBridgeError("");
         try { validateTransferAmount(route, amount); }
         catch (error) { setBridgeError(errorMessage(error)); return; }
+        if (capBlocked) {
+          setBridgeError(balanceCap.checking ? "" : balanceCap.error);
+          return;
+        }
         if (fees.requiresQuote) {
           if (!isQuoteReviewable(quoteQuery.data)) {
             setBridgeError(quoteQuery.error ? errorMessage(quoteQuery.error) : "Refresh the quote before reviewing.");
@@ -713,6 +722,10 @@ function BridgeForm() {
     setShowPreflight(false);
     if (reviewWalletsChanged) {
       setBridgeError("Your connected wallet changed. Review the transfer again.");
+      return;
+    }
+    if (capBlocked) {
+      setBridgeError(balanceCap.checking ? "" : balanceCap.error);
       return;
     }
     void submitTransfer();
@@ -793,6 +806,7 @@ function BridgeForm() {
       },
       {
         openEvmWallet: open,
+        verifyBalanceCap: balanceCap.verifyBalanceCap,
         onError: setBridgeError,
         onSubmittingChange: setIsSubmitting,
         onPhaseChange: setSubmitPhase,
@@ -988,10 +1002,10 @@ function BridgeForm() {
                   </div>
                   {isSource ? (
                     <label className="swap-box-amount">
-                      <input aria-label="Amount" aria-invalid={Boolean(amountValidation.error)}
-                        aria-describedby={amountValidation.error ? "amount-error" : undefined}
+                      <input aria-label="Amount" aria-invalid={Boolean(amountError)}
+                        aria-describedby={amountError ? "amount-error" : undefined}
                         inputMode="decimal" placeholder="0" value={amount}
-                        onChange={(event) => { setAmount(event.target.value); setRouteMenuOpen(false); }} />
+                        onChange={(event) => { setAmount(event.target.value); setBridgeError(""); setRouteMenuOpen(false); }} />
                     </label>
                   ) : (
                     <div className="readonly-amount swap-box-amount" aria-label="Expected received">
@@ -1019,8 +1033,14 @@ function BridgeForm() {
 
           </div>
 
-          {amountValidation.error ? <p id="amount-error" className="form-error" role="alert">{amountValidation.error}</p>
+          {amountError ? <p id="amount-error" className="form-error" role="alert">{amountError}</p>
             : bridgeError || quoteQuery.error ? <p className="form-error" role="alert">{bridgeError || errorMessage(quoteQuery.error)}</p> : null}
+          {balanceCap.enabled && !balanceCap.checking && balanceCap.status === "unavailable" && hasRouteAmount ? <div id="balance-cap-status" className="balance-cap-status">
+            <button
+              type="button" className="balance-cap-retry"
+              onClick={() => { setBridgeError(""); void balanceCap.refresh().catch(error => setBridgeError(errorMessage(error))); }}
+            >Retry balance check</button>
+          </div> : null}
 
         </section>
         <section className="transfer-route-card" data-provider={provider} data-has-amount={hasRouteAmount} aria-label="Transfer route">
@@ -1083,7 +1103,7 @@ function BridgeForm() {
               type="button"
               ref={primaryActionRef}
               onClick={handlePrimaryAction}
-              disabled={cta.disabled || Boolean(amountValidation.error)}
+              disabled={cta.disabled || Boolean(amountValidation.error) || (cta.action === "review" && capBlocked)}
             >
               {cta.action === "review" ? "Review transfer" : cta.label}
               {isSubmitting ? (
@@ -1194,6 +1214,7 @@ function BridgeForm() {
 
                   {provider === "xreserve" ? <p className="preflight-note">{routeNote}</p> : null}
                   {reviewWalletsChanged ? <p className="form-error" role="alert">Your connected wallet changed. Close this review and review the transfer again.</p> : null}
+                  {capError ? <p className="form-error" role="alert">{capError}</p> : null}
                 </div>
 
                 <div className="preflight-actions">
@@ -1201,7 +1222,7 @@ function BridgeForm() {
                     type="button"
                     className="primary-button preflight-confirm"
                     ref={preflightConfirmRef}
-                    disabled={reviewWalletsChanged}
+                    disabled={reviewWalletsChanged || capBlocked}
                     onClick={confirmPreflight}
                   >
                     Confirm in wallet
