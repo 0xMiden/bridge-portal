@@ -1,16 +1,12 @@
 # Bridge portal runbook
 
-## Live testnet E2E is red
+## Browser tests are red
 
-1. Open the failed `e2e-testnet` run and the Playwright trace artifact.
-2. Distinguish:
-   - Empty faucet / below 0.001 Sepolia ETH: top up the throwaway key.
-   - Faucet note never consumed: the seed wallet's first send asks faucet.testnet.miden.io for a public note. A 429 is the faucet rate limit.
-   - Kernel skew (`procedure with root digest`): SDK pin is behind the testnet node. Bump `@miden-sdk/miden-sdk`.
-   - Allocator 5xx: check Epoch service availability. `NO_QUOTE_AVAILABLE` also occurs with stale token configuration: verify the Miden faucet against Epoch's current dashboard configuration and compare the exact quote payload before diagnosing an outage.
-   - Activity hash is a UUID: Midenscan link bug; `waitForTransaction` did not return `txHash`.
+1. Open the failed `mock` job in the `ci` workflow and download its Playwright trace artifact.
+2. Reproduce with `npm run test:browser`; the browser tests run the normal application with simulated extension transports and remote responses without private keys, seeds, or funded accounts.
+3. Inspect the failing assertion, screenshot, and trace for the affected wallet, navigation, review, or receipt flow.
 
-Until `E2E_EVM_PRIVATE_KEY` and `E2E_MIDEN_SEED` are set, the live suite skips and still counts as green, so production can deploy. After the secrets exist, a red live suite blocks deploy.
+Production deployment runs after successful `ci` on `main`, using the exact tested commit. A failed unit, browser, Cloudflare build, or Docker job blocks deployment.
 
 ## Production looks down
 
@@ -24,17 +20,28 @@ Nightly `pin-drift` compares portal `@miden-sdk/miden-sdk`, `MIDEN_BRIDGE_ID`, a
 
 ## Secrets
 
-Repo Actions secrets (throwaway testnet only):
-
-- `E2E_EVM_PRIVATE_KEY`
-- `E2E_MIDEN_SEED` (32 bytes; the harness creates a public wallet from it)
-- `E2E_MIDEN_ACCOUNT_ID` (optional; must match that seed's wallet)
-- `E2E_SEPOLIA_RPC_URL` (optional keyed RPC)
-
 Production deploy:
 
 - `CLOUDFLARE_API_TOKEN`
 - Eight primary EVM RPC URL secrets from [`.env.example`](../.env.example) (Worker runtime)
 - `NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID` (inlined at `cf:build`)
 
-Never set `NEXT_PUBLIC_E2E_*` on a production `cf:build`. `scripts/check-prod-bundle.mjs` fails the deploy if they leak into `.next` / `.open-next`.
+## Manual testnet check before a release
+
+CI does not prove that a live transfer settles. For each affected enabled testnet
+route and direction, a developer should:
+
+1. Open the release candidate, choose Testnet and connect their own testnet wallets.
+2. Review the source chain, token, amount, recipient and fee. Submit a small amount
+   above the route minimum, and check the actual wallet prompt against that review.
+3. Record the source transaction and receipt URL. Reload the receipt and verify
+   that tracking resumes without requesting another signature.
+4. Verify destination delivery against the destination explorer and receiving
+   wallet (including note consumption when required). Record the received amount,
+   fees, both transaction IDs, candidate commit and date in the release evidence.
+5. Record unavailable quotes, RPC failures or unsettled transfers as incomplete
+   checks. A source transaction alone is not evidence of destination settlement.
+
+Wallet credentials stay in the developer's wallet. No seed or private-key CI
+configuration is required. The `mock` CI job retains its historical required-check
+name; its step and npm command describe browser integration coverage.

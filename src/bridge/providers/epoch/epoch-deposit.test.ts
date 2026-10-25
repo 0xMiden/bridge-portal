@@ -15,7 +15,6 @@ import type { EvmProvider } from "../../../wallets/evm/evm-wallet";
 // the external wallet/RPC/HTTP, balance-cap valuation and unrelated Miden WASM boundaries are simulated.
 vi.mock("@wagmi/core", () => ({ getAccount: () => ({ address: SPONSOR, chainId: 42161 }), getWalletClient: vi.fn() }));
 vi.mock("../../../wallets/evm/appkit-config", () => ({ wagmiAdapter: { wagmiConfig: {} } }));
-vi.mock("../../../wallets/testing/env", () => ({ isE2E: () => false }));
 vi.mock("./miden-note", () => ({ createBridgeP2IDENoteCallback: vi.fn() }));
 vi.mock("@miden-sdk/miden-sdk", () => ({
   AccountId: {
@@ -58,6 +57,10 @@ function setup(mode: "sequential" | "batch" | "rejected") {
   function readDeposit(data: Hex) {
     const call = decodeFunctionData({ abi: COMPACT_ABI, data });
     if (call.functionName !== "depositERC20AndRegister") throw new Error("Expected a Compact deposit");
+    const [token, lockTag, amount] = call.args;
+    expect(lockTag).toBeDefined();
+    expect(token.toLowerCase()).toBe("0xaf88d065e77c8cc2239327c5edb3a432268e5831");
+    expect(amount).toBe(1_000_000n);
     [, , , claimHash, typehash] = call.args;
   }
   const wallet = {

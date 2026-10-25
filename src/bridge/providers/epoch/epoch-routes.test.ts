@@ -7,7 +7,6 @@ import { quoteEpochReceive, quoteEpochSend } from "./epoch-quote";
 import { createBridgeP2IDENoteCallback } from "./miden-note";
 import { buildCrossChainIntent, buildEVMToMidenIntent, getCrossChainQuote, getEVMToMidenQuote } from "./bridge";
 
-vi.mock("../../../wallets/testing/env", () => ({ isE2E: () => false }));
 vi.mock("./miden-note", () => ({ createBridgeP2IDENoteCallback: vi.fn() }));
 vi.mock("./sdk", () => ({ getEpochReadOnlySdk: vi.fn(async () => ({})), getEpochSdk: vi.fn(async () => ({})) }));
 vi.mock("@epoch-protocol/epoch-intents-sdk", () => ({ CollateralType: { Miden: "miden" } }));

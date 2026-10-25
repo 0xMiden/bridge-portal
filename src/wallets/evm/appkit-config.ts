@@ -3,18 +3,10 @@ import { sepolia, baseSepolia, arbitrumSepolia, mainnet, base, arbitrum, polygon
 import type { AppKitNetwork } from "@reown/appkit/networks";
 import { arcTestnet, arcMainnet } from "../../config/arc";
 import { evmReadTransport } from "../../bridge/evm/transport";
-import { e2eEvmConnector } from "../testing/evm-connector";
 
 export const projectId = process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID!;
 
 export const networks: [AppKitNetwork, ...AppKitNetwork[]] = [sepolia, arcTestnet, baseSepolia, arbitrumSepolia, mainnet, arcMainnet, base, arbitrum, polygon];
-
-// In E2E mode, register a headless test-wallet connector that signs Sepolia txs
-// with the test key (no MetaMask). The env check is inlined (not a helper call)
-// so webpack's DefinePlugin folds it to a constant and dead-code-eliminates the
-// connector — and its transitive e2e code — out of normal production bundles.
-const e2eConnectors =
-  process.env.NEXT_PUBLIC_E2E_TEST === "true" ? [e2eEvmConnector()] : [];
 
 export const wagmiAdapter = new WagmiAdapter({
   networks,
@@ -31,7 +23,6 @@ export const wagmiAdapter = new WagmiAdapter({
     [baseSepolia.id]: evmReadTransport("base-sepolia"),
     [arbitrumSepolia.id]: evmReadTransport("arbitrum-sepolia"),
   },
-  ...(e2eConnectors.length ? { connectors: e2eConnectors } : {}),
 });
 
 // Use the real page origin in the browser (where createAppKit consumes this),

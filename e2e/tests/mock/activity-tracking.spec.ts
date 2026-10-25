@@ -1,3 +1,4 @@
+import { acceptAgglayerDeposit } from "../../fixtures/deposit";
 import { readFile } from "node:fs/promises";
 import { BridgePage } from "../../pages/bridge-page";
 import { findBridgeRoute } from "../../../src/bridge/core/routes";
@@ -245,12 +246,10 @@ test("a receipt from an earlier release sends its saved recovery data when track
 
 test("an unsaved receipt survives client navigation and can be downloaded", async ({ page }, testInfo) => {
   const bridge = new BridgePage(page);
-  await page.route("**/suggested-nonce/**", route => route.fulfill({ json: { nonce: "1" } }));
-  await page.route("**/checkIfDepositNeeded", route => route.fulfill({ json: { tokenOut: "991878" } }));
-  await page.route("**/intentStatus/**", route => route.fulfill({ json: [] }));
-  await page.goto("/?provider=epoch&mode=receive");
+  acceptAgglayerDeposit(page);
+  await page.goto("/?provider=agglayer&mode=receive");
   await bridge.waitForReady();
-  await bridge.fillAmount("1");
+  await bridge.fillAmount("0.01");
   await bridge.openPreflight();
   await page.evaluate(() => {
     const setItem = Storage.prototype.setItem;
@@ -280,10 +279,9 @@ test("an unsaved receipt survives client navigation and can be downloaded", asyn
   expect(receipt).toMatchObject({
     id: new URL(receiptUrl).pathname.split("/").at(-1),
     sourceTxHash: `0x${"ab".repeat(32)}`,
-    epochIntentNonce: "42",
-    amount: "1",
+    amount: "0.01",
     environment: "testnet",
-    routeSnapshot: { id: "epoch-test-usdc-to-miden", provider: "epoch", mode: "receive" },
+    routeSnapshot: { id: "agglayer-eth-to-miden", provider: "agglayer", mode: "receive" },
   });
   expect(download.suggestedFilename()).toBe(`miden-bridge-${receipt.id}.json`);
   await page.screenshot({ path: testInfo.outputPath("unsaved-receipt.png"), fullPage: true, animations: "disabled" });

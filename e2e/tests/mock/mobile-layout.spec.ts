@@ -105,7 +105,7 @@ test.describe("mobile bridge layout", () => {
     await bridge.setRoute("USDCx");
     await bridge.setMode("Receive");
     await bridge.setChain("Arc Testnet");
-    await page.evaluate(() => localStorage.setItem("e2e-signer-mode", "reject"));
+    await page.evaluate(() => { window.testWallets.rejectSwitch = true; });
     await bridge.fillAmount("0.05");
     await bridge.openPreflight();
     await bridge.confirmPreflight();

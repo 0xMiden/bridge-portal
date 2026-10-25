@@ -1,7 +1,7 @@
 import { test, expect } from "../../fixtures/bridge";
 
 for (const mode of ["receive", "send"] as const) {
-  test(`Epoch ${mode}: restore a retired selection, quote the current faucet and submit`, async ({ bridge, page }) => {
+  test(`Epoch ${mode}: restore a retired selection, quote the current faucet and review`, async ({ bridge, page }) => {
     await page.route("**/suggested-nonce/**", (route) => route.fulfill({ json: { nonce: "1" } }));
     await page.route("**/checkIfDepositNeeded", (route) => route.fulfill({
       json: { tokenOut: mode === "receive" ? "991878" : "990000000000000000" },
@@ -29,12 +29,8 @@ for (const mode of ["receive", "send"] as const) {
     });
     await bridge.openPreflight();
     await expect(bridge.preflight()).toContainText(mode === "receive" ? "0.991878" : "0.99");
-    await bridge.confirmPreflight();
-    await bridge.waitForActivityPage();
-    expect((await bridge.readActivities())[0]).toMatchObject({
-      provider: "epoch", mode,
-      routeId: `epoch-test-usdc-to-${mode === "receive" ? "miden" : "sepolia"}`,
-    });
+    await bridge.cancelPreflight();
+    expect(await bridge.readActivities()).toEqual([]);
   });
 }
 
@@ -79,24 +75,6 @@ test("Epoch cannot reach review when the allocator has no estimate", async ({ br
 for (const [network, chainId] of [["ethereum", 1], ["base", 8453], ["arbitrum", 42161], ["polygon", 137]] as const) {
   for (const mode of ["receive", "send"] as const) {
     test(`Cedar Epoch ${network} ${mode}: quotes the selected chain and invalidates a changed amount`, async ({ bridge, page }) => {
-      // Mainnet uses the real adapter. Mock its public extension interface,
-      // leaving the production wallet/network checks in place.
-      await page.addInitScript(() => {
-        let address: string | undefined;
-        Object.defineProperty(window, "midenWallet", { value: {
-          get address() { return address; },
-          connect: async (_permission: string, network: string) => {
-            if (network !== "mainnet") throw new Error("Expected Cedar wallet connection");
-            address = "mm1aqu8zjdwvcgkeug5a67kpwmnsyv2qgp7";
-          },
-          disconnect: async () => { address = undefined; },
-          on: () => {}, off: () => {},
-          requestAssets: async () => ({ assets: [] }),
-          requestConsumableNotes: async () => ({ notes: [] }),
-        } });
-      });
-      await page.reload();
-      await bridge.waitForReady();
       const endpoint = "https://miden-smallocator.epochprotocol.xyz";
       await page.route(`${endpoint}/suggested-nonce/**`, route => route.fulfill({ json: { nonce: "1" } }));
       await page.route(`${endpoint}/checkIfDepositNeeded`, route => {

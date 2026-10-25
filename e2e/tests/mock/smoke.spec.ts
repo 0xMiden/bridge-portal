@@ -1,3 +1,4 @@
+import { EVM_ADDRESS, MIDEN_ADDRESS } from "../../fixtures/wallets";
 import { test, expect } from "../../fixtures/bridge";
 
 // The SUT boots, WASM hydrates, both injected wallets connect, and the core UI
@@ -5,14 +6,8 @@ import { test, expect } from "../../fixtures/bridge";
 test("bridge boots, wallets connect, only compatible providers are offered", async ({ bridge, page }) => {
   await test.step("wallets ready", async () => {
     await bridge.waitForReady();
-    const hook = await page.evaluate(() => ({
-      evm: window.__E2E__?.evmAddress,
-      miden: window.__E2E__?.midenAddress,
-      ready: window.__E2E__?.ready,
-    }));
-    expect(hook.ready).toBe(true);
-    expect(hook.evm).toBeTruthy();
-    expect(hook.miden).toBeTruthy();
+    await expect(page.locator('[data-wallet="evm"] .wallet-pill')).toHaveClass(/connected/);
+    await expect(page.getByRole("button", { name: "Bread wallet menu", exact: true })).toBeVisible();
   });
 
   await test.step("bridge card renders", async () => {
@@ -49,7 +44,7 @@ test("launch links select the route but connected wallets determine both recipie
   await expect(page.getByRole("textbox", { name: /Miden account|address/ })).toHaveCount(0);
   await bridge.fillAmount("0.01");
   await bridge.openPreflight();
-  const walletMiden = await page.evaluate(() => window.__E2E__!.midenAddress!);
+  const walletMiden = MIDEN_ADDRESS;
   expect(walletMiden).not.toBe(midenAccount);
   await expect(destination).toHaveAttribute("title", walletMiden);
   await bridge.cancelPreflight();
@@ -60,7 +55,7 @@ test("launch links select the route but connected wallets determine both recipie
   await expect(page.locator(".mode-switch button[aria-pressed='true']")).toHaveText("Withdraw");
   const withdrawalRequest = page.waitForRequest("**/api/xreserve/withdrawal-quote", { timeout: 20_000 });
   await bridge.fillAmount("2");
-  const walletEvm = await page.evaluate(() => window.__E2E__!.evmAddress!);
+  const walletEvm = EVM_ADDRESS;
   expect(walletEvm).not.toBe(evmAddress);
   expect((await withdrawalRequest).postDataJSON()).toMatchObject({ recipient: walletEvm, sender: walletMiden });
   await bridge.openPreflight();

@@ -1,3 +1,4 @@
+import { EVM_ADDRESS, MIDEN_ADDRESS } from "../../fixtures/wallets";
 import { findBridgeRoute } from "../../../src/bridge/core/routes";
 import { expect, test, type Page } from "@playwright/test";
 import { stubNetwork } from "../../fixtures/mock-network";
@@ -312,7 +313,7 @@ test("Circle origins retain Miden USDCx, review the separate fee and restore the
 });
 
 test("browsing routes leaves the wallet alone; confirming switches chains and a rejection can be retried", async ({ page }) => {
-  await page.addInitScript(() => localStorage.setItem("e2e-signer-mode", "reject"));
+  await page.addInitScript(() => { window.addEventListener("DOMContentLoaded", () => { window.testWallets.rejectSwitch = true; }); });
   // A successful switch reaches the deposit's first on-chain check. Stop there
   // so this test exercises network selection without signing a deposit.
   let arcReads = 0;
@@ -338,7 +339,7 @@ test("browsing routes leaves the wallet alone; confirming switches chains and a 
   expect(arcReads).toBe(0);
   await expect(bridge.selectedProvider()).toContainText("USDCx");
   await expect(page.getByRole("textbox", { name: "Amount", exact: true })).toHaveValue("1.000001");
-  await page.evaluate(() => localStorage.setItem("e2e-signer-mode", "sign"));
+  await page.evaluate(() => { window.testWallets.rejectSwitch = false; });
   await bridge.openPreflight();
   await bridge.confirmPreflight();
   await expect(page.locator(".form-error")).toContainText("Miden deposits are not registered");
@@ -363,7 +364,7 @@ test("USDCx withdrawals restore the destination and show the net payout estimate
   await expect(bridge.preflight()).toContainText("0.0164 USDC (estimated)");
   await expect(bridge.preflight().getByText("Minimum received", { exact: true })).toHaveCount(0);
   await expect(bridge.preflight().locator(".fiat-amount")).toHaveText("$2.00");
-  await expect(page.locator("#preflight-source-value")).toHaveAttribute("title", await page.evaluate(() => window.__E2E__!.midenAddress!));
-  await expect(page.locator("#preflight-destination-value")).toHaveAttribute("title", await page.evaluate(() => window.__E2E__!.evmAddress!));
+  await expect(page.locator("#preflight-source-value")).toHaveAttribute("title", MIDEN_ADDRESS);
+  await expect(page.locator("#preflight-destination-value")).toHaveAttribute("title", EVM_ADDRESS);
   await expect(bridge.preflight()).toContainText("Burning USDCx is irreversible");
 });

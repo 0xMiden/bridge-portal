@@ -11,6 +11,7 @@ async function selectNetwork(page: Page, network: "Mainnet" | "Testnet") {
 
 test("routes load on a fresh visit without remote configuration or registry discovery", async ({ page }) => {
   await startOnTestnet(page);
+  await stubNetwork(page);
   const configRequests: string[] = [];
   await page.route(/\/api\/wallet-config|raw\.githubusercontent\.com\/0xMiden\/wallet-config|rpc\.(testnet|cedar)\.miden\.io/, route => {
     configRequests.push(route.request().url());

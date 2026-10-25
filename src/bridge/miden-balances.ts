@@ -1,6 +1,5 @@
 import type { MidenFiWalletContextState } from "@miden-sdk/miden-wallet-adapter-react";
 import type { MidenAsset } from "./core/assets";
-import { e2eNetwork, isE2E } from "../wallets/testing/env";
 import { getMidenFaucetMetadata } from "./miden-rpc";
 
 type RequestAssets = NonNullable<MidenFiWalletContextState["requestAssets"]>;
@@ -42,32 +41,23 @@ export async function fetchMidenBalances(
   network: MidenAsset["network"] = tokens[0]?.network ?? "miden-testnet",
 ): Promise<MidenBalances> {
   const { formatUnits } = await import("viem");
-  let canon = normalizeId;
-  let resolveMetadata = async (asset: MidenAsset) => ({
-    decimals: asset.decimals,
-    symbol: asset.symbol,
-  });
-
-  // Mock E2E must not load the browser-only WASM SDK.
-  if (!(isE2E() && e2eNetwork() === "mock")) {
-    const { normalizeMidenIdToHex } = await import("./miden-address-sdk");
-    canon = (id) => {
-      try {
-        return normalizeId(normalizeMidenIdToHex(id));
-      } catch {
-        return normalizeId(id);
-      }
-    };
-    resolveMetadata = async (asset) => {
-      try {
-        const metadata = await getMidenFaucetMetadata(asset.faucetId, asset.network);
-        if (metadata) return metadata;
-      } catch {
-        // Unavailable or private faucet metadata uses the configured precision.
-      }
-      return { decimals: asset.decimals, symbol: asset.symbol };
-    };
-  }
+  const { normalizeMidenIdToHex } = await import("./miden-address-sdk");
+  const canon = (id: string) => {
+    try {
+      return normalizeId(normalizeMidenIdToHex(id));
+    } catch {
+      return normalizeId(id);
+    }
+  };
+  const resolveMetadata = async (asset: MidenAsset) => {
+    try {
+      const metadata = await getMidenFaucetMetadata(asset.faucetId, asset.network);
+      if (metadata) return metadata;
+    } catch {
+      // Unavailable or private faucet metadata uses the configured precision.
+    }
+    return { decimals: asset.decimals, symbol: asset.symbol };
+  };
 
   const assets = await requestAssets();
   const byFaucet = new Map<string, bigint>();

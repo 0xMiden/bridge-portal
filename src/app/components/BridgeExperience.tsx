@@ -18,7 +18,6 @@ import Link from "next/link";
 import { useRouter, useSearchParams, type ReadonlyURLSearchParams } from "next/navigation";
 import {
   type KeyboardEvent as ReactKeyboardEvent,
-  useCallback,
   useEffect,
   useMemo,
   useRef,
@@ -84,8 +83,7 @@ import {
 import { type EvmProvider } from "../../wallets/evm/evm-wallet";
 import { gsap, useGSAP } from "../lib/gsap";
 import { EASE, motionMM } from "../lib/motion";
-// Type-only import — erased at build, so the eager-WASM adapter never reaches SSR.
-import type { MidenFiWalletContextState } from "@miden-sdk/miden-wallet-adapter-react";
+import { useMidenWallet } from "../../wallets/miden/useMidenWallet";
 
 const MOBILE_ROUTE_QUERY = "(max-width: 640px)";
 
@@ -102,35 +100,6 @@ function getMobileRouteSnapshot() {
 function getServerMobileRouteSnapshot() {
   return false;
 }
-
-type MidenWalletSnapshot = {
-  address: string;
-  connected: boolean;
-  connecting: boolean;
-  ready: boolean;
-  error: string;
-  balanceText: string;
-  noteSyncStatus: string;
-  consumableNoteCount: number | null;
-  requestSend?: MidenFiWalletContextState["requestSend"];
-  requestTransaction?: MidenFiWalletContextState["requestTransaction"];
-  waitForTransaction?: MidenFiWalletContextState["waitForTransaction"];
-  requestConsumableNotes?: MidenFiWalletContextState["requestConsumableNotes"];
-};
-
-const emptyMidenWallet: MidenWalletSnapshot = {
-  address: "",
-  connected: false,
-  connecting: false,
-  // Default ready=true so the panel reads a neutral "Not connected" before the
-  // (dynamically imported) adapter reports; it corrects to "Not installed" only
-  // once the button confirms the extension is genuinely missing.
-  ready: true,
-  error: "",
-  balanceText: "Not connected",
-  noteSyncStatus: "Not connected",
-  consumableNoteCount: null,
-};
 
 function initialBridgeForm(params: ReadonlyURLSearchParams, environment: BridgeEnvironment) {
   const bridgeRoutes = routesForEnvironment(environment);
@@ -152,20 +121,8 @@ function initialBridgeForm(params: ReadonlyURLSearchParams, environment: BridgeE
   return { route };
 }
 
-const MainnetMidenWalletButton = dynamic(
+const MidenWalletButton = dynamic(
   () => import("../../wallets/miden/MidenWalletButton").then(mod => mod.MidenWalletButton),
-  { ssr: false },
-);
-
-const TestnetMidenWalletButton = dynamic(
-  () =>
-    process.env.NEXT_PUBLIC_E2E_TEST === "true"
-      ? import("../../wallets/testing/E2EMidenWalletButton").then(
-          (mod) => mod.E2EMidenWalletButton,
-        )
-      : import("../../wallets/miden/MidenWalletButton").then(
-          (mod) => mod.MidenWalletButton,
-        ),
   {
     ssr: false,
     loading: () => (
@@ -225,8 +182,7 @@ function BridgeForm() {
   const walletConnected = isConnected && Boolean(address);
   const externalAsset = route.source.kind === "miden" ? route.destination : route.source;
   const evmNetwork = evmNetworks[externalAsset.kind === "miden" ? "sepolia" : externalAsset.network];
-  const [midenWallet, setMidenWallet] =
-    useState<MidenWalletSnapshot>(emptyMidenWallet);
+  const midenWallet = useMidenWallet();
   const [walletError, setWalletError] = useState("");
   const [bridgeError, setBridgeError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -406,10 +362,6 @@ function BridgeForm() {
     submitPhase,
     evmNetworkLabel: evmNetwork.name,
   });
-  const handleMidenWalletState = useCallback(
-    (next: MidenWalletSnapshot) => setMidenWallet(next),
-    [],
-  );
 
   useEffect(() => {
     saveStoredRoute(initialForm.route.provider, initialForm.route.id, environment);
@@ -990,7 +942,7 @@ function BridgeForm() {
                     <ChainSelect route={route} side={side} onSelectRoute={selectRoute} />
                   </div>
                   <div className="panel-wallet" data-wallet={isMiden ? "miden" : "evm"}>
-                    {isMiden ? environment === "mainnet" ? <MainnetMidenWalletButton onStateChange={handleMidenWalletState} /> : <TestnetMidenWalletButton onStateChange={handleMidenWalletState} /> : evmWalletControl}
+                    {isMiden ? <MidenWalletButton /> : evmWalletControl}
                   </div>
                   {isSource ? (
                     <label className="swap-box-amount">

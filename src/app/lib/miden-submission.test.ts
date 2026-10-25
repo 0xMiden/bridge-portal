@@ -13,7 +13,6 @@ import { activityDetailFor } from "./activity-detail-presentation";
 
 // Keep submission, provider execution, note callbacks and persistence real.
 // Replace browser-only WASM and the external wallet/Epoch boundaries.
-vi.mock("../../wallets/testing/env", () => ({ isE2E: () => false }));
 vi.mock("../../bridge/providers/epoch/sdk", () => ({ getEpochReadOnlySdk: vi.fn() }));
 const rpc = vi.hoisted(() => ({ getNotes: vi.fn() }));
 vi.mock("../../wallets/miden/miden-transaction", () => ({ createFeeConversionSalt: () => "salt" }));

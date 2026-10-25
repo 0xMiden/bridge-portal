@@ -11,7 +11,6 @@ import { getEpochReadOnlySdk, getEpochSdk } from "./sdk";
 
 // Exercise review, submission, execution and SDK task encoding together. Only
 // wallet setup, balance-cap valuation, Miden WASM and the SDK's quote/signing boundaries are replaced.
-vi.mock("../../../wallets/testing/env", () => ({ isE2E: () => false }));
 vi.mock("./sdk", () => ({ getEpochReadOnlySdk: vi.fn(), getEpochSdk: vi.fn() }));
 vi.mock("./miden-note", () => ({ createBridgeP2IDENoteCallback: vi.fn() }));
 vi.mock("@miden-sdk/miden-sdk", () => ({

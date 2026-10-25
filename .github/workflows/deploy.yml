@@ -1,11 +1,10 @@
 name: deploy
 
-# Ship the Worker only after live testnet E2E (or its skip-until-secrets path)
-# succeeded on main. That workflow itself waits on `ci`, so a red mock suite
-# never reaches here.
+# Ship the tested revision after CI succeeds on main, including unit tests,
+# browser integration tests, the Cloudflare build, and the Docker build.
 on:
   workflow_run:
-    workflows: [e2e-testnet]
+    workflows: [ci]
     types: [completed]
     branches: [main]
 
@@ -15,7 +14,7 @@ concurrency:
 
 jobs:
   deploy:
-    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    if: ${{ github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push' }}
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
@@ -32,8 +31,6 @@ jobs:
         env:
           NEXT_PUBLIC_APP_URL: https://bridge.miden.xyz
           NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID: ${{ secrets.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID }}
-      - name: Refuse E2E secrets in the production bundle
-        run: node scripts/check-prod-bundle.mjs
       - name: Deploy Worker
         run: |
           secrets_file="$(mktemp)"
