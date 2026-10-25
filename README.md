@@ -99,7 +99,22 @@ local token-logo paths, and stable receive/send route IDs. Logos are bundled in
 for route assets and the asset exports used by faucet actions. There is no runtime
 or build dependency on `token-list`.
 Bridge contracts, provider endpoints, and availability switches continue to
-come from the existing wallet-config documents. An absent direction is not
+come from the existing wallet-config documents, with one explicit portal rollout
+in `src/config/wallet-config/epoch-mainnet.ts`: Cedar USDCx ↔ native USDC on
+Ethereum, Base, Arbitrum and Polygon uses `https://miden-smallocator.epochprotocol.xyz`
+and enables both Epoch directions independently of upstream's `fastBridge` flag.
+The pinned upstream files and revision remain intact; release validation checks
+the effective configuration and receipts save it. The faucet comes from the
+verified Cedar USDCx registry metadata. The allocator was confirmed via
+[wallet-config PR #23](https://github.com/0xMiden/wallet-config/pull/23) and live
+quotes in both directions on October 24, 2026. Quotes depend on the entered amount
+and current liquidity: preview requires a positive, unexpired matching quote,
+and execution fetches and validates another quote before signing collateral.
+The Epoch mainnet SDK and commons graph are pinned together. The legacy
+`NEXT_PUBLIC_EPOCH_ALLOCATOR_URL` override applies only to testnet.
+`POLYGON_RPC_URL` optionally overrides Polygon's server-side read RPC.
+
+An absent direction is not
 implemented; `disabled` keeps retired connections addressable.
 
 To update the pin, use Node 22.18 or later and an explicit upstream commit:

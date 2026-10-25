@@ -61,35 +61,8 @@ export async function checkArcDelivery(
   recovery?: BridgeConfig,
 ): Promise<{ noteId: string; block?: number }> {
   const sdk = await import("@miden-sdk/miden-sdk");
-  const { configMidenNetwork } = await import("../../../config/bridge-config");
+  const { getMidenNoteBlock } = await import("../../miden-rpc");
   const noteId = deriveArcNoteId(intent, sdk);
-  const endpoint = new sdk.Endpoint(
-    configMidenNetwork(recovery).rpcUrl,
-  );
-  // These WASM APIs take ownership of the endpoint and the note ID array.
-  const rpc = new sdk.RpcClient(endpoint);
-  const id = sdk.NoteId.fromHex(noteId);
-  try {
-    const notes = await rpc.getNotesById([id]);
-    try {
-      for (const note of notes) {
-        const fetchedId = note.noteId;
-        const matches = fetchedId.toString() === noteId;
-        fetchedId.free();
-        if (matches) {
-          const proof = note.inclusionProof;
-          const location = proof.location();
-          const block = location.blockNum();
-          location.free();
-          proof.free();
-          return { noteId, block };
-        }
-      }
-      return { noteId };
-    } finally {
-      notes.forEach((note) => note.free());
-    }
-  } finally {
-    rpc.free();
-  }
+  const block = await getMidenNoteBlock(noteId, recovery);
+  return { noteId, block };
 }

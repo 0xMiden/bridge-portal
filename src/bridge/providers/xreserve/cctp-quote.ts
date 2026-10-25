@@ -1,7 +1,7 @@
 import { configKey } from "../../../config/bridge-config";
 import { formatUnits, type PublicClient } from "viem";
 import type { QuoteRequest, QuoteResult } from "../../core/quote";
-import { normalizeMidenAccountHex } from "../agglayer/agglayer";
+import { normalizeMidenAccountHex } from "../../miden-address";
 import { cctpAbi, cctpConfig, cctpSource } from "./config";
 import { arcRecipient, parseArcAmount } from "./deposit-terms";
 import {

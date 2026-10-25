@@ -1,13 +1,15 @@
+import { validateMidenRecipient } from "../../miden-address";
 import type { BridgeConfig } from "../../../config/bridge-config";
 import { erc20Abi, type Address, type Hash } from "viem";
 import type { EvmProvider } from "../../../wallets/evm/evm-wallet";
 import { prepareDepositWallet, type DepositWallet } from "../../evm/deposit-wallet";
 import { arcConfig, xReserveAbi } from "./config";
 import { arcRecipient, parseArcAmount } from "./deposit-terms";
-import { assertArcRouteAvailable, validateMidenRecipient } from "./deposit-preflight";
+import { assertArcRouteAvailable } from "./deposit-preflight";
 import { ensureUsdcApproval } from "./approval";
+import { suggestEvmFees } from "../../evm/fee-suggestions";
 
-export type ArcDepositPhase = "checking" | "approving" | "approval-confirming" | "depositing";
+export type ArcDepositPhase = "checking" | "approving" | "approving-wallet-fees" | "approval-confirming" | "depositing" | "depositing-wallet-fees";
 
 type ArcDepositRequest = {
   provider: EvmProvider;
@@ -45,9 +47,10 @@ export async function depositOnArc(input: ArcDepositRequest, recovery?: BridgeCo
     account, address: arc.xReserve, abi: xReserveAbi, functionName: "depositToRemote",
     args: [value, arc.midenDomain, remoteRecipient, arc.usdc, arc.maxFee, "0x"],
   });
-  onPhase("depositing");
+  const fees = await suggestEvmFees(connection.client);
+  onPhase(fees ? "depositing" : "depositing-wallet-fees");
   await connection.assertWallet();
-  const hash = await connection.wallet.writeContract(deposit.request);
+  const hash = await connection.wallet.writeContract({ ...deposit.request, ...fees, type: undefined, gasPrice: undefined });
   onBroadcast(hash); // Persist immediately: a later polling error is not a failed deposit.
   return hash;
 }

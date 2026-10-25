@@ -1,7 +1,7 @@
 import { z } from "zod";
 import type { bridgeConfigSchema } from "./schema";
 
-const evmNetwork = z.enum(["sepolia", "arc-testnet", "base-sepolia", "arbitrum-sepolia", "ethereum", "arc", "base", "arbitrum"]);
+const evmNetwork = z.enum(["sepolia", "arc-testnet", "base-sepolia", "arbitrum-sepolia", "ethereum", "arc", "base", "arbitrum", "polygon"]);
 export const tokenLogoSchema = z.string().regex(/^\/asset-logos\/[a-z0-9-]+\.(svg|png)$/);
 const metadata = { symbol: z.string().min(1).max(11), name: z.string().min(1).max(100).optional(), logo: tokenLogoSchema };
 const evmMetadata = { ...metadata, network: evmNetwork, decimals: z.int().min(0).max(255) };
@@ -59,6 +59,10 @@ export function assertTokenConnections(config: z.infer<typeof bridgeConfigSchema
     if (!bridge || miden.network !== `miden-${environment}`) throw new Error(`Unconfigured token connection: ${provider}/${evm.network}`);
     if (provider === "epoch") {
       const token = bridge.tokens?.[evm.symbol];
+      if (environment === "mainnet" && (!token || evm.symbol !== "USDC" || evm.decimals !== 6 ||
+          miden.symbol !== "USDCx" || miden.decimals !== 6 || miden.faucetId !== derived.usdcxFaucetId ||
+          miden.faucetId !== document["bridge-providers"].epoch?.outputs?.[token.outputs?.[0] ?? ""]?.faucetId))
+        throw new Error("Epoch token connection does not match verified configuration");
       if (token && (evm.kind !== "erc20" || token.contractAddress.toLowerCase() !== evm.address.toLowerCase()))
         throw new Error("Epoch token connection does not match wallet-config");
       const output = token?.outputs?.[0];

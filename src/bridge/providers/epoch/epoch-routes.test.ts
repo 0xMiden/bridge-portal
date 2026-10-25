@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { defaultBridgeRoute, findBridgeRoute, type BridgeRoute } from "../../core/routes";
+import { getEpochReadOnlySdk, getEpochSdk } from "./sdk";
 import type { BridgeAsset } from "../../core/assets";
 import { runEpochTransfer } from "./epoch-execute";
 import { quoteEpochReceive, quoteEpochSend } from "./epoch-quote";
@@ -56,9 +57,18 @@ describe.each([
   { name: "another token pair", evm: "0x2222222222222222222222222222222222222222", evmDecimals: 8,
     faucet: "0x123456789012345678901234567890", midenDecimals: 2, sendUnits: 125n,
     sendOutput: "1.25", receiveOutput: "1250000", symbol: "TEST", midenSymbol: "MTEST" },
+  ...[
+    { network: "ethereum", chainId: 1, evm: "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48" },
+    { network: "base", chainId: 8453, evm: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913" },
+    { network: "arbitrum", chainId: 42161, evm: "0xaf88d065e77c8cC2239327C5EDb3A432268e5831" },
+    { network: "polygon", chainId: 137, evm: "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359" },
+  ].map(chain => ({ ...chain, name: `Cedar ${chain.network}`, route: `mainnet:epoch:${chain.network}`,
+    evmDecimals: 6, faucet: "0xe69e6ca6e39df1b10c1e5399399feb", midenDecimals: 6,
+    sendUnits: 1250000n, sendOutput: "125", receiveOutput: "125", symbol: "USDC", midenSymbol: "USDCx" })),
 ])("Epoch route token inputs: $name", (expected) => {
   function route(mode: "send" | "receive"): BridgeRoute {
     const registered = defaultBridgeRoute("epoch", mode)!;
+    if ("network" in expected) return findBridgeRoute(`${expected.route}:${mode}`)!;
     return expected.route ? findBridgeRoute(`${expected.route}-to-${mode === "send" ? "sepolia" : "miden"}`)! : {
       ...registered, id: "unregistered-test-pair",
       source: mode === "send" ? customMiden : customEvm,
@@ -68,16 +78,18 @@ describe.each([
 
   it("uses the same source faucet and destination ERC20 for send quotes and execution", async () => {
     const selected = route("send");
+    expect(selected.disabled).toBeFalsy();
     const preview = await quoteEpochSend({ route: selected, amount: "1.25", evmAddress: account, midenAccount });
     const result = await runEpochTransfer({
       route: selected, amount: "1.25", evmAddress: account, midenAccount,
+      minReceived: preview.received,
       requestTransaction: vi.fn(), waitForTransaction: vi.fn(),
     });
     expect(getCrossChainQuote).toHaveBeenCalledTimes(2);
     for (const [, params] of vi.mocked(getCrossChainQuote).mock.calls) {
       expect(params).toMatchObject({
         midenFaucetId: expected.faucet, midenAmount: expected.sendUnits.toString(),
-        destinationChainId: 11155111, outputTokenAddress: expected.evm,
+        destinationChainId: "chainId" in expected ? expected.chainId : 11155111, outputTokenAddress: expected.evm,
       });
     }
     expect(preview.received).toBe(expected.sendOutput);
@@ -87,8 +99,11 @@ describe.each([
 
   it("uses the same source ERC20 and destination faucet for receive quotes and execution", async () => {
     const selected = route("receive");
+    expect(selected.disabled).toBeFalsy();
     const preview = await quoteEpochReceive({ route: selected, amount: "1.25", evmAddress: account, midenAccount });
-    const result = await runEpochTransfer({ route: selected, amount: "1.25", evmAddress: account, midenAccount });
+    expect(getEpochReadOnlySdk).toHaveBeenCalledWith(account, selected.recovery, selected.source.network);
+    expect(getEpochSdk).not.toHaveBeenCalled();
+    const result = await runEpochTransfer({ route: selected, amount: "1.25", minReceived: preview.received, evmAddress: account, midenAccount });
     expect(getEVMToMidenQuote).toHaveBeenCalledTimes(2);
     for (const [, params] of vi.mocked(getEVMToMidenQuote).mock.calls) {
       expect(params).toMatchObject({
@@ -106,7 +121,7 @@ it.each(["0x0000000000000000000000000000000000000000", "0x1234"])("rejects an un
   const route = defaultBridgeRoute("epoch", "receive")!;
   await expect(runEpochTransfer({
     route: { ...route, source: { ...customEvm, address: address as `0x${string}` } },
-    amount: "1.25", evmAddress: account, midenAccount,
+    amount: "1.25", minReceived: "1", evmAddress: account, midenAccount,
   })).rejects.toThrow("not configured");
   expect(buildEVMToMidenIntent).not.toHaveBeenCalled();
 });
@@ -125,6 +140,20 @@ it("publishes the committed Miden source before an allocator failure", async () 
   });
   await expect(runEpochTransfer({
     route: defaultBridgeRoute("epoch", "send")!, amount: "1.25", evmAddress: account, midenAccount,
+    minReceived: "0.000000000125",
     requestTransaction: vi.fn(), waitForTransaction: vi.fn(), onSubmitted,
   })).rejects.toThrow("Allocator unavailable");
+});
+
+// Preview success must never authorize a later deposit without another live quote.
+it.each(["send", "receive"] as const)("Cedar %s stops before signing if liquidity disappears after preview", async mode => {
+  const route = findBridgeRoute(`mainnet:epoch:polygon:${mode}`)!;
+  const input = { route, amount: "10", evmAddress: account, midenAccount };
+  const preview = await (mode === "send" ? quoteEpochSend(input) : quoteEpochReceive(input));
+  vi.mocked(mode === "send" ? getCrossChainQuote : getEVMToMidenQuote).mockRejectedValueOnce(new Error("No liquidity available for this transfer."));
+  const requestTransaction = vi.fn();
+  await expect(runEpochTransfer({ ...input, minReceived: preview.received, requestTransaction, waitForTransaction: vi.fn() })).rejects.toThrow("No liquidity");
+  expect(buildCrossChainIntent).not.toHaveBeenCalled();
+  expect(buildEVMToMidenIntent).not.toHaveBeenCalled();
+  expect(requestTransaction).not.toHaveBeenCalled();
 });

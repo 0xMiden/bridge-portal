@@ -1,4 +1,4 @@
-import { normalizeMidenAccountHex } from "./providers/agglayer/agglayer";
+import { normalizeMidenAccountHex } from "./miden-address";
 
 export function midenAccountLink(value: string | undefined): string | undefined {
   if (!value) return undefined;

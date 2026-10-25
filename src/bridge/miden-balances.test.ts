@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { MIDEN_ETH, MIDEN_USDC } from "./core/assets";
 import { fetchMidenBalances, midenBalanceKey } from "./miden-balances";
+import { midenNetworks } from "../config/environment";
 
 const sdk = vi.hoisted(() => ({
   getAccountDetails: vi.fn(),
@@ -18,12 +19,13 @@ vi.mock("@miden-sdk/miden-sdk", () => ({
     },
   },
   Endpoint: class {
-    constructor(readonly url: string) {}
-    static testnet() { return { url: "https://rpc.testnet.miden.io" }; }
+    constructor(public url: string) {}
+    static testnet() { return new this(midenNetworks.testnet.rpcUrl); }
   },
   RpcClient: class {
-    constructor(endpoint: { url: string }) { sdk.endpoint(endpoint.url); }
-    getAccountDetails = sdk.getAccountDetails;
+    constructor(private endpoint: { url: string }) { sdk.endpoint(endpoint.url); }
+    getAccountDetails(id: unknown) { return sdk.getAccountDetails(id, this.endpoint.url); }
+    free() {}
   },
   BasicFungibleFaucetComponent: { fromAccount: sdk.fromAccount },
 }));
@@ -31,6 +33,26 @@ vi.mock("@miden-sdk/miden-sdk", () => ({
 beforeEach(() => vi.resetAllMocks());
 
 describe("Miden asset resolution", () => {
+  it("formats mainnet balances using metadata from the token's network", async () => {
+    const token = { ...MIDEN_ETH, network: "miden-mainnet" as const };
+    sdk.getAccountDetails.mockImplementation(async (_id, url) => ({
+      account: () => ({ decimals: url === midenNetworks.mainnet.rpcUrl ? 6 : 8 }),
+      free() {},
+    }));
+    sdk.fromAccount.mockImplementation(account => ({
+      decimals: () => account.decimals,
+      symbol: () => ({ toString: () => "WETH", free() {} }),
+      free() {},
+    }));
+
+    const balances = await fetchMidenBalances("0xabcd", [token], async () => [
+      { faucetId: token.faucetId, amount: "1500000" },
+    ]);
+
+    expect(balances[midenBalanceKey("0xabcd", token)])
+      .toMatchObject({ decimals: 6, balance: "1.5" });
+  });
+
   it("totals hex and bech32 holdings with on-chain decimals shared by every route for the token", async () => {
     sdk.getAccountDetails.mockResolvedValue({ account: () => ({}) });
     sdk.fromAccount.mockReturnValue({ decimals: () => 6, symbol: () => ({ toString: () => "WETH" }) });

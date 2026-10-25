@@ -54,6 +54,7 @@ export const explorerUrls = {
 };
 
 export const networkLabels: Record<BridgeNetwork, string> = {
+  polygon: "Polygon",
   ethereum: "Ethereum", arc: "Arc", base: "Base", arbitrum: "Arbitrum", "miden-mainnet": "Miden",
   sepolia: "Sepolia",
   "arc-testnet": "Arc Testnet",
@@ -291,11 +292,19 @@ export function buildDiagnostics(
     }),
     transactions: prune({
       sourceTxHash: activity.sourceTxHash,
+      midenWalletRequestId: activity.midenWalletRequestId,
+      midenNoteId: activity.midenNoteId,
       destinationTxHash: activity.destinationTxHash,
       midenTxId: activity.midenTxId,
       claimTxHash: activity.claimTxHash,
       depositCount: activity.depositCount,
       epochIntentNonce: activity.epochIntentNonce,
+      epochDepositId: activity.epochDepositId,
+      epochClaimHash: activity.epochClaimHash,
+      epochDepositConfirmed: activity.epochDepositConfirmed,
+      epochError: activity.epochError,
+      epochRecoveryRequired: activity.epochRecoveryRequired,
+      epochMidenBlock: activity.epochMidenBlock,
       sourceOriginalTxHash: activity.sourceOriginalTxHash,
       sourceTransaction: activity.sourceTransaction,
       xreserveStatus: activity.xreserveStatus,

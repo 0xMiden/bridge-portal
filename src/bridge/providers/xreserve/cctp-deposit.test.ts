@@ -11,7 +11,7 @@ import fixture from "./fixtures/cctp-hook.json";
 
 const mocks = vi.hoisted(() => ({
   publicClient: vi.fn(), walletClient: vi.fn(), simulate: vi.fn(), write: vi.fn(),
-  receipt: vi.fn(), quote: vi.fn(), validate: vi.fn(),
+  block: vi.fn(), tip: vi.fn(), receipt: vi.fn(), quote: vi.fn(), validate: vi.fn(),
 }));
 vi.mock("viem", async (original) => ({ ...await original<typeof import("viem")>(),
   createPublicClient: (options: ClientOptions) => mocks.publicClient(options),
@@ -95,6 +95,7 @@ function sourceClient(origin: CctpNetwork) {
       return mocks.simulate(call);
     },
     waitForTransactionReceipt: mocks.receipt,
+    getBlock: mocks.block, estimateMaxPriorityFeePerGas: mocks.tip,
   };
 }
 
@@ -113,6 +114,8 @@ beforeEach(() => {
     setItem: (key: string, value: string) => storage.set(key, value),
     removeItem: (key: string) => storage.delete(key),
   } });
+  mocks.block.mockResolvedValue({ baseFeePerGas: 100n });
+  mocks.tip.mockResolvedValue(3n);
   allowance = 0n;
   network = "base-sepolia";
   secondsRemaining = 120;
@@ -339,4 +342,39 @@ describe("Circle multichain deposits", () => {
     await expect(depositViaCctp(input())).rejects.toThrow("transfer changed");
     expect(mocks.write).not.toHaveBeenCalled();
   });
+});
+
+it("suggests fresh RPC fees for approval and burn without overriding gas limits", async () => {
+  mocks.block.mockResolvedValueOnce({ baseFeePerGas: 100n }).mockResolvedValueOnce({ baseFeePerGas: 200n });
+  mocks.tip.mockResolvedValueOnce(3n).mockResolvedValueOnce(7n);
+  await depositViaCctp(input());
+  expect(mocks.write.mock.calls.map(([call]) => ({
+    functionName: call.functionName, maxFeePerGas: call.maxFeePerGas,
+    maxPriorityFeePerGas: call.maxPriorityFeePerGas, gas: call.gas, gasPrice: call.gasPrice,
+  }))).toEqual([
+    { functionName: "approve", maxFeePerGas: 203n, maxPriorityFeePerGas: 3n, gas: undefined, gasPrice: undefined },
+    { functionName: "depositForBurnWithHookAndFees", maxFeePerGas: 407n, maxPriorityFeePerGas: 7n, gas: undefined, gasPrice: undefined },
+  ]);
+});
+
+it("falls back to wallet pricing with a notice when RPC fees are unavailable", async () => {
+  mocks.tip.mockRejectedValue(new Error("RPC unavailable"));
+  const args = input();
+  await depositViaCctp(args);
+  expect(mocks.write).toHaveBeenCalledTimes(2);
+  for (const [call] of mocks.write.mock.calls) {
+    expect(call).not.toHaveProperty("maxFeePerGas");
+    expect(call).not.toHaveProperty("maxPriorityFeePerGas");
+  }
+  expect(args.onPhase).toHaveBeenCalledWith("approving-wallet-fees");
+  expect(args.onPhase).toHaveBeenCalledWith("depositing-wallet-fees");
+});
+
+it("refreshes a Circle quote that expires while estimating burn fees", async () => {
+  allowance = 1_400_000n;
+  mocks.tip.mockImplementationOnce(async () => { secondsRemaining = 0; return 3n; });
+  await depositViaCctp(input());
+  expect(mocks.quote).toHaveBeenCalledOnce();
+  expect(mocks.write).toHaveBeenCalledOnce();
+  expect(mocks.write.mock.calls[0][0].args.at(-1).signedQuote).toBe("0xabcd");
 });

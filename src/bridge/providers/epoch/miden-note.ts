@@ -3,7 +3,6 @@ import type { BridgeConfig } from "../../../config/bridge-config";
 
 import type { SolveIntentParams } from "@epoch-protocol/epoch-intents-sdk";
 import {
-  AccountId,
   AccountInterface,
   FungibleAsset,
   NetworkId,
@@ -16,8 +15,8 @@ import {
 import { Transaction } from "@miden-sdk/miden-wallet-adapter-base";
 import type { MidenFiWalletContextState } from "@miden-sdk/miden-wallet-adapter-react";
 
-import { normalizeMidenIdToHex } from "./bridge";
-import { getCurrentMidenBlock } from "./chain";
+import { parseMidenAccountId } from "../../miden-address-sdk";
+import { getCurrentMidenBlock } from "../../miden-rpc";
 import { createFeeConversionSalt } from "../../../wallets/miden/miden-transaction";
 
 export type CreateMidenP2IDENote = NonNullable<SolveIntentParams["createMidenP2IDENote"]>;
@@ -26,8 +25,10 @@ export type CreateMidenP2IDENote = NonNullable<SolveIntentParams["createMidenP2I
 export interface MidenNoteDeps {
   requestTransaction: NonNullable<MidenFiWalletContextState["requestTransaction"]>;
   waitForTransaction: NonNullable<MidenFiWalletContextState["waitForTransaction"]>;
-  /** Connected sender's Miden account — bech32 (`mtst1…`) or 0x hex. */
+  /** Connected sender's Miden account — bech32 (`mm1…` / `mtst1…`) or 0x hex. */
   senderAddress: string;
+  /** Surface wallet acceptance immediately, before the confirmation wait. */
+  onNoteSubmitted?: (info: { requestId: string; noteId: string }) => void;
   /** Surface the committed note details for activity tracking. */
   onNoteCreated?: (info: { noteId: string; txHash: string }) => void;
 }
@@ -58,9 +59,9 @@ export function createBridgeP2IDENoteCallback(deps: MidenNoteDeps, recovery?: Br
         throw new Error("Invalid Epoch reclaim height.");
       }
 
-      const sender = AccountId.fromHex(normalizeMidenIdToHex(deps.senderAddress));
-      const allocator = AccountId.fromHex(normalizeMidenIdToHex(allocatorId));
-      const faucet = AccountId.fromHex(normalizeMidenIdToHex(faucetId));
+      const sender = parseMidenAccountId(deps.senderAddress);
+      const allocator = parseMidenAccountId(allocatorId);
+      const faucet = parseMidenAccountId(faucetId);
       const note = Note.createP2IDENote(
         sender,
         allocator,
@@ -76,13 +77,15 @@ export function createBridgeP2IDENoteCallback(deps: MidenNoteDeps, recovery?: Br
         .withFeeConversionSalt(createFeeConversionSalt())
         .withOwnOutputNotes(new NoteArray([note]))
         .build();
+      const network = recovery?.environment === "mainnet" ? NetworkId.mainnet() : NetworkId.testnet();
       const transaction = Transaction.createCustomTransaction(
-        sender.toBech32(NetworkId.testnet(), AccountInterface.BasicWallet),
-        allocator.toBech32(NetworkId.testnet(), AccountInterface.BasicWallet),
+        deps.senderAddress,
+        allocator.toBech32(network, AccountInterface.BasicWallet),
         request,
       );
 
       const txId = await deps.requestTransaction(transaction);
+      deps.onNoteSubmitted?.({ requestId: txId, noteId: expectedNoteId });
       const output = await deps.waitForTransaction(txId);
       // Fee-paying transactions also emit a fee note. Return our collateral
       // note even when it is not the first output.

@@ -22,7 +22,7 @@ vi.mock("../../bridge/providers/xreserve/cctp-deposit", () => ({ depositViaCctp:
 vi.mock("../../bridge/providers/agglayer/agglayer-execute", () => ({ runAgglayerSend: vi.fn() }));
 vi.mock("../../bridge/providers/epoch/epoch-execute", () => ({ runEpochTransfer: vi.fn() }));
 const { tokenRpc, allowance } = vi.hoisted(() => ({
-  tokenRpc: { readContract: vi.fn(), call: vi.fn(), estimateGas: vi.fn(), waitForTransactionReceipt: vi.fn() },
+  tokenRpc: { getBlock: vi.fn(), estimateMaxPriorityFeePerGas: vi.fn(), readContract: vi.fn(), call: vi.fn(), estimateGas: vi.fn(), waitForTransactionReceipt: vi.fn() },
   allowance: vi.fn(),
 }));
 vi.mock("viem", async (importOriginal) => ({
@@ -49,6 +49,8 @@ const history: Activity = {
 
 beforeEach(() => {
   vi.resetAllMocks();
+  tokenRpc.getBlock.mockResolvedValue({ baseFeePerGas: 100n });
+  tokenRpc.estimateMaxPriorityFeePerGas.mockResolvedValue(3n);
   vi.mocked(captureSourceTransaction).mockResolvedValue(undefined);
   const storage = new Map<string, string>();
   vi.stubGlobal("window", {
@@ -290,7 +292,6 @@ describe("Epoch activity lifecycle", () => {
     execution.resolve({
       direction: mode, intentNonce: "42", sponsorAddress: EVM_ADDRESS,
       sourceTxHash: TX_HASH, outputAmount: "0.123456789012345678",
-      raw: { taskTypeString: "test", intentData: {} },
     });
     await submission;
 
@@ -571,6 +572,7 @@ describe("Ethereum ERC-20 deposits", () => {
     await submission;
     expect(effects.onError).not.toHaveBeenCalled();
     expect(transactions()).toHaveLength(3);
+    for (const tx of transactions()) expect(tx).toMatchObject({ maxFeePerGas: "0xcb", maxPriorityFeePerGas: "0x3", gas: "0x1d4c0" });
     expect(transactions()[2].to).toBe(bridge);
     expect(loadStoredActivities("mainnet")[0].sourceTxHash).toBe(TX_HASH);
   });
@@ -620,4 +622,38 @@ describe("Ethereum ERC-20 deposits", () => {
     expect(evmRequest).not.toHaveBeenCalled();
     expect(loadStoredActivities()).toMatchObject([history]);
   });
+});
+
+
+describe("Cedar Epoch deposits", () => {
+  it.each([["ethereum", 1], ["base", 8453], ["arbitrum", 42161], ["polygon", 137]])(
+    "switches to %s and preserves its effective deployment in the receipt", async (network, chainId) => {
+      const account = "mm1aqu8zjdwvcgkeug5a67kpwmnsyv2qgp7";
+      const { input, effects, evmRequest } = setup({
+        environment: "mainnet", routeId: `mainnet:epoch:${network}:receive`, amount: "10",
+        midenAccount: account, midenWallet: { connected: true, address: account },
+      });
+      let chain = SEPOLIA_NETWORK.chainHex as string;
+      evmRequest.mockImplementation(async ({ method, params }) => {
+        if (method === "eth_accounts") return [EVM_ADDRESS];
+        if (method === "wallet_switchEthereumChain") chain = (params as [{ chainId: string }])[0].chainId;
+        return chain;
+      });
+      vi.mocked(runEpochTransfer).mockImplementation(async ({ onSubmitted }) => {
+        expect(chain).toBe(`0x${Number(chainId).toString(16)}`);
+        onSubmitted!({ sourceTxHash: TX_HASH });
+        return { direction: "receive", intentNonce: "42", sponsorAddress: EVM_ADDRESS,
+          sourceTxHash: TX_HASH, outputAmount: "9.9" };
+      });
+      await submitBridgeTransfer(input, effects);
+      expect(effects.onError).not.toHaveBeenCalled();
+      expect(runEpochTransfer).toHaveBeenCalledOnce();
+      expect(loadStoredActivities("mainnet")).toMatchObject([{
+        routeSnapshot: { id: input.routeId, source: { network },
+          recovery: { document: { "bridge-providers": { epoch: { allocatorUrl: "https://miden-smallocator.epochprotocol.xyz" } } } } },
+        epochIntentNonce: "42", receivedAmount: "9.9",
+      }]);
+      expect(loadStoredActivities("testnet")).toMatchObject([history]);
+    },
+  );
 });

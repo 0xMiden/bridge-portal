@@ -115,6 +115,13 @@ export const recoveryGuidance: ActivityGuidance = {
   ],
 };
 
+export const pendingMidenRequestGuidance: ActivityGuidance = {
+  tone: "active",
+  icon: "wallet",
+  title: "Confirming on Miden",
+  body: "Your wallet accepted the transfer. We’re waiting for confirmation on Miden. You don’t need to send it again.",
+};
+
 export const consumeNoteGuidance: ActivityGuidance = {
   tone: "success",
   icon: "wallet",

@@ -1,11 +1,8 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("@miden-sdk/miden-sdk", () => ({
-  AccountId: {
-    fromHex: (value: string) => ({ toBech32: () => value }),
-  },
-  AccountInterface: { BasicWallet: "basic-wallet" },
-  NetworkId: { testnet: () => "testnet" },
+vi.mock("@miden-sdk/miden-sdk", async (importOriginal) => ({
+  // Keep the real address codec: a network-blind stub hides mainnet regressions.
+  ...await importOriginal<typeof import("@miden-sdk/miden-sdk")>(),
   FungibleAsset: class { constructor(public faucet: unknown, public amount: bigint) {} },
   NoteAssets: class { constructor(public assets: unknown[]) {} },
   NoteArray: class { constructor(public notes: unknown[]) {} },
@@ -16,25 +13,26 @@ vi.mock("@miden-sdk/miden-sdk", () => ({
     salt: unknown;
     withFeeConversionSalt(salt: unknown) { this.salt = salt; return this; }
     withOwnOutputNotes = vi.fn().mockReturnThis();
-    build = vi.fn(() => ({ request: true, salt: this.salt }));
+    build = vi.fn(() => ({ request: true, salt: this.salt, serialize: () => new Uint8Array([1, 2, 3]) }));
   },
 }));
-vi.mock("@miden-sdk/miden-wallet-adapter-base", () => ({
-  Transaction: { createCustomTransaction: vi.fn(() => ({ type: "custom" })) },
-}));
-vi.mock("./bridge", () => ({ normalizeMidenIdToHex: (value: string) => value }));
-vi.mock("./chain", () => ({ getCurrentMidenBlock: vi.fn(async () => 12_000) }));
+// The adapter only declares a bundler entry point; use its real transaction
+// implementation directly in Node so assertions cover the submitted payload.
+vi.mock("@miden-sdk/miden-wallet-adapter-base", () => import("@miden-sdk/miden-wallet-adapter-base/dist/transaction.js"));
+vi.mock("../../miden-rpc", () => ({ getCurrentMidenBlock: vi.fn(async () => 12_000) }));
 vi.mock("../../../wallets/miden/miden-transaction", () => ({ createFeeConversionSalt: vi.fn() }));
 
 import { Note } from "@miden-sdk/miden-sdk";
 import { Transaction } from "@miden-sdk/miden-wallet-adapter-base";
+import { currentBridgeConfig, type BridgeConfig } from "../../../config/bridge-config";
 import { createFeeConversionSalt } from "../../../wallets/miden/miden-transaction";
-import { getCurrentMidenBlock } from "./chain";
+import { getCurrentMidenBlock } from "../../miden-rpc";
 import { createBridgeP2IDENoteCallback, type MidenNoteDeps } from "./miden-note";
 
 const TEST_ACCOUNT_ID = "0x387149ae66116cf114eebd60bb7381";
+const ALLOCATOR_ID = "0x787149ae66116cf114eebd60bb7381";
 const BINDING = [1n, 2n, 3n, 4n];
-function setup() {
+function setup(senderAddress = TEST_ACCOUNT_ID, recovery?: BridgeConfig) {
   const requestTransaction = vi.fn().mockResolvedValue("wallet-request-id");
   const waitForTransaction = vi.fn().mockResolvedValue({
     txHash: "0xtx", outputNotes: [
@@ -44,11 +42,11 @@ function setup() {
   });
   const onNoteCreated = vi.fn();
   const callback = createBridgeP2IDENoteCallback({
-    senderAddress: TEST_ACCOUNT_ID,
+    senderAddress,
     requestTransaction: requestTransaction as MidenNoteDeps["requestTransaction"],
     waitForTransaction: waitForTransaction as MidenNoteDeps["waitForTransaction"],
     onNoteCreated,
-  });
+  }, recovery);
   return { callback, requestTransaction, waitForTransaction, onNoteCreated };
 }
 
@@ -66,8 +64,38 @@ describe("createBridgeP2IDENoteCallback", () => {
       expect.objectContaining({ assets: [expect.objectContaining({ amount })] }),
       15_500, null, "public", expect.objectContaining({ felts: BigUint64Array.from(BINDING) }),
     );
-    expect(requestTransaction).toHaveBeenCalledWith({ type: "custom" });
+    expect(requestTransaction).toHaveBeenCalledWith(expect.objectContaining({ type: "custom" }));
     expect(onNoteCreated).toHaveBeenCalledWith({ noteId: "0xnote", txHash: "0xtx" });
+  });
+
+  it.each([
+    {
+      name: "mainnet",
+      senderAddress: "mm1aqu8zjdwvcgkeug5a67kpwmnsyv2qgp7_qr7qqq9wr6w",
+      recovery: currentBridgeConfig("mainnet"),
+      allocatorAddress: "mm1apu8zjdwvcgkeug5a67kpwmnsynr09mq_qr7qqq9wr6w",
+    },
+    {
+      name: "testnet",
+      senderAddress: "mtst1aqu8zjdwvcgkeug5a67kpwmnsymvmkg0_qr7qqq9wr6w",
+      recovery: currentBridgeConfig("testnet"),
+      allocatorAddress: "mtst1apu8zjdwvcgkeug5a67kpwmnsyy95mj3_qr7qqq9wr6w",
+    },
+    {
+      name: "legacy hex sender with default testnet configuration",
+      senderAddress: TEST_ACCOUNT_ID,
+      recovery: undefined,
+      allocatorAddress: "mtst1apu8zjdwvcgkeug5a67kpwmnsyy95mj3_qr7qqq9wr6w",
+    },
+  ])("submits the connected sender and route-network allocator in the $name wallet payload", async ({ senderAddress, recovery, allocatorAddress }) => {
+    const { callback, requestTransaction } = setup(senderAddress, recovery);
+
+    expect(await callback(TEST_ACCOUNT_ID, "1000", ALLOCATOR_ID, 2000, BINDING))
+      .toEqual({ success: true, noteId: "0xnote" });
+    expect(requestTransaction).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({
+      type: "custom",
+      payload: expect.objectContaining({ address: senderAddress, recipientAddress: allocatorAddress }),
+    }));
   });
 
   it("rejects invalid amounts before wallet submission", async () => {
@@ -81,15 +109,16 @@ describe("createBridgeP2IDENoteCallback", () => {
   });
 
   it("declares a fresh fee-conversion salt for every wallet request", async () => {
+    const createCustomTransaction = vi.spyOn(Transaction, "createCustomTransaction");
     const { callback } = setup();
     const first = { salt: 1 } as unknown as ReturnType<typeof createFeeConversionSalt>;
     const second = { salt: 2 } as unknown as ReturnType<typeof createFeeConversionSalt>;
     vi.mocked(createFeeConversionSalt).mockReturnValueOnce(first).mockReturnValueOnce(second);
     await callback(TEST_ACCOUNT_ID, "1000", TEST_ACCOUNT_ID, 2000, BINDING);
     await callback(TEST_ACCOUNT_ID, "1000", TEST_ACCOUNT_ID, 2000, BINDING);
-    const calls = vi.mocked(Transaction.createCustomTransaction).mock.calls;
-    expect(calls[0][2]).toEqual({ request: true, salt: first });
-    expect(calls[1][2]).toEqual({ request: true, salt: second });
+    const calls = createCustomTransaction.mock.calls;
+    expect(calls[0][2]).toEqual(expect.objectContaining({ request: true, salt: first }));
+    expect(calls[1][2]).toEqual(expect.objectContaining({ request: true, salt: second }));
     expect(createFeeConversionSalt).toHaveBeenCalledTimes(2);
   });
 
