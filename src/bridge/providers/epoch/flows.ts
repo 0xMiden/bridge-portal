@@ -53,6 +53,7 @@ async function execute(
   { input, route, phase, record, update }: SubmissionContext,
   destination: string,
 ) {
+  if (input.quote?.kind !== "epoch") throw new Error("Refresh and review the quote before sending.");
   phase("Confirm in your wallet…");
   const { runEpochTransfer } = await import("./epoch-execute");
   const accounts = {
@@ -66,6 +67,7 @@ async function execute(
   const result = await runEpochTransfer({
     route,
     amount: input.amount,
+    minReceived: input.quote.received,
     midenAccount: input.midenAccount,
     evmAddress: input.evmAddress,
     requestTransaction: input.midenWallet.requestTransaction,

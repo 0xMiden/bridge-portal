@@ -37,6 +37,7 @@ describe("runEpochTransfer (mock E2E)", () => {
     const result = await runEpochTransfer({
       route: defaultBridgeRoute("epoch", "receive")!,
       amount: "0.01",
+      minReceived: "0.99",
       midenAccount: "mtst1aqk5t00kapdcnq2yyf77dz6xcysswce0_qr7qqq9wr6w",
       evmAddress: "0x1111111111111111111111111111111111111111",
     });

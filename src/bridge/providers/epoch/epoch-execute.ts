@@ -49,6 +49,8 @@ export interface RunEpochTransferArgs {
   route: BridgeRoute;
   /** Human-readable amount in the route's source token. */
   amount: string;
+  /** Reviewed payout floor in human-readable destination-token units. */
+  minReceived: string;
   /** Miden account — sender (send) or recipient (receive). bech32 or 0x hex. */
   midenAccount: string;
   /** EVM address — recipient/sponsor (send) or connected source (receive). Must be 0x. */
@@ -117,9 +119,21 @@ function assertCommonArgs(args: RunEpochTransferArgs) {
   }
 }
 
+/** Preserve the reviewed precision; parseUnits would otherwise round it. */
+function reviewedMinTokenOut(value: string, decimals: number): string {
+  if (typeof value !== "string" || !/^(?:0|[1-9]\d*)(?:\.\d+)?$/.test(value) ||
+      (value.split(".")[1]?.length ?? 0) > decimals) {
+    throw new Error("Refresh and review the quote before sending.");
+  }
+  const minimum = parseUnits(value, decimals);
+  if (minimum <= 0n) throw new Error("Refresh and review the quote before sending.");
+  return minimum.toString();
+}
+
 /** Miden→EVM: P2IDE collateral note + Epoch intent. */
 async function runEpochSend(
   args: RunEpochTransferArgs,
+  minTokenOut: string,
 ): Promise<EpochExecuteResult> {
   if (!args.requestTransaction || !args.waitForTransaction) {
     throw new Error("Connect your Miden wallet to sign the send.");
@@ -141,7 +155,7 @@ async function runEpochSend(
     evmRecipient,
     destinationChainId: chain.id,
     outputTokenAddress: evm.address,
-    minTokenOut: "0",
+    minTokenOut,
   };
 
   // The note is minted inside solveIntent; capture its id/hash for the activity.
@@ -182,6 +196,7 @@ async function runEpochSend(
 /** EVM→Miden: Compact deposit (user signs) + Epoch intent. */
 async function runEpochReceive(
   args: RunEpochTransferArgs,
+  minTokenOut: string,
 ): Promise<EpochExecuteResult> {
   const evmSource = args.evmAddress.trim() as `0x${string}`;
   const midenRecipient = args.midenAccount.trim();
@@ -200,7 +215,7 @@ async function runEpochReceive(
     evmTokenDecimals: evm.decimals,
     midenRecipientId: midenRecipient,
     midenFaucetId: miden.faucetId,
-    minTokenOut: "0",
+    minTokenOut,
   };
 
   const quote = await getEVMToMidenQuote(sdk, params, evmSource);
@@ -233,6 +248,7 @@ export async function runEpochTransfer(
   args: RunEpochTransferArgs,
 ): Promise<EpochExecuteResult> {
   assertCommonArgs(args);
+  const minTokenOut = reviewedMinTokenOut(args.minReceived, args.route.destination.decimals);
   if (isE2E() && e2eNetwork() === "mock") {
     const sourceTxHash = `0x${"ab".repeat(32)}`;
     args.onSubmitted?.({ sourceTxHash });
@@ -246,5 +262,5 @@ export async function runEpochTransfer(
       raw: {} as IntentResult,
     };
   }
-  return args.route.mode === "send" ? runEpochSend(args) : runEpochReceive(args);
+  return args.route.mode === "send" ? runEpochSend(args, minTokenOut) : runEpochReceive(args, minTokenOut);
 }
