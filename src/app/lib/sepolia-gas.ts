@@ -2,14 +2,16 @@
 
 import { useEffect, useState } from "react";
 import type { EvmNetwork } from "../../bridge/core/assets";
-import { formatEther } from "viem";
+import { evmNetworks } from "../../config/evm-networks";
+import { formatUnits } from "viem";
 
-function formatEthFee(wei: bigint): string {
-  const eth = Number(formatEther(wei));
-  if (eth === 0) return "0 ETH";
+function formatGasFee(wei: bigint, network: EvmNetwork): string {
+  const { symbol, decimals } = evmNetworks[network].nativeCurrency;
+  const eth = Number(formatUnits(wei, decimals));
+  if (eth === 0) return `0 ${symbol}`;
   // Keep it compact but with enough precision for sub-milli-ETH testnet gas.
   const digits = eth < 0.001 ? 6 : eth < 1 ? 5 : 4;
-  return `~${Number(eth.toFixed(digits))} ETH`;
+  return `~${Number(eth.toFixed(digits))} ${symbol}`;
 }
 
 export interface SepoliaGasFee {
@@ -22,9 +24,9 @@ export interface SepoliaGasFee {
 }
 
 /**
- * Live Sepolia network-fee estimate for a given gas-limit. Polls the gas price
- * and returns `gasPrice * gasUnits` as an ETH string. Pass `null` to disable
- * (e.g. when the route's fee isn't on Sepolia).
+ * Live EVM network-fee estimate for a given gas-limit. Polls the gas price
+ * and returns `gasPrice * gasUnits` in the network’s native currency. Pass `null` to disable
+ * when there is no EVM source fee.
  */
 export function useSepoliaGasEstimate(gasUnits: number | null, network: EvmNetwork = "sepolia"): SepoliaGasFee {
   const [state, setState] = useState<SepoliaGasFee>({ loading: gasUnits != null });
@@ -58,7 +60,7 @@ export function useSepoliaGasEstimate(gasUnits: number | null, network: EvmNetwo
         const fee = BigInt(payload.gasPriceWei) * BigInt(units);
         setState({
           loading: false,
-          fee: formatEthFee(fee),
+          fee: formatGasFee(fee, network),
           gwei: payload.gwei
             ? `${Number(Number(payload.gwei).toFixed(2))} gwei`
             : undefined,

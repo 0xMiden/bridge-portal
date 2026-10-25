@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 const environmentSchema = z.enum(["testnet", "mainnet"]);
-const networkSchema = z.enum(["sepolia", "arc-testnet", "base-sepolia", "arbitrum-sepolia", "ethereum", "arc", "base", "arbitrum"]);
+const networkSchema = z.enum(["sepolia", "arc-testnet", "base-sepolia", "arbitrum-sepolia", "ethereum", "arc", "base", "arbitrum", "polygon"]);
 const address = z.templateLiteral(["0x", z.string()]).refine(value => /^0x[\da-f]{40}$/i.test(value));
 const account = z.string().regex(/^0x[\da-f]{30}$/i);
 const decimals = z.int().min(0).max(18);
@@ -19,7 +19,7 @@ const services = {
     agglayer: "https://bridge-cedar-miden.eu-north-3.gateway.fm/api",
     attestation: "https://xreserve-api.circle.com",
     iris: "https://iris-api.circle.com",
-    epoch: undefined,
+    epoch: "https://miden-smallocator.epochprotocol.xyz",
   },
 } as const;
 const token = z.object({ contractAddress: address, outputs: z.array(z.string().max(80)).max(32).optional() });
@@ -35,8 +35,8 @@ const bridge = z.object({
   executor: z.object({ address, handler: address }).optional(),
 });
 const ids = { sepolia: 11155111, "arc-testnet": 5042002, "base-sepolia": 84532, "arbitrum-sepolia": 421614,
-  ethereum: 1, arc: 5042, base: 8453, arbitrum: 42161 };
-const domains = { sepolia: 0, ethereum: 0, "base-sepolia": 6, base: 6, "arbitrum-sepolia": 3, arbitrum: 3, "arc-testnet": 26, arc: 26 };
+  ethereum: 1, arc: 5042, base: 8453, arbitrum: 42161, polygon: 137 };
+const domains = { sepolia: 0, ethereum: 0, "base-sepolia": 6, base: 6, "arbitrum-sepolia": 3, arbitrum: 3, "arc-testnet": 26, arc: 26, polygon: 7 };
 export const walletDocumentSchema = z.object({
   network: environmentSchema,
   version: z.int().positive(),
@@ -59,7 +59,8 @@ export const walletDocumentSchema = z.object({
     if (ids[network] !== chain.chainId || (doc.network === "testnet") !== /sepolia|testnet/.test(network)) invalid("Network mismatch");
     const { agglayer, usdcx, epoch } = chain.bridges;
     if (agglayer && (!agglayer.contractAddress || !agglayer.midenBridgeId || network !== (doc.network === "mainnet" ? "ethereum" : "sepolia"))) invalid("Unsupported Agglayer deployment");
-    if (epoch && (!p.epoch || !epoch.tokens?.USDC || doc.network !== "testnet")) invalid("Unsupported Epoch deployment");
+    if (epoch && (!p.epoch || !epoch.tokens?.USDC ||
+      !(doc.network === "testnet" ? network === "sepolia" : ["ethereum", "base", "arbitrum", "polygon"].includes(network)))) invalid("Unsupported Epoch deployment");
     if (epoch && (epoch.depositEnabled || epoch.withdrawalEnabled)) {
       const output = epoch.tokens?.USDC?.outputs?.[0];
       if (!output || !p.epoch?.outputs?.[output]) invalid("Unresolved Epoch output");

@@ -10,8 +10,11 @@ import { currentBridgeConfig, type BridgeConfig } from "../../../config/bridge-c
 
 export function epochAllocatorUrl(deployment: BridgeConfig = currentBridgeConfig("testnet")) {
   const provider = deployment.document["bridge-providers"].epoch;
-  if (deployment.environment !== "testnet" || !provider) throw new Error("Epoch is unavailable on this network.");
-  return process.env.NEXT_PUBLIC_EPOCH_ALLOCATOR_URL ?? provider.allocatorUrl;
+  if (!provider) throw new Error("Epoch is unavailable on this network.");
+  // The legacy override belongs to testnet; never route Cedar collateral to it.
+  return deployment.environment === "testnet"
+    ? process.env.NEXT_PUBLIC_EPOCH_ALLOCATOR_URL ?? provider.allocatorUrl
+    : provider.allocatorUrl;
 }
 
 /**

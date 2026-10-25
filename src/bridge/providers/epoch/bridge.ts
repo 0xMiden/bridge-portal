@@ -55,11 +55,14 @@ export interface EVMToMidenQuote {
 }
 
 /** Used by preview and by the fresh quote taken immediately before signing. */
-function requireEstimate(quote: IntentQuoteResult): void {
+function requireEstimate(quote: IntentQuoteResult, minTokenOut: string): void {
   if (!quote.success) throw new Error(quote.error ?? "Quote failed");
   if (typeof quote.tokenOut !== "string" || !/^\d+$/.test(quote.tokenOut) ||
       BigInt(quote.tokenOut) <= 0n) {
     throw new Error("No liquidity available for this transfer.");
+  }
+  if (BigInt(quote.tokenOut) < BigInt(minTokenOut)) {
+    throw new Error("The Epoch quote is below the payout you reviewed. Refresh and review the quote before sending.");
   }
 }
 
@@ -170,7 +173,7 @@ export async function getEVMToMidenQuote(
     isNative: false,
   });
 
-  requireEstimate(quoteResult);
+  requireEstimate(quoteResult, params.minTokenOut);
 
   return { taskTypeString, intentData, quoteResult, params };
 }
@@ -211,7 +214,9 @@ export async function buildEVMToMidenIntent(
       taskTypeString,
       intentData: intentData as Record<string, unknown>,
       error:
-        err instanceof Error ? err.message : "Failed to solve EVM→Miden intent",
+        err instanceof Error
+          ? [err.message, "status" in err && typeof err.status === "number" ? `HTTP ${err.status}` : undefined, "code" in err ? err.code : undefined].filter(Boolean).join(" · ")
+          : "Failed to solve EVM→Miden intent",
     };
   }
 }
@@ -232,7 +237,7 @@ export async function getCrossChainQuote(
     isNative: false,
   });
 
-  requireEstimate(quoteResult);
+  requireEstimate(quoteResult, params.minTokenOut);
 
   return { taskTypeString, intentData, quoteResult, params };
 }

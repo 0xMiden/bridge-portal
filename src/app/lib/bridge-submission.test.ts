@@ -557,3 +557,37 @@ describe("Ethereum ERC-20 deposits", () => {
     expect(loadStoredActivities()).toMatchObject([history]);
   });
 });
+
+
+describe("Cedar Epoch deposits", () => {
+  it.each([["ethereum", 1], ["base", 8453], ["arbitrum", 42161], ["polygon", 137]])(
+    "switches to %s and preserves its effective deployment in the receipt", async (network, chainId) => {
+      const account = "mm1aqu8zjdwvcgkeug5a67kpwmnsyv2qgp7";
+      const { input, effects, evmRequest } = setup({
+        environment: "mainnet", routeId: `mainnet:epoch:${network}:receive`, amount: "10",
+        midenAccount: account, midenWallet: { connected: true, address: account },
+      });
+      let chain = SEPOLIA_NETWORK.chainHex as string;
+      evmRequest.mockImplementation(async ({ method, params }) => {
+        if (method === "eth_accounts") return [EVM_ADDRESS];
+        if (method === "wallet_switchEthereumChain") chain = (params as [{ chainId: string }])[0].chainId;
+        return chain;
+      });
+      vi.mocked(runEpochTransfer).mockImplementation(async ({ onSubmitted }) => {
+        expect(chain).toBe(`0x${Number(chainId).toString(16)}`);
+        onSubmitted!({ sourceTxHash: TX_HASH });
+        return { direction: "receive", intentNonce: "42", sponsorAddress: EVM_ADDRESS,
+          sourceTxHash: TX_HASH, outputAmount: "9.9", raw: { taskTypeString: "test", intentData: {} } };
+      });
+      await submitBridgeTransfer(input, effects);
+      expect(effects.onError).not.toHaveBeenCalled();
+      expect(runEpochTransfer).toHaveBeenCalledOnce();
+      expect(loadStoredActivities("mainnet")).toMatchObject([{
+        routeSnapshot: { id: input.routeId, source: { network },
+          recovery: { document: { "bridge-providers": { epoch: { allocatorUrl: "https://miden-smallocator.epochprotocol.xyz" } } } } },
+        epochIntentNonce: "42", receivedAmount: "9.9",
+      }]);
+      expect(loadStoredActivities("testnet")).toMatchObject([history]);
+    },
+  );
+});

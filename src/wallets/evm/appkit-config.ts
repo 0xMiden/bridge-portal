@@ -1,5 +1,5 @@
 import { WagmiAdapter } from "@reown/appkit-adapter-wagmi";
-import { sepolia, baseSepolia, arbitrumSepolia, mainnet, base, arbitrum } from "@reown/appkit/networks";
+import { sepolia, baseSepolia, arbitrumSepolia, mainnet, base, arbitrum, polygon } from "@reown/appkit/networks";
 import type { AppKitNetwork } from "@reown/appkit/networks";
 import { arcTestnet, arcMainnet } from "../../config/arc";
 import { evmReadTransport } from "../../bridge/evm/transport";
@@ -7,7 +7,7 @@ import { e2eEvmConnector } from "../testing/evm-connector";
 
 export const projectId = process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID!;
 
-export const networks: [AppKitNetwork, ...AppKitNetwork[]] = [sepolia, arcTestnet, baseSepolia, arbitrumSepolia, mainnet, arcMainnet, base, arbitrum];
+export const networks: [AppKitNetwork, ...AppKitNetwork[]] = [sepolia, arcTestnet, baseSepolia, arbitrumSepolia, mainnet, arcMainnet, base, arbitrum, polygon];
 
 // In E2E mode, register a headless test-wallet connector that signs Sepolia txs
 // with the test key (no MetaMask). The env check is inlined (not a helper call)
@@ -21,6 +21,7 @@ export const wagmiAdapter = new WagmiAdapter({
   projectId,
   ssr: true,
   transports: {
+    [polygon.id]: evmReadTransport("polygon"),
     [mainnet.id]: evmReadTransport("ethereum"),
     [arcMainnet.id]: evmReadTransport("arc"),
     [base.id]: evmReadTransport("base"),

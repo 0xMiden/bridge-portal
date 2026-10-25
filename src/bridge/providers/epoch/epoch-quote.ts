@@ -1,13 +1,13 @@
 import { formatUnits, parseUnits } from "viem";
 import type { QuoteRequest, QuoteResult } from "../../core/quote";
-import { EPOCH_DESTINATION_CHAIN_ID, epochRouteAssets } from "./bridgeable-token";
+import { epochRouteAssets } from "./bridgeable-token";
 import { getCrossChainQuote, getEVMToMidenQuote } from "./bridge";
 import { MIDEN_DESTINATION_CHAIN_ID } from "./config";
-import { getEpochReadOnlySdk, getEpochSdk } from "./sdk";
+import { getEpochReadOnlySdk } from "./sdk";
 
 /** Quote both directions without executing or requesting a signature. */
 export async function quoteEpochSend(input: QuoteRequest): Promise<QuoteResult> {
-  const { miden, evm } = epochRouteAssets(input.route);
+  const { miden, evm, chain } = epochRouteAssets(input.route);
   const address = evmAddress(input.evmAddress);
   const sdk = await getEpochReadOnlySdk(address, input.route.recovery);
   const quote = await getCrossChainQuote(
@@ -17,7 +17,7 @@ export async function quoteEpochSend(input: QuoteRequest): Promise<QuoteResult> 
       midenFaucetId: miden.faucetId,
       midenAmount: parseUnits(input.amount, miden.decimals).toString(),
       evmRecipient: address,
-      destinationChainId: EPOCH_DESTINATION_CHAIN_ID,
+      destinationChainId: chain.id,
       outputTokenAddress: evm.address,
       minTokenOut: "0",
     },
@@ -29,8 +29,7 @@ export async function quoteEpochSend(input: QuoteRequest): Promise<QuoteResult> 
 export async function quoteEpochReceive(input: QuoteRequest): Promise<QuoteResult> {
   const { miden, evm } = epochRouteAssets(input.route);
   const address = evmAddress(input.evmAddress);
-  const sdk = await getEpochSdk(input.route.recovery);
-  if (!sdk) throw new Error("Connect a Sepolia wallet to quote the Epoch route.");
+  const sdk = await getEpochReadOnlySdk(address, input.route.recovery, evm.network);
   const quote = await getEVMToMidenQuote(
     sdk,
     {

@@ -26,8 +26,10 @@ export type CreateMidenP2IDENote = NonNullable<SolveIntentParams["createMidenP2I
 export interface MidenNoteDeps {
   requestTransaction: NonNullable<MidenFiWalletContextState["requestTransaction"]>;
   waitForTransaction: NonNullable<MidenFiWalletContextState["waitForTransaction"]>;
-  /** Connected sender's Miden account — bech32 (`mtst1…`) or 0x hex. */
+  /** Connected sender's Miden account — bech32 (`mm1…` / `mtst1…`) or 0x hex. */
   senderAddress: string;
+  /** Surface wallet acceptance immediately, before the confirmation wait. */
+  onNoteSubmitted?: (info: { requestId: string; noteId: string }) => void;
   /** Surface the committed note details for activity tracking. */
   onNoteCreated?: (info: { noteId: string; txHash: string }) => void;
 }
@@ -76,13 +78,15 @@ export function createBridgeP2IDENoteCallback(deps: MidenNoteDeps, recovery?: Br
         .withFeeConversionSalt(createFeeConversionSalt())
         .withOwnOutputNotes(new NoteArray([note]))
         .build();
+      const network = recovery?.environment === "mainnet" ? NetworkId.mainnet() : NetworkId.testnet();
       const transaction = Transaction.createCustomTransaction(
-        sender.toBech32(NetworkId.testnet(), AccountInterface.BasicWallet),
-        allocator.toBech32(NetworkId.testnet(), AccountInterface.BasicWallet),
+        deps.senderAddress,
+        allocator.toBech32(network, AccountInterface.BasicWallet),
         request,
       );
 
       const txId = await deps.requestTransaction(transaction);
+      deps.onNoteSubmitted?.({ requestId: txId, noteId: expectedNoteId });
       const output = await deps.waitForTransaction(txId);
       // Fee-paying transactions also emit a fee note. Return our collateral
       // note even when it is not the first output.

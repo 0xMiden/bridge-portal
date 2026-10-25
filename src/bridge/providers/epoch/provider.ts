@@ -1,5 +1,18 @@
 import { activityPhase, type Provider, type ProviderDirections } from "../../core/provider";
-import { recoveryGuidance } from "../../core/activity-presentation";
+import type { BridgeRoute } from "../../core/routes";
+import { evmNetworks } from "../../../config/evm-networks";
+import { recoveryGuidance, type ActivityGuidance } from "../../core/activity-presentation";
+
+const withdrawalRecoveryGuidance: ActivityGuidance = {
+  tone: "active",
+  icon: "alert",
+  title: "Recover this withdrawal",
+  body: "Epoch did not return a delivery tracking reference. Automatic delivery tracking is unavailable for this receipt. Do not submit another withdrawal.",
+  steps: [
+    "Check this transfer in your Bread wallet.",
+    "Copy diagnostics and share them with Epoch support to recover the existing transfer or discuss reclaiming the collateral note.",
+  ],
+};
 
 const phases = {
   signature: {
@@ -43,11 +56,20 @@ const fees = {
   output: "unquoted",
   eta: "1-3 min",
   showEta: true,
-  networkFee: "Sepolia gas",
   bridgeFee: "In quoted rate",
-  warning: "Epoch uses mock tokens on Sepolia. Check the quoted output before confirming.",
   sepoliaGasUnits: 150000,
 } as const;
+
+function quoteFees(route?: BridgeRoute) {
+  const evm = route?.mode === "send" ? route.destination : route?.source;
+  return {
+    ...fees,
+    networkFee: evm && evm.kind !== "miden" ? `${evmNetworks[evm.network].name} gas` : "Network gas",
+    warning: route?.recovery.environment === "mainnet"
+      ? "A live quote is required for this amount. Check the output before confirming."
+      : "Epoch uses mock tokens on Sepolia. Check the quoted output before confirming.",
+  };
+}
 
 const directions = {
   send: {
@@ -56,6 +78,7 @@ const directions = {
       destinationHash: activity.claimTxHash ?? activity.destinationTxHash,
       destinationKind: "tx",
       received: activity.receivedAmount,
+      reference: activity.midenNoteId ? { label: "Collateral note ID", value: activity.midenNoteId } : undefined,
     }),
     steps: [
       {
@@ -70,30 +93,63 @@ const directions = {
       },
       {
         status: "message_observed",
-        label: "Solver filling on Sepolia",
-        detail: "A solver claimed your note and is paying out {asset} on Sepolia.",
+        label: "Solver filling on the destination network",
+        detail: "A solver claimed your note and is paying out {asset} on the destination network.",
       },
       {
         status: "complete",
-        label: "Settled on Sepolia",
-        detail: "{asset} delivered to your Sepolia address.",
+        label: "Transfer settled",
+        detail: "{asset} delivered to your destination address.",
       },
     ],
     phases: {
       ...phases,
+      awaiting_tracking: {
+        status: "source_finality",
+        order: 1,
+        tracking: "manual",
+        headline: "Waiting for Epoch confirmation",
+        guidance: {
+          tone: "active",
+          icon: "wallet",
+          title: "Keep this page open",
+          body: "Epoch has not returned a delivery tracking reference yet. Keep this page open while submission finishes. You don’t need to send it again.",
+        },
+      },
+      recovery_unconfirmed: {
+        status: "source_finality",
+        order: 1,
+        tracking: "manual",
+        headline: "Miden confirmation unverified; recovery needed",
+        guidance: withdrawalRecoveryGuidance,
+      },
+      recovery_confirmed: {
+        status: "source_finality",
+        order: 1,
+        tracking: "manual",
+        headline: "Miden confirmed; delivery unconfirmed",
+        guidance: withdrawalRecoveryGuidance,
+      },
       complete: {
         status: "complete",
         order: 5,
-        headline: "Funds released on Sepolia",
+        headline: "Funds delivered",
       },
     },
-    phaseFields: ["status", "failureLeg"],
-    resolvePhase: activityPhase,
+    phaseFields: ["status", "failureLeg", "epochRecoveryRequired"],
+    resolvePhase: (activity) => {
+      if (activity.status === "complete" || activity.status === "failed" ||
+          (activity.epochIntentNonce && activity.epochSponsor)) return activityPhase(activity);
+      if (!(activity.midenWalletRequestId || activity.midenNoteId || activity.sourceTxHash || activity.midenTxId)) return activityPhase(activity);
+      if (!activity.epochRecoveryRequired) return "awaiting_tracking";
+      return activity.epochMidenBlock !== undefined || activity.sourceTxHash || activity.midenTxId
+        ? "recovery_confirmed" : "recovery_unconfirmed";
+    },
     consumeNote: false,
     tracking: "automatic",
     pollMs: 5000,
-    fees: () => ({
-      ...fees,
+    fees: (route) => ({
+      ...quoteFees(route),
       sepoliaGasUnits: null,
       networkFee: "In quoted rate",
     }),
@@ -104,17 +160,18 @@ const directions = {
       destinationHash: activity.midenTxId ?? activity.destinationTxHash,
       destinationKind: "tx",
       received: activity.receivedAmount,
+      reference: activity.epochClaimHash ? { label: "Epoch claim hash", value: activity.epochClaimHash } : undefined,
     }),
     steps: [
       {
         status: "signature",
-        label: "Sign Sepolia deposit",
+        label: "Sign the deposit",
         detail: "Approve the deposit in your Ethereum wallet.",
       },
       {
         status: "source_finality",
-        label: "Sepolia confirmation",
-        detail: "The deposit confirms on Sepolia.",
+        label: "Deposit confirmation",
+        detail: "The deposit confirms on the source network.",
       },
       {
         status: "message_observed",
@@ -129,24 +186,36 @@ const directions = {
     ],
     phases: {
       ...phases,
+      allocation_pending: {
+        status: "source_finality",
+        order: 1,
+        headline: "Deposit confirmed; delivery unconfirmed",
+        guidance: {
+          tone: "active",
+          icon: "alert",
+          title: "Keep this receipt",
+          body: "Your deposit confirmed on the source network. Delivery on Miden has not been confirmed. Do not send the deposit again. Share this receipt’s diagnostics with Epoch support if delivery remains unconfirmed.",
+        },
+      },
       complete: {
         status: "complete",
         order: 5,
         headline: "Delivered on Miden",
       },
     },
-    phaseFields: ["status", "failureLeg"],
-    resolvePhase: activityPhase,
+    phaseFields: ["status", "failureLeg", "epochDepositConfirmed"],
+    resolvePhase: (activity) => activity.status === "source_finality" && activity.epochDepositConfirmed
+      ? "allocation_pending" : activityPhase(activity),
     consumeNote: false,
     tracking: "automatic",
     pollMs: 5000,
-    fees: () => fees,
+    fees: quoteFees,
   },
 } satisfies ProviderDirections;
 
 export const epoch: Provider = {
   label: "Epoch",
-  badge: "Testnet",
+  badge: "Fast",
   unavailableReason: "Epoch does not currently quote the reverse direction for this token pair.",
   directions,
   load: () => import("./flows"),
