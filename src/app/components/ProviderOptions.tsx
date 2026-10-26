@@ -28,26 +28,27 @@ export function ProviderOptions({ route, amount, received, fee, onSelect }: {
     return (
       <button
         key={candidate.id}
-        className={`route-option provider-option ${selected ? "selected" : ""}`}
+        className="provider-option grid w-full gap-2 rounded-sm border border-border p-3 text-left transition
+          hover:bg-surface-muted aria-pressed:border-accent-border aria-pressed:bg-accent-soft"
         type="button"
         aria-pressed={selected}
         onClick={() => onSelect(candidate)}
       >
-        <span className="route-option-head">
-          <strong>{provider.label}</strong>
-          <small className="route-tag testnet">{routeEnvironment(candidate) === "mainnet" ? "Mainnet" : provider.badge}</small>
-          {selected ? <Check className="route-check" size={16} aria-hidden="true" /> : null}
+        <span className="flex items-center gap-2">
+          <strong className="truncate text-sm font-semibold">{provider.label}</strong>
+          <small className="route-tag testnet rounded-full bg-accent-soft px-2 py-0.5 text-xs font-semibold text-accent-foreground">{routeEnvironment(candidate) === "mainnet" ? "Mainnet" : provider.badge}</small>
+          {selected ? <Check className="route-check text-accent flex-none ml-auto" size={16} aria-hidden="true" /> : null}
         </span>
-        <span className="provider-route-path">
+        <span className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
           <span>{candidate.source.symbol} · {networkLabels[candidate.source.network]}</span>
-          <ArrowRight size={13} aria-hidden="true" />
+          <ArrowRight className="flex-none" size={13} aria-hidden="true" />
           <span>{candidate.destination.symbol} · {networkLabels[candidate.destination.network]}</span>
         </span>
-        <span className="provider-output">
+        <span className="grid text-2xl font-medium tabular-nums wrap-anywhere">
           {!amount ? "Enter an amount" : output === "—" || !output ? "Quote unavailable" : `${output} ${candidate.destination.symbol}`}
-          <small>{selected ? "Selected · You receive" : "Estimated received"}</small>
+          <small className="text-xs text-muted-foreground">{selected ? "Selected · You receive" : "Estimated received"}</small>
         </span>
-        <span className="provider-costs">
+        <span className="provider-costs text-muted-foreground flex-wrap justify-between gap-2 text-xs font-medium flex">
           <span>{selected ? fee : policy?.bridgeFee}</span>
           <span>{policy?.showEta ? policy.eta : "Time varies"}</span>
         </span>

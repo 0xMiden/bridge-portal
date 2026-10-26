@@ -6,7 +6,7 @@ import { test, expect } from "../../fixtures/bridge";
 test("bridge boots, wallets connect, only compatible providers are offered", async ({ bridge, page }) => {
   await test.step("wallets ready", async () => {
     await bridge.waitForReady();
-    await expect(page.locator('[data-wallet="evm"] .wallet-pill')).toHaveClass(/connected/);
+    await expect(page.locator('[data-wallet="evm"] .wallet-pill')).toHaveAttribute("data-connected", "true");
     await expect(page.getByRole("button", { name: "Bread wallet menu", exact: true })).toBeVisible();
   });
 

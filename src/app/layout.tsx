@@ -3,7 +3,6 @@ import { Geist, Geist_Mono } from "next/font/google";
 import { headers } from "next/headers";
 import { Providers } from "./components/Providers";
 import "./globals.css";
-import "./bridge-form.css";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -69,7 +68,7 @@ export default async function RootLayout({
       className={`${geistSans.variable} ${geistMono.variable} h-full`}
       suppressHydrationWarning
     >
-      <body className="min-h-full bg-background text-foreground antialiased">
+      <body>
         <Providers cookies={cookies}>{children}</Providers>
       </body>
     </html>

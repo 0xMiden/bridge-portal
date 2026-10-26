@@ -1,12 +1,14 @@
 "use client";
 
-import Image from "next/image";
-import Link from "next/link";
+import { PageShell, PageHeader } from "./ui/PageLayout";
+import { EmptyState, FormAlert } from "./ui/Feedback";
+
 import { useRef } from "react";
 import { routesForEnvironment } from "../../bridge/core/routes";
 import { bridgeProviders } from "../../bridge/providers/registry";
 import type { BridgeEnvironment } from "../../config/environment";
 import { errorMessage } from "../lib/wallet-errors";
+import { BridgeSurface } from "./ui/Surface";
 import { FaucetMenu } from "./FaucetMenu";
 import { useBridgeEnvironment } from "./NetworkProvider";
 import { NetworkSelect } from "./NetworkSelect";
@@ -23,16 +25,16 @@ export function BridgeExperience() {
   const environment = useBridgeEnvironment();
   if (!routesForEnvironment(environment).some(route => !route.disabled && !bridgeProviders[route.provider].disabled)) {
     return (
-      <main className="app-shell">
-        <header className="topbar"><h1>Miden Bridge</h1><NetworkSelect /></header>
-        <section className="detail-empty">
+      <PageShell className="app-shell">
+        <PageHeader variant="detail"><NetworkSelect /></PageHeader>
+        <EmptyState>
           <h2>No routes available</h2>
           <p>New transfers are currently unavailable on {environment}. Existing receipts remain accessible from their saved links.</p>
-        </section>
-      </main>
+        </EmptyState>
+      </PageShell>
     );
   }
-  return <BridgeForm key={environment} environment={environment} />;
+  return <BridgeSurface><BridgeForm key={environment} environment={environment} /></BridgeSurface>;
 }
 
 function BridgeForm({ environment }: { environment: BridgeEnvironment }) {
@@ -70,23 +72,14 @@ function BridgeForm({ environment }: { environment: BridgeEnvironment }) {
   }
 
   return (
-    <main className="app-shell bridge-portal">
-      <header className="topbar">
-        <Link className="brand" href="/" aria-label="Miden bridge home">
-          <Image src="/miden-logo-horizontal.svg" alt="Miden" width={112} height={34} priority />
-          <span>Bridge</span>
-        </Link>
-        <div className="topbar-actions">
-          <div className="topbar-utilities">
-            <NetworkSelect disabled={transfer.isSubmitting} />
-            {environment === "testnet" ? <FaucetMenu /> : null}
-            <ThemeToggle />
-          </div>
-        </div>
-      </header>
-      {wallets.miden.error ? <p className="form-error topbar-error" role="alert">{errorMessage(wallets.miden.error)}</p> : null}
-      <section className="swap-stage">
-        <div className="swap-group">
+    <PageShell variant="bridge" className="app-shell bridge-portal" data-surface="bridge">
+      <PageHeader variant="bridge">
+        <NetworkSelect disabled={transfer.isSubmitting} />
+        {environment === "testnet" ? <FaucetMenu /> : null}
+        <ThemeToggle />
+      </PageHeader>
+      {wallets.miden.error ? <FormAlert className="topbar-error max-w-295" role="alert">{errorMessage(wallets.miden.error)}</FormAlert> : null}
+      <section className="swap-stage mx-auto mt-6 flex w-full max-w-137 flex-col items-center gap-4 pb-10 mobile:mt-4">
           <h1 className="sr-only">Miden Bridge</h1>
           <BridgeTabs environment={environment}>
             <SwapPanels draft={draft} wallets={wallets} transfer={transfer} panelsRef={panelsRef} onChange={editDraft} />
@@ -97,8 +90,7 @@ function BridgeForm({ environment }: { environment: BridgeEnvironment }) {
               ) : null}
             </TransferRouteCard>
           </BridgeTabs>
-        </div>
       </section>
-    </main>
+    </PageShell>
   );
 }

@@ -53,7 +53,7 @@ test("Epoch token choices distinguish mocks and keep USDCx withdrawal-only", asy
   await expect(page.locator(".token-select-trigger").first()).toContainText("USDCx");
   await expect(page.locator(".mode-switch").getByRole("button", { name: "Deposit", exact: true })).toBeDisabled();
   await page.getByRole("button", { name: "Get testnet funds", exact: true }).click();
-  await expect(page.getByRole("link", { name: "Epoch test token faucets", exact: true }))
+  await expect(page.getByRole("menuitem", { name: "Epoch test token faucets", exact: true }))
     .toHaveAttribute("href", "https://userdashboard.epochprotocol.xyz/faucets");
 });
 
@@ -92,7 +92,7 @@ for (const [network, chainId] of [["ethereum", 1], ["base", 8453], ["arbitrum", 
       await expect(bridge.selectedProvider()).toContainText("Epoch");
       await page.locator('[data-wallet="miden"] .wallet-pill').click();
       await page.getByRole("menuitem", { name: "Connect wallet", exact: true }).click();
-      await expect(page.locator('[data-wallet="miden"] .wallet-pill')).toHaveClass(/connected/);
+      await expect(page.locator('[data-wallet="miden"] .wallet-pill')).toHaveAttribute("data-connected", "true");
       const request = page.waitForRequest(`${endpoint}/checkIfDepositNeeded`, { timeout: 20_000 });
       await bridge.fillAmount("1");
       const payload = (await request).postDataJSON();

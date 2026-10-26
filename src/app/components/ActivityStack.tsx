@@ -1,42 +1,10 @@
 "use client";
 
-import { bridgeProviders } from "../../bridge/providers/registry";
-
-import Link from "next/link";
-import { ChevronDown, ChevronRight } from "lucide-react";
+import { ActivityRow, ActivitySection } from "./ActivityRow";
+import { ChevronDown } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import {
-  type Activity,
-  statusLabel,
-  statusTone,
-} from "../lib/bridge-presentation";
-import { activityStartedAt } from "../../bridge/core/rules";
-import { RelativeTime } from "./RelativeTime";
-import { gsap } from "../lib/gsap";
-import { EASE } from "../lib/motion";
-
-function Row({ activity }: { activity: Activity }) {
-  return (
-    <>
-      <span className={`status-dot ${statusTone(activity.status, activity)}`} />
-      <span className="activity-copy">
-        <strong>{activity.summary}</strong>
-        <small>
-          {bridgeProviders[activity.provider].label} - {statusLabel(activity.status, activity)}
-        </small>
-      </span>
-      <span className="activity-meta">
-        <strong>
-          {activity.amount} {activity.asset}
-        </strong>
-        <small>
-          <RelativeTime at={activityStartedAt(activity)} />
-        </small>
-      </span>
-      <ChevronRight size={16} aria-hidden="true" />
-    </>
-  );
-}
+import type { Activity } from "../lib/bridge-presentation";
+import { gsap, standardEase } from "../lib/gsap";
 
 /**
  * Recent transfers as an Apple-style notification stack: collapsed, the latest
@@ -94,7 +62,7 @@ export function ActivityStack({
           opacity: 0,
           y: -6,
           duration: 0.34,
-          ease: EASE.standard,
+          ease: standardEase,
           stagger: 0.045,
           delay: 0.06,
         }),
@@ -122,28 +90,10 @@ export function ActivityStack({
   // without implying an exact count (the toggle carries the real number).
   const peek = Math.min(activities.length - 1, 2);
 
-  if (activities.length === 1) {
-    return (
-      <section className="home-activity" aria-label={title}>
-        <div className="home-activity-title">
-          <h2>{title}</h2>
-        </div>
-        <div className="home-activity-list">
-          <Link className="home-activity-item" href={`/activity/${encodeURIComponent(top.id)}`}>
-            <Row activity={top} />
-          </Link>
-        </div>
-      </section>
-    );
-  }
-
   return (
-    <section className="home-activity" ref={sectionRef} aria-label={title}>
-      <div className="home-activity-title">
-        <h2>{title}</h2>
-        <button
+    <ActivitySection title={title} ref={sectionRef} action={activities.length > 1 && <button
           type="button"
-          className="activity-stack-toggle"
+          className="inline-flex items-center gap-1 rounded-full bg-surface px-2.5 py-1 text-xs font-bold text-muted-foreground hover:text-foreground"
           aria-expanded={expanded}
           onClick={toggle}
         >
@@ -151,43 +101,34 @@ export function ActivityStack({
           <ChevronDown
             size={15}
             aria-hidden="true"
-            className={expanded ? "is-open" : undefined}
+            className={expanded ? "rotate-180" : ""}
           />
-        </button>
-      </div>
+        </button>}>
 
-      {expanded ? (
-        <div className="home-activity-list">
+      {expanded || activities.length === 1 ? (
+        <div className="grid gap-2">
           {activities.map((activity) => (
-            <Link
-              className="home-activity-item"
-              href={`/activity/${encodeURIComponent(activity.id)}`}
-              key={encodeURIComponent(activity.id)}
-            >
-              <Row activity={activity} />
-            </Link>
+            <ActivityRow activity={activity} key={activity.id} />
           ))}
         </div>
       ) : (
         <button
           type="button"
-          className="activity-stack"
+          className="relative block w-full text-left"
           onClick={toggle}
           aria-label={`Show all ${activities.length} transfers`}
         >
-          <span className="home-activity-item activity-stack-top">
-            <Row activity={top} />
-          </span>
+          <ActivityRow activity={top} stacked />
           {Array.from({ length: peek }).map((_, i) => (
             <span
               key={i}
-              className="activity-stack-peek"
-              style={{ ["--i" as string]: String(i + 1) }}
+              className={`absolute rounded-lg bg-surface shadow-(--shadow-card)
+                ${i === 0 ? "inset-x-2 top-2 -bottom-2 z-1 opacity-75" : "inset-x-4 top-4 -bottom-4 z-0 opacity-50"}`}
               aria-hidden="true"
             />
           ))}
         </button>
       )}
-    </section>
+    </ActivitySection>
   );
 }

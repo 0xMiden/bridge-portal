@@ -24,7 +24,7 @@ for (const width of [640, 641]) {
     await expect(bridge.providerOptions()).toBeVisible();
     await expect(page.getByRole("dialog")).toHaveCount(0);
     expect((await bridge.routeTrigger().boundingBox())?.height).toBeGreaterThanOrEqual(MIN_TAP_TARGET);
-    await expect(page.locator("body")).not.toHaveAttribute("data-overlay-open", "true");
+    await expect(page.locator("body")).not.toHaveCSS("overflow", "hidden");
     await bridge.providerOptions().getByRole("button").first().focus();
     await page.keyboard.press("Escape");
     await expect(bridge.providerOptions()).toBeHidden();
@@ -66,7 +66,7 @@ test.describe("mobile bridge layout", () => {
     await bridge.waitForReady();
 
     await page.locator('.panel-wallet[data-wallet="evm"] .wallet-button').first().click();
-    const walletItems = page.locator(".wallet-actions-menu.open .wallet-menu-item");
+    const walletItems = page.getByRole("menu").getByRole("menuitem");
     await expect(walletItems.first()).toBeVisible();
     for (let index = 0; index < (await walletItems.count()); index += 1) {
       await expect
