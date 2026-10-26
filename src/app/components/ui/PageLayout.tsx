@@ -16,11 +16,11 @@ export function PageHeader({ variant, children, action }: { variant: Layout; chi
   const bridge = variant === "bridge";
   const layout = bridge ? "topbar min-h-20 border-b border-border" : "detail-topbar min-h-16";
   return (
-    <header className={`flex flex-wrap items-center gap-3 py-3 ${layout}`}>
-      <Link className="flex min-w-0 flex-1 items-center gap-2.5" href="/" aria-label={bridge ? "Miden bridge home" : "Back to bridge"}>
+    <header className={`flex flex-wrap items-center gap-4 ${bridge ? "py-4 mobile:py-3" : "py-3"} ${layout}`}>
+      <Link className="flex min-w-0 flex-1 items-center gap-2.5 font-bold" href="/" aria-label={bridge ? "Miden bridge home" : "Back to bridge"}>
         <Image className="w-28 min-w-0 dark:invert dark:hue-rotate-180"
           src="/miden-logo-horizontal.svg" alt="Miden" width={112} height={34} priority />
-        <span className="border-l border-border pl-2.5 text-sm text-muted-foreground mobile:hidden">Bridge</span>
+        <span className="border-l border-border pl-2.5 text-sm/normal text-muted-foreground mobile:hidden">Bridge</span>
       </Link>
       <div className="flex items-center gap-2">
         {children}

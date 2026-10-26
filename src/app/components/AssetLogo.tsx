@@ -35,7 +35,7 @@ export function TokenLogo({ asset, compact = false }: { asset: BridgeAsset; comp
       <Image className={`size-full object-contain ${src === "/asset-logos/near.svg" ? "dark:invert" : ""}`}
         src={src} alt="" width={32} height={32} unoptimized />
       {/* UI identifier, not a claim that USDCx has its own official brand mark. */}
-      {asset.symbol === "USDCx" ? <span className="token-logo-variant absolute right-0 bottom-0 size-4 rounded-full bg-foreground text-center text-xs text-surface">x</span> : null}
+      {asset.symbol === "USDCx" ? <span className="token-logo-variant absolute -right-[3px] -bottom-0.5 grid size-[15px] place-items-center rounded-full border-2 border-surface bg-foreground font-[system-ui] text-[10px]/none font-semibold text-surface">x</span> : null}
     </span>
   );
 }

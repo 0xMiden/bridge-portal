@@ -22,9 +22,10 @@ export function BridgeTabs({ environment, children }: { environment: BridgeEnvir
 
   return (
     <>
-      <div className="bridge-tabs flex w-full max-w-84" role="tablist" aria-label="Bridge portal">
+      <div className="bridge-tabs flex w-full max-w-84 border-b-3 border-border" role="tablist" aria-label="Bridge portal">
         {(["bridge", "activity"] as const).map(tab => (
-          <button className="min-h-12 flex-1 border-b-3 border-border text-base text-muted-foreground aria-selected:border-foreground aria-selected:font-semibold aria-selected:text-foreground" key={tab} id={`${tab}-tab`} type="button" role="tab" aria-selected={activeTab === tab}
+          <button className="relative min-h-12 flex-1 text-base text-muted-foreground aria-selected:font-semibold aria-selected:text-foreground
+            aria-selected:after:absolute aria-selected:after:inset-x-0 aria-selected:after:-bottom-[3px] aria-selected:after:h-[3px] aria-selected:after:rounded-xs aria-selected:after:bg-foreground" key={tab} id={`${tab}-tab`} type="button" role="tab" aria-selected={activeTab === tab}
             aria-controls={`${tab}-panel`} tabIndex={activeTab === tab ? 0 : -1} onClick={() => setActiveTab(tab)}
             onKeyDown={event => {
               if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
@@ -32,11 +33,11 @@ export function BridgeTabs({ environment, children }: { environment: BridgeEnvir
               focusTab(event.key === "Home" ? "bridge" : event.key === "End" ? "activity" : tab === "bridge" ? "activity" : "bridge");
             }}>
             {tab === "bridge" ? "Bridge" : "Activity"}
-            {tab === "activity" && inFlight.length > 0 ? <span className="activity-count ml-2 rounded-full bg-accent-soft px-1.5 text-xs text-accent-foreground">{inFlight.length}</span> : null}
+            {tab === "activity" && inFlight.length > 0 ? <span className="activity-count ml-2 inline-grid h-5 min-w-5 place-items-center rounded-full bg-accent-soft px-1 text-[11px] text-accent-foreground">{inFlight.length}</span> : null}
           </button>
         ))}
       </div>
-      <div id="bridge-panel" role="tabpanel" aria-labelledby="bridge-tab" hidden={activeTab !== "bridge"} className="w-full space-y-3">{children}</div>
+      <div id="bridge-panel" role="tabpanel" aria-labelledby="bridge-tab" hidden={activeTab !== "bridge"} className="grid w-full grid-cols-1 gap-3 hidden:hidden">{children}</div>
       <div id="activity-panel" role="tabpanel" aria-labelledby="activity-tab" hidden={activeTab !== "activity"} className="activity-tab-panel w-full">
         <div className="activity-region grid w-full gap-3">
           {!inFlight.length && !past.length ? (

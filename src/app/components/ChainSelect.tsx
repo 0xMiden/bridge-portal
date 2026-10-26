@@ -24,9 +24,9 @@ export function ChainSelect({
   const menuLabel = side === "source" ? "Origin chain" : "Destination chain";
 
   if (asset.kind === "miden" || networks.length < 2) {
-    return <span className="flex items-center gap-2 text-muted-foreground">
+    return <span className="flex min-w-0 items-center gap-1.5 text-muted-foreground mobile:gap-1">
       <NetworkLogo network={asset.network} />
-      <strong className="text-xs font-medium">{label}</strong>
+      <strong className="text-sm/normal font-medium mobile:text-xs">{label}</strong>
     </span>;
   }
 
@@ -54,7 +54,7 @@ export function ChainSelect({
       }}
     >
       <NetworkLogo network={asset.network} variant="selector" />
-      <span className="chain-select-label truncate" title={label}>{label}</span>
+      <span className="chain-select-label truncate mobile:whitespace-normal mobile:text-left mobile:leading-tight" title={label}>{label}</span>
     </ListboxSelect>
   );
 }
