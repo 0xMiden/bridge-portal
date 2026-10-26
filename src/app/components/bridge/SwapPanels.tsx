@@ -3,11 +3,11 @@ import { WalletButton } from "../../../wallets/WalletMenu";
 import { FormAlert } from "../ui/Feedback";
 import { ArrowDownUp, RefreshCcw } from "lucide-react";
 import dynamic from "next/dynamic";
-import { useRef, type RefObject } from "react";
+import { useLayoutEffect, useRef, type RefObject } from "react";
 import { flowModes } from "../../../bridge/core/models";
 import { reverseBridgeRoute } from "../../../bridge/core/routes";
 import { bridgeProviders } from "../../../bridge/providers/registry";
-import { gsap, useGSAP, standardEase, motionMM } from "../../lib/gsap";
+import { animateWithMotionPreference, standardEase } from "../../lib/motion";
 import { errorMessage } from "../../lib/wallet-errors";
 import { ChainSelect } from "../ChainSelect";
 import { FiatAmount } from "../FiatAmount";
@@ -41,17 +41,16 @@ export function SwapPanels({ draft, wallets, transfer, panelsRef, onChange }: {
   const reverse = reverseBridgeRoute(route);
   const unavailableReason = bridgeProviders[route.provider].unavailableReason;
   const cardRef = useRef<HTMLElement>(null);
-  const firstRender = useRef(true);
-  useGSAP(() => {
-    if (firstRender.current) { firstRender.current = false; return; }
+  const previousRoute = useRef(route.id);
+  useLayoutEffect(() => {
+    if (previousRoute.current === route.id) return;
+    previousRoute.current = route.id;
     const root = cardRef.current;
     if (!root) return;
-    motionMM(({ reduced }) => {
-      if (reduced) return;
-      gsap.fromTo(root.querySelectorAll(".swap-box > *"),
-        { opacity: 0.6 }, { opacity: 1, duration: 0.36, ease: standardEase, overwrite: true });
-    });
-  }, { dependencies: [route.id], scope: cardRef });
+    return animateWithMotionPreference(() => Array.from(root.querySelectorAll(".swap-box > *"), element =>
+      element.animate([{ opacity: 0.6 }, { opacity: 1 }], { duration: 360, easing: standardEase }),
+    ));
+  }, [route.id]);
 
   return (
     <Card className="swap-card" data-provider={route.provider} aria-label="Miden bridge" ref={cardRef}>
