@@ -8,7 +8,7 @@ export function DetailsList({ items, layout = "review", children, className = ""
   layout?: "receipt" | "review" | "inline";
 }) {
   const inline = layout === "inline";
-  const spacing = inline ? "flex flex-wrap gap-x-3 gap-y-1 text-xs"
+  const spacing = inline ? "flex flex-wrap gap-x-3 gap-y-1 text-xs/normal"
     : `grid gap-3 border-t border-border pt-5 text-sm ${layout === "receipt" ? "mt-6" : "mb-2"}`;
   return <dl {...props} className={`${spacing} ${className}`}>
     {items.map(item => item && <div className={`flex items-baseline ${inline ? "flex-wrap gap-1" : "justify-between gap-3"}`} key={item.label}>

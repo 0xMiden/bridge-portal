@@ -1,7 +1,7 @@
 import type { ComponentProps } from "react";
 
 const variants = {
-  form: "rounded-3xl p-4",
+  form: "rounded-3xl p-5 mobile:rounded-[20px] mobile:p-3",
   receipt: "rounded-lg p-6 mobile:p-4",
   empty: "rounded-3xl px-6 py-12 text-center",
 };

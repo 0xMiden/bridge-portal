@@ -33,8 +33,8 @@ export function WalletMenuItem({ danger = false, children }: { danger?: boolean;
 }
 
 export function WalletButton({ connected = false, showChevron = true, className = "", children, ...props }: ComponentProps<"button"> & { connected?: boolean; showChevron?: boolean }) {
-  return <button {...props} data-connected={connected} className={`wallet-button wallet-pill group/wallet inline-flex min-h-11 w-full min-w-0 items-center gap-1.5 rounded-full border border-border bg-surface px-2.5 text-xs font-medium
-    hover:bg-surface-muted aria-expanded:bg-surface-muted ${connected ? "text-foreground" : "text-accent-foreground"} ${className}`}>
+  return <button {...props} data-connected={connected} className={`wallet-button wallet-pill group/wallet flex min-h-9 w-full min-w-0 items-center justify-center gap-1.5 rounded-full border border-border bg-surface px-2.5 py-2 text-xs/normal font-medium [&_.wallet-pill-label]:tracking-[-0.01em] mobile:min-h-11
+    hover:border-border-strong hover:bg-surface-muted aria-expanded:border-border-strong aria-expanded:bg-surface-muted ${connected ? "text-foreground" : "text-accent-foreground"} ${className}`}>
     {children}
     {showChevron && <ChevronDown size={12} className="shrink-0 group-aria-expanded/wallet:rotate-180" aria-hidden="true" />}
   </button>;

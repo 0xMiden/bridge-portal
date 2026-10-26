@@ -5,7 +5,7 @@ import { useQuery } from "@tanstack/react-query";
 import { formatUsdAmount, priceSymbol } from "../lib/token-pricing";
 import { usdPriceQuery } from "../lib/usd-price-query";
 
-const sizes = { field: "text-xs", receipt: "text-sm", review: "text-sm" };
+const sizes = { field: "text-xs/normal", receipt: "text-sm", review: "text-sm" };
 
 export function FiatAmount({ amount, symbol, size = "field" }: { amount: string; symbol: string; size?: keyof typeof sizes }) {
   const environment = useBridgeEnvironment();

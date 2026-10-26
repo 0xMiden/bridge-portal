@@ -5,9 +5,9 @@ import { Check, ChevronDown, Search } from "lucide-react";
 import { type KeyboardEvent, type ReactNode, useId, useRef, useState } from "react";
 
 const variants = {
-  chain: { trigger: "rounded-full border border-border text-xs", menu: "w-56" },
-  token: { trigger: "rounded-full border border-border text-lg font-semibold", menu: "w-70" },
-  network: { trigger: "rounded-md text-sm font-medium", menu: "w-56" },
+  chain: { trigger: "min-h-9 gap-1.5 rounded-full border border-border px-2.5 py-1.5 text-[13px]/normal font-medium hover:border-border-strong data-[state=open]:border-border-strong mobile:min-h-11 mobile:gap-1 mobile:px-2 mobile:text-xs", menu: "w-72" },
+  token: { trigger: "min-h-12 gap-2 rounded-full border border-border px-2.5 py-2 text-lg/normal font-semibold hover:border-border-strong data-[state=open]:border-border-strong mobile:min-h-11 mobile:py-1.5", menu: "w-80 data-[kind=token]:max-w-[calc(100vw-4rem)] data-[kind=token]:rounded-lg ring-1 ring-border" },
+  network: { trigger: "min-h-11 gap-2 rounded-md px-3 text-[13px]/normal font-semibold shadow-(--shadow-control)", menu: "w-56" },
 };
 
 /** Shared selection, focus, and dismissal behavior for bridge asset controls. */
@@ -99,7 +99,7 @@ export function ListboxSelect({
             type="button"
             role={kind !== "token" ? "combobox" : undefined}
             disabled={disabled}
-            className={`${kind}-select-trigger group/select inline-flex min-h-11 max-w-full items-center gap-2 bg-surface px-2.5 text-foreground transition
+            className={`${kind}-select-trigger group/select inline-flex max-w-full items-center bg-surface text-foreground transition
               hover:bg-surface-muted data-[state=open]:bg-surface-muted disabled:cursor-wait disabled:opacity-60 ${variant.trigger}`}
             aria-haspopup="listbox"
             aria-expanded={open}
@@ -116,18 +116,19 @@ export function ListboxSelect({
         </PopoverTrigger>
         <PopoverContent
           ref={menuRef}
+          data-kind={kind}
           role={undefined}
           aria-labelledby={undefined}
           onOpenAutoFocus={focusOptions}
           align={kind === "token" ? "end" : "start"}
           className={`select-menu ${variant.menu}`}
         >
-          <div className="flex items-baseline justify-between gap-3 p-2 text-sm font-semibold">
+          <div className={`flex items-baseline justify-between gap-3 font-semibold ${kind === "token" ? "px-2.5 pt-1.5 pb-3 text-[13px]/normal" : "p-2 text-sm"}`}>
             <span>{heading}</span>
-            {context ? <small className="text-xs text-muted-foreground">{context}</small> : null}
+            {context ? <small className="text-xs/normal font-normal text-muted-foreground">{context}</small> : null}
           </div>
           {searchable ? (
-            <label className="select-search mb-2 flex items-center gap-2 rounded-md border border-border p-2 text-muted-foreground focus-within:outline-2 focus-within:outline-accent-foreground focus-within:outline-offset-2">
+            <label className="select-search mx-0.5 mb-2 flex items-center gap-2 rounded-md border border-border bg-surface p-2.5 text-muted-foreground focus-within:outline-2 focus-within:outline-accent focus-within:outline-offset-2">
               <Search className="shrink-0" size={16} aria-hidden="true" />
               <input
                 ref={searchInputRef}
@@ -143,7 +144,7 @@ export function ListboxSelect({
               />
             </label>
           ) : null}
-          <div id={menuId} role="listbox" aria-label={menuLabel}>
+          <div id={menuId} role="listbox" aria-label={menuLabel} className="grid gap-1">
             {filteredOptions.map((option) => (
               <button
                 key={option.value}
@@ -152,7 +153,7 @@ export function ListboxSelect({
                 aria-label={option.label}
                 aria-selected={option.value === value}
                 tabIndex={-1}
-                className={`group/option flex min-h-12 w-full items-center gap-2 rounded-md p-2.5 text-left text-sm
+                className={`group/option flex w-full items-center rounded-md p-2.5 text-left ${kind === "token" ? "min-h-15 gap-2.5 text-sm/normal" : "min-h-12 gap-2 text-sm"}
                   hover:bg-surface-muted aria-selected:bg-accent-soft focus-visible:-outline-offset-2`}
                 onClick={() => {
                   onChange(option.value);
@@ -166,7 +167,7 @@ export function ListboxSelect({
             ))}
           </div>
           {filteredOptions.length === 0 ? (
-            <p className="select-empty p-3 text-sm text-muted-foreground" role="status">
+            <p className="select-empty px-2.5 py-3 text-sm/normal text-muted-foreground" role="status">
               No tokens found. Try another name or symbol.
             </p>
           ) : null}

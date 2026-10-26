@@ -57,7 +57,7 @@ export function SwapPanels({ draft, wallets, transfer, panelsRef, onChange }: {
       {wallets.error ? <FormAlert compact role="alert">{wallets.error}</FormAlert> : null}
       <div className="mode-switch grid grid-cols-2 gap-2 rounded-xl border border-border bg-field p-1" role="group" aria-label="Cross-chain direction" data-active={route.mode}>
         {flowModes.map(mode => (
-          <button className="min-h-10 rounded-[8px] text-sm font-medium text-muted-foreground transition hover:text-foreground
+          <button className="min-h-10 rounded-[8px] text-[15px]/normal font-medium text-muted-foreground transition hover:text-foreground
             aria-pressed:bg-surface aria-pressed:font-semibold aria-pressed:text-foreground aria-pressed:shadow-[inset_0_0_0_1px_var(--border)]" key={mode} type="button" aria-pressed={mode === route.mode}
             disabled={mode !== route.mode && !reverse}
             title={mode !== route.mode && !reverse ? unavailableReason : undefined}
@@ -95,37 +95,35 @@ function TransferPanel({ side, draft, wallets, quote, onChange }: {
   const reverse = reverseBridgeRoute(route);
   const unavailableReason = bridgeProviders[route.provider].unavailableReason;
   const selectRoute = (next: BridgeDraft["route"]) => onChange({ type: "route", route: next });
-  const amountClasses = "block w-full min-w-0 bg-transparent text-4xl font-medium outline-none mobile:text-3xl";
+  const amountClasses = "block w-full min-w-0 bg-transparent text-4xl/[1.2] font-medium tracking-[-0.6px] outline-none mobile:text-[30px]";
   return (
-    <div className="swap-box relative space-y-2 rounded-[20px] border border-border bg-field p-3" data-side={side}>
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="swap-box-head flex min-w-0 flex-1 basis-32 flex-wrap items-center gap-1 text-xs text-muted-foreground">
-          <span>{isSource ? "From" : "To"}</span>
-          <ChainSelect route={route} side={side} onSelectRoute={selectRoute} />
-        </div>
-        <div className="panel-wallet ml-auto min-w-0 max-w-43 flex-1 basis-36" data-wallet={isMiden ? "miden" : "evm"}>
-          {isMiden ? <MidenWalletButton /> : <EvmWalletControl wallet={wallets.evm} onConnect={wallets.openEvmWallet} onError={wallets.setError} />}
-        </div>
+    <div className="swap-box relative grid min-h-38 grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-2 rounded-[20px] border border-border bg-field px-4 py-3 mobile:min-h-40 mobile:gap-x-2 mobile:gap-y-1 mobile:px-3 mobile:py-2.5" data-side={side}>
+      <div className="swap-box-head col-start-1 row-start-1 flex min-h-9 min-w-0 flex-wrap items-center gap-2 text-sm/normal text-muted-foreground mobile:gap-1.25 mobile:text-xs max-[380px]:col-span-2">
+        <span>{isSource ? "From" : "To"}</span>
+        <ChainSelect route={route} side={side} onSelectRoute={selectRoute} />
       </div>
-      <div className="flex items-center gap-3">
-        {isSource ? (
-          <label className="min-w-0 flex-1">
-            <input className={amountClasses} aria-label="Amount" aria-invalid={Boolean(quote.amountError)}
-              aria-describedby={quote.amountError ? "amount-error" : undefined}
-              inputMode="decimal" placeholder="0" value={amount}
-              onChange={event => onChange({ type: "amount", amount: event.target.value })} />
-          </label>
-        ) : (
-          <div className="readonly-amount min-w-0 flex-1" aria-label="Expected received"><strong className={amountClasses}>{quote.received}</strong></div>
-        )}
-        <TokenSelect route={route} side={side} onSelectRoute={selectRoute} />
-      </div>
-      <div className="flex min-h-5 items-center justify-between gap-2">
-        <FiatAmount amount={isSource ? amount : quote.received} symbol={route[side].symbol} />
-        <small className="balance-line flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">{isMiden ? <MidenBalance wallet={wallets.miden} /> : <EvmBalance wallet={wallets.evm} />}</small>
+      <div className="panel-wallet col-start-2 row-start-1 min-w-0 max-w-43 justify-self-end max-[380px]:col-span-2 max-[380px]:col-start-1 max-[380px]:row-start-2" data-wallet={isMiden ? "miden" : "evm"}>
+        {isMiden ? <MidenWalletButton /> : <EvmWalletControl wallet={wallets.evm} onConnect={wallets.openEvmWallet} onError={wallets.setError} />}
       </div>
       {isSource ? (
-        <button className="swap-divider absolute -bottom-8 left-1/2 z-2 grid size-11 -translate-x-1/2 place-items-center rounded-xl border border-border bg-surface
+        <label className="col-start-1 row-start-2 min-w-0 max-[380px]:row-start-3">
+          <input className={amountClasses} aria-label="Amount" aria-invalid={Boolean(quote.amountError)}
+            aria-describedby={quote.amountError ? "amount-error" : undefined}
+            inputMode="decimal" placeholder="0" value={amount}
+            onChange={event => onChange({ type: "amount", amount: event.target.value })} />
+        </label>
+      ) : (
+        <div className="readonly-amount col-start-1 row-start-2 min-w-0 max-[380px]:row-start-3" aria-label="Expected received"><strong className={amountClasses}>{quote.received}</strong></div>
+      )}
+      <div className="col-start-2 row-start-2 min-w-0 justify-self-end max-[380px]:row-start-3">
+        <TokenSelect route={route} side={side} onSelectRoute={selectRoute} />
+      </div>
+      <div className="col-span-2 row-start-3 flex min-h-5 items-center justify-between gap-2 max-[380px]:row-start-4">
+        <FiatAmount amount={isSource ? amount : quote.received} symbol={route[side].symbol} />
+        <small className="balance-line flex min-w-0 max-w-3/4 items-center justify-end gap-1.5 text-xs/normal text-muted-foreground">{isMiden ? <MidenBalance wallet={wallets.miden} /> : <EvmBalance wallet={wallets.evm} />}</small>
+      </div>
+      {isSource ? (
+        <button className="swap-divider absolute -bottom-[31px] left-1/2 z-2 grid size-11 -translate-x-1/2 place-items-center rounded-xl border border-border bg-surface
           enabled:hover:border-accent enabled:hover:text-accent-foreground disabled:text-muted-foreground" type="button" aria-label="Reverse transfer direction" disabled={!reverse}
           title={!reverse ? unavailableReason : "Reverse transfer direction"}
           onClick={() => onChange({ type: "mode", mode: route.mode === "receive" ? "send" : "receive" })}>
@@ -148,7 +146,7 @@ function MidenBalance({ wallet }: { wallet: BridgeWallets["miden"] }) {
   if (wallet.balance.balance) return (
     <>
       Available {wallet.balanceText}
-      <button type="button" className="-my-3 grid size-11 shrink-0 place-items-center rounded-md hover:text-foreground" onClick={() => void wallet.balance.refresh().catch(() => {})}
+      <button type="button" className="grid size-4 shrink-0 place-items-center rounded-md hover:text-foreground mobile:-m-2.5 mobile:size-11" onClick={() => void wallet.balance.refresh().catch(() => {})}
         disabled={wallet.balance.loading} aria-label="Refresh Miden balance" title="Refresh Miden balance">
         <RefreshCcw size={12} aria-hidden="true" />
       </button>
