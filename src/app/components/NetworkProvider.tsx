@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, useSyncExternalStore, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useState, useSyncExternalStore, type ReactNode } from "react";
 import { usePathname } from "next/navigation";
 import { isBridgeEnvironment, type BridgeEnvironment } from "../../config/environment";
 import { useActivitySnapshot } from "./ActivityProvider";
@@ -52,11 +52,20 @@ function subscribe(listener: () => void) {
 const NetworkContext = createContext({
   environment: "mainnet" as BridgeEnvironment,
   selectEnvironment,
+  selectionLocked: false,
+  lockSelection: (): (() => void) => () => {},
 });
 export const useBridgeEnvironment = () => useContext(NetworkContext).environment;
 export const useSelectBridgeEnvironment = () => useContext(NetworkContext).selectEnvironment;
+export const useNetworkSelectionLocked = () => useContext(NetworkContext).selectionLocked;
+export const useLockNetworkSelection = () => useContext(NetworkContext).lockSelection;
 
 export function NetworkProvider({ children }: { children: ReactNode }) {
+  const [pendingSubmissions, setPendingSubmissions] = useState(0);
+  const lockSelection = useCallback(() => {
+    setPendingSubmissions(count => count + 1);
+    return () => setPendingSubmissions(count => count - 1);
+  }, []);
   const pathname = usePathname();
   const { ready, receipts } = useActivitySnapshot();
   const environment = useSyncExternalStore(
@@ -66,5 +75,5 @@ export function NetworkProvider({ children }: { children: ReactNode }) {
   );
   // Resolve the saved network before mounting wallet sessions or balance stores.
   if (!ready || !environment) return null;
-  return <NetworkContext.Provider value={{ environment, selectEnvironment }}>{children}</NetworkContext.Provider>;
+  return <NetworkContext.Provider value={{ environment, selectEnvironment, selectionLocked: pendingSubmissions > 0, lockSelection }}>{children}</NetworkContext.Provider>;
 }

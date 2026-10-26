@@ -7,6 +7,7 @@ import { RejectionGuard } from "../../wallets/RejectionGuard";
 import { ThemeProvider } from "./ThemeProvider";
 import { BalanceProvider } from "../../bridge/BalanceProvider";
 import { ActivityProvider } from "./ActivityProvider";
+import { ActivityNavigationProvider } from "./ActivityNavigationProvider";
 import { NetworkProvider, useBridgeEnvironment } from "./NetworkProvider";
 
 // The MidenFi provider eager-loads the Miden SDK WASM, so it must stay out of
@@ -32,7 +33,9 @@ export function Providers({
       <AppKitProvider cookies={cookies}>
         <ActivityProvider>
           <NetworkProvider>
-            <NetworkWalletProviders>{children}</NetworkWalletProviders>
+            <ActivityNavigationProvider>
+              <NetworkWalletProviders>{children}</NetworkWalletProviders>
+            </ActivityNavigationProvider>
           </NetworkProvider>
         </ActivityProvider>
       </AppKitProvider>

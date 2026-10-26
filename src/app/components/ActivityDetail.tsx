@@ -1,18 +1,17 @@
 "use client";
 
-import { PageShell, PageHeader } from "./ui/PageLayout";
 import { EmptyState, FormAlert } from "./ui/Feedback";
 
 import { Button, ButtonAnchor, ButtonLink } from "./ui/Button";
-import { AlertTriangle, ArrowLeft, Check, Copy, RotateCcw, ShieldCheck, Wallet } from "lucide-react";
+import { AlertTriangle, ArrowLeft, Check, Copy, Plus, RotateCcw, ShieldCheck, Wallet } from "lucide-react";
+import Link from "next/link";
 import { useEffect, useRef, useState, type ComponentProps, type ReactNode } from "react";
 import { shortAddress } from "../../wallets/identity";
 import { type Activity, buildDiagnostics } from "../lib/bridge-presentation";
 import { type ActivityDetailModel, activityDetailFor } from "../lib/activity-detail-presentation";
 import { formatAgo } from "../lib/relative-time";
 import { useActivityTracking } from "../lib/use-activity-tracking";
-import { NetworkSelect } from "./NetworkSelect";
-import { ThemeToggle } from "./ThemeToggle";
+import { useBridgeEnvironment, useSelectBridgeEnvironment } from "./NetworkProvider";
 import { ActivityJourney } from "./ActivityJourney";
 
 type Tracking = ReturnType<typeof useActivityTracking>;
@@ -22,15 +21,19 @@ type LoadedActivityProps = Pick<Tracking, "monitorError" | "lastCheckedAt" | "re
 
 export function ActivityDetail({ id }: { id: string }) {
   const tracking = useActivityTracking(id);
+  const environment = useBridgeEnvironment();
+  const selectEnvironment = useSelectBridgeEnvironment();
   return (
-    <PageShell className="detail-shell">
-      <PageHeader variant="detail" action={
-        <ButtonLink variant="toolbar" className="back-link" href="/">
-          <ArrowLeft size={17} aria-hidden="true" />New transfer
-        </ButtonLink>
-      }>
-        <NetworkSelect /><ThemeToggle />
-      </PageHeader>
+    <div className="detail-shell mx-auto mt-6 w-full max-w-137 pb-10 mobile:mt-4">
+      <nav aria-label="Activity navigation" className="mb-3 flex items-center justify-between gap-4 text-sm text-muted-foreground">
+        <Link className="inline-flex min-h-11 items-center gap-1.5 rounded-sm hover:text-foreground hover:underline underline-offset-4"
+          href="/?tab=activity" scroll={false} onNavigate={() => selectEnvironment(environment)}>
+          <ArrowLeft size={16} aria-hidden="true" />Activity
+        </Link>
+        <Link className="inline-flex min-h-11 items-center gap-1.5 rounded-sm hover:text-foreground hover:underline underline-offset-4" href="/">
+          New transfer<Plus size={16} aria-hidden="true" />
+        </Link>
+      </nav>
       {tracking.isLoading ? (
         <EmptyState role="status">Loading activity…</EmptyState>
       ) : tracking.activity ? (
@@ -42,7 +45,7 @@ export function ActivityDetail({ id }: { id: string }) {
           <ButtonLink className="primary-button mt-2.5" href="/">Back to bridge</ButtonLink>
         </EmptyState>
       )}
-    </PageShell>
+    </div>
   );
 }
 
@@ -50,7 +53,7 @@ function LoadedActivity({ activity, monitorError, lastCheckedAt, refresh, receip
   const model = activityDetailFor(activity);
   const needsClaim = model.progress.kind === "tracked" && model.progress.milestones.some((step) => step.status === "consume" && step.state === "current");
   return (
-    <section className="detail-simple mx-auto mt-4 w-full max-w-137 pb-10">
+    <section className="detail-simple">
       <p className="sr-only activity-status-announcement" role="status" aria-live="polite" aria-atomic="true">
         {model.announcement}
       </p>
