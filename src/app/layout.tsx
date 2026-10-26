@@ -3,6 +3,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import { headers } from "next/headers";
 import { Providers } from "./components/Providers";
 import { AppShell } from "./components/AppShell";
+import { SHARE_IMAGE, SITE_DESCRIPTION, SITE_NAME, SITE_URL, TWITTER_IMAGE } from "../config/site";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -15,36 +16,26 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
-const SITE_URL = "https://bridge.miden.xyz";
-const SITE_DESCRIPTION =
-  "Move value across Ethereum networks and Miden with wallet-native cross-chain receive and send flows.";
-
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
-  title: "Miden Bridge",
+  title: SITE_NAME,
   description: SITE_DESCRIPTION,
-  applicationName: "Miden Bridge",
-  // Favicon is the Miden mark from src/app/icon.svg (Next file-based metadata).
+  applicationName: SITE_NAME,
+  // SVG, ICO, and Apple touch icons use Next's file-based metadata.
   openGraph: {
     type: "website",
     url: SITE_URL,
-    siteName: "Miden Bridge",
-    title: "Miden Bridge",
+    siteName: SITE_NAME,
+    title: SITE_NAME,
     description: SITE_DESCRIPTION,
-    images: [
-      {
-        url: "/og.png",
-        width: 2400,
-        height: 1260,
-        alt: "Miden Bridge — move value across Ethereum networks and Miden",
-      },
-    ],
+    images: [SHARE_IMAGE],
   },
   twitter: {
     card: "summary_large_image",
-    title: "Miden Bridge",
+    site: "@0xMiden",
+    title: SITE_NAME,
     description: SITE_DESCRIPTION,
-    images: ["/og.png"],
+    images: [TWITTER_IMAGE],
   },
 };
 

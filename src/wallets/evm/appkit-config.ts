@@ -3,6 +3,7 @@ import { sepolia, baseSepolia, arbitrumSepolia, mainnet, base, arbitrum, polygon
 import type { AppKitNetwork } from "@reown/appkit/networks";
 import { arcTestnet, arcMainnet } from "../../config/arc";
 import { evmReadTransport } from "../../bridge/evm/transport";
+import { SITE_DESCRIPTION, SITE_NAME } from "../../config/site";
 
 export const projectId = process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID!;
 
@@ -35,8 +36,8 @@ const appUrl =
     : process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
 
 export const metadata = {
-  name: "Miden Bridge",
-  description: "Miden Bridge",
+  name: SITE_NAME,
+  description: SITE_DESCRIPTION,
   url: appUrl,
-  icons: [`${appUrl}/favicon.ico`],
+  icons: [`${appUrl}/wallet-icon.png`],
 };
