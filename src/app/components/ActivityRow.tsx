@@ -19,7 +19,7 @@ export function ActivitySection({ title, action, children, ...props }: Component
 }
 
 /** The same receipt summary appears in current activity, history, and the stack. */
-export function ActivityRow({ activity, stacked = false }: { activity: Activity; stacked?: boolean }) {
+export function ActivityRow({ activity, stacked = false, onNavigate }: { activity: Activity; stacked?: boolean; onNavigate?: () => void }) {
   const classes = "home-activity-item relative z-2 flex items-center gap-3 rounded-lg bg-surface p-3 text-sm wrap-anywhere hover:bg-surface-muted";
   const content = <>
     <StatusIndicator variant="dot" tone={statusTone(activity.status, activity)} />
@@ -30,7 +30,7 @@ export function ActivityRow({ activity, stacked = false }: { activity: Activity;
     <ChevronRight size={16} aria-hidden="true" className="shrink-0" />
   </>;
   return stacked ? <span className={classes}>{content}</span>
-    : <Link className={classes} href={`/activity/${encodeURIComponent(activity.id)}`}>{content}</Link>;
+    : <Link className={classes} href={`/activity/${encodeURIComponent(activity.id)}`} onNavigate={onNavigate}>{content}</Link>;
 }
 
 function ActivityText({ primary, secondary, meta = false }: { primary: ReactNode; secondary: ReactNode; meta?: boolean }) {

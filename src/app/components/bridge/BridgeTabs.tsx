@@ -1,22 +1,41 @@
 import { Card } from "../ui/Card";
 import { ActivityRow, ActivitySection } from "../ActivityRow";
 import { Button } from "../ui/Button";
-import { useState, type ReactNode } from "react";
+import { useLayoutEffect, type ReactNode } from "react";
+import { useSearchParams } from "next/navigation";
 import type { BridgeEnvironment } from "../../../config/environment";
 import { useActivitySnapshot } from "../ActivityProvider";
 import { ActivityStack } from "../ActivityStack";
+import { useActivityNavigation } from "../ActivityNavigationProvider";
 
 /** Keep both panels mounted so switching tabs preserves the transfer draft. */
 export function BridgeTabs({ environment, children }: { environment: BridgeEnvironment; children: ReactNode }) {
-  const [activeTab, setActiveTab] = useState<"bridge" | "activity">("bridge");
+  const params = useSearchParams();
+  const activeTab = params.get("tab") === "activity" ? "activity" : "bridge";
+  const { expanded, scrollY, setExpanded, rememberScroll } = useActivityNavigation(environment);
   const { receipts } = useActivitySnapshot();
   const activities = receipts.map(receipt => receipt.activity).filter(activity => activity.environment === environment);
   const inFlight = activities.filter(activity => activity.status !== "complete" && activity.status !== "failed" &&
     !(activity.status === "signature" && !activity.sourceTxHash));
   const past = activities.filter(activity => activity.status === "complete" || activity.status === "failed").slice(0, 12);
 
+  useLayoutEffect(() => {
+    if (activeTab === "activity" && scrollY !== null) {
+      window.scrollTo({ top: scrollY, behavior: "instant" });
+    }
+  }, [activeTab, environment, scrollY]);
+
+  function selectTab(tab: typeof activeTab) {
+    if (activeTab === "activity") rememberScroll();
+    const url = new URL(window.location.href);
+    if (tab === "activity") url.searchParams.set("tab", tab);
+    else url.searchParams.delete("tab");
+    // Updating only the URL keeps the form and its draft mounted.
+    window.history.replaceState(null, "", url);
+  }
+
   function focusTab(tab: typeof activeTab) {
-    setActiveTab(tab);
+    selectTab(tab);
     document.getElementById(`${tab}-tab`)?.focus();
   }
 
@@ -25,7 +44,7 @@ export function BridgeTabs({ environment, children }: { environment: BridgeEnvir
       <div className="bridge-tabs flex w-full max-w-84" role="tablist" aria-label="Bridge portal">
         {(["bridge", "activity"] as const).map(tab => (
           <button className="min-h-12 flex-1 border-b-3 border-border text-base text-muted-foreground aria-selected:border-foreground aria-selected:font-semibold aria-selected:text-foreground" key={tab} id={`${tab}-tab`} type="button" role="tab" aria-selected={activeTab === tab}
-            aria-controls={`${tab}-panel`} tabIndex={activeTab === tab ? 0 : -1} onClick={() => setActiveTab(tab)}
+            aria-controls={`${tab}-panel`} tabIndex={activeTab === tab ? 0 : -1} onClick={() => selectTab(tab)}
             onKeyDown={event => {
               if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
               event.preventDefault();
@@ -50,12 +69,12 @@ export function BridgeTabs({ environment, children }: { environment: BridgeEnvir
             <ActivitySection title="Current transfer">
               <div className="grid gap-2">
                 {inFlight.map(activity => (
-                  <ActivityRow activity={activity} key={activity.id} />
+                  <ActivityRow activity={activity} key={activity.id} onNavigate={rememberScroll} />
                 ))}
               </div>
             </ActivitySection>
           ) : null}
-          <ActivityStack activities={past} title="Recent transfers" />
+          <ActivityStack activities={past} title="Recent transfers" expanded={expanded} onExpandedChange={setExpanded} onNavigate={rememberScroll} />
         </div>
       </div>
     </>
