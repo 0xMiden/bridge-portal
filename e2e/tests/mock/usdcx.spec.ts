@@ -323,7 +323,8 @@ test("browsing routes leaves the wallet alone; confirming switches chains and a 
   // Quotes use public reads. Wallet switching still happens only on confirmation.
   let registered = true;
   await page.route("**/api/evm/arc-testnet/rpc", (route) => {
-    const { id, params } = route.request().postDataJSON();
+    const { id, method, params } = route.request().postDataJSON();
+    if (method !== "eth_call" || params?.[0]?.to?.toLowerCase() !== arcConfig().xReserve.toLowerCase()) return route.fallback();
     const { functionName } = decodeFunctionData({ abi: xReserveAbi, data: params[0].data });
     if (functionName !== "isRemoteDomainRegistered" && functionName !== "getRemoteToken") throw new Error("Unexpected contract read");
     return route.fulfill({ json: { jsonrpc: "2.0", id, result: encodeFunctionResult({
