@@ -110,6 +110,10 @@ test("theme choice is keyboard accessible, persistent, and system-aware", async 
 
   await expect(menu).toBeVisible();
   await expect(system).toBeFocused();
+  await system.press("ArrowRight");
+  await expect(light).toBeFocused();
+  await light.press("ArrowLeft");
+  await expect(system).toBeFocused();
   await system.press("ArrowDown");
   await expect(light).toBeFocused();
   await light.press("ArrowDown");

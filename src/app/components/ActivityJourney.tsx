@@ -1,5 +1,9 @@
 "use client";
 
+import { Card } from "./ui/Card";
+import { DetailsList } from "./ui/DetailsList";
+import { StatusIndicator } from "./ui/Status";
+import type { BridgeNetwork } from "../../bridge/core/assets";
 import { ExternalLink } from "lucide-react";
 import { type ReactNode, useEffect, useState } from "react";
 import { activityRoute } from "../../bridge/core/routes";
@@ -32,10 +36,10 @@ function Address({ label, value }: { label: string; value?: string }) {
     }
   }
 
-  return <div className="journey-address"><span>{label} </span>{value ? (
-    <button type="button" aria-label={`Copy ${label.toLowerCase()} address`} title={value} disabled={status === "copying"} onClick={copy}>
-      <span className={status === "copied" || status === "failed" ? "journey-copy-hidden" : undefined}>{shortAddress(value)}</span>
-      <span className="journey-copy-feedback" role="status">{status === "copied" ? "Copied" : status === "failed" ? "Copy failed" : ""}</span>
+  return <div className="mt-1 text-xs text-muted-foreground wrap-anywhere"><span>{label} </span>{value ? (
+    <button className="relative rounded text-left hover:text-foreground hover:underline" type="button" aria-label={`Copy ${label.toLowerCase()} address`} title={value} disabled={status === "copying"} onClick={copy}>
+      <span className={status === "copied" || status === "failed" ? "journey-copy-hidden invisible" : undefined}>{shortAddress(value)}</span>
+      <span className="journey-copy-feedback absolute inset-0" role="status">{status === "copied" ? "Copied" : status === "failed" ? "Copy failed" : ""}</span>
     </button>
   ) : <span>Not recorded</span>}</div>;
 }
@@ -43,15 +47,15 @@ function Address({ label, value }: { label: string; value?: string }) {
 function Reference({ label, hash, link, at }: {
   label: string; hash?: string; link: Receipt["sourceLink"]; at?: number;
 }) {
-  return <div className="journey-reference">
-    <dt title={label}>{label}</dt>
-    <dd>
-      {at ? <time dateTime={new Date(at).toISOString()} title={new Date(at).toLocaleString()}>
+  return <div className="flex flex-wrap items-baseline justify-between gap-2">
+    <dt className="text-muted-foreground" title={label}>{label}</dt>
+    <dd className="ml-auto flex flex-wrap items-center justify-end gap-2">
+      {at ? <time className="text-xs text-muted-foreground tabular-nums" dateTime={new Date(at).toISOString()} title={new Date(at).toLocaleString()}>
         <span className="journey-reference-date">{new Date(at).toLocaleDateString(undefined, { month: "short", day: "numeric" })}<span aria-hidden="true"> · </span></span>
         {new Date(at).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit", hour12: false })}
       </time> : null}
       {link?.available && link.href ? (
-        <a href={link.href} target="_blank" rel="noopener noreferrer" aria-label={link.label} title={hash}>
+        <a className="inline-flex items-center gap-1.25 underline underline-offset-3" href={link.href} target="_blank" rel="noopener noreferrer" aria-label={link.label} title={hash}>
           {hash ? shortAddress(hash) : "Explorer"}<ExternalLink size={12} aria-hidden="true" />
         </a>
       ) : <span title={hash}>{hash ? shortAddress(hash) : "Pending"}</span>}
@@ -73,37 +77,44 @@ export function ActivityJourney({ receipt, needsClaim, children }: {
   const evmAsset = route?.source.kind === "miden" ? route.destination : route?.source;
   const gas = useSepoliaGasEstimate(receipt.sepoliaGasUnits, evmAsset?.kind !== "miden" ? evmAsset?.network : undefined);
   const networkFee = gas.fee ?? (gas.loading ? "Estimating…" : receipt.networkFee);
-  const status = needsClaim ? { label: "Ready to claim", tone: "active" }
-    : receipt.status ?? { label: "Complete", tone: "success" };
+  const status = needsClaim ? { label: "Ready to claim", tone: "active" as const }
+    : receipt.status ?? { label: "Complete", tone: "success" as const };
   const elapsed = receipt.sourceTxAt && receipt.destinationTxAt && receipt.destinationTxAt > receipt.sourceTxAt
     ? Math.round((receipt.destinationTxAt - receipt.sourceTxAt) / 1000) : null;
   const duration = elapsed === null ? "—" : elapsed < 60 ? `${elapsed}s` : `${Math.floor(elapsed / 60)}m${elapsed % 60 ? ` ${elapsed % 60}s` : ""}`;
 
-  return <article className="journey-paper" aria-label="Transfer receipt">
-    <header className="journey-heading">
-      <h1>{activity.amount} {activity.asset} <FiatAmount amount={activity.amount} symbol={activity.asset} /></h1>
-      <span className={`rcpt-status ${status.tone}`}>{status.label}</span>
+  return <Card as="article" variant="receipt" aria-label="Transfer receipt">
+    <header className="flex flex-wrap items-start justify-between gap-4">
+      <h1 className="flex min-w-0 flex-wrap items-baseline gap-2 text-3xl font-semibold wrap-anywhere">{activity.amount} {activity.asset} <FiatAmount amount={activity.amount} symbol={activity.asset} size="receipt" /></h1>
+      <StatusIndicator tone={status.tone}>{status.label}</StatusIndicator>
     </header>
-    <div className="journey-route">
-      <div className="journey-endpoint">
-        <div className="journey-chain">{route && <NetworkLogo network={route.source.network} />}<strong>{from}</strong></div>
-        <Address label="From" value={sourceAddress} />
-      </div>
-      <span className="journey-connection" aria-hidden="true" />
-      <div className="journey-endpoint">
-        <div className="journey-chain">{route && <NetworkLogo network={route.destination.network} />}<strong>{to}</strong></div>
-        <Address label="To" value={activity.destination} />
-      </div>
+    <div className="my-5 flex items-start gap-3">
+      <JourneyEndpoint network={route?.source.network} name={from} label="From" address={sourceAddress} />
+      <span className="mt-4 h-px w-4 shrink-0 bg-border-strong" aria-hidden="true" />
+      <JourneyEndpoint network={route?.destination.network} name={to} label="To" address={activity.destination} />
     </div>
     {children}
-    <dl className="journey-details" aria-label="Fees and details">
-      <div><dt>Provider</dt><dd>{bridgeProviders[activity.provider].label}</dd></div>
-      {receipt.tracked && <div><dt>{receipt.pending ? "Estimated total time" : "Delivery time"}</dt><dd>{receipt.pending ? activity.eta : duration}</dd></div>}
-      {differentOutput && <div><dt>{receipt.receivedLabel}</dt><dd>{receipt.receivedAmount} {destinationAsset}</dd></div>}
-      <div><dt>Network fee · estimated</dt><dd>{networkFee}</dd></div>
-      <div><dt>{receipt.fee?.label ?? "Provider fee"}</dt><dd>{receipt.fee?.value ?? "Unavailable"}</dd></div>
+    <DetailsList layout="receipt" aria-label="Fees and details" items={[
+      { label: "Provider", value: bridgeProviders[activity.provider].label },
+      receipt.tracked && { label: receipt.pending ? "Estimated total time" : "Delivery time", value: receipt.pending ? activity.eta : duration },
+      differentOutput && { label: receipt.receivedLabel, value: `${receipt.receivedAmount} ${destinationAsset}` },
+      { label: "Network fee · estimated", value: networkFee },
+      { label: receipt.fee?.label ?? "Provider fee", value: receipt.fee?.value ?? "Unavailable" },
+    ]}>
       <Reference label={`${from} tx`} hash={receipt.sourceHash} link={receipt.sourceLink} at={receipt.sourceTxAt} />
       {(receipt.tracked || receipt.destinationHash) && <Reference label={`${to} ${receipt.destinationKind}`} hash={receipt.destinationHash} link={receipt.destinationLink} at={receipt.destinationTxAt} />}
-    </dl>
-  </article>;
+    </DetailsList>
+  </Card>;
+}
+
+function JourneyEndpoint({ network, name, label, address }: {
+  network?: BridgeNetwork; name: string; label: string; address?: string;
+}) {
+  return <div className="min-w-0">
+    <div className="flex items-center gap-2">
+      {network && <NetworkLogo network={network} variant="endpoint" />}
+      <strong className="text-sm font-semibold">{name}</strong>
+    </div>
+    <Address label={label} value={address} />
+  </div>;
 }

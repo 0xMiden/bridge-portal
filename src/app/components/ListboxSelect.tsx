@@ -1,7 +1,14 @@
 "use client";
 
+import { Popover, PopoverContent, PopoverTrigger } from "./ui/Popover";
 import { Check, ChevronDown, Search } from "lucide-react";
-import { type KeyboardEvent, type ReactNode, useEffect, useId, useRef, useState } from "react";
+import { type KeyboardEvent, type ReactNode, useId, useRef, useState } from "react";
+
+const variants = {
+  chain: { trigger: "rounded-full border border-border text-xs", menu: "w-56" },
+  token: { trigger: "rounded-full border border-border text-lg font-semibold", menu: "w-70" },
+  network: { trigger: "rounded-md text-sm font-medium", menu: "w-56" },
+};
 
 /** Shared selection, focus, and dismissal behavior for bridge asset controls. */
 export function ListboxSelect({
@@ -19,6 +26,7 @@ export function ListboxSelect({
   onChange: (value: string) => void;
   children: ReactNode;
 }) {
+  const variant = variants[kind];
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const searchInputRef = useRef<HTMLInputElement>(null);
@@ -26,39 +34,24 @@ export function ListboxSelect({
     ? options.filter((option) => option.label.toLowerCase().includes(query.trim().toLowerCase()))
     : options;
   const menuId = useId();
-  const rootRef = useRef<HTMLDivElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const searchRef = useRef({ text: "", at: 0 });
 
-  useEffect(() => {
-    if (!open) return;
-    const onPointer = (event: PointerEvent) => {
-      if (!rootRef.current?.contains(event.target as Node)) setOpen(false);
-    };
-    const onKey = (event: globalThis.KeyboardEvent) => {
-      if (event.key === "Escape") {
-        setOpen(false);
-        triggerRef.current?.focus();
-      }
-    };
-    const buttons = Array.from(rootRef.current?.querySelectorAll<HTMLButtonElement>('[role="option"]') ?? []);
+  function focusOptions(event: Event) {
+    event.preventDefault();
+    const buttons = Array.from(menuRef.current?.querySelectorAll<HTMLButtonElement>('[role="option"]') ?? []);
     const match = searchRef.current.text
-      ? buttons.find((button) => button.getAttribute("aria-label")?.toLowerCase().startsWith(searchRef.current.text))
+      ? buttons.find(button => button.getAttribute("aria-label")?.toLowerCase().startsWith(searchRef.current.text))
       : undefined;
-    (searchInputRef.current ?? match ?? buttons.find((button) => button.getAttribute("aria-selected") === "true"))?.focus();
-    document.addEventListener("pointerdown", onPointer);
-    document.addEventListener("keydown", onKey);
-    return () => {
-      document.removeEventListener("pointerdown", onPointer);
-      document.removeEventListener("keydown", onKey);
-    };
-  }, [open]);
+    (searchInputRef.current ?? match ?? buttons.find(button => button.getAttribute("aria-selected") === "true") ?? buttons[0])?.focus();
+  }
 
   function navigateOptions(event: KeyboardEvent<HTMLDivElement>) {
     if (disabled) return;
     const editingSearch = event.target === searchInputRef.current;
     if (editingSearch && event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
-    const buttons = Array.from(rootRef.current?.querySelectorAll<HTMLButtonElement>('[role="option"]') ?? []);
+    const buttons = Array.from(menuRef.current?.querySelectorAll<HTMLButtonElement>('[role="option"]') ?? []);
     const index = buttons.indexOf(document.activeElement as HTMLButtonElement);
     let next: number;
     if (event.key === "ArrowDown" || event.key === "ArrowUp") {
@@ -98,44 +91,47 @@ export function ListboxSelect({
   }
 
   return (
-    <div
-      className={`${kind}-select`}
-      ref={rootRef}
-      onKeyDown={navigateOptions}
-      onBlur={(event) => {
-        if (!event.currentTarget.contains(event.relatedTarget)) setOpen(false);
-      }}
-    >
-      <button
-        ref={triggerRef}
-        type="button"
-        role={kind !== "token" ? "combobox" : undefined}
-        disabled={disabled}
-        className={`${kind}-select-trigger ${open ? "open" : ""}`}
-        aria-haspopup="listbox"
-        aria-expanded={open}
-        aria-controls={open ? menuId : undefined}
-        aria-label={label}
-        onClick={() => {
-          searchRef.current = { text: "", at: 0 };
-          setQuery("");
-          setOpen((previous) => !previous);
-        }}
-      >
-        {children}
-        <ChevronDown className="select-caret" size={15} aria-hidden="true" />
-      </button>
-      {open ? (
-        <div className={`select-menu ${kind}-select-menu`}>
-          <div className="select-menu-heading">
+    <Popover open={open} onOpenChange={setOpen}>
+      <div className="min-w-0 max-w-full shrink-0" data-kind={kind} onKeyDown={navigateOptions}>
+        <PopoverTrigger asChild>
+          <button
+            ref={triggerRef}
+            type="button"
+            role={kind !== "token" ? "combobox" : undefined}
+            disabled={disabled}
+            className={`${kind}-select-trigger group/select inline-flex min-h-11 max-w-full items-center gap-2 bg-surface px-2.5 text-foreground transition
+              hover:bg-surface-muted data-[state=open]:bg-surface-muted disabled:cursor-wait disabled:opacity-60 ${variant.trigger}`}
+            aria-haspopup="listbox"
+            aria-expanded={open}
+            aria-controls={open ? menuId : undefined}
+            aria-label={label}
+            onClick={() => {
+              searchRef.current = { text: "", at: 0 };
+              setQuery("");
+            }}
+          >
+            {children}
+            <ChevronDown className="select-caret shrink-0 text-muted-foreground group-data-[state=open]/select:rotate-180" size={15} aria-hidden="true" />
+          </button>
+        </PopoverTrigger>
+        <PopoverContent
+          ref={menuRef}
+          role={undefined}
+          aria-labelledby={undefined}
+          onOpenAutoFocus={focusOptions}
+          align={kind === "token" ? "end" : "start"}
+          className={`select-menu ${variant.menu}`}
+        >
+          <div className="flex items-baseline justify-between gap-3 p-2 text-sm font-semibold">
             <span>{heading}</span>
-            {context ? <small>{context}</small> : null}
+            {context ? <small className="text-xs text-muted-foreground">{context}</small> : null}
           </div>
           {searchable ? (
-            <label className="select-search">
-              <Search size={16} aria-hidden="true" />
+            <label className="select-search mb-2 flex items-center gap-2 rounded-md border border-border p-2 text-muted-foreground focus-within:outline-2 focus-within:outline-accent-foreground focus-within:outline-offset-2">
+              <Search className="shrink-0" size={16} aria-hidden="true" />
               <input
                 ref={searchInputRef}
+                className="min-w-0 flex-1 bg-transparent text-base text-foreground outline-none placeholder:text-muted-foreground"
                 type="search"
                 aria-label="Search tokens by name or symbol"
                 aria-controls={menuId}
@@ -156,7 +152,8 @@ export function ListboxSelect({
                 aria-label={option.label}
                 aria-selected={option.value === value}
                 tabIndex={-1}
-                className={`select-option ${option.value === value ? "selected" : ""}`}
+                className={`group/option flex min-h-12 w-full items-center gap-2 rounded-md p-2.5 text-left text-sm
+                  hover:bg-surface-muted aria-selected:bg-accent-soft focus-visible:-outline-offset-2`}
                 onClick={() => {
                   onChange(option.value);
                   setOpen(false);
@@ -164,13 +161,17 @@ export function ListboxSelect({
                 }}
               >
                 {option.content}
-                {option.value === value ? <Check className="select-option-check" size={16} aria-hidden="true" /> : null}
+                {option.value === value ? <Check className="select-option-check ml-auto flex-none text-accent-foreground" size={16} aria-hidden="true" /> : null}
               </button>
             ))}
           </div>
-          {filteredOptions.length === 0 ? <p className="select-empty" role="status">No tokens found. Try another name or symbol.</p> : null}
-        </div>
-      ) : null}
-    </div>
+          {filteredOptions.length === 0 ? (
+            <p className="select-empty p-3 text-sm text-muted-foreground" role="status">
+              No tokens found. Try another name or symbol.
+            </p>
+          ) : null}
+        </PopoverContent>
+      </div>
+    </Popover>
   );
 }

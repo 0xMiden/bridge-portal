@@ -1,13 +1,10 @@
-import { ChevronRight } from "lucide-react";
-import Link from "next/link";
+import { Card } from "../ui/Card";
+import { ActivityRow, ActivitySection } from "../ActivityRow";
+import { Button } from "../ui/Button";
 import { useState, type ReactNode } from "react";
-import { activityStartedAt } from "../../../bridge/core/rules";
-import { bridgeProviders } from "../../../bridge/providers/registry";
 import type { BridgeEnvironment } from "../../../config/environment";
-import { statusLabel, statusTone } from "../../lib/bridge-presentation";
 import { useActivitySnapshot } from "../ActivityProvider";
 import { ActivityStack } from "../ActivityStack";
-import { RelativeTime } from "../RelativeTime";
 
 /** Keep both panels mounted so switching tabs preserves the transfer draft. */
 export function BridgeTabs({ environment, children }: { environment: BridgeEnvironment; children: ReactNode }) {
@@ -25,9 +22,9 @@ export function BridgeTabs({ environment, children }: { environment: BridgeEnvir
 
   return (
     <>
-      <div className="bridge-tabs" role="tablist" aria-label="Bridge portal">
+      <div className="bridge-tabs flex w-full max-w-84" role="tablist" aria-label="Bridge portal">
         {(["bridge", "activity"] as const).map(tab => (
-          <button key={tab} id={`${tab}-tab`} type="button" role="tab" aria-selected={activeTab === tab}
+          <button className="min-h-12 flex-1 border-b-3 border-border text-base text-muted-foreground aria-selected:border-foreground aria-selected:font-semibold aria-selected:text-foreground" key={tab} id={`${tab}-tab`} type="button" role="tab" aria-selected={activeTab === tab}
             aria-controls={`${tab}-panel`} tabIndex={activeTab === tab ? 0 : -1} onClick={() => setActiveTab(tab)}
             onKeyDown={event => {
               if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
@@ -35,40 +32,28 @@ export function BridgeTabs({ environment, children }: { environment: BridgeEnvir
               focusTab(event.key === "Home" ? "bridge" : event.key === "End" ? "activity" : tab === "bridge" ? "activity" : "bridge");
             }}>
             {tab === "bridge" ? "Bridge" : "Activity"}
-            {tab === "activity" && inFlight.length > 0 ? <span className="activity-count">{inFlight.length}</span> : null}
+            {tab === "activity" && inFlight.length > 0 ? <span className="activity-count ml-2 rounded-full bg-accent-soft px-1.5 text-xs text-accent-foreground">{inFlight.length}</span> : null}
           </button>
         ))}
       </div>
-      <div id="bridge-panel" role="tabpanel" aria-labelledby="bridge-tab" hidden={activeTab !== "bridge"} className="bridge-tab-panel">{children}</div>
-      <div id="activity-panel" role="tabpanel" aria-labelledby="activity-tab" hidden={activeTab !== "activity"} className="activity-tab-panel">
-        <div className="activity-region">
+      <div id="bridge-panel" role="tabpanel" aria-labelledby="bridge-tab" hidden={activeTab !== "bridge"} className="w-full space-y-3">{children}</div>
+      <div id="activity-panel" role="tabpanel" aria-labelledby="activity-tab" hidden={activeTab !== "activity"} className="activity-tab-panel w-full">
+        <div className="activity-region grid w-full gap-3">
           {!inFlight.length && !past.length ? (
-            <div className="activity-empty">
-              <h2>No transfers yet</h2>
-              <p>Your current and past transfers will appear here.</p>
-              <button className="secondary-button" type="button" onClick={() => focusTab("bridge")}>Make a transfer</button>
-            </div>
+            <Card variant="empty">
+              <h2 className="text-xl">No transfers yet</h2>
+              <p className="mt-3 mb-6 text-muted-foreground">Your current and past transfers will appear here.</p>
+              <Button variant="secondary" className="secondary-button" type="button" onClick={() => focusTab("bridge")}>Make a transfer</Button>
+            </Card>
           ) : null}
           {inFlight.length > 0 ? (
-            <section className="home-activity" aria-label="Current transfer">
-              <div className="home-activity-title"><h2>Current transfer</h2></div>
-              <div className="home-activity-list">
+            <ActivitySection title="Current transfer">
+              <div className="grid gap-2">
                 {inFlight.map(activity => (
-                  <Link className="home-activity-item" href={`/activity/${encodeURIComponent(activity.id)}`} key={activity.id}>
-                    <span className={`status-dot ${statusTone(activity.status, activity)}`} />
-                    <span className="activity-copy">
-                      <strong>{activity.summary}</strong>
-                      <small>{bridgeProviders[activity.provider].label} - {statusLabel(activity.status, activity)}</small>
-                    </span>
-                    <span className="activity-meta">
-                      <strong>{activity.amount} {activity.asset}</strong>
-                      <small><RelativeTime at={activityStartedAt(activity)} /></small>
-                    </span>
-                    <ChevronRight size={16} aria-hidden="true" />
-                  </Link>
+                  <ActivityRow activity={activity} key={activity.id} />
                 ))}
               </div>
-            </section>
+            </ActivitySection>
           ) : null}
           <ActivityStack activities={past} title="Recent transfers" />
         </div>

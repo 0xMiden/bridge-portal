@@ -10,14 +10,14 @@ export class BridgePage {
   async waitForReady(timeout = 30_000): Promise<void> {
     const evm = this.page.locator('[data-wallet="evm"] .wallet-pill');
     await expect(evm).toBeVisible({ timeout });
-    if (!(await evm.getAttribute("class"))?.includes("connected")) {
+    if ((await evm.getAttribute("data-connected")) !== "true") {
       await evm.click();
       await this.page.getByText("Browser test wallet", { exact: true }).click();
     }
-    await expect(evm).toHaveClass(/connected/, { timeout });
+    await expect(evm).toHaveAttribute("data-connected", "true", { timeout });
     const miden = this.page.locator('[data-wallet="miden"] .wallet-pill');
     await expect(miden).toBeVisible({ timeout });
-    if (!(await miden.getAttribute("class"))?.includes("connected")) {
+    if ((await miden.getAttribute("data-connected")) !== "true") {
       // Restore can complete between rendering the pill and opening its menu.
       await miden.click();
       const connect = this.page.getByRole("menuitem", { name: "Connect wallet", exact: true });
@@ -26,7 +26,7 @@ export class BridgePage {
       if (await connect.isVisible()) await connect.click();
       else await this.page.keyboard.press("Escape");
     }
-    await expect(miden).toHaveClass(/connected/, { timeout });
+    await expect(miden).toHaveAttribute("data-connected", "true", { timeout });
   }
 
   async setRoute(route: Route): Promise<void> {

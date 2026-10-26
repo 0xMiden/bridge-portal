@@ -5,7 +5,9 @@ import { useQuery } from "@tanstack/react-query";
 import { formatUsdAmount, priceSymbol } from "../lib/token-pricing";
 import { usdPriceQuery } from "../lib/usd-price-query";
 
-export function FiatAmount({ amount, symbol }: { amount: string; symbol: string }) {
+const sizes = { field: "text-xs", receipt: "text-sm", review: "text-sm" };
+
+export function FiatAmount({ amount, symbol, size = "field" }: { amount: string; symbol: string; size?: keyof typeof sizes }) {
   const environment = useBridgeEnvironment();
   const marketSymbol = priceSymbol(symbol);
   const price = useQuery(usdPriceQuery(marketSymbol));
@@ -17,5 +19,5 @@ export function FiatAmount({ amount, symbol }: { amount: string; symbol: string 
     ? `${value} estimated using the ${marketSymbol ?? symbol}/USD market price from Coinbase.${environment === "testnet" ? " Testnet tokens have no real USD value." : ""}`
     : loading ? "Loading USD estimate…" : `USD estimate unavailable for ${symbol}.`;
 
-  return <small className="fiat-amount" title={title}>{value ?? (loading ? "…" : "—")}</small>;
+  return <small className={`fiat-amount min-w-0 truncate text-muted-foreground ${sizes[size]}`} title={title}>{value ?? (loading ? "…" : "—")}</small>;
 }

@@ -1,43 +1,41 @@
 "use client";
 
-import type { ReactNode } from "react";
+import type { ComponentProps, ReactNode } from "react";
+import { ChevronDown } from "lucide-react";
+import { MenuContent, MenuItem } from "../app/components/ui/Menu";
 
-/**
- * Shared dropdown shell for both wallet menus (Sepolia/EVM + Miden/Bread), so
- * they have the exact same layout, width, and open/close animation — only the
- * identity summary and the action items differ. The parent always renders it
- * (mounted even when closed) and toggles `open`, so the `.open` transition
- * plays the same way for both.
- */
-export function WalletMenu({
-  open,
-  avatar,
-  name,
-  subtitle,
-  children,
-}: {
-  open: boolean;
+/** Wallet identity and actions share the same accessible menu surface. */
+export function WalletMenu({ avatar, state, name, subtitle, children }: {
   avatar: ReactNode;
+  state?: "connected" | "pending";
   name: ReactNode;
   subtitle: ReactNode;
   children: ReactNode;
 }) {
   return (
-    <div
-      className={`wallet-actions-menu ${open ? "open" : ""}`}
-      role="menu"
-      aria-label={typeof name === "string" ? name : "Wallet"}
-      aria-hidden={!open}
-      inert={!open}
-    >
-      <div className="wallet-menu-summary">
-        {avatar}
-        <span>
-          <strong>{name}</strong>
-          <small>{subtitle}</small>
+    <MenuContent className="wallet-actions-menu" aria-label={typeof name === "string" ? name : "Wallet"}>
+      <div className="flex items-center gap-3 border-b border-border px-2 pt-2 pb-3.5">
+        <span className={`grid size-10 shrink-0 place-items-center rounded-md ${state === "connected" ? "bg-accent-soft text-accent" : state === "pending" ? "bg-warning-soft text-warning-foreground" : "bg-surface-muted text-muted-foreground"}`} data-state={state}>{avatar}</span>
+        <span className="grid min-w-0 gap-0.5">
+          <strong className="truncate text-sm font-semibold">{name}</strong>
+          <small className="text-xs text-muted-foreground wrap-anywhere">{subtitle}</small>
         </span>
       </div>
       {children}
-    </div>
+    </MenuContent>
   );
+}
+
+export function WalletMenuItem({ danger = false, children }: { danger?: boolean; children: ReactNode }) {
+  return <MenuItem keepOpen data-danger={danger} className={`wallet-menu-item flex min-h-11 items-center gap-2 rounded-md px-3 text-left text-sm
+    hover:bg-surface-muted data-[highlighted]:bg-surface-muted [&>svg]:shrink-0
+    ${danger ? "text-danger-foreground" : "text-foreground"}`}>{children}</MenuItem>;
+}
+
+export function WalletButton({ connected = false, showChevron = true, className = "", children, ...props }: ComponentProps<"button"> & { connected?: boolean; showChevron?: boolean }) {
+  return <button {...props} data-connected={connected} className={`wallet-button wallet-pill group/wallet inline-flex min-h-11 w-full min-w-0 items-center gap-1.5 rounded-full border border-border bg-surface px-2.5 text-xs font-medium
+    hover:bg-surface-muted aria-expanded:bg-surface-muted ${connected ? "text-foreground" : "text-accent-foreground"} ${className}`}>
+    {children}
+    {showChevron && <ChevronDown size={12} className="shrink-0 group-aria-expanded/wallet:rotate-180" aria-hidden="true" />}
+  </button>;
 }
