@@ -1,5 +1,5 @@
 import { pad, parseUnits, type Hex } from "viem";
-import { normalizeMidenAccountHex } from "../agglayer/agglayer";
+import { normalizeMidenAccountHex } from "../../miden-address";
 import { ARC_MAX_MIDEN_AMOUNT } from "./config";
 
 export function parseArcAmount(amount: string): bigint {

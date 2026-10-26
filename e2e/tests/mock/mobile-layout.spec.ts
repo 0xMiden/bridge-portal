@@ -17,18 +17,14 @@ function intersects(a: Rect, b: Rect) {
 }
 
 for (const width of [640, 641]) {
-  test(`${width}px uses an inline provider disclosure with accessible controls`, async ({ bridge, page }) => {
+  test(`${width}px keeps the quoted provider inline without a redundant selector`, async ({ bridge, page }) => {
     await page.setViewportSize({ width, height: 900 });
     await bridge.fillAmount("1");
-    await bridge.routeTrigger().click();
     await expect(bridge.providerOptions()).toBeVisible();
     await expect(page.getByRole("dialog")).toHaveCount(0);
-    expect((await bridge.routeTrigger().boundingBox())?.height).toBeGreaterThanOrEqual(MIN_TAP_TARGET);
-    await expect(page.locator("body")).not.toHaveAttribute("data-overlay-open", "true");
-    await bridge.providerOptions().getByRole("button").first().focus();
-    await page.keyboard.press("Escape");
-    await expect(bridge.providerOptions()).toBeHidden();
-    await expect(bridge.routeTrigger()).toBeFocused();
+    await expect(page.locator("body")).not.toHaveCSS("overflow", "hidden");
+    await expect(bridge.selectedProvider()).toHaveText("Circle");
+    await expect(bridge.providerOptions().getByRole("radio")).toHaveCount(0);
   });
 }
 
@@ -66,7 +62,7 @@ test.describe("mobile bridge layout", () => {
     await bridge.waitForReady();
 
     await page.locator('.panel-wallet[data-wallet="evm"] .wallet-button').first().click();
-    const walletItems = page.locator(".wallet-actions-menu.open .wallet-menu-item");
+    const walletItems = page.getByRole("menu").getByRole("menuitem");
     await expect(walletItems.first()).toBeVisible();
     for (let index = 0; index < (await walletItems.count()); index += 1) {
       await expect
@@ -76,14 +72,6 @@ test.describe("mobile bridge layout", () => {
     await page.keyboard.press("Escape");
 
     await bridge.fillAmount("1");
-    await bridge.routeTrigger().click();
-    const routeOptions = bridge.providerOptions().getByRole("button");
-    for (let index = 0; index < (await routeOptions.count()); index += 1) {
-      const box = await routeOptions.nth(index).boundingBox();
-      expect(box?.height).toBeGreaterThanOrEqual(MIN_TAP_TARGET);
-    }
-    await bridge.routeTrigger().click();
-
     await bridge.fillAmount("0.05");
     await bridge.openPreflight();
     for (const control of [
@@ -105,7 +93,7 @@ test.describe("mobile bridge layout", () => {
     await bridge.setRoute("USDCx");
     await bridge.setMode("Receive");
     await bridge.setChain("Arc Testnet");
-    await page.evaluate(() => localStorage.setItem("e2e-signer-mode", "reject"));
+    await page.evaluate(() => { window.testWallets.rejectSwitch = true; });
     await bridge.fillAmount("0.05");
     await bridge.openPreflight();
     await bridge.confirmPreflight();

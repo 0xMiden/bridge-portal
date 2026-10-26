@@ -1,42 +1,10 @@
 "use client";
 
-import { bridgeProviders } from "../../bridge/providers/registry";
-
-import Link from "next/link";
-import { ChevronDown, ChevronRight } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
-import {
-  type Activity,
-  statusLabel,
-  statusTone,
-} from "../lib/bridge-presentation";
-import { activityStartedAt } from "../../bridge/core/rules";
-import { RelativeTime } from "./RelativeTime";
-import { gsap } from "../lib/gsap";
-import { EASE } from "../lib/motion";
-
-function Row({ activity }: { activity: Activity }) {
-  return (
-    <>
-      <span className={`status-dot ${statusTone(activity.status, activity)}`} />
-      <span className="activity-copy">
-        <strong>{activity.summary}</strong>
-        <small>
-          {bridgeProviders[activity.provider].label} - {statusLabel(activity.status, activity)}
-        </small>
-      </span>
-      <span className="activity-meta">
-        <strong>
-          {activity.amount} {activity.asset}
-        </strong>
-        <small>
-          <RelativeTime at={activityStartedAt(activity)} />
-        </small>
-      </span>
-      <ChevronRight size={16} aria-hidden="true" />
-    </>
-  );
-}
+import { ActivityRow, ActivitySection } from "./ActivityRow";
+import { ChevronDown } from "lucide-react";
+import { useLayoutEffect, useRef } from "react";
+import type { Activity } from "../lib/bridge-presentation";
+import { animateWithMotionPreference, standardEase } from "../lib/motion";
 
 /**
  * Recent transfers as an Apple-style notification stack: collapsed, the latest
@@ -47,72 +15,51 @@ function Row({ activity }: { activity: Activity }) {
 export function ActivityStack({
   activities,
   title,
+  expanded,
+  onExpandedChange,
+  onNavigate,
 }: {
   activities: Activity[];
   title: string;
+  expanded: boolean;
+  onExpandedChange: (expanded: boolean) => void;
+  onNavigate: () => void;
 }) {
-  const [expanded, setExpanded] = useState(false);
   const sectionRef = useRef<HTMLElement>(null);
-  const prevHeight = useRef(0);
-  const didMount = useRef(false);
+  const prevHeight = useRef<number | null>(null);
 
   // Spring the section between its collapsed and expanded heights. Because the
   // card + history are a margin-auto centered group, animating this height makes
   // the whole component glide up/down as the list opens — the "move up springly"
-  // feel — while the revealed rows stagger in. Plain useEffect (not useGSAP) so
-  // we fully own cleanup: height/overflow are always cleared, otherwise the
-  // section stays pinned and overflow:hidden would clip the peek cards.
-  useEffect(() => {
-    if (!didMount.current) {
-      didMount.current = true;
-      return;
-    }
+  // feel — while the revealed rows stagger in. Measure before paint, after the
+  // previous animation is canceled, so rapid toggles start at the visible height
+  // and settle back to natural layout without clipping the peek cards.
+  useLayoutEffect(() => {
+    const start = prevHeight.current;
+    prevHeight.current = null;
     const el = sectionRef.current;
-    if (!el) return;
-    const reset = () => {
-      el.style.height = "";
-      el.style.overflow = "";
-    };
-    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
-      reset();
-      return;
-    }
-
-    gsap.killTweensOf(el);
+    if (!el || start === null) return;
     const target = el.offsetHeight;
-    const tweens = [
-      gsap.fromTo(
-        el,
-        { height: prevHeight.current || target, overflow: "hidden" },
-        { height: target, duration: 0.5, ease: "back.out(1.2)" },
-      ),
-    ];
-    if (expanded) {
-      const rows = el.querySelectorAll(".home-activity-item");
-      tweens.push(
-        gsap.from(Array.from(rows).slice(1), {
-          opacity: 0,
-          y: -6,
-          duration: 0.34,
-          ease: EASE.standard,
-          stagger: 0.045,
-          delay: 0.06,
-        }),
-      );
-    }
-    // Guaranteed clear once the spring settles — height/overflow must never
-    // linger (overflow:hidden would clip the collapsed stack's peek cards).
-    const clearTimer = window.setTimeout(reset, 700);
-    return () => {
-      window.clearTimeout(clearTimer);
-      tweens.forEach((t) => t.kill());
-      reset();
-    };
+    return animateWithMotionPreference(() => {
+      const animations = [el.animate(
+        [{ height: `${start}px`, overflow: "hidden" }, { height: `${target}px`, overflow: "hidden" }],
+        // The cubic curve preserves the original back-out overshoot of 1.2.
+        { duration: 500, easing: "cubic-bezier(0.333333, 1.4, 0.666667, 1)" },
+      )];
+      if (expanded) {
+        const rows = Array.from(el.querySelectorAll(".home-activity-item")).slice(1);
+        animations.push(...rows.map((row, index) => row.animate(
+          [{ opacity: 0, transform: "translateY(-6px)" }, { opacity: 1, transform: "none" }],
+          { duration: 340, easing: standardEase, delay: 60 + index * 45, fill: "backwards" },
+        )));
+      }
+      return animations;
+    });
   }, [expanded]);
 
   const toggle = () => {
-    prevHeight.current = sectionRef.current?.offsetHeight ?? 0;
-    setExpanded((open) => !open);
+    prevHeight.current = sectionRef.current?.getBoundingClientRect().height ?? null;
+    onExpandedChange(!expanded);
   };
 
   if (activities.length === 0) return null;
@@ -122,28 +69,10 @@ export function ActivityStack({
   // without implying an exact count (the toggle carries the real number).
   const peek = Math.min(activities.length - 1, 2);
 
-  if (activities.length === 1) {
-    return (
-      <section className="home-activity" aria-label={title}>
-        <div className="home-activity-title">
-          <h2>{title}</h2>
-        </div>
-        <div className="home-activity-list">
-          <Link className="home-activity-item" href={`/activity/${encodeURIComponent(top.id)}`}>
-            <Row activity={top} />
-          </Link>
-        </div>
-      </section>
-    );
-  }
-
   return (
-    <section className="home-activity" ref={sectionRef} aria-label={title}>
-      <div className="home-activity-title">
-        <h2>{title}</h2>
-        <button
+    <ActivitySection title={title} ref={sectionRef} action={activities.length > 1 && <button
           type="button"
-          className="activity-stack-toggle"
+          className="inline-flex items-center gap-1 rounded-full bg-surface px-2.5 py-1 text-xs font-bold text-muted-foreground hover:text-foreground"
           aria-expanded={expanded}
           onClick={toggle}
         >
@@ -151,43 +80,34 @@ export function ActivityStack({
           <ChevronDown
             size={15}
             aria-hidden="true"
-            className={expanded ? "is-open" : undefined}
+            className={expanded ? "rotate-180" : ""}
           />
-        </button>
-      </div>
+        </button>}>
 
-      {expanded ? (
-        <div className="home-activity-list">
+      {expanded || activities.length === 1 ? (
+        <div className="grid gap-2">
           {activities.map((activity) => (
-            <Link
-              className="home-activity-item"
-              href={`/activity/${encodeURIComponent(activity.id)}`}
-              key={encodeURIComponent(activity.id)}
-            >
-              <Row activity={activity} />
-            </Link>
+            <ActivityRow activity={activity} key={activity.id} onNavigate={onNavigate} />
           ))}
         </div>
       ) : (
         <button
           type="button"
-          className="activity-stack"
+          className="relative block w-full text-left"
           onClick={toggle}
           aria-label={`Show all ${activities.length} transfers`}
         >
-          <span className="home-activity-item activity-stack-top">
-            <Row activity={top} />
-          </span>
+          <ActivityRow activity={top} stacked />
           {Array.from({ length: peek }).map((_, i) => (
             <span
               key={i}
-              className="activity-stack-peek"
-              style={{ ["--i" as string]: String(i + 1) }}
+              className={`absolute rounded-lg bg-surface shadow-(--shadow-card)
+                ${i === 0 ? "inset-x-2 top-2 -bottom-2 z-1 opacity-75" : "inset-x-4 top-4 -bottom-4 z-0 opacity-50"}`}
               aria-hidden="true"
             />
           ))}
         </button>
       )}
-    </section>
+    </ActivitySection>
   );
 }

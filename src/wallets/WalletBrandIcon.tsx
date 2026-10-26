@@ -8,7 +8,7 @@ export function WalletBrandIcon({ src, size }: { src?: string; size: number }) {
   const [failedSrc, setFailedSrc] = useState<string>();
 
   if (!src || src === failedSrc) {
-    return <Wallet size={size} style={{ flexShrink: 0 }} aria-hidden="true" />;
+    return <Wallet size={size} className="shrink-0" aria-hidden="true" />;
   }
 
   return (
@@ -19,14 +19,8 @@ export function WalletBrandIcon({ src, size }: { src?: string; size: number }) {
       alt=""
       width={size}
       height={size}
-      style={{
-        display: "block",
-        flexShrink: 0,
-        width: size,
-        height: size,
-        objectFit: "contain",
-        borderRadius: 4,
-      }}
+      className="shrink-0 rounded object-contain"
+      style={{ width: size, height: size }}
       onError={() => setFailedSrc(src)}
     />
   );

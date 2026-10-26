@@ -1,8 +1,10 @@
-export type PriceSymbol = "ETH" | "USDC";
+export type PriceSymbol = "ETH" | "USDC" | "DAI" | "USDT" | "WBTC" | "SOL" | "NEAR" | "PAXG" | "BNB" | "PYUSD";
 
 export type UsdPrice = {
   symbol: PriceSymbol;
   usd: number;
+  /** Original provider decimal, retained for exact balance-limit arithmetic. */
+  usdDecimal?: string;
   fetchedAt: number;
 };
 
@@ -14,6 +16,16 @@ export function priceSymbol(symbol: string): PriceSymbol | null {
     case "ETH": return "ETH";
     case "USDC":
     case "USDCX": return "USDC";
+    case "DAI": return "DAI";
+    case "USDT": return "USDT";
+    case "WBTC": return "WBTC";
+    case "WSOL":
+    case "SOL": return "SOL";
+    case "NEAR": return "NEAR";
+    case "PAXG": return "PAXG";
+    case "WBNB":
+    case "BNB": return "BNB";
+    case "PYUSD": return "PYUSD";
     default: return null;
   }
 }

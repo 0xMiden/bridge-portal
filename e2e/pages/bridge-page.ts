@@ -1,35 +1,50 @@
 import { expect, type Page } from "@playwright/test";
 
-// Capability interface (§4): the same specs drive the bridge through this
-// page-object regardless of target (local dev server vs preview deploy).
 export type Route = "AggLayer" | "Epoch" | "USDCx";
 export type Mode = "Receive" | "Send";
 
 export class BridgePage {
   constructor(private readonly page: Page) {}
 
-  /** Wait until both injected wallets have connected (window.__E2E__.ready). */
-  async waitForReady(timeout = 120_000): Promise<void> {
-    await this.page.waitForFunction(() => window.__E2E__?.ready === true, null, {
-      timeout,
-    });
+  /** Connect through the same UI and extension discovery as a user's wallet. */
+  async waitForReady(timeout = 30_000): Promise<void> {
+    const evm = this.page.locator('[data-wallet="evm"] .wallet-pill');
+    await expect(evm).toBeVisible({ timeout });
+    if ((await evm.getAttribute("data-connected")) !== "true") {
+      await evm.click();
+      await this.page.getByText("Browser test wallet", { exact: true }).click();
+    }
+    await expect(evm).toHaveAttribute("data-connected", "true", { timeout });
+    const miden = this.page.locator('[data-wallet="miden"] .wallet-pill');
+    await expect(miden).toBeVisible({ timeout });
+    if ((await miden.getAttribute("data-connected")) !== "true") {
+      // Restore can complete between rendering the pill and opening its menu.
+      await miden.click();
+      const connect = this.page.getByRole("menuitem", { name: "Connect wallet", exact: true });
+      const disconnect = this.page.getByRole("menuitem", { name: "Disconnect", exact: true });
+      await expect(connect.or(disconnect)).toBeVisible({ timeout });
+      if (await connect.isVisible()) await connect.click();
+      else await this.page.keyboard.press("Escape");
+    }
+    await expect(miden).toHaveAttribute("data-connected", "true", { timeout });
   }
 
   async setRoute(route: Route): Promise<void> {
+    const provider = route === "USDCx" ? "xreserve" : route.toLowerCase();
     // Assets/networks define the route; the provider picker only contains
     // compatible providers and must never silently switch assets.
-    if (!new RegExp(route, "i").test((await this.selectedProvider().textContent()) ?? "")) {
+    if ((await this.page.locator(".transfer-route-card").getAttribute("data-provider")) !== provider) {
       await this.setChain("Sepolia");
       await this.page.locator(".token-select-trigger").first().click();
       const token = route === "AggLayer" ? "ETH Ether" : route === "USDCx" ? "USDC Circle USDC" : "USDC Epoch test USDC";
       await this.page.getByRole("listbox", { name: "Token", exact: true })
         .getByRole("option", { name: token, exact: true }).click();
     }
-    // Case-insensitive: the semantic route name ("AggLayer") differs from the
-    // UI label casing ("Agglayer", lowercase L).
-    await expect(this.selectedProvider()).toContainText(
-      new RegExp(route, "i"),
-    );
+    await this.expectRoute(provider);
+  }
+
+  async expectRoute(provider: string): Promise<void> {
+    await expect(this.page.locator(".transfer-route-card")).toHaveAttribute("data-provider", provider);
   }
 
   async setChain(label: string): Promise<void> {
@@ -49,16 +64,6 @@ export class BridgePage {
     await input.fill(amount);
   }
 
-  /** Opt-in Miden balance fetch (AggLayer send needs the resolved ETH faucet). */
-  async showMidenBalance(): Promise<void> {
-    const button = this.page.locator("button.balance-show");
-    if ((await button.count()) === 0) return;
-    await button.click();
-    await expect(this.page.locator("button.balance-show")).toHaveCount(0, {
-      timeout: 20_000,
-    });
-  }
-
   async waitForActivityPage(timeout = 60_000): Promise<void> {
     await this.page.waitForURL(/\/activity\//, { timeout });
     await this.page.locator(".detail-simple, .rcpt-paper, .status-badge").first()
@@ -67,10 +72,6 @@ export class BridgePage {
 
   primaryButton() {
     return this.actionDock().locator(".primary-button");
-  }
-
-  routeTrigger() {
-    return this.page.locator(".route-trigger");
   }
 
   selectedProvider() {
@@ -112,27 +113,11 @@ export class BridgePage {
     await this.confirmPreflight();
   }
 
-  /** The first Current-transfer activity row, once one appears. */
-  async waitForActivityRow(timeout = 120_000) {
-    await this.page.getByRole("tab", { name: /Activity/ }).click();
-    const row = this.page.locator(".home-activity-item").first();
-    await row.waitFor({ state: "visible", timeout });
-    return row;
-  }
-
-  async openActivity(): Promise<void> {
-    await (await this.waitForActivityRow()).click();
-    await this.page.locator(".detail-simple").waitFor({ state: "visible" });
-  }
-
-  /** Read persisted activities via the gated window hook. */
+  /** Inspect the durable receipt format used for reload/recovery. */
   async readActivities(): Promise<Array<Record<string, unknown>>> {
     return this.page.evaluate(
-      () => (window.__E2E__?.readActivities() ?? []) as Array<Record<string, unknown>>,
+      () => JSON.parse(localStorage.getItem("miden.bridge.ui.activities.v2") ?? "[]") as Array<Record<string, unknown>>,
     );
   }
 
-  async statusBadgeText(): Promise<string> {
-    return (await this.page.locator(".status-badge").first().textContent()) ?? "";
-  }
 }

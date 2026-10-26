@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 /** Resolve a reviewed revision once; replace the current files only after both networks validate. */
+import { withPortalEpochRoutes } from "../src/config/wallet-config/epoch-mainnet.ts";
 import { readFile, writeFile, rename } from "node:fs/promises";
 import { arcMainnet, arcTestnet } from "../src/config/arc.ts";
 import { bridgeConfigSchema, walletDocumentSchema } from "../src/config/wallet-config/schema.ts";
@@ -121,7 +122,7 @@ const configs = await Promise.all(["testnet", "mainnet"].map(async environment =
     schemaVersion: 1, id: `${environment}:${document.version}`, environment, document,
     derived: { usdcxFaucetId: `0x${remote.slice(34, 64)}`.toLowerCase() },
   }));
-  assertTokenConnections(config, tokenRegistry[environment]);
+  assertTokenConnections(bridgeConfigSchema.parse(withPortalEpochRoutes(config)), tokenRegistry[environment]);
   return { revision, ...config };
 }));
 // Fetching and verification finish before either existing file is replaced.

@@ -31,6 +31,10 @@ export type BridgeActivity = {
    * Epoch receives do not have an Agglayer bridge destination. */
   midenAccountHex?: string;
   sourceTxHash?: string;
+  /** Accepted Miden wallet request; retained before an on-chain hash is known. */
+  midenWalletRequestId?: string;
+  /** Expected source output note, distinct from the wallet request and tx hash. */
+  midenNoteId?: string;
   /** Actual wallet transaction identity, retained across fee replacements and reloads. */
   sourceTransaction?: SourceTransaction;
   sourceOriginalTxHash?: string;
@@ -47,6 +51,15 @@ export type BridgeActivity = {
   epochIntentNonce?: string;
   /** Epoch sponsor / user address the intent status is keyed on (EVM 0x). */
   epochSponsor?: string;
+  /** Compact collateral evidence survives an allocator error or lost response. */
+  epochDepositId?: string;
+  epochClaimHash?: string;
+  epochDepositConfirmed?: boolean;
+  epochError?: string;
+  /** Submission was interrupted before Epoch returned a delivery tracking reference. */
+  epochRecoveryRequired?: boolean;
+  /** Inclusion of this withdrawal's collateral note; not evidence of EVM delivery. */
+  epochMidenBlock?: number;
   /** Circle attestation is separate from inclusion of the recipient's Miden note. */
   xreserveStatus?: "submitted" | "confirmed" | "attested" | "delivered" | "reverted" | "cancelled" | "replaced";
   xreserveNoteId?: string;

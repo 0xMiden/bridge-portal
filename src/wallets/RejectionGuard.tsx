@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
+import { isUserRejection } from "./errors";
 
 // Some wallet SDKs surface a declined prompt as an unhandled promise rejection
 // from an internal fire-and-forget task (our own await/try-catch already handles
@@ -9,23 +10,6 @@ import { useEffect } from "react";
 // real errors still propagate normally.
 export function RejectionGuard() {
   useEffect(() => {
-    function isUserRejection(reason: unknown): boolean {
-      const code =
-        typeof reason === "object" && reason !== null && "code" in reason
-          ? (reason as { code?: unknown }).code
-          : undefined;
-      const message = (
-        reason instanceof Error ? reason.message : String(reason ?? "")
-      ).toLowerCase();
-      return (
-        code === 4001 ||
-        message.includes("user rejected") ||
-        message.includes("user denied") ||
-        message.includes("denied transaction") ||
-        message.includes("rejected the request")
-      );
-    }
-
     function onRejection(event: PromiseRejectionEvent) {
       if (isUserRejection(event.reason)) event.preventDefault();
     }

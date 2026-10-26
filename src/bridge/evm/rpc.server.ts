@@ -25,6 +25,11 @@ export function evmRpcUrls(network: EvmNetwork): string[] {
       process.env.ARBITRUM_RPC_URL,
       ...evmNetworks.arbitrum.rpcUrls.default.http,
     ],
+    polygon: [
+      process.env.POLYGON_RPC_URL,
+      ...evmNetworks.polygon.rpcUrls.default.http,
+      "https://polygon-bor-rpc.publicnode.com",
+    ],
     sepolia: [
       process.env.AGGLAYER_SEPOLIA_RPC_URL,
       process.env.EVM_RPC_URL,

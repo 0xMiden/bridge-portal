@@ -13,6 +13,8 @@ const eslintConfig = defineConfig([
     files: [
       "src/bridge/core/quote.ts",
       "src/bridge/evm/approval-store.ts",
+      "src/bridge/miden-address*.ts",
+      "src/bridge/miden-rpc*.ts",
       "src/bridge/providers/agglayer/**/*.ts",
       "src/app/api/agglayer/**/route.ts",
       "src/bridge/evm/deposit-wallet.ts",

@@ -1,9 +1,10 @@
 "use client";
 
-import { createContext, useContext, useSyncExternalStore, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useState, useSyncExternalStore, type ReactNode } from "react";
 import { usePathname } from "next/navigation";
 import { isBridgeEnvironment, type BridgeEnvironment } from "../../config/environment";
-import { loadStoredActivities } from "../lib/bridge-persistence";
+import { useActivitySnapshot } from "./ActivityProvider";
+import type { ActivityReceipt } from "../../bridge/activity";
 
 const storageKey = "miden.bridge.ui.environment";
 const changeEvent = "bridge-network-change";
@@ -19,15 +20,15 @@ function selectEnvironment(environment: BridgeEnvironment) {
   window.dispatchEvent(new Event(changeEvent));
 }
 
-function readEnvironment(pathname: string): BridgeEnvironment {
+function readEnvironment(pathname: string, receipts: readonly ActivityReceipt[]): BridgeEnvironment {
   // A receipt always uses its recorded network, regardless of the tab's selection.
   const receipt = /^\/activity\/([^/]+)\/?$/.exec(pathname);
   if (receipt) {
     try {
-      const activity = loadStoredActivities().find(item => item.id === decodeURIComponent(receipt[1]));
+      const activity = receipts.find(item => item.activity.id === decodeURIComponent(receipt[1]))?.activity;
       if (activity?.environment) return activity.environment;
     } catch {
-      // The receipt page handles missing or unreadable history.
+      // A malformed receipt URL cannot select a network.
     }
   }
   try {
@@ -51,18 +52,28 @@ function subscribe(listener: () => void) {
 const NetworkContext = createContext({
   environment: "mainnet" as BridgeEnvironment,
   selectEnvironment,
+  selectionLocked: false,
+  lockSelection: (): (() => void) => () => {},
 });
 export const useBridgeEnvironment = () => useContext(NetworkContext).environment;
 export const useSelectBridgeEnvironment = () => useContext(NetworkContext).selectEnvironment;
+export const useNetworkSelectionLocked = () => useContext(NetworkContext).selectionLocked;
+export const useLockNetworkSelection = () => useContext(NetworkContext).lockSelection;
 
 export function NetworkProvider({ children }: { children: ReactNode }) {
+  const [pendingSubmissions, setPendingSubmissions] = useState(0);
+  const lockSelection = useCallback(() => {
+    setPendingSubmissions(count => count + 1);
+    return () => setPendingSubmissions(count => count - 1);
+  }, []);
   const pathname = usePathname();
+  const { ready, receipts } = useActivitySnapshot();
   const environment = useSyncExternalStore(
     subscribe,
-    () => readEnvironment(pathname),
+    () => readEnvironment(pathname, receipts),
     () => null,
   );
   // Resolve the saved network before mounting wallet sessions or balance stores.
-  if (!environment) return null;
-  return <NetworkContext.Provider value={{ environment, selectEnvironment }}>{children}</NetworkContext.Provider>;
+  if (!ready || !environment) return null;
+  return <NetworkContext.Provider value={{ environment, selectEnvironment, selectionLocked: pendingSubmissions > 0, lockSelection }}>{children}</NetworkContext.Provider>;
 }

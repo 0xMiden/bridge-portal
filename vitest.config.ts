@@ -1,8 +1,7 @@
 import { defineConfig } from "vitest/config";
 
-// Unit tier only: fast, pure-logic tests (no DOM, no WASM). Browser-based e2e
-// lives under e2e/ and runs via Playwright, never vitest — jsdom can't load the
-// Miden/Epoch WASM, so keep the two tiers' runners strictly separate.
+// Node unit/integration tests include real SDK codecs where practical.
+// Browser lifecycle and UI scenarios run separately with Playwright.
 export default defineConfig({
   test: {
     environment: "node",
@@ -18,7 +17,6 @@ export default defineConfig({
         "src/**/*.test.ts",
         "src/**/*.test.tsx",
         "src/**/*.d.ts",
-        "src/wallets/testing/**",
         "src/app/lib/activity-demo.ts",
         "src/app/components/motion/**",
       ],

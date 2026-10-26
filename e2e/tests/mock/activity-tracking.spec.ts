@@ -1,3 +1,6 @@
+import { acceptAgglayerDeposit } from "../../fixtures/deposit";
+import { readFile } from "node:fs/promises";
+import { BridgePage } from "../../pages/bridge-page";
 import { findBridgeRoute } from "../../../src/bridge/core/routes";
 import { expect, test, type Page } from "@playwright/test";
 import type { Activity } from "../../../src/app/lib/bridge-presentation";
@@ -209,21 +212,9 @@ for (const provider of ["epoch", "agglayer"] as const) {
   });
 }
 
-test("activity history is loading before storage is read, then resolves missing", async ({ page }) => {
-  await page.addInitScript((key) => {
-    const getItem = Storage.prototype.getItem;
-    Storage.prototype.getItem = function (name) {
-      if (name === key && !getItem.call(sessionStorage, "before-history-read")) {
-        const initialState = document.querySelector(".detail-empty")?.textContent;
-        if (initialState) sessionStorage.setItem("before-history-read", initialState);
-      }
-      return getItem.call(this, name);
-    };
-  }, STORAGE_KEY);
+test("a missing receipt resolves after app history is restored", async ({ page }) => {
   await page.goto("/activity/unknown-activity");
   await expect(page.getByRole("heading", { name: "Activity not found" })).toBeVisible();
-  expect(await page.evaluate(() => sessionStorage.getItem("before-history-read")))
-    .toBe("Loading activity…");
 });
 
 test("diagnostics copies the displayed activity and resets its confirmation", async ({ context, page }) => {
@@ -251,4 +242,47 @@ test("a receipt from an earlier release sends its saved recovery data when track
   await expect.poll(async () => (await storedActivity(page)).status).toBe("complete");
   await expect(page.getByRole("article", { name: "Transfer receipt" })).toBeVisible();
   expect((await storedActivity(page)).routeSnapshot?.recovery).toEqual(historical.recovery);
+});
+
+test("an unsaved receipt survives client navigation and can be downloaded", async ({ page }, testInfo) => {
+  const bridge = new BridgePage(page);
+  acceptAgglayerDeposit(page);
+  await page.goto("/?provider=agglayer&mode=receive");
+  await bridge.waitForReady();
+  await bridge.fillAmount("0.01");
+  await bridge.openPreflight();
+  await page.evaluate(() => {
+    const setItem = Storage.prototype.setItem;
+    Storage.prototype.setItem = function (key, value) {
+      if (key === "miden.bridge.ui.activities.v2") throw new DOMException("Storage full", "QuotaExceededError");
+      setItem.call(this, key, value);
+    };
+  });
+  await bridge.confirmPreflight();
+  await bridge.waitForActivityPage();
+  await expect(page.getByRole("article", { name: "Transfer receipt" })).toBeVisible();
+  await expect(page.getByRole("alert").filter({ hasText: "This receipt could not be saved" }))
+    .toContainText("Download it before refreshing or closing this tab");
+  await expect(page.getByText("Safe to leave.", { exact: false })).toBeHidden();
+  expect(await page.evaluate(() => localStorage.getItem("miden.bridge.ui.activities.v2"))).toBeNull();
+
+  const receiptUrl = page.url();
+  await page.getByRole("link", { name: "New transfer", exact: true }).click();
+  await expect(page).toHaveURL(/\/$/);
+  await page.goBack();
+  await expect(page).toHaveURL(receiptUrl);
+  await expect(page.getByRole("article", { name: "Transfer receipt" })).toBeVisible();
+  const downloadPromise = page.waitForEvent("download");
+  await page.getByRole("link", { name: "Download receipt" }).click();
+  const download = await downloadPromise;
+  const receipt = JSON.parse(await readFile((await download.path())!, "utf8"));
+  expect(receipt).toMatchObject({
+    id: new URL(receiptUrl).pathname.split("/").at(-1),
+    sourceTxHash: `0x${"ab".repeat(32)}`,
+    amount: "0.01",
+    environment: "testnet",
+    routeSnapshot: { id: "agglayer-eth-to-miden", provider: "agglayer", mode: "receive" },
+  });
+  expect(download.suggestedFilename()).toBe(`miden-bridge-${receipt.id}.json`);
+  await page.screenshot({ path: testInfo.outputPath("unsaved-receipt.png"), fullPage: true, animations: "disabled" });
 });

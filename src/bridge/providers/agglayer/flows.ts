@@ -8,6 +8,7 @@ import {
   agglayerConfig,
 } from "./agglayer";
 import { submitAgglayerDeposit } from "./deposit";
+import { quoteAgglayer } from "./quote";
 
 import { chainObservationSchema, depositStatusSchema, withdrawalStatusSchema, type ChainTxObservation } from "./status-schema";
 import type { Activity } from "../../core/models";
@@ -29,9 +30,7 @@ async function sourceTransaction(hash: string, signal: AbortSignal, network: Evm
 
 export const flows: ProviderFlows = {
   receive: {
-    async quote() {
-      return null;
-    },
+    quote: quoteAgglayer,
     async submit({ input, route, phase, record }) {
       const AGGLAYER_TESTNET = agglayerConfig(route.recovery);
       const { provider, address } = input.evmWallet;
@@ -81,10 +80,8 @@ export const flows: ProviderFlows = {
     },
   },
   send: {
-    async quote() {
-      return null;
-    },
-    async submit({ input, route, phase, record }) {
+    quote: quoteAgglayer,
+    async submit({ input, route, phase, record, update }) {
       const AGGLAYER_TESTNET = agglayerConfig(route.recovery);
       const wallet = input.midenWallet;
       if (!wallet.requestTransaction || !wallet.waitForTransaction || !wallet.address)
@@ -108,15 +105,15 @@ export const flows: ProviderFlows = {
         senderAddress: wallet.address,
         requestTransaction: wallet.requestTransaction,
         waitForTransaction: wallet.waitForTransaction,
+        onSubmitted: ({ requestId, noteId }) => record({
+          status: "source_finality", eta: "Waiting for Miden confirmation",
+          destination, midenAccount: wallet.address, evmAddress: destination,
+          midenWalletRequestId: requestId, midenNoteId: noteId,
+          sourceNetworkId: AGGLAYER_TESTNET.destinationNetworkId,
+          destinationNetworkId: AGGLAYER_TESTNET.sourceNetworkId,
+        }),
       }, route.recovery);
-      record({
-        status: "source_finality",
-        eta: "10-20 min",
-        destination,
-        midenTxId: txHash,
-        sourceNetworkId: AGGLAYER_TESTNET.destinationNetworkId,
-        destinationNetworkId: AGGLAYER_TESTNET.sourceNetworkId,
-      });
+      update({ sourceTxHash: txHash, midenTxId: txHash, eta: "10-20 min" });
     },
     monitor: {
       canPoll: (activity) =>
@@ -128,7 +125,7 @@ export const flows: ProviderFlows = {
         let exitHashes = activity.agglayerExitHashes;
         if (!exitHashes?.length) {
           const hash = activity.midenTxId ?? activity.sourceTxHash;
-          if (!hash) return { patch: {}, warning: "The Miden transaction ID is missing. This withdrawal cannot be matched yet." };
+          if (!hash) return unconfirmedWithdrawal(activity);
           const params = new URLSearchParams({ sourceTxHash: hash });
           const response = await fetch(`/api/agglayer/withdrawal?${params}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ recovery }), cache: "no-store", signal });
           if (!response.ok) throw new Error("Unable to recover the withdrawal's identity. Tracking will retry.");
@@ -154,6 +151,14 @@ export const flows: ProviderFlows = {
 function needsReceiveTracking(activity: Activity) {
   if (activity.status === "failed") return false;
   return !(activity.status === "complete" && activity.midenTxId);
+}
+
+function unconfirmedWithdrawal(activity: Activity) {
+  return {
+    patch: {},
+    warning: activity.midenWalletRequestId ? undefined
+      : "The Miden transaction ID is missing. This withdrawal cannot be matched yet.",
+  };
 }
 
 async function observeDeposit(activity: Activity, signal: AbortSignal, recovery?: BridgeConfig) {

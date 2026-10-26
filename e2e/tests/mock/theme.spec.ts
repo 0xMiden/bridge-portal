@@ -62,16 +62,14 @@ for (const theme of ["Light", "Dark"] as const) {
     await bridge.fillAmount("1");
     await page.getByRole("button", { name: "Theme: System" }).click();
     await page.getByRole("menuitemradio", { name: theme, exact: true }).click();
-    await bridge.routeTrigger().click();
     await expect(bridge.providerOptions()).toBeVisible();
     const samples = await page.evaluate(() => {
       const pairs = [
         [".swap-box input", ".swap-box"],
         [".balance-line", ".swap-box"],
-        [".selected-provider", ".transfer-route-card"],
-        [".route-trigger", ".transfer-route-card"],
-        [".route-tag.testnet", ".provider-option"],
-        [".provider-costs", ".provider-option"],
+        [".selected-provider", ".provider-option > span"],
+        [".provider-option .text-xl", ".provider-option > span"],
+        [".provider-option .text-accent-foreground", ".provider-option > span"],
         [".primary-action-dock .primary-button", ".primary-action-dock .primary-button"],
       ];
       return pairs.map(([textSelector, surfaceSelector]) => {
@@ -84,7 +82,6 @@ for (const theme of ["Light", "Dark"] as const) {
     for (const sample of samples) {
       expect(contrastRatio(sample.foreground, sample.background, sample.backdrop), sample.textSelector).toBeGreaterThanOrEqual(4.5);
     }
-    await bridge.routeTrigger().click();
     await page.screenshot({ path: info.outputPath(`bridge-${theme.toLowerCase()}.png`), fullPage: true, animations: "disabled" });
   });
 }
@@ -109,6 +106,10 @@ test("theme choice is keyboard accessible, persistent, and system-aware", async 
   const system = menu.getByRole("menuitemradio", { name: "System" });
 
   await expect(menu).toBeVisible();
+  await expect(system).toBeFocused();
+  await system.press("ArrowRight");
+  await expect(light).toBeFocused();
+  await light.press("ArrowLeft");
   await expect(system).toBeFocused();
   await system.press("ArrowDown");
   await expect(light).toBeFocused();

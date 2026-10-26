@@ -2,25 +2,15 @@
 
 import { useBridgeEnvironment } from "./NetworkProvider";
 import { useQuery } from "@tanstack/react-query";
-import { formatUsdAmount, PRICE_REFRESH_MS, priceSymbol, type UsdPrice } from "../lib/token-pricing";
+import { formatUsdAmount, priceSymbol } from "../lib/token-pricing";
+import { usdPriceQuery } from "../lib/usd-price-query";
 
-export function FiatAmount({ amount, symbol }: { amount: string; symbol: string }) {
+const sizes = { field: "text-xs/normal", receipt: "text-sm", review: "text-sm" };
+
+export function FiatAmount({ amount, symbol, size = "field" }: { amount: string; symbol: string; size?: keyof typeof sizes }) {
   const environment = useBridgeEnvironment();
   const marketSymbol = priceSymbol(symbol);
-  const price = useQuery({
-    // Both panels, networks and aliases share the same market price. Typing
-    // changes only the local calculation, never the query or its cache key.
-    queryKey: ["usd-price", marketSymbol],
-    enabled: marketSymbol !== null,
-    queryFn: async ({ signal }): Promise<UsdPrice> => {
-      const response = await fetch(`/api/prices?symbol=${marketSymbol}`, { signal });
-      if (!response.ok) throw new Error("USD price unavailable");
-      return response.json();
-    },
-    staleTime: PRICE_REFRESH_MS,
-    refetchInterval: PRICE_REFRESH_MS,
-    retry: false,
-  });
+  const price = useQuery(usdPriceQuery(marketSymbol));
 
   const unavailable = price.isError || price.fetchStatus === "paused";
   const value = formatUsdAmount(amount, unavailable ? undefined : price.data?.usd);
@@ -29,5 +19,5 @@ export function FiatAmount({ amount, symbol }: { amount: string; symbol: string 
     ? `${value} estimated using the ${marketSymbol ?? symbol}/USD market price from Coinbase.${environment === "testnet" ? " Testnet tokens have no real USD value." : ""}`
     : loading ? "Loading USD estimate…" : `USD estimate unavailable for ${symbol}.`;
 
-  return <small className="fiat-amount" title={title}>{value ?? (loading ? "…" : "—")}</small>;
+  return <small className={`fiat-amount min-w-0 truncate text-muted-foreground ${sizes[size]}`} title={title}>{value ?? (loading ? "…" : "—")}</small>;
 }

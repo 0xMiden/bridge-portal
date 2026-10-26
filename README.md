@@ -55,9 +55,9 @@ local extension testing through `window.ethereum`.
 ### Environment variables
 
 All variables and their defaults are documented in
-[`.env.example`](.env.example); the E2E harness knobs live in
-[`.env.e2e.example`](.env.e2e.example). Every var has an in-code fallback, so
-the app boots with none of them set. In brief:
+[`.env.example`](.env.example). Every var has an in-code fallback, so the app
+boots with none of them set. Browser tests configure their mock wallets
+automatically and require no wallet credentials. In brief:
 
 | Var | Scope | Purpose |
 | --- | --- | --- |
@@ -99,7 +99,22 @@ local token-logo paths, and stable receive/send route IDs. Logos are bundled in
 for route assets and the asset exports used by faucet actions. There is no runtime
 or build dependency on `token-list`.
 Bridge contracts, provider endpoints, and availability switches continue to
-come from the existing wallet-config documents. An absent direction is not
+come from the existing wallet-config documents, with one explicit portal rollout
+in `src/config/wallet-config/epoch-mainnet.ts`: Cedar USDCx ↔ native USDC on
+Ethereum, Base, Arbitrum and Polygon uses `https://miden-smallocator.epochprotocol.xyz`
+and enables both Epoch directions independently of upstream's `fastBridge` flag.
+The pinned upstream files and revision remain intact; release validation checks
+the effective configuration and receipts save it. The faucet comes from the
+verified Cedar USDCx registry metadata. The allocator was confirmed via
+[wallet-config PR #23](https://github.com/0xMiden/wallet-config/pull/23) and live
+quotes in both directions on October 24, 2026. Quotes depend on the entered amount
+and current liquidity: preview requires a positive, unexpired matching quote,
+and execution fetches and validates another quote before signing collateral.
+The Epoch mainnet SDK and commons graph are pinned together. The legacy
+`NEXT_PUBLIC_EPOCH_ALLOCATOR_URL` override applies only to testnet.
+`POLYGON_RPC_URL` optionally overrides Polygon's server-side read RPC.
+
+An absent direction is not
 implemented; `disabled` keeps retired connections addressable.
 
 To update the pin, use Node 22.18 or later and an explicit upstream commit:
@@ -153,12 +168,25 @@ session storage and can differ across tabs. EVM submission checks the required
 chain and account; every new submission checks the reviewed config, including
 transfers without fee quotes. Quotes also bind the route, amount and recipients.
 
+Bridge-in deposits are capped at a projected connected-account balance of
+**$1,232.462**. The portal sums wallet holdings with available prices using trusted
+faucet identities, then adds the gross deposit value before fees. Unknown or
+unpriced holdings are excluded from the total and do not block deposits.
+Comparisons preserve token and price decimal precision. Unavailable balances or
+a missing/stale price for the deposit itself show an error with an explicit retry.
+The cap notice appears only when the amount exceeds the limit.
+Confirmation refreshes the account balance and prices
+before any provider submission. This is a frontend safeguard, applied on both
+network selections (testnet uses equivalent market estimates); withdrawals and
+incoming note consumption are unrestricted by this cap. Pending deposits are
+not reserved against the allowance until they appear in the wallet balance.
+
 Bread must support the selected network. The installed adapter forwards the
 `mainnet` connection string even though its published enum omits it; network
 prefix checks reject wrong-network accounts before signing. Mainnet requires an
 `mm1…` address; raw account IDs remain supported only for legacy testnet callers.
 Use a mainnet-capable Bread release for manual end-to-end validation. The automated
-suite uses mock signatures and does not transfer mainnet funds.
+suite supplies extension responses and does not sign or transfer mainnet funds.
 
 `GET /health/deep` remains the legacy testnet upstream check; it does not attest
 to mainnet availability. Network-specific quote/status endpoints validate the
@@ -221,16 +249,26 @@ npm run test             # vitest run
 npm run build            # next build --webpack
 ```
 
-### End-to-end (Playwright)
+### Browser integration tests (Playwright)
 
 ```bash
 npm run playwright:install     # one-time: chromium + deps
-npm run test:e2e:mock          # mock tier: no secrets, network stubbed
-npm run test:e2e:testnet       # live Sepolia + Miden; needs .env.e2e
+npm run test:browser           # production app; simulated external wallets and responses
 ```
 
-CI runs that suite on `main` / `workflow_dispatch` (serialized, one funded key).
-It skips cleanly until the `E2E_*` repo secrets exist. See `docs/runbook.md`.
+CI runs the browser suite on pull requests and pushes to `main`. Production
+deployment follows successful CI on `main`. Playwright runs the ordinary production build with the real wallet providers.
+Fixtures inject extension transports and intercept remote responses. Transaction
+checks inspect calldata or deserialize Miden wallet requests using the shipped
+browser WASM; simulated acceptance is supplied only after checking the request.
+The browser runner supplies a placeholder public WalletConnect project ID and
+intercepts wallet discovery responses. No private keys, seeds, funded accounts,
+Reown account, or live signing are used.
+
+Passing CI verifies UI, lifecycle, transaction construction and recovery under
+controlled external responses. It does not verify live proving, broadcasting,
+liquidity or settlement. Run the manual testnet release check in
+[`docs/runbook.md`](docs/runbook.md) for that evidence.
 
 ## Docker
 

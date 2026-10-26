@@ -1,30 +1,24 @@
 import { test, expect } from "../../fixtures/bridge";
+import { expectAgglayerDeposit } from "../../fixtures/deposit";
+import { respondToWallet, walletRequests } from "../../fixtures/wallets";
 
-// Cancelling the wallet prompt (injected signer throws 4001) shows the friendly
-// inline message and leaves the app intact — the regression behind the
-// blank-page-on-cancel fix.
-test("cancelled wallet prompt: friendly message, no blank page", async ({
-  bridge,
-  page,
-}) => {
-  await test.step("wallets ready", () => bridge.waitForReady());
-
-  await test.step("arm reject mode", () =>
-    page.evaluate(() => window.localStorage.setItem("e2e-signer-mode", "reject")),
-  );
-
-  await test.step("USDCx receive, small amount", async () => {
-    await bridge.setRoute("USDCx");
-    await bridge.setMode("Receive");
-    await bridge.fillAmount("0.01");
+// Reject the actual deposit signature, after production validation and encoding.
+test("rejecting a deposit signature preserves the form without creating a receipt", async ({ bridge, page }) => {
+  const signature = Promise.withResolvers<void>();
+  respondToWallet(page, async request => {
+    expectAgglayerDeposit(request);
+    await signature.promise;
+    return { error: { code: 4001, message: "User rejected the request." } };
   });
-
-  await test.step("submit rejects → friendly message, card intact", async () => {
-    await bridge.submit();
-    await expect(page.locator(".form-error")).toContainText(/cancelled/i);
-    await expect(page.locator(".swap-card")).toBeVisible();
-    // No activity row was created for a rejected submit.
-    const activities = await bridge.readActivities();
-    expect(activities.length).toBe(0);
-  });
+  await bridge.setRoute("AggLayer");
+  await bridge.fillAmount("0.01");
+  await bridge.submit();
+  await expect(page.getByRole("combobox", { name: "Bridge network" })).toBeDisabled();
+  signature.resolve();
+  await expect(page.locator(".form-error")).toContainText(/cancelled/i);
+  await expect(page.getByRole("combobox", { name: "Bridge network" })).toBeEnabled();
+  expect((await walletRequests(page)).filter(request => request.method === "eth_sendTransaction")).toHaveLength(1);
+  await expect(page.locator(".swap-card")).toBeVisible();
+  await expect(page.getByRole("textbox", { name: "Amount", exact: true })).toHaveValue("0.01");
+  expect(await bridge.readActivities()).toEqual([]);
 });

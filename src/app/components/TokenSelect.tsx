@@ -21,7 +21,7 @@ export function TokenSelect({
   const active = route[side];
   const routes = routesForEnvironment(routeEnvironment(route)).filter((option) => !bridgeProviders[option.provider].disabled);
   const options = tokenChoices(route, side, routes);
-  const selectedToken = <><TokenLogo asset={active} /><span className="token-select-symbol">{active.symbol}</span></>;
+  const selectedToken = <><TokenLogo asset={active} compact /><span className="token-select-symbol tracking-[-0.02em]">{active.symbol}</span></>;
 
   return (
     <ListboxSelect
@@ -37,7 +37,7 @@ export function TokenSelect({
         return {
           value: assetKey(token),
           label: `${token.symbol} ${name}`,
-          content: <><TokenLogo asset={token} /><span className="token-option-text"><strong>{token.symbol}</strong><small>{name}</small></span></>,
+          content: <><TokenLogo asset={token} /><span className="token-option-text flex min-w-0 flex-col gap-px"><strong className="text-[15px]/[1.4] font-semibold">{token.symbol}</strong><small className="text-xs/[1.4] text-muted-foreground">{name}</small></span></>,
         };
       })}
       onChange={(id) => {

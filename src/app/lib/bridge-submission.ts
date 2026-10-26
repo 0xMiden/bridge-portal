@@ -6,9 +6,7 @@ import { findBridgeRoute, routeEnvironment } from "../../bridge/core/routes";
 import type { Activity, BridgeProvider } from "../../bridge/core/models";
 import type { TransferSubmission, SubmissionEffects } from "../../bridge/core/submission";
 import { bridgeProviders, directionFor } from "../../bridge/providers/registry";
-import { shortAddress } from "../../wallets/identity";
 import { createActivity } from "./bridge-presentation";
-import { loadStoredActivities, patchStoredActivity, saveActivities } from "./bridge-persistence";
 import { errorMessage } from "./wallet-errors";
 
 const preloaded = new Map<BridgeProvider, Promise<unknown>>();
@@ -26,7 +24,7 @@ export function preloadBridgeSubmission(provider: BridgeProvider) {
 
 export type { TransferSubmission, SubmissionEffects } from "../../bridge/core/submission";
 
-/** Wallet lifecycle, persistence and errors are identical for all adapters. */
+/** Wallet lifecycle, receipt publication and errors are identical for all adapters. */
 export async function submitBridgeTransfer(
   input: TransferSubmission,
   effects: SubmissionEffects,
@@ -55,11 +53,9 @@ export async function submitBridgeTransfer(
   }
 
   let recorded: Activity | undefined;
-  const publish = () => effects.onActivitiesChange(loadStoredActivities());
   const update = (patch: Partial<Activity>) => {
     if (!recorded) return;
-    patchStoredActivity(recorded.id, patch);
-    publish();
+    recorded = effects.activities.patch(recorded.id, patch) ?? recorded;
   };
   effects.onSubmittingChange(true);
   try {
@@ -75,7 +71,8 @@ export async function submitBridgeTransfer(
       throw new Error("Your connected wallet changed. Review the transfer again.");
     }
     const { flows } = await bridgeProviders[route.provider].load();
-    if (directionFor(route).fees(route).requiresQuote) {
+    const requiresQuote = directionFor(route).fees(route).requiresQuote;
+    if (requiresQuote) {
       const quote = input.quote;
       if (
         !isQuoteReviewable(quote) ||
@@ -88,6 +85,16 @@ export async function submitBridgeTransfer(
         throw new Error("Refresh and review the quote before sending.");
       }
     }
+    if (route.mode === "receive") {
+      if (!effects.verifyBalanceCap) {
+        throw new Error("Unable to verify the $1,232.462 balance limit. Refresh the page and try again.");
+      }
+      await effects.verifyBalanceCap(route, input.amount, input.midenAccount);
+    }
+    // Account and price reads can outlast a reviewed quote's validity window.
+    if (requiresQuote && !isQuoteReviewable(input.quote)) {
+      throw new Error("Refresh and review the quote before sending.");
+    }
     await flows[route.mode].submit({
       input,
       route,
@@ -98,12 +105,7 @@ export async function submitBridgeTransfer(
           update(patch);
           return recorded;
         }
-        recorded = createActivity(route, input.amount, {
-          ...patch,
-          ...(patch.sourceTxHash ? { txHash: shortAddress(patch.sourceTxHash) } : {}),
-        });
-        saveActivities([recorded, ...loadStoredActivities()]);
-        publish();
+        recorded = effects.activities.record(createActivity(route, input.amount, patch));
         effects.navigate(`/activity/${recorded.id}`);
         return recorded;
       },

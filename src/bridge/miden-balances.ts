@@ -1,6 +1,6 @@
 import type { MidenFiWalletContextState } from "@miden-sdk/miden-wallet-adapter-react";
 import type { MidenAsset } from "./core/assets";
-import { e2eNetwork, isE2E } from "../wallets/testing/env";
+import { getMidenFaucetMetadata } from "./miden-rpc";
 
 type RequestAssets = NonNullable<MidenFiWalletContextState["requestAssets"]>;
 
@@ -10,6 +10,8 @@ export interface ResolvedMidenAsset {
   /** On-chain precision when available, otherwise the asset's configured value. */
   decimals: number;
   symbol: string;
+  /** Trusted registry identity; never inferred from a faucet's reported symbol. */
+  pricingSymbol?: string;
 }
 
 export type MidenBalances = Readonly<Partial<Record<
@@ -31,51 +33,31 @@ export function midenBalanceKey(account: string, asset: Pick<MidenAsset, "networ
   return JSON.stringify([normalizeId(account), asset.network, normalizeId(asset.faucetId)]);
 }
 
-/** One private-assets request supplies every route's token on the connected network. */
+/** One private-assets request retains the complete account, including unknown faucets. */
 export async function fetchMidenBalances(
   account: string,
   tokens: readonly MidenAsset[],
   requestAssets: RequestAssets,
+  network: MidenAsset["network"] = tokens[0]?.network ?? "miden-testnet",
 ): Promise<MidenBalances> {
   const { formatUnits } = await import("viem");
-  let canon = normalizeId;
-  let resolveMetadata = async (asset: MidenAsset) => ({
-    decimals: asset.decimals,
-    symbol: asset.symbol,
-  });
-
-  // Mock E2E must not load the browser-only WASM SDK.
-  if (!(isE2E() && e2eNetwork() === "mock")) {
-    const { AccountId, RpcClient, Endpoint, BasicFungibleFaucetComponent } =
-      await import("@miden-sdk/miden-sdk");
-    const accountId = (id: string) => {
-      const normalized = normalizeId(id);
-      return /^[0-9a-f]+$/.test(normalized)
-        ? AccountId.fromHex(`0x${normalized}`)
-        : AccountId.fromBech32(id.trim());
-    };
-    canon = (id) => {
-      try {
-        return normalizeId(accountId(id).toString());
-      } catch {
-        return normalizeId(id);
-      }
-    };
-    const rpc = new RpcClient(Endpoint.testnet());
-    resolveMetadata = async (asset) => {
-      try {
-        const fetched = await rpc.getAccountDetails(accountId(asset.faucetId));
-        const account = fetched.account();
-        if (account) {
-          const faucet = BasicFungibleFaucetComponent.fromAccount(account);
-          return { decimals: faucet.decimals(), symbol: faucet.symbol().toString() };
-        }
-      } catch {
-        // Unavailable or private faucet metadata uses the configured precision.
-      }
-      return { decimals: asset.decimals, symbol: asset.symbol };
-    };
-  }
+  const { normalizeMidenIdToHex } = await import("./miden-address-sdk");
+  const canon = (id: string) => {
+    try {
+      return normalizeId(normalizeMidenIdToHex(id));
+    } catch {
+      return normalizeId(id);
+    }
+  };
+  const resolveMetadata = async (asset: MidenAsset) => {
+    try {
+      const metadata = await getMidenFaucetMetadata(asset.faucetId, asset.network);
+      if (metadata) return metadata;
+    } catch {
+      // Unavailable or private faucet metadata uses the configured precision.
+    }
+    return { decimals: asset.decimals, symbol: asset.symbol };
+  };
 
   const assets = await requestAssets();
   const byFaucet = new Map<string, bigint>();
@@ -85,17 +67,30 @@ export async function fetchMidenBalances(
   }
 
   const balances: Record<string, ResolvedMidenAsset & { balance: string }> = {};
+  const registered = new Set<string>();
   for (const token of tokens) {
+    if (token.network !== network) continue;
+    const faucet = canon(token.faucetId);
+    if (registered.has(faucet)) continue;
+    registered.add(faucet);
     const key = midenBalanceKey(account, token);
-    if (balances[key]) continue;
-    const amountRaw = byFaucet.get(canon(token.faucetId)) ?? 0n;
+    const amountRaw = byFaucet.get(faucet) ?? 0n;
     const metadata = amountRaw > 0n ? await resolveMetadata(token) : token;
     balances[key] = {
       faucetId: token.faucetId,
       amountRaw,
       decimals: metadata.decimals,
       symbol: metadata.symbol,
+      pricingSymbol: token.symbol,
       balance: formatUnits(amountRaw, metadata.decimals),
+    };
+  }
+  for (const [faucetId, amountRaw] of byFaucet) {
+    if (registered.has(faucetId)) continue;
+    // Preserve unknown holdings without inventing a trusted market or precision.
+    // The deposit cap skips these unpriced assets.
+    balances[midenBalanceKey(account, { network, faucetId })] = {
+      faucetId, amountRaw, decimals: 0, symbol: "Unknown asset", balance: amountRaw.toString(),
     };
   }
   return balances;

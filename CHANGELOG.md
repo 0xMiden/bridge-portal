@@ -4,6 +4,8 @@
 
 ### Changes
 
+- [CHANGE] **Browser tests use simulated wallets without credentials.** Removed live testnet signing, seed-wallet creation, faucet funding, and the funded-account monitor. Production deploys follow successful `ci` on `main`.
+
 - [CHANGE] **Epoch testnet routes are re-enabled.** Sepolia ↔ Miden supports Epoch test USDC, DAI, USDT and WBTC using the v0.17 faucets published by [Epoch's faucet dashboard](https://userdashboard.epochprotocol.xyz/faucets). Retired USDC route IDs remain available for historical receipts; new selections use the current routes. Epoch mock tokens are labeled separately from Circle USDC.
 - [CHANGE] **Epoch token availability follows verified allocator estimates.** Both directions returned positive estimates on 2026-10-20 for the enabled token pairs. WETH returned no quote at 0.01, 1 or 10 tokens and is excluded. WBTC deposits quoted at 0.01 and 1 but not 10; every transfer requires a live estimate for its actual amount.
 - [CHANGE] **Epoch supports USDCx withdrawals to mock Sepolia USDC.** Miden USDCx can withdraw to Epoch's 18-decimal mock USDC (`0x2BB4FfD7E2c6D432b697554Efd77fA13bdbefd69`). The reverse direction returned no quote at 0.01, 1 or 10 tokens and stays unavailable. This route is separate from Circle USDC ↔ USDCx.
@@ -16,17 +18,14 @@
 - [CHANGE] **Miden SDK is upgraded to 0.17.1 and React/wallet adapters to 0.17.0.** The USDCx testnet faucet is pinned to `0x4cbdcaffe75f0a317482224dae6436`. Circle attestation remains pending until the exact v0.17 P2ID note is included on Miden; users consume the note in Bread.
 - [CHANGE] **The initial v0.17 upgrade keeps unverified routes unavailable.** USDCx withdrawals await a verified withdrawal integration. Existing Epoch/Agglayer deployment pins remain unchanged and require separate v0.17 deployment verification.
 - [CHANGE] **Epoch SDK is pinned to 1.0.39.** Miden collateral uses the SDK's reclaim window and mandate-binding attachment in a custom wallet transaction; both directions use the exported witness schemas.
-- [CHANGE] **Production deploys wait on live testnet E2E**, which itself waits on `ci`. The Worker is canaried at `/health/deep` after ship. A production bundle with inlined E2E keys fails the deploy.
 - [CHANGE] **`GET /health/deep`** checks Sepolia, Miden RPC, Epoch, and AggLayer. A cron hits it every 20 minutes. `/health` stays liveness-only.
-- [CHANGE] **Nightly pin-drift vs wallet main** (SDK version + AggLayer bridge/faucet ids) and a daily floor check on the throwaway Sepolia E2E account.
-- [CHANGE] **Live testnet E2E exists.** `npm run test:e2e:testnet` drives the four route x direction cells against Sepolia + Miden. CI runs it on main, serialized, and skips until `E2E_*` secrets are set.
+- [CHANGE] **Nightly pin-drift vs wallet main** (SDK version + AggLayer bridge/faucet ids).
 - [CHANGE] **Miden SDK 0.16.2.** `@miden-sdk/miden-sdk` and `@miden-sdk/react` plus the wallet adapters move off 0.15.7 onto the 0.16 line. B2AGG no longer calls `withCallbacks` (the flag is intrinsic to the faucet id). `npm run check:wasm-size` keeps the `st` wasm under 24 MiB.
-- [CHANGE] **CI is honest.** PRs now run typecheck, lint (`--max-warnings 0`), unit tests, and mock E2E. The old `e2e` workflow only ran vitest plus mock Playwright and still gated production deploys. Deploy now waits on the `ci` workflow.
+- [CHANGE] **CI is honest.** PRs now run typecheck, lint (`--max-warnings 0`), unit tests, and browser integration tests. The old `e2e` workflow only ran vitest plus mock Playwright and still gated production deploys. Deploy now waits on the `ci` workflow.
 - [CHANGE] **npm is the only installer.** Dropped the `packageManager: yarn@4` field that contradicted `package-lock.json` and `npm ci`. Node `>=22` is required, matching CI and the Dockerfile.
-- [CHANGE] **`npm run test:e2e:testnet` no longer pretends.** The script named a `playwright.e2e.config.ts` that is not in the tree. It now exits 1 with that message until live testnet E2E lands.
 - [CHANGE] **CSP framing is same-origin only.** Removed a personal Tailscale host from `frame-ancestors` and `allowedDevOrigins`.
 - [CHANGE] **Unit coverage is collected from every `src` file and gated.** First floor is the measured 12/11/9/12 (statements/branches/functions/lines). Sepolia RPC fallback, B2AGG construction, Epoch taskType, and pin freeze are now unit-tested.
-- [CHANGE] **Mock E2E submits all four route x direction cells.** Confirm creates an activity whose tx hash is a 32-byte hex, not a wallet-adapter UUID. Mock Miden `waitForTransaction` now returns a hash; mock Epoch/AggLayer balance paths skip live WASM/RPC.
+- [CHANGE] **Browser tests exercise the production application.** Removed alternate wallet providers, build flags and fabricated Epoch success. Extension transports now live in Playwright. Transaction checks decode real EVM calldata and serialized Miden notes; live settlement requires a manual testnet release check.
 
 ### Fixes
 

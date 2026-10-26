@@ -1,496 +1,148 @@
 "use client";
 
-import {
-  WalletReadyState,
-} from "@miden-sdk/miden-wallet-adapter-base";
-import {
-  type MidenFiWalletContextState,
-  useMidenFiWallet,
-} from "@miden-sdk/miden-wallet-adapter-react";
-import { ChevronDown, Copy, LogOut, RefreshCcw } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
-import {
-  midenWalletIdentity,
-  shortAddress,
-} from "../identity";
-import { useResetMidenProvider } from "./MidenWalletProvider";
-import { WalletMenu } from "../WalletMenu";
+import { Menu, MenuTrigger } from "../../app/components/ui/Menu";
+
+import { Copy, LogOut, RefreshCcw } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { midenWalletIdentity, shortAddress } from "../identity";
+import { WalletMenu, WalletMenuItem, WalletButton } from "../WalletMenu";
 import { WalletBrandIcon } from "../WalletBrandIcon";
-import { useBridgeEnvironment } from "../../app/components/NetworkProvider";
-import { midenNetworks, type BridgeEnvironment } from "../../config/environment";
-import { assertMidenAccountNetwork } from "./network";
-import { useMidenBalances } from "../../bridge/BalanceProvider";
+import { useMidenWallet } from "./useMidenWallet";
 
-export type MidenWalletSnapshot = {
-  address: string;
-  connected: boolean;
-  /** Adapter is mid-connect — drives the "Connecting…" state in the panel. */
-  connecting: boolean;
-  /** MidenFi extension present + loadable; false marks the wallet unavailable. */
-  ready: boolean;
-  error: string;
-  balanceText: string;
-  noteSyncStatus: string;
-  consumableNoteCount: number | null;
-  /**
-   * Miden write primitives surfaced upward so the (SSR'd) BridgeExperience can
-   * run an Epoch Miden→EVM send without importing the eager-WASM adapter itself.
-   * Undefined until the MidenFi adapter connects.
-   */
-  requestSend?: MidenFiWalletContextState["requestSend"];
-  // requestTransaction submits a custom (pre-built) TransactionRequest — the
-  // Agglayer B2AGG and Epoch mandate-bound P2IDE notes use this.
-  requestTransaction?: MidenFiWalletContextState["requestTransaction"];
-  waitForTransaction?: MidenFiWalletContextState["waitForTransaction"];
-  // requestConsumableNotes reads the account's notes for Miden-side history.
-  requestConsumableNotes?: MidenFiWalletContextState["requestConsumableNotes"];
-};
-
-type MidenWalletButtonProps = {
-  onStateChange: (state: MidenWalletSnapshot) => void;
-};
-
-type MidenWalletButtonInnerProps = MidenWalletButtonProps & {
-  onResetProvider: () => void;
-};
-
-const walletRequestTimeoutMs = 45_000;
-
-// Set once the user has connected; drives a silent session restore on the next
-// page load so the Miden wallet behaves like WalletConnect (stays connected
-// across refreshes) instead of dropping every reload. Separate from the
-// adapter's own selection key ("miden-bridge-wallet") so a reset clears both.
-const connectedKey = (environment: BridgeEnvironment) => environment === "testnet" ? "miden-bridge-wallet-connected" : "miden-bridge-wallet-connected.mainnet";
-
-function markWalletConnected(environment: BridgeEnvironment) {
-  try {
-    window.localStorage.setItem(connectedKey(environment), "1");
-  } catch {
-    // ignore storage failures — reconnect-on-refresh just won't fire
-  }
-}
-
-function clearWalletConnected(environment: BridgeEnvironment) {
-  try {
-    window.localStorage.removeItem(connectedKey(environment));
-  } catch {
-    // ignore storage failures
-  }
-}
-
-class WalletRequestTimeoutError extends Error {
-  constructor() {
-    super(
-      "Bread wallet did not return after 45 seconds. Reset the connection and try again.",
-    );
-    this.name = "WalletRequestTimeoutError";
-  }
-}
-
-function errorMessage(error: unknown) {
-  if (error instanceof Error) return error.message;
-  if (typeof error === "object" && error && "message" in error)
-    return String(error.message);
-  return "Something went wrong. Try again.";
-}
-
-function withWalletTimeout<T>(request: Promise<T>) {
-  let timeoutId: number | undefined;
-  const timeout = new Promise<never>((_, reject) => {
-    timeoutId = window.setTimeout(
-      () => reject(new WalletRequestTimeoutError()),
-      walletRequestTimeoutMs,
-    );
-  });
-
-  return Promise.race([request, timeout]).finally(() => {
-    if (timeoutId) window.clearTimeout(timeoutId);
-  });
-}
-
-function MidenWalletButtonInner({
-  onResetProvider,
-  onStateChange,
-}: MidenWalletButtonInnerProps) {
-  const wallet = useMidenFiWallet();
-  const environment = useBridgeEnvironment();
-  const [error, setError] = useState("");
+export function MidenWalletButton() {
+  const wallet = useMidenWallet();
   const [menuOpen, setMenuOpen] = useState(false);
   const [copied, setCopied] = useState(false);
-  const [noteSyncStatus, setNoteSyncStatus] = useState("Not connected");
-  const [consumableNoteCount, setConsumableNoteCount] = useState<number | null>(
-    null,
-  );
-  const menuRef = useRef<HTMLDivElement>(null);
-  // Deduplicate the menu's combined asset/note sync. Asset requests are also
-  // deduplicated with the bridge form by the shared balance store.
-  const refreshInflightRef = useRef<Promise<void> | null>(null);
-  const address = wallet.address ?? "";
-  const balances = useMidenBalances(wallet.connected ? address : "", midenNetworks[environment].network);
-  const heldAssets = Object.values(balances.balances ?? {}).flatMap((asset) => asset && asset.amountRaw > 0n ? [asset] : []);
-  const balanceText = !wallet.connected
-    ? "Not connected"
-    : balances.loading
-      ? "Syncing assets"
-      : balances.error
-        ? "Balance sync unavailable"
-        : balances.balances
-          ? heldAssets.map((asset) => `${asset.balance} ${asset.symbol}`).join(" · ") || "No bridge assets"
-          : "Connected";
-  const guardedRequestTransaction = useMemo(() => {
-    const request = wallet.requestTransaction;
-    const adapter = wallet.wallet?.adapter;
-    if (!request) return undefined;
-    return (...args: Parameters<typeof request>) => {
-      if (!adapter?.connected || adapter.address !== address) throw new Error("Your Miden wallet changed. Reconnect and review the transfer.");
-      assertMidenAccountNetwork(adapter.address, environment);
-      return request(...args);
-    };
-  }, [wallet.requestTransaction, wallet.wallet, address, environment]);
-  let networkError = "";
-  if (wallet.connected) { try { assertMidenAccountNetwork(address, environment); } catch (error) { networkError = errorMessage(error); } }
-  const readyState = wallet.wallet?.readyState;
-  const walletLogo = wallet.wallet?.adapter?.icon;
-  const ready =
-    readyState === WalletReadyState.Installed ||
-    readyState === WalletReadyState.Loadable;
+  const [copyError, setCopyError] = useState("");
+  const copyTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
-  useEffect(() => {
-    if (wallet.wallet || wallet.wallets.length === 0) return;
-    wallet.select(wallet.wallets[0].adapter.name);
-  }, [wallet]);
+  useEffect(() => () => clearTimeout(copyTimer.current), []);
 
-  // Silent session restore on load: if the user was connected before, reconnect
-  // to the same wallet once the adapter is selected + the extension is ready —
-  // so the Miden wallet survives a refresh like WalletConnect does, instead of
-  // needing a manual reconnect every time. Kept out of the adapter's built-in
-  // autoConnect (which could sit in "Connecting" forever). The same 45s timeout
-  // as a manual connect resets a hung restore rather than leaving the button stuck.
-  const autoReconnectTriedRef = useRef(false);
-  useEffect(() => {
-    if (autoReconnectTriedRef.current) return;
-    if (!ready || !wallet.wallet) return;
-    if (wallet.connected || wallet.connecting) return;
-    let wasConnected = false;
-    try {
-      wasConnected =
-        window.localStorage.getItem(connectedKey(environment)) === "1";
-    } catch {
-      // storage unavailable → no restore
-    }
-    if (!wasConnected) return;
-    autoReconnectTriedRef.current = true;
-    void withWalletTimeout(wallet.connect()).catch((restoreError) => {
-      if (restoreError instanceof WalletRequestTimeoutError) {
-        window.setTimeout(onResetProvider, 250);
-      } else {
-        // Stale/rejected session — drop the flag so we don't retry it every load.
-        clearWalletConnected(environment);
-      }
-    });
-  }, [ready, wallet, wallet.wallet, wallet.connected, wallet.connecting, onResetProvider, environment]);
-
-  useEffect(() => {
-    onStateChange({
-      address,
-      connected: wallet.connected,
-      connecting: wallet.connecting,
-      ready,
-      error: networkError || error,
-      balanceText,
-      noteSyncStatus,
-      consumableNoteCount,
-      requestSend: wallet.requestSend,
-      requestTransaction: guardedRequestTransaction,
-      waitForTransaction: wallet.waitForTransaction,
-      requestConsumableNotes: wallet.requestConsumableNotes,
-    });
-  }, [
-    address,
-    balanceText,
-    consumableNoteCount,
-    error,
-    noteSyncStatus,
-    onStateChange,
-    ready,
-    wallet.connected,
-    wallet.connecting,
-    wallet.requestSend,
-    guardedRequestTransaction,
-    networkError,
-    wallet.waitForTransaction,
-    wallet.requestConsumableNotes,
-  ]);
-
-  useEffect(() => {
-    if (!wallet.connected) {
-      queueMicrotask(() => {
-        setNoteSyncStatus("Not connected");
-        setConsumableNoteCount(null);
-      });
-      return;
-    }
-
-    // Asset balances load through the shared session on connection. Notes still
-    // require the menu's explicit "Sync wallet state" action.
-    queueMicrotask(() => {
-      setNoteSyncStatus("Refresh to sync");
-    });
-  }, [wallet.connected, address]);
-
-  useEffect(() => {
-    if (!menuOpen) return;
-
-    function closeMenu(event: MouseEvent | PointerEvent) {
-      if (!menuRef.current?.contains(event.target as Node)) setMenuOpen(false);
-    }
-
-    function closeOnEscape(event: KeyboardEvent) {
-      if (event.key === "Escape") setMenuOpen(false);
-    }
-
-    document.addEventListener("pointerdown", closeMenu);
-    document.addEventListener("keydown", closeOnEscape);
-    return () => {
-      document.removeEventListener("pointerdown", closeMenu);
-      document.removeEventListener("keydown", closeOnEscape);
-    };
-  }, [menuOpen]);
-
-  async function connectMidenWallet() {
-    setError("");
+  function invoke(action: () => void | Promise<void>) {
     setMenuOpen(false);
-    if (!ready) {
-      setError(
-        "Install or enable the Bread wallet extension, then refresh this page.",
-      );
-      return;
-    }
-
-    try {
-      await withWalletTimeout(wallet.connect());
-      markWalletConnected(environment);
-    } catch (connectError) {
-      setError(errorMessage(connectError));
-      if (connectError instanceof WalletRequestTimeoutError) {
-        window.setTimeout(onResetProvider, 250);
-      }
-    }
-  }
-
-  async function reconnectMidenWallet() {
-    setError("");
-    try {
-      if (wallet.connected) await wallet.disconnect();
-      await withWalletTimeout(wallet.connect());
-      markWalletConnected(environment);
-      setMenuOpen(false);
-    } catch (reconnectError) {
-      setError(errorMessage(reconnectError));
-      if (reconnectError instanceof WalletRequestTimeoutError) {
-        window.setTimeout(onResetProvider, 250);
-      }
-    }
-  }
-
-  async function disconnectMidenWallet() {
-    setError("");
-    try {
-      // Explicit disconnect = don't silently reconnect on the next load.
-      clearWalletConnected(environment);
-      await wallet.disconnect();
-      setMenuOpen(false);
-    } catch (disconnectError) {
-      setError(errorMessage(disconnectError));
-    }
+    setCopyError("");
+    void action();
   }
 
   async function copyMidenAddress() {
-    if (!address) return;
-
+    if (!wallet.address) return;
+    setCopyError("");
     try {
-      await navigator.clipboard.writeText(address);
+      await navigator.clipboard.writeText(wallet.address);
       setCopied(true);
-      window.setTimeout(() => setCopied(false), 1400);
+      clearTimeout(copyTimer.current);
+      copyTimer.current = setTimeout(() => setCopied(false), 1400);
     } catch {
-      setError("Could not copy the Miden account from this browser.");
+      setCopyError("Could not copy the Miden account from this browser.");
     }
-  }
-
-  async function refreshWalletState() {
-    if (!wallet.connected) return;
-    // Collapse concurrent/repeated refreshes into one popup cycle.
-    if (refreshInflightRef.current) return refreshInflightRef.current;
-    const run = doRefreshWalletState();
-    refreshInflightRef.current = run;
-    try {
-      await run;
-    } finally {
-      if (refreshInflightRef.current === run) refreshInflightRef.current = null;
-    }
-  }
-
-  async function doRefreshWalletState() {
-    setError("");
-    setNoteSyncStatus("Syncing notes");
-
-    try {
-      await balances.refresh();
-    } catch (assetError) {
-      setError(errorMessage(assetError));
-    }
-
-    try {
-      const notes = wallet.requestConsumableNotes
-        ? await wallet.requestConsumableNotes()
-        : [];
-      const count = Array.isArray(notes) ? notes.length : 0;
-      setConsumableNoteCount(count);
-      setNoteSyncStatus(
-        count > 0
-          ? `${count} consumable note${count === 1 ? "" : "s"}`
-          : "No consumable notes",
-      );
-    } catch {
-      setConsumableNoteCount(null);
-      setNoteSyncStatus("Note sync unavailable");
-    }
-  }
-
-  function resetMidenConnection() {
-    setError("");
-    try {
-      window.localStorage.removeItem(environment === "testnet" ? "miden-bridge-wallet" : "miden-bridge-wallet.mainnet");
-    } catch {
-      // Ignore storage failures; remounting the provider still clears local UI state.
-    }
-    clearWalletConnected(environment);
-    void wallet.disconnect().catch(() => undefined);
-    setMenuOpen(false);
-    onResetProvider();
   }
 
   // One source of truth for the pill's chain-specific label + accessible name.
   const identity = midenWalletIdentity({
     connecting: wallet.connecting,
     connected: wallet.connected,
-    ready,
-    address,
+    ready: wallet.ready,
+    address: wallet.address,
   });
 
   return (
-    <div className="wallet-menu-root" ref={menuRef}>
-      <button
-        className={`wallet-button wallet-pill ${wallet.connected ? "connected" : ""} ${identity.state === "unavailable" ? "unavailable" : ""}`}
+      <Menu open={menuOpen} onOpenChange={open => setMenuOpen(open)}>
+      <MenuTrigger asChild>
+      <WalletButton
+        connected={wallet.connected}
         type="button"
-        onClick={() => setMenuOpen((open) => !open)}
         aria-expanded={menuOpen}
         aria-haspopup="menu"
         aria-label={identity.actionLabel}
       >
-        <WalletBrandIcon src={walletLogo} size={18} />
-        <span className="wallet-pill-label">{identity.state === "idle" ? "Connect wallet" : identity.pillLabel}</span>
-        <ChevronDown
-          className="wallet-menu-chevron"
-          size={15}
-          aria-hidden="true"
-        />
-      </button>
+        <WalletBrandIcon src={wallet.logo} size={18} />
+        <span className="wallet-pill-label truncate">{identity.state === "idle" ? "Connect wallet" : identity.pillLabel}</span>
+      </WalletButton>
+      </MenuTrigger>
 
       <WalletMenu
-        open={menuOpen}
-        avatar={
-          <span
-            className={`wallet-menu-avatar ${wallet.connected ? "connected" : wallet.connecting ? "pending" : ""}`}
-          >
-            <WalletBrandIcon src={walletLogo} size={20} />
-          </span>
-        }
+        avatar={<WalletBrandIcon src={wallet.logo} size={20} />}
+        state={wallet.connected ? "connected" : wallet.connecting ? "pending" : undefined}
         name="Bread wallet"
         subtitle={
           wallet.connected
-            ? `${shortAddress(address)} · ${balanceText}`
+            ? `${shortAddress(wallet.address)} · ${wallet.balanceText}`
             : wallet.connecting
               ? "Connection pending"
-              : ready
+              : wallet.ready
                 ? "Ready to connect"
                 : "Wallet extension not detected"
         }
       >
+        {copyError ? <p className="m-2 text-xs text-muted-foreground" role="alert">{copyError}</p> : null}
         {wallet.connected ? (
             <>
-              <p className="wallet-menu-note">
-                Note sync: {noteSyncStatus}. Note consume remains
+              <p className="m-2 text-xs text-muted-foreground">
+                Note sync: {wallet.noteSyncStatus}. Note consume remains
                 wallet-confirmed.
               </p>
-              <button
+              <WalletMenuItem><button
                 type="button"
                 role="menuitem"
-                className="wallet-menu-item"
-                onClick={refreshWalletState}
+                onClick={wallet.refresh}
               >
                 <RefreshCcw size={15} aria-hidden="true" />
                 <span>Sync wallet state</span>
-              </button>
-              <button
+              </button></WalletMenuItem>
+              <WalletMenuItem><button
                 type="button"
                 role="menuitem"
-                className="wallet-menu-item"
-                onClick={reconnectMidenWallet}
+                onClick={() => invoke(wallet.reconnect)}
               >
                 <RefreshCcw size={15} aria-hidden="true" />
                 <span>Reconnect wallet</span>
-              </button>
-              <button
+              </button></WalletMenuItem>
+              <WalletMenuItem><button
                 type="button"
                 role="menuitem"
-                className="wallet-menu-item"
                 onClick={copyMidenAddress}
               >
                 <Copy size={15} aria-hidden="true" />
                 <span>{copied ? "Copied" : "Copy account"}</span>
-              </button>
-              <span className="wallet-menu-separator" />
-              <button
+              </button></WalletMenuItem>
+              <span className="wallet-menu-separator bg-border h-px m-1" />
+              <WalletMenuItem danger><button
                 type="button"
                 role="menuitem"
-                className="wallet-menu-item danger"
-                onClick={disconnectMidenWallet}
+                onClick={() => invoke(wallet.disconnect)}
               >
                 <LogOut size={15} aria-hidden="true" />
                 <span>Disconnect</span>
-              </button>
+              </button></WalletMenuItem>
             </>
           ) : (
             <>
               {wallet.connecting ? (
-                <p className="wallet-menu-note">
+                <p className="m-2 text-xs text-muted-foreground">
                   Waiting for the wallet response. If the popup is gone, reset
                   the connection and try again.
                 </p>
               ) : null}
-              {!wallet.connecting && !ready ? (
-                <p className="wallet-menu-note">
+              {!wallet.connecting && !wallet.ready ? (
+                <p className="m-2 text-xs text-muted-foreground">
                   Install or enable the Bread wallet extension, then reset the
                   wallet state.
                 </p>
               ) : null}
-              {!wallet.connecting && ready ? (
-                <button
+              {!wallet.connecting && wallet.ready ? (
+                <WalletMenuItem><button
                   type="button"
                   role="menuitem"
-                  className="wallet-menu-item"
-                  onClick={connectMidenWallet}
+                  onClick={() => invoke(wallet.connect)}
                 >
-                  <WalletBrandIcon src={walletLogo} size={15} />
+                  <WalletBrandIcon src={wallet.logo} size={15} />
                   <span>Connect wallet</span>
-                </button>
+                </button></WalletMenuItem>
               ) : null}
-              <button
+              <WalletMenuItem><button
                 type="button"
                 role="menuitem"
-                className="wallet-menu-item"
-                onClick={resetMidenConnection}
+                onClick={() => invoke(wallet.reset)}
               >
                 <RefreshCcw size={15} aria-hidden="true" />
                 <span>
@@ -498,18 +150,10 @@ function MidenWalletButtonInner({
                     ? "Reset connection"
                     : "Reset wallet state"}
                 </span>
-              </button>
+              </button></WalletMenuItem>
             </>
           )}
       </WalletMenu>
-    </div>
+      </Menu>
   );
-}
-
-// The MidenFi provider now lives at the app root (see MidenWalletProvider) so
-// the connection persists across navigation; the button just consumes it and
-// pulls the reset trigger from context.
-export function MidenWalletButton(props: MidenWalletButtonProps) {
-  const resetProvider = useResetMidenProvider();
-  return <MidenWalletButtonInner {...props} onResetProvider={resetProvider} />;
 }

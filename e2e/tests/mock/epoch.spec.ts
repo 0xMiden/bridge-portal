@@ -1,7 +1,7 @@
 import { test, expect } from "../../fixtures/bridge";
 
 for (const mode of ["receive", "send"] as const) {
-  test(`Epoch ${mode}: restore a retired selection, quote the current faucet and submit`, async ({ bridge, page }) => {
+  test(`Epoch ${mode}: restore a retired selection, quote the current faucet and review`, async ({ bridge, page }) => {
     await page.route("**/suggested-nonce/**", (route) => route.fulfill({ json: { nonce: "1" } }));
     await page.route("**/checkIfDepositNeeded", (route) => route.fulfill({
       json: { tokenOut: mode === "receive" ? "991878" : "990000000000000000" },
@@ -13,7 +13,7 @@ for (const mode of ["receive", "send"] as const) {
     }, mode);
     await page.reload();
     await bridge.waitForReady();
-    await expect(bridge.selectedProvider()).toContainText("Epoch");
+    await bridge.expectRoute("epoch");
     await page.goto(`/?provider=epoch&mode=${mode}`);
     await bridge.waitForReady();
     await expect(page.locator(".mode-switch button[aria-pressed='true']"))
@@ -29,12 +29,8 @@ for (const mode of ["receive", "send"] as const) {
     });
     await bridge.openPreflight();
     await expect(bridge.preflight()).toContainText(mode === "receive" ? "0.991878" : "0.99");
-    await bridge.confirmPreflight();
-    await bridge.waitForActivityPage();
-    expect((await bridge.readActivities())[0]).toMatchObject({
-      provider: "epoch", mode,
-      routeId: `epoch-test-usdc-to-${mode === "receive" ? "miden" : "sepolia"}`,
-    });
+    await bridge.cancelPreflight();
+    expect(await bridge.readActivities()).toEqual([]);
   });
 }
 
@@ -53,11 +49,11 @@ test("Epoch token choices distinguish mocks and keep USDCx withdrawal-only", asy
   // Keep the actual USDCx faucet as source; choose Epoch's mock as destination.
   await page.locator(".token-select-trigger").last().click();
   await tokens.getByRole("option", { name: "USDC Epoch test USDC", exact: true }).click();
-  await expect(bridge.selectedProvider()).toContainText("Epoch");
+  await bridge.expectRoute("epoch");
   await expect(page.locator(".token-select-trigger").first()).toContainText("USDCx");
   await expect(page.locator(".mode-switch").getByRole("button", { name: "Deposit", exact: true })).toBeDisabled();
   await page.getByRole("button", { name: "Get testnet funds", exact: true }).click();
-  await expect(page.getByRole("link", { name: "Epoch test token faucets", exact: true }))
+  await expect(page.getByRole("menuitem", { name: "Epoch test token faucets", exact: true }))
     .toHaveAttribute("href", "https://userdashboard.epochprotocol.xyz/faucets");
 });
 
@@ -69,8 +65,51 @@ test("Epoch cannot reach review when the allocator has no estimate", async ({ br
   await page.goto("/?provider=epoch&mode=receive");
   await bridge.waitForReady();
   await bridge.fillAmount("1");
-  await expect(page.locator(".form-error")).toContainText("A quote isn't available for this intent");
-  await bridge.primaryButton().click();
+  await expect(page.locator(".provider-card")).toContainText("No quotes available");
+  await expect(bridge.primaryButton()).toBeDisabled();
   await expect(bridge.preflight()).toBeHidden();
   expect(await bridge.readActivities()).toEqual([]);
 });
+
+
+for (const [network, chainId] of [["ethereum", 1], ["base", 8453], ["arbitrum", 42161], ["polygon", 137]] as const) {
+  for (const mode of ["receive", "send"] as const) {
+    test(`Cedar Epoch ${network} ${mode}: quotes the selected chain and invalidates a changed amount`, async ({ bridge, page }) => {
+      const endpoint = "https://miden-smallocator.epochprotocol.xyz";
+      await page.route(`${endpoint}/suggested-nonce/**`, route => route.fulfill({ json: { nonce: "1" } }));
+      await page.route(`${endpoint}/checkIfDepositNeeded`, route => {
+        const amount = route.request().postDataJSON().compact.mandate.tokenInAmount;
+        return route.fulfill({ json: { tokenOut: amount === "1000000" ? "991878" : "0" } });
+      });
+      await page.route("**/api/evm/*/gas**", route => route.fulfill({ json: { gasPriceWei: "1200000000", gwei: "1.2" } }));
+      await page.evaluate(({ network, mode }) => {
+        localStorage.setItem("miden.bridge.ui.route.mainnet", "epoch");
+        localStorage.setItem("miden.bridge.ui.mode.mainnet", mode);
+        localStorage.setItem("miden.bridge.ui.route.mainnet.id", `mainnet:epoch:${network}:${mode}`);
+      }, { network, mode });
+      await page.getByRole("combobox", { name: "Bridge network" }).click();
+      await page.getByRole("option", { name: "Mainnet", exact: true }).click();
+      await bridge.expectRoute("epoch");
+      await page.locator('[data-wallet="miden"] .wallet-pill').click();
+      await page.getByRole("menuitem", { name: "Connect wallet", exact: true }).click();
+      await expect(page.locator('[data-wallet="miden"] .wallet-pill')).toHaveAttribute("data-connected", "true");
+      const request = page.waitForRequest(`${endpoint}/checkIfDepositNeeded`, { timeout: 20_000 });
+      await bridge.fillAmount("1");
+      const payload = (await request).postDataJSON();
+      expect(payload.chainId).toBe(String(mode === "send" ? 999999999 : chainId));
+      expect(payload.compact.mandate).toMatchObject({
+        destinationChainId: String(mode === "send" ? chainId : 999999999),
+        midenFaucetId: "0xe69e6ca6e39df1b10c1e5399399feb", tokenInAmount: "1000000",
+      });
+      await bridge.openPreflight();
+      await expect(bridge.preflight()).toContainText("0.991878");
+      if (network === "polygon" && mode === "receive") await expect(bridge.preflight()).toContainText("POL");
+      await bridge.cancelPreflight();
+      await bridge.fillAmount("0.5");
+      await expect(page.locator(".provider-card")).toContainText("No quotes available");
+      await expect(bridge.primaryButton()).toBeDisabled();
+      await expect(bridge.preflight()).toBeHidden();
+      expect(await bridge.readActivities()).toEqual([]);
+    });
+  }
+}

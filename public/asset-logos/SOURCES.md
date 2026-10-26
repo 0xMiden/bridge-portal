@@ -1,5 +1,6 @@
-Additional token icons:
+Additional token and network icons:
 
+- `polygon.svg`: [Web3 Icons, Polygon background](https://github.com/0xa3k5/web3icons/blob/3cce0f390cf902f204a1b3d52f485bcc95d2fe9e/packages/core/src/svgs/networks/background/polygon.svg), MIT.
 - `sol.svg`: [Cryptocurrency Icons](https://github.com/spothq/cryptocurrency-icons/blob/master/svg/color/sol.svg), CC0-1.0.
 - `near.svg`: [Web3 Icons, NEAR monochrome](https://github.com/0xa3k5/web3icons/blob/3cce0f390cf902f204a1b3d52f485bcc95d2fe9e/raw-svgs/tokens/mono/NEAR.svg), MIT. Black fill with the source’s original padding balances the mark against circular token badges; CSS inverts it in dark mode.
 - `paxg.svg`: [Web3 Icons, PAXG branded](https://github.com/0xa3k5/web3icons/blob/3cce0f390cf902f204a1b3d52f485bcc95d2fe9e/raw-svgs/tokens/branded/PAXG.svg), MIT. Tighter viewBox preserves the previous icon size.

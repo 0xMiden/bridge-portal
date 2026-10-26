@@ -1,8 +1,5 @@
 import type { BridgeRoute } from "../../core/routes";
-import { SEPOLIA_NETWORK } from "../../../config/sepolia";
-
-/** EVM destination chain for the Epoch route (Sepolia). */
-export const EPOCH_DESTINATION_CHAIN_ID = SEPOLIA_NETWORK.chainId;
+import { evmNetworks } from "../../../config/evm-networks";
 
 function isBridgeableEvmTokenConfigured(address: string): boolean {
   return (
@@ -11,7 +8,7 @@ function isBridgeableEvmTokenConfigured(address: string): boolean {
   );
 }
 
-/** Epoch currently connects a Sepolia ERC20 with a Miden faucet token. */
+/** Epoch connects an EVM ERC20 with a Miden faucet token. */
 export function epochRouteAssets(route: BridgeRoute) {
   const miden = route.mode === "send" ? route.source : route.destination;
   const evm = route.mode === "send" ? route.destination : route.source;
@@ -21,5 +18,5 @@ export function epochRouteAssets(route: BridgeRoute) {
   ) {
     throw new Error("The Epoch route is not configured yet.");
   }
-  return { miden, evm };
+  return { miden, evm, chain: evmNetworks[evm.network] };
 }

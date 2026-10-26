@@ -30,7 +30,7 @@ export function NetworkSelect({ disabled = false }: { disabled?: boolean }) {
       options={networks.map(({ value, label, Icon }) => ({
         value,
         label,
-        content: <><Icon className="network-option-icon" size={18} aria-hidden="true" /><span>{label}</span></>,
+        content: <><Icon className="network-option-icon text-muted-foreground flex-none group-aria-selected/option:text-accent-foreground" size={18} aria-hidden="true" /><span>{label}</span></>,
       }))}
       onChange={next => {
         if (isBridgeEnvironment(next) && next !== environment) {
@@ -39,7 +39,7 @@ export function NetworkSelect({ disabled = false }: { disabled?: boolean }) {
         }
       }}
     >
-      <SelectedIcon className="network-symbol" size={17} aria-hidden="true" />
+      <SelectedIcon className="network-symbol text-accent-foreground" size={17} aria-hidden="true" />
       <span>{selected.label}</span>
     </ListboxSelect>
   );

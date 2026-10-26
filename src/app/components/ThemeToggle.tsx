@@ -1,15 +1,10 @@
 "use client";
 
+import { IconButton } from "./ui/Button";
 import { Check, Monitor, Moon, Sun } from "lucide-react";
 import { useTheme } from "next-themes";
-import {
-  type KeyboardEvent,
-  useEffect,
-  useId,
-  useRef,
-  useState,
-  useSyncExternalStore,
-} from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { Menu, MenuContent, MenuRadioGroup, MenuRadioItem, MenuTrigger } from "./ui/Menu";
 
 const choices = [
   { value: "light", label: "Light", Icon: Sun },
@@ -17,143 +12,59 @@ const choices = [
   { value: "system", label: "System", Icon: Monitor },
 ] as const;
 
-type ThemeChoice = (typeof choices)[number]["value"];
-
-function isThemeChoice(value: string | undefined): value is ThemeChoice {
-  return choices.some((choice) => choice.value === value);
-}
-
-export function ThemeToggle({ className }: { className?: string }) {
+export function ThemeToggle() {
   const { setTheme, theme } = useTheme();
-  const mounted = useSyncExternalStore(
-    () => () => undefined,
-    () => true,
-    () => false,
-  );
-  const [open, setOpen] = useState(false);
-  const rootRef = useRef<HTMLDivElement>(null);
+  const mounted = useSyncExternalStore(() => () => undefined, () => true, () => false);
   const triggerRef = useRef<HTMLButtonElement>(null);
-  const optionRefs = useRef<Array<HTMLButtonElement | null>>([]);
-  const menuId = useId();
-  const selectedTheme = mounted && isThemeChoice(theme) ? theme : "system";
-  const selectedIndex = choices.findIndex(
-    (choice) => choice.value === selectedTheme,
-  );
-  const selectedChoice = choices[selectedIndex];
+  const selectedRef = useRef<HTMLButtonElement>(null);
+  const [open, setOpen] = useState(false);
+  const isOpen = useRef(false);
+
+  function changeOpen(next: boolean) {
+    isOpen.current = next;
+    setOpen(next);
+  }
 
   useEffect(() => {
     if (!open) return;
-
-    optionRefs.current[selectedIndex]?.focus();
-
-    const handlePointerDown = (event: PointerEvent) => {
-      if (rootRef.current?.contains(event.target as Node)) return;
-      setOpen(false);
-      requestAnimationFrame(() => triggerRef.current?.focus());
-    };
-
-    document.addEventListener("pointerdown", handlePointerDown);
-    return () => document.removeEventListener("pointerdown", handlePointerDown);
-  }, [open, selectedIndex]);
-
-  const closeAndRestoreFocus = () => {
-    setOpen(false);
-    triggerRef.current?.focus();
-  };
-
-  const chooseTheme = (nextTheme: ThemeChoice) => {
-    setTheme(nextTheme);
-    closeAndRestoreFocus();
-  };
-
-  const handleOptionKeyDown = (
-    event: KeyboardEvent<HTMLButtonElement>,
-    index: number,
-  ) => {
-    if (event.key === "Escape") {
-      event.preventDefault();
-      closeAndRestoreFocus();
-      return;
-    }
-
-    if (event.key === "Enter" || event.key === " ") {
-      event.preventDefault();
-      chooseTheme(choices[index].value);
-      return;
-    }
-
-    let nextIndex: number | undefined;
-    if (event.key === "ArrowDown" || event.key === "ArrowRight") {
-      nextIndex = (index + 1) % choices.length;
-    } else if (event.key === "ArrowUp" || event.key === "ArrowLeft") {
-      nextIndex = (index - 1 + choices.length) % choices.length;
-    } else if (event.key === "Home") {
-      nextIndex = 0;
-    } else if (event.key === "End") {
-      nextIndex = choices.length - 1;
-    }
-
-    if (nextIndex !== undefined) {
-      event.preventDefault();
-      optionRefs.current[nextIndex]?.focus();
-    }
-  };
-
-  const SelectedIcon = selectedChoice.Icon;
+    const frame = requestAnimationFrame(() => selectedRef.current?.focus());
+    return () => cancelAnimationFrame(frame);
+  }, [open]);
+  const selected = choices.find(choice => mounted && choice.value === theme) ?? choices[2];
+  const Icon = selected.Icon;
 
   return (
-    <div
-      className={["theme-menu-root", className].filter(Boolean).join(" ")}
-      ref={rootRef}
-    >
-      <button
-        ref={triggerRef}
-        className="theme-trigger"
-        type="button"
-        aria-label={`Theme: ${selectedChoice.label}`}
-        aria-haspopup="menu"
-        aria-expanded={open}
-        aria-controls={menuId}
-        onClick={() => setOpen((current) => !current)}
-      >
-        {mounted ? (
-          <SelectedIcon size={18} aria-hidden="true" />
-        ) : (
-          <span className="theme-trigger-placeholder" aria-hidden="true" />
-        )}
-      </button>
-
-      {open ? (
-        <div className="theme-menu" id={menuId} role="menu" aria-label="Theme">
-          {choices.map(({ value, label, Icon }, index) => {
-            const checked = value === selectedTheme;
-            return (
-              <button
-                key={value}
-                ref={(element) => {
-                  optionRefs.current[index] = element;
-                }}
-                className="theme-menu-item"
-                type="button"
-                role="menuitemradio"
-                aria-checked={checked}
-                tabIndex={checked ? 0 : -1}
-                onClick={() => chooseTheme(value)}
-                onKeyDown={(event) => handleOptionKeyDown(event, index)}
-              >
-                <Icon size={17} aria-hidden="true" />
-                <span>{label}</span>
-                <Check
-                  className="theme-menu-check"
-                  size={16}
-                  aria-hidden="true"
-                  data-visible={checked}
-                />
-              </button>
-            );
-          })}
-        </div>
-      ) : null}
-    </div>
+      <Menu open={open} onOpenChange={changeOpen}>
+        <MenuTrigger asChild>
+          <IconButton ref={triggerRef} className="theme-trigger" type="button" aria-label={`Theme: ${selected.label}`}>
+            {mounted ? <Icon size={18} aria-hidden="true" /> : <span className="size-4.5" aria-hidden="true" />}
+          </IconButton>
+        </MenuTrigger>
+        <MenuContent size="small" aria-label="Theme" onCloseAutoFocus={event => {
+          event.preventDefault();
+          // A quick reopen must not be dismissed by the previous close's focus restoration.
+          if (!isOpen.current) triggerRef.current?.focus();
+        }}>
+          <MenuRadioGroup value={selected.value} onValueChange={setTheme} onKeyDown={event => {
+            // Retain the theme control's existing horizontal arrow shortcuts.
+            const step = event.key === "ArrowRight" ? 1 : event.key === "ArrowLeft" ? -1 : 0;
+            if (!step) return;
+            event.preventDefault();
+            const items = Array.from(event.currentTarget.querySelectorAll<HTMLButtonElement>('[role="menuitemradio"]'));
+            const index = items.indexOf(event.target as HTMLButtonElement);
+            items[(index + step + items.length) % items.length]?.focus();
+          }}>
+            {choices.map(({ value, label, Icon: ChoiceIcon }) => (
+              <MenuRadioItem key={value} value={value} asChild>
+                <button ref={value === selected.value ? selectedRef : undefined} type="button" className="flex min-h-11 w-full items-center gap-2 rounded-md px-3 text-left hover:bg-surface-muted focus-visible:bg-surface-muted focus-visible:-outline-offset-2">
+                  <ChoiceIcon size={17} aria-hidden="true" />
+                  <span>{label}</span>
+                  {value === selected.value && <Check className="ml-auto text-accent" size={16} aria-hidden="true" />}
+                </button>
+              </MenuRadioItem>
+            ))}
+          </MenuRadioGroup>
+        </MenuContent>
+      </Menu>
   );
 }

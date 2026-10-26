@@ -12,6 +12,8 @@ export type PhaseDefinition = {
   headline: string;
   guidance?: ActivityGuidance;
   message?: string;
+  /** Some phases cannot promise automatic delivery tracking yet. */
+  tracking?: "manual";
   failureLeg?: "source" | "destination";
 };
 

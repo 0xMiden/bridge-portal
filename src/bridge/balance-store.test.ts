@@ -3,8 +3,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { BalanceStore } from "./balance-store";
 import { ARC_USDC, MIDEN_ETH, MIDEN_USDC, SEPOLIA_ETH, SEPOLIA_USDC } from "./core/assets";
 import { midenBalanceKey } from "./miden-balances";
+vi.mock("./miden-rpc", () => ({ getMidenFaucetMetadata: vi.fn(async () => null) }));
 
-vi.mock("../wallets/testing/env", () => ({ isE2E: () => true, e2eNetwork: () => "mock" }));
 
 const account = "0xabcd";
 const network = "miden-testnet";
@@ -23,9 +23,32 @@ afterEach(() => {
   client.clear();
   focusManager.setFocused(undefined);
   vi.unstubAllGlobals();
+  vi.useRealTimers();
 });
 
 describe("private balance sessions", () => {
+  it("settles unsupported asset access as an error and recovers when the wallet gains access", async () => {
+    const observer = new QueryObserver(client, store.midenQuery(account, network));
+    const stop = observer.subscribe(() => {});
+    try {
+      store.setMidenSession({ account, network, requestAssets: undefined });
+      await vi.waitFor(() => expect(observer.getCurrentResult()).toMatchObject({
+        status: "error", fetchStatus: "idle", isPending: false, data: undefined,
+        error: expect.any(Error),
+      }));
+
+      const requestAssets = vi.fn(async () => holdings);
+      store.setMidenSession({ account, network, requestAssets });
+      await vi.waitFor(() => expect(observer.getCurrentResult()).toMatchObject({
+        status: "success", fetchStatus: "idle", error: null,
+        data: { [midenBalanceKey(account, MIDEN_ETH)]: { balance: "1.5" } },
+      }));
+      expect(requestAssets).toHaveBeenCalledOnce();
+    } finally {
+      stop();
+    }
+  });
+
   it("loads on connection, shares the read across consumers, and keeps its result after unmount", async () => {
     const pending = Promise.withResolvers<typeof holdings>();
     const requestAssets = vi.fn(() => pending.promise);
@@ -89,6 +112,36 @@ describe("private balance sessions", () => {
     await store.requestMiden(account, network);
     expect(observer.getCurrentResult().data?.[midenBalanceKey(account, MIDEN_ETH)]?.balance).toBe("1.5");
     stop();
+  });
+
+  it("rejects even a cached balance read if the connected account changes before it resolves", async () => {
+    store.setMidenSession({ account, network, requestAssets: async () => holdings });
+    await store.requestMiden(account, network);
+    const cached = store.requestMiden(account, network);
+    store.setMidenSession(null);
+    await expect(cached).rejects.toThrow("Miden account changed");
+  });
+
+  it("ends a stuck balance read so retry can succeed without a late response replacing it", async () => {
+    vi.useFakeTimers();
+    const pending = Promise.withResolvers<typeof holdings>();
+    const requestAssets = vi.fn(() => pending.promise);
+    store.setMidenSession({ account, network, requestAssets });
+    const failedRead = store.requestMiden(account, network).catch(error => error);
+    await vi.waitFor(() => expect(requestAssets).toHaveBeenCalledOnce());
+
+    await vi.advanceTimersByTimeAsync(45_000);
+    const queryKey = store.midenQuery(account, network).queryKey;
+    expect(client.getQueryState(queryKey)).toMatchObject({ status: "error", fetchStatus: "idle" });
+    expect(await failedRead).toEqual(expect.objectContaining({ message: expect.stringContaining("timed out") }));
+    requestAssets.mockResolvedValue([{ faucetId: MIDEN_ETH.faucetId, amount: "250000000" }]);
+    const retried = await store.requestMiden(account, network);
+    expect(retried[midenBalanceKey(account, MIDEN_ETH)]?.balance).toBe("2.5");
+
+    pending.resolve(holdings);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(client.getQueryData(queryKey)?.[midenBalanceKey(account, MIDEN_ETH)]?.balance).toBe("2.5");
+    expect(requestAssets).toHaveBeenCalledTimes(2);
   });
 
   it.each(["disconnect", "switch accounts"])("clears private data and discards a pending refresh when wallets %s", async (change) => {

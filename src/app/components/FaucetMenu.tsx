@@ -2,7 +2,9 @@
 
 import { useAppKitAccount, useAppKitProvider } from "@reown/appkit/react";
 import { ArrowUpRight, Check, Droplets, Loader2 } from "lucide-react";
-import { useEffect, useId, useRef, useState } from "react";
+import { IconButton } from "./ui/Button";
+import { useState, type ReactNode } from "react";
+import { Menu, MenuContent, MenuItem, MenuTrigger } from "./ui/Menu";
 import { type EvmProvider } from "../../wallets/evm/evm-wallet";
 import { useBalanceStore } from "../../bridge/BalanceProvider";
 import { SEPOLIA_USDC } from "../../bridge/core/assets";
@@ -29,32 +31,7 @@ export function FaucetMenu() {
   const balances = useBalanceStore();
   const { address, isConnected } = useAppKitAccount();
   const { walletProvider } = useAppKitProvider<EvmProvider>("eip155");
-  const [open, setOpen] = useState(false);
   const [status, setStatus] = useState<MintStatus>({ kind: "idle" });
-  const rootRef = useRef<HTMLDivElement>(null);
-  const triggerRef = useRef<HTMLButtonElement>(null);
-  const menuId = useId();
-
-  useEffect(() => {
-    if (!open) return;
-    const onPointer = (event: PointerEvent) => {
-      if (rootRef.current?.contains(event.target as Node)) return;
-      setOpen(false);
-    };
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        setOpen(false);
-        triggerRef.current?.focus();
-      }
-    };
-    document.addEventListener("pointerdown", onPointer);
-    document.addEventListener("keydown", onKey);
-    return () => {
-      document.removeEventListener("pointerdown", onPointer);
-      document.removeEventListener("keydown", onKey);
-    };
-  }, [open]);
-
   const canMint = isConnected && !!address && !!walletProvider;
 
   const handleMint = async () => {
@@ -77,36 +54,28 @@ export function FaucetMenu() {
   };
 
   return (
-    <div className="faucet-menu-root" ref={rootRef}>
-      <button
-        ref={triggerRef}
-        className="faucet-trigger"
+      <Menu>
+      <MenuTrigger asChild>
+      <IconButton tone="accent" className="faucet-trigger"
         type="button"
         aria-label="Get testnet funds"
-        aria-haspopup="menu"
-        aria-expanded={open}
-        aria-controls={menuId}
-        onClick={() => setOpen((current) => !current)}
       >
         <Droplets size={18} aria-hidden="true" />
-      </button>
+      </IconButton>
+      </MenuTrigger>
+        <MenuContent aria-label="Testnet faucet">
+          <p className="mb-1 text-xs text-muted-foreground">Get testnet funds</p>
 
-      {open ? (
-        <div className="faucet-menu" id={menuId} role="menu" aria-label="Testnet faucet">
-          <p className="faucet-menu-title">Get testnet funds</p>
-
-          <a className="faucet-row" role="menuitem" href="https://faucet.circle.com/" target="_blank" rel="noopener noreferrer">
-            <span className="faucet-row-info"><strong>Circle USDC</strong><small>Arc, Ethereum Sepolia, Base Sepolia or Arbitrum Sepolia</small></span>
+          <MenuItem keepOpen><a className="flex items-center justify-between gap-3 p-1" role="menuitem" href="https://faucet.circle.com/" target="_blank" rel="noopener noreferrer">
+            <FaucetDescription title="Circle USDC">Arc, Ethereum Sepolia, Base Sepolia or Arbitrum Sepolia</FaucetDescription>
             <ArrowUpRight size={15} aria-hidden="true" />
-          </a>
+          </a></MenuItem>
 
-          <div className="faucet-row">
-            <span className="faucet-row-info">
-              <strong>Epoch test USDC</strong>
-              <small>Mints {FAUCET_MINT_AMOUNT} to your wallet</small>
-            </span>
-            <button
-              className="faucet-mint-btn"
+          <div className="flex items-center justify-between gap-3 p-1">
+            <FaucetDescription title="Epoch test USDC">Mints {FAUCET_MINT_AMOUNT} to your wallet</FaucetDescription>
+            <MenuItem keepOpen disabled={!canMint || status.kind === "minting"}><button
+              className="inline-flex min-h-8 flex-none items-center gap-1 rounded-full bg-accent px-3 text-sm font-semibold whitespace-nowrap text-on-accent transition
+                enabled:hover:brightness-105 disabled:bg-surface-strong disabled:text-muted-foreground"
               type="button"
               onClick={handleMint}
               disabled={!canMint || status.kind === "minting"}
@@ -114,7 +83,7 @@ export function FaucetMenu() {
             >
               {status.kind === "minting" ? (
                 <>
-                  <Loader2 size={13} className="faucet-spin" aria-hidden="true" />
+                  <Loader2 size={13} className="animate-spin" aria-hidden="true" />
                   Minting
                 </>
               ) : status.kind === "done" ? (
@@ -125,55 +94,45 @@ export function FaucetMenu() {
               ) : (
                 `Mint ${FAUCET_MINT_AMOUNT}`
               )}
-            </button>
+            </button></MenuItem>
           </div>
 
           {status.kind === "done" ? (
-            <a
-              className="faucet-note faucet-note-link"
+            <MenuItem keepOpen><a
+              className="inline-flex items-center gap-1 text-xs text-accent-foreground hover:underline"
               href={sepoliaTxUrl(status.hash)}
               target="_blank"
               rel="noopener noreferrer"
             >
               View mint transaction
               <ArrowUpRight size={12} aria-hidden="true" />
-            </a>
+            </a></MenuItem>
           ) : null}
           {status.kind === "error" ? (
-            <p className="faucet-note faucet-note-error">{status.message}</p>
+            <p className="text-xs text-danger-foreground wrap-anywhere">{status.message}</p>
           ) : null}
 
-          <div className="faucet-links">
-            <a
-              className="faucet-link"
-              href="https://userdashboard.epochprotocol.xyz/faucets"
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              Epoch test token faucets
-              <ArrowUpRight size={13} aria-hidden="true" />
-            </a>
-            <a
-              className="faucet-link"
-              href={SEPOLIA_ETH_FAUCET_URL}
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              Sepolia ETH (gas)
-              <ArrowUpRight size={13} aria-hidden="true" />
-            </a>
-            <a
-              className="faucet-link"
-              href={MIDEN_TESTNET_FAUCET_URL}
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              Miden testnet faucet
-              <ArrowUpRight size={13} aria-hidden="true" />
-            </a>
+          <div className="mt-1.5 grid gap-0.5 border-t border-border pt-2">
+            {[
+              ["Epoch test token faucets", "https://userdashboard.epochprotocol.xyz/faucets"],
+              ["Sepolia ETH (gas)", SEPOLIA_ETH_FAUCET_URL],
+              ["Miden testnet faucet", MIDEN_TESTNET_FAUCET_URL],
+            ].map(([label, href]) => (
+              <MenuItem keepOpen key={href}>
+                <a className="flex min-h-9 items-center justify-between gap-2 rounded-md px-1 text-xs text-muted-foreground hover:bg-surface-muted hover:text-foreground" href={href} target="_blank" rel="noopener noreferrer">
+                  {label}<ArrowUpRight size={13} aria-hidden="true" />
+                </a>
+              </MenuItem>
+            ))}
           </div>
-        </div>
-      ) : null}
-    </div>
+        </MenuContent>
+      </Menu>
   );
+}
+
+function FaucetDescription({ title, children }: { title: string; children: ReactNode }) {
+  return <span className="min-w-0">
+    <strong className="block text-sm font-semibold">{title}</strong>
+    <small className="block text-xs text-muted-foreground">{children}</small>
+  </span>;
 }

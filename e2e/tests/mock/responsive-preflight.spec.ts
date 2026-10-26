@@ -109,9 +109,15 @@ test(`mobile ${width}px review is a viewport bottom sheet with a contained keybo
 });
 }
 
-test("desktop review remains centered", async ({ bridge, page }) => {
+test("desktop review remains centered without shifting the header", async ({ bridge, page }) => {
   await page.setViewportSize({ width: 1024, height: 768 });
+  const headerBounds = () => page.getByRole("banner", { includeHidden: true }).evaluate(element => {
+    const { x, width } = element.getBoundingClientRect();
+    return { x, width };
+  });
+  const initialHeaderBounds = await headerBounds();
   await openUsdcxReview(bridge);
+  await expect.poll(headerBounds).toEqual(initialHeaderBounds);
 
   const geometry = await bridge.preflight().evaluate((overlay) => {
     const panel = overlay.querySelector<HTMLElement>(".preflight-panel")!;
@@ -139,4 +145,7 @@ test("desktop review remains centered", async ({ bridge, page }) => {
       MIN_TAP_TARGET,
     );
   }
+  await page.keyboard.press("Escape");
+  await expect(bridge.preflight()).toBeHidden();
+  await expect.poll(headerBounds).toEqual(initialHeaderBounds);
 });

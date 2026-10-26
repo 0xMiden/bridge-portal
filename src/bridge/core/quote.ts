@@ -25,6 +25,9 @@ export type QuoteResult = {
       kind: "epoch";
     }
   | {
+      kind: "agglayer" | "arc-deposit";
+    }
+  | {
       kind: "cctp";
       authorization: CctpQuote;
     }

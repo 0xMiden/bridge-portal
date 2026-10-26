@@ -1,3 +1,4 @@
+import { ActivityStore } from "../../bridge/activity";
 import { fetchWithdrawalQuote, type WithdrawalQuote } from "../../bridge/providers/xreserve/withdrawal-quote";
 import { withdrawUsdcx } from "../../bridge/providers/xreserve/withdrawal-execute";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -10,7 +11,7 @@ import { runEpochTransfer, type EpochExecuteResult } from "../../bridge/provider
 import { captureSourceTransaction, type SourceTransaction } from "../../bridge/evm/source-transaction";
 import { depositOnArc } from "../../bridge/providers/xreserve/deposit";
 import { depositViaCctp } from "../../bridge/providers/xreserve/cctp-deposit";
-import { loadStoredActivities, saveActivities } from "./bridge-persistence";
+import { activityPersistence, activityStorageKey, loadStoredActivities, saveActivities } from "./bridge-persistence";
 import type { Activity } from "./bridge-presentation";
 import { submitBridgeTransfer, type TransferSubmission } from "./bridge-submission";
 
@@ -96,12 +97,14 @@ function setup(overrides: Partial<TransferSubmission> = {}) {
   }
   const effects = {
     openEvmWallet: vi.fn(async () => {}),
+    verifyBalanceCap: vi.fn(async () => {}),
     onError: vi.fn(),
     onSubmittingChange: vi.fn(),
     onPhaseChange: vi.fn(),
-    onActivitiesChange: vi.fn(),
+    activities: new ActivityStore(activityPersistence),
     navigate: vi.fn(),
   };
+  effects.activities.sync();
   return { input, effects, evmRequest };
 }
 
@@ -126,6 +129,69 @@ function setupCctp() {
 }
 
 describe("submission validation", () => {
+  it.each([true, false])("waits for a fresh balance-cap check before any deposit wallet call (allowed: %s)", async (allowed) => {
+    const { input, effects, evmRequest } = setup({ routeId: "agglayer-eth-to-miden" });
+    const valuation = Promise.withResolvers<void>();
+    effects.verifyBalanceCap.mockReturnValue(valuation.promise);
+    evmRequest.mockImplementation(async ({ method }) => method === "eth_accounts"
+      ? [EVM_ADDRESS] : method === "eth_sendTransaction" ? TX_HASH : SEPOLIA_NETWORK.chainHex);
+
+    const submission = submitBridgeTransfer(input, effects);
+    await vi.waitFor(() => expect(effects.verifyBalanceCap).toHaveBeenCalledWith(
+      findBridgeRoute(input.routeId), input.amount, MIDEN_ACCOUNT,
+    ));
+    expect(effects.onSubmittingChange).toHaveBeenLastCalledWith(true);
+    expect(evmRequest).not.toHaveBeenCalled();
+    expect(loadStoredActivities()).toMatchObject([history]);
+
+    if (allowed) valuation.resolve();
+    else valuation.reject(new Error("This deposit exceeds the $1,232.462 balance limit."));
+    await submission;
+
+    if (allowed) {
+      expect(evmRequest.mock.calls.some(([request]) => request.method === "eth_sendTransaction")).toBe(true);
+      expect(loadStoredActivities()[0]).toMatchObject({ provider: "agglayer", sourceTxHash: TX_HASH });
+      expect(effects.onError).not.toHaveBeenCalled();
+    } else {
+      expect(evmRequest).not.toHaveBeenCalled();
+      expect(effects.onError).toHaveBeenCalledWith("This deposit exceeds the $1,232.462 balance limit.");
+      expect(loadStoredActivities()).toMatchObject([history]);
+      expect(effects.navigate).not.toHaveBeenCalled();
+    }
+    expect(effects.onSubmittingChange).toHaveBeenLastCalledWith(false);
+    expect(effects.onPhaseChange).toHaveBeenLastCalledWith("");
+  });
+
+  it("blocks deposits when no balance-cap verifier is available", async () => {
+    const { input, effects, evmRequest } = setup({ routeId: "agglayer-eth-to-miden" });
+    await submitBridgeTransfer(input, { ...effects, verifyBalanceCap: undefined });
+    expect(effects.onError).toHaveBeenCalledWith(expect.stringContaining("Unable to verify the $1,232.462 balance limit"));
+    expect(evmRequest).not.toHaveBeenCalled();
+    expect(loadStoredActivities()).toMatchObject([history]);
+    expect(effects.navigate).not.toHaveBeenCalled();
+  });
+
+  it("requires another review if the quote expires while the account valuation is pending", async () => {
+    const now = Date.now();
+    const clock = vi.spyOn(Date, "now").mockReturnValue(now);
+    const { input, effects, evmRequest } = setup();
+    const valuation = Promise.withResolvers<void>();
+    effects.verifyBalanceCap.mockReturnValue(valuation.promise);
+    const submission = submitBridgeTransfer(input, effects);
+    await vi.waitFor(() => expect(effects.verifyBalanceCap).toHaveBeenCalledOnce());
+
+    clock.mockReturnValue(now + 60_001);
+    valuation.resolve();
+    await submission;
+
+    expect(effects.onError).toHaveBeenCalledWith("Refresh and review the quote before sending.");
+    expect(evmRequest).not.toHaveBeenCalled();
+    expect(runEpochTransfer).not.toHaveBeenCalled();
+    expect(loadStoredActivities()).toMatchObject([history]);
+    expect(effects.navigate).not.toHaveBeenCalled();
+    expect(effects.onSubmittingChange).toHaveBeenLastCalledWith(false);
+  });
+
   it.each([
     ...(["missing", "expired", "amount", "routeId", "recovery", "midenAccount", "evmAddress"] as const).map(change => ({ kind: "epoch", change })),
     ...(["missing", "amount", "routeId", "recovery", "midenAccount", "evmAddress"] as const).map(change => ({ kind: "cctp", change })),
@@ -195,6 +261,50 @@ describe("Agglayer submission", () => {
 });
 
 describe("Epoch activity lifecycle", () => {
+  it.each(["full", "blocked reads", "blocked access", "corrupted"] as const)(
+    "opens and updates the acknowledged receipt when local storage is %s",
+    async (failure) => {
+      const { input, effects } = setup();
+      if (failure === "full") {
+        vi.spyOn(window.localStorage, "setItem").mockImplementation(() => { throw new DOMException("Storage full", "QuotaExceededError"); });
+      } else if (failure === "blocked reads") {
+        vi.spyOn(window.localStorage, "getItem").mockImplementation(() => { throw new DOMException("Storage blocked", "SecurityError"); });
+      } else if (failure === "blocked access") {
+        Object.defineProperty(window, "localStorage", { configurable: true, get() { throw new DOMException("Storage blocked", "SecurityError"); } });
+      } else {
+        window.localStorage.setItem(activityStorageKey, "{broken");
+      }
+      const published = vi.fn();
+      effects.activities.subscribe(() => published(effects.activities.getSnapshot().receipts.map(receipt => receipt.activity)));
+      let receiptAtNavigation: Activity | undefined;
+      effects.navigate.mockImplementation((path: string) => {
+        receiptAtNavigation = effects.activities.getSnapshot().receipts.map(receipt => receipt.activity).find(activity => path === `/activity/${activity.id}`);
+      });
+      vi.mocked(runEpochTransfer).mockImplementation(async ({ onSubmitted }) => {
+        onSubmitted!({ sourceTxHash: TX_HASH });
+        return { direction: "receive", intentNonce: "42", sponsorAddress: EVM_ADDRESS, sourceTxHash: TX_HASH, outputAmount: "0.12" };
+      });
+
+      await submitBridgeTransfer(input, effects);
+
+      expect(effects.navigate).toHaveBeenCalledOnce();
+      expect(receiptAtNavigation).toMatchObject({ status: "source_finality", sourceTxHash: TX_HASH, midenAccount: MIDEN_ACCOUNT, evmAddress: EVM_ADDRESS, routeSnapshot: findBridgeRoute(input.routeId) });
+      const activities: Activity[] = published.mock.lastCall![0];
+      expect(activities).toMatchObject([
+        { id: receiptAtNavigation!.id, epochIntentNonce: "42", receivedAmount: "0.12", sourceTxHash: TX_HASH }, history,
+      ]);
+      expect(effects.activities.getSnapshot().receipts.map(receipt => receipt.activity)).toEqual(activities);
+      expect(activities.every(activity => activity.environment === "testnet")).toBe(true);
+      // The receipt monitor must be able to merge progress after navigation too.
+      effects.activities.patch(receiptAtNavigation!.id, { status: "complete", destinationTxHash: "0xarrival" });
+      effects.activities.patch(receiptAtNavigation!.id, { status: "source_finality", sourceTxHash: undefined });
+      expect(effects.activities.getSnapshot().receipts.map(receipt => receipt.activity)[0]).toMatchObject({ status: "complete", destinationTxHash: "0xarrival", sourceTxHash: TX_HASH, epochIntentNonce: "42" });
+      expect(effects.onError).not.toHaveBeenCalled();
+      expect(effects.onSubmittingChange).toHaveBeenLastCalledWith(false);
+      expect(effects.onPhaseChange).toHaveBeenLastCalledWith("");
+    },
+  );
+
   it.each([
     { routeId: "epoch-test-usdc-to-miden", mode: "receive", destination: MIDEN_ACCOUNT },
     { routeId: "epoch-usdcx-to-sepolia", mode: "send", destination: EVM_ADDRESS },
@@ -228,7 +338,6 @@ describe("Epoch activity lifecycle", () => {
     execution.resolve({
       direction: mode, intentNonce: "42", sponsorAddress: EVM_ADDRESS,
       sourceTxHash: TX_HASH, outputAmount: "0.123456789012345678",
-      raw: { taskTypeString: "test", intentData: {} },
     });
     await submission;
 
@@ -238,7 +347,7 @@ describe("Epoch activity lifecycle", () => {
       sourceTxHash: TX_HASH, receivedAmount: "0.123456789012345678",
       midenAccount: MIDEN_ACCOUNT, evmAddress: EVM_ADDRESS,
     });
-    expect(effects.onActivitiesChange).toHaveBeenLastCalledWith(loadStoredActivities());
+    expect(effects.activities.getSnapshot().receipts.map(receipt => receipt.activity)).toEqual(loadStoredActivities());
     expect(effects.onSubmittingChange).toHaveBeenLastCalledWith(false);
     expect(effects.onPhaseChange).toHaveBeenLastCalledWith("");
   });
@@ -360,6 +469,8 @@ describe("USDCx withdrawal submission", () => {
       routeId: "xreserve-usdc-to-arc", amount: "2", evmAddress: EVM_ADDRESS, quote: reviewedQuote(),
       evmWallet: { connected: true, address: EVM_ADDRESS },
     });
+    // A failed deposit valuation must never keep users from withdrawing funds.
+    effects.verifyBalanceCap.mockRejectedValue(new Error("Balance limit exceeded"));
     const noteId = `0x${"cd".repeat(32)}`;
     vi.mocked(withdrawUsdcx).mockImplementation(async ({ onSubmitted }) => {
       onSubmitted(noteId, "wallet-request-id");
@@ -375,6 +486,7 @@ describe("USDCx withdrawal submission", () => {
     expect(loadStoredActivities()[0].sourceTxHash).toBe(fails ? undefined : TX_HASH);
     expect(effects.navigate).toHaveBeenCalledOnce();
     expect(effects.openEvmWallet).not.toHaveBeenCalled();
+    expect(effects.verifyBalanceCap).not.toHaveBeenCalled();
     expect(evmRequest).not.toHaveBeenCalled();
     if (fails) expect(effects.onError).toHaveBeenCalledWith(expect.stringContaining("do not submit again"));
   });
@@ -556,4 +668,38 @@ describe("Ethereum ERC-20 deposits", () => {
     expect(evmRequest).not.toHaveBeenCalled();
     expect(loadStoredActivities()).toMatchObject([history]);
   });
+});
+
+
+describe("Cedar Epoch deposits", () => {
+  it.each([["ethereum", 1], ["base", 8453], ["arbitrum", 42161], ["polygon", 137]])(
+    "switches to %s and preserves its effective deployment in the receipt", async (network, chainId) => {
+      const account = "mm1aqu8zjdwvcgkeug5a67kpwmnsyv2qgp7";
+      const { input, effects, evmRequest } = setup({
+        environment: "mainnet", routeId: `mainnet:epoch:${network}:receive`, amount: "10",
+        midenAccount: account, midenWallet: { connected: true, address: account },
+      });
+      let chain = SEPOLIA_NETWORK.chainHex as string;
+      evmRequest.mockImplementation(async ({ method, params }) => {
+        if (method === "eth_accounts") return [EVM_ADDRESS];
+        if (method === "wallet_switchEthereumChain") chain = (params as [{ chainId: string }])[0].chainId;
+        return chain;
+      });
+      vi.mocked(runEpochTransfer).mockImplementation(async ({ onSubmitted }) => {
+        expect(chain).toBe(`0x${Number(chainId).toString(16)}`);
+        onSubmitted!({ sourceTxHash: TX_HASH });
+        return { direction: "receive", intentNonce: "42", sponsorAddress: EVM_ADDRESS,
+          sourceTxHash: TX_HASH, outputAmount: "9.9" };
+      });
+      await submitBridgeTransfer(input, effects);
+      expect(effects.onError).not.toHaveBeenCalled();
+      expect(runEpochTransfer).toHaveBeenCalledOnce();
+      expect(loadStoredActivities("mainnet")).toMatchObject([{
+        routeSnapshot: { id: input.routeId, source: { network },
+          recovery: { document: { "bridge-providers": { epoch: { allocatorUrl: "https://miden-smallocator.epochprotocol.xyz" } } } } },
+        epochIntentNonce: "42", receivedAmount: "9.9",
+      }]);
+      expect(loadStoredActivities("testnet")).toMatchObject([history]);
+    },
+  );
 });
