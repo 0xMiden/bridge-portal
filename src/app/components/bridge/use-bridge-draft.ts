@@ -10,15 +10,12 @@ import { loadStoredMode, loadStoredRoute, loadStoredRouteId, saveStoredMode, sav
 export interface BridgeDraft {
   route: BridgeRoute;
   amount: string;
-  providerSelection: "automatic" | "manual";
-  routeMenuOpen: boolean;
 }
 
 export type DraftAction =
   | { type: "amount"; amount: string }
   | { type: "mode"; mode: FlowMode }
-  | { type: "route"; route: BridgeRoute; manual?: boolean }
-  | { type: "route-menu"; open: boolean };
+  | { type: "route"; route: BridgeRoute };
 
 function initialRoute(params: ReadonlyURLSearchParams, environment: BridgeEnvironment) {
   const requestedProvider = params.get("provider");
@@ -39,22 +36,18 @@ function initialRoute(params: ReadonlyURLSearchParams, environment: BridgeEnviro
 function reduceDraft(state: BridgeDraft, action: DraftAction): BridgeDraft {
   switch (action.type) {
     case "amount":
-      return { ...state, amount: action.amount, routeMenuOpen: false };
-    case "route-menu":
-      return { ...state, routeMenuOpen: action.open };
+      return { ...state, amount: action.amount };
     case "mode": {
       const route = action.mode === state.route.mode ? state.route : reverseBridgeRoute(state.route);
-      return route ? { route, amount: "", providerSelection: "automatic", routeMenuOpen: false } : state;
+      return route ? { route, amount: "" } : state;
     }
     case "route": {
       const route = action.route;
       if (route.disabled || bridgeProviders[route.provider].disabled) return state;
-      if (route.id === state.route.id && !action.manual) return state;
+      if (route.id === state.route.id) return state;
       return {
         route,
         amount: routeSwitchChangesAsset(state.route, route) ? "" : state.amount,
-        providerSelection: action.manual ? "manual" : "automatic",
-        routeMenuOpen: false,
       };
     }
   }
@@ -66,8 +59,6 @@ export function useBridgeDraft(environment: BridgeEnvironment) {
   const [draft, dispatch] = useReducer(reduceDraft, null, (): BridgeDraft => ({
     route: initialRoute(params, environment),
     amount: "",
-    providerSelection: "automatic",
-    routeMenuOpen: false,
   }));
   useEffect(() => {
     saveStoredRoute(draft.route.provider, draft.route.id, environment);

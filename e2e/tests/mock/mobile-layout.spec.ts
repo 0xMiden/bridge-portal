@@ -17,18 +17,14 @@ function intersects(a: Rect, b: Rect) {
 }
 
 for (const width of [640, 641]) {
-  test(`${width}px uses an inline provider disclosure with accessible controls`, async ({ bridge, page }) => {
+  test(`${width}px keeps the quoted provider inline without a redundant selector`, async ({ bridge, page }) => {
     await page.setViewportSize({ width, height: 900 });
     await bridge.fillAmount("1");
-    await bridge.routeTrigger().click();
     await expect(bridge.providerOptions()).toBeVisible();
     await expect(page.getByRole("dialog")).toHaveCount(0);
-    expect((await bridge.routeTrigger().boundingBox())?.height).toBeGreaterThanOrEqual(MIN_TAP_TARGET);
     await expect(page.locator("body")).not.toHaveCSS("overflow", "hidden");
-    await bridge.providerOptions().getByRole("button").first().focus();
-    await page.keyboard.press("Escape");
-    await expect(bridge.providerOptions()).toBeHidden();
-    await expect(bridge.routeTrigger()).toBeFocused();
+    await expect(bridge.selectedProvider()).toHaveText("Circle");
+    await expect(bridge.providerOptions().getByRole("radio")).toHaveCount(0);
   });
 }
 
@@ -76,14 +72,6 @@ test.describe("mobile bridge layout", () => {
     await page.keyboard.press("Escape");
 
     await bridge.fillAmount("1");
-    await bridge.routeTrigger().click();
-    const routeOptions = bridge.providerOptions().getByRole("button");
-    for (let index = 0; index < (await routeOptions.count()); index += 1) {
-      const box = await routeOptions.nth(index).boundingBox();
-      expect(box?.height).toBeGreaterThanOrEqual(MIN_TAP_TARGET);
-    }
-    await bridge.routeTrigger().click();
-
     await bridge.fillAmount("0.05");
     await bridge.openPreflight();
     for (const control of [

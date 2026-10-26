@@ -13,7 +13,7 @@ for (const mode of ["receive", "send"] as const) {
     }, mode);
     await page.reload();
     await bridge.waitForReady();
-    await expect(bridge.selectedProvider()).toContainText("Epoch");
+    await bridge.expectRoute("epoch");
     await page.goto(`/?provider=epoch&mode=${mode}`);
     await bridge.waitForReady();
     await expect(page.locator(".mode-switch button[aria-pressed='true']"))
@@ -49,7 +49,7 @@ test("Epoch token choices distinguish mocks and keep USDCx withdrawal-only", asy
   // Keep the actual USDCx faucet as source; choose Epoch's mock as destination.
   await page.locator(".token-select-trigger").last().click();
   await tokens.getByRole("option", { name: "USDC Epoch test USDC", exact: true }).click();
-  await expect(bridge.selectedProvider()).toContainText("Epoch");
+  await bridge.expectRoute("epoch");
   await expect(page.locator(".token-select-trigger").first()).toContainText("USDCx");
   await expect(page.locator(".mode-switch").getByRole("button", { name: "Deposit", exact: true })).toBeDisabled();
   await page.getByRole("button", { name: "Get testnet funds", exact: true }).click();
@@ -65,8 +65,8 @@ test("Epoch cannot reach review when the allocator has no estimate", async ({ br
   await page.goto("/?provider=epoch&mode=receive");
   await bridge.waitForReady();
   await bridge.fillAmount("1");
-  await expect(page.locator(".form-error")).toContainText("A quote isn't available for this intent");
-  await bridge.primaryButton().click();
+  await expect(page.locator(".provider-card")).toContainText("No quotes available");
+  await expect(bridge.primaryButton()).toBeDisabled();
   await expect(bridge.preflight()).toBeHidden();
   expect(await bridge.readActivities()).toEqual([]);
 });
@@ -89,7 +89,7 @@ for (const [network, chainId] of [["ethereum", 1], ["base", 8453], ["arbitrum", 
       }, { network, mode });
       await page.getByRole("combobox", { name: "Bridge network" }).click();
       await page.getByRole("option", { name: "Mainnet", exact: true }).click();
-      await expect(bridge.selectedProvider()).toContainText("Epoch");
+      await bridge.expectRoute("epoch");
       await page.locator('[data-wallet="miden"] .wallet-pill').click();
       await page.getByRole("menuitem", { name: "Connect wallet", exact: true }).click();
       await expect(page.locator('[data-wallet="miden"] .wallet-pill')).toHaveAttribute("data-connected", "true");
@@ -106,8 +106,8 @@ for (const [network, chainId] of [["ethereum", 1], ["base", 8453], ["arbitrum", 
       if (network === "polygon" && mode === "receive") await expect(bridge.preflight()).toContainText("POL");
       await bridge.cancelPreflight();
       await bridge.fillAmount("0.5");
-      await expect(page.locator(".form-error")).toContainText("No liquidity available");
-      await bridge.primaryButton().click();
+      await expect(page.locator(".provider-card")).toContainText("No quotes available");
+      await expect(bridge.primaryButton()).toBeDisabled();
       await expect(bridge.preflight()).toBeHidden();
       expect(await bridge.readActivities()).toEqual([]);
     });

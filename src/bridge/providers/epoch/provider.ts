@@ -151,7 +151,7 @@ const directions = {
     fees: (route) => ({
       ...quoteFees(route),
       sepoliaGasUnits: null,
-      networkFee: "In quoted rate",
+      networkFee: "Miden fee (USDCx)",
     }),
   },
   receive: {

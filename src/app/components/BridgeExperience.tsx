@@ -2,16 +2,18 @@
 
 import { EmptyState, FormAlert } from "./ui/Feedback";
 
-import { useRef } from "react";
+import { useLayoutEffect, useRef } from "react";
 import { routesForEnvironment } from "../../bridge/core/routes";
 import { bridgeProviders } from "../../bridge/providers/registry";
 import type { BridgeEnvironment } from "../../config/environment";
 import { errorMessage } from "../lib/wallet-errors";
+import { selectedProviderQuote } from "../lib/provider-quotes";
 import { useBridgeEnvironment } from "./NetworkProvider";
 import { BridgeTabs } from "./bridge/BridgeTabs";
 import { SwapPanels } from "./bridge/SwapPanels";
 import { TransferReview } from "./bridge/TransferReview";
 import { TransferRouteCard } from "./bridge/TransferRouteCard";
+import { ProviderOptions } from "./ProviderOptions";
 import { useBridgeDraft, type DraftAction } from "./bridge/use-bridge-draft";
 import { useBridgeTransfer } from "./bridge/use-bridge-transfer";
 import { useBridgeWallets } from "./bridge/use-bridge-wallets";
@@ -34,10 +36,18 @@ function BridgeForm({ environment }: { environment: BridgeEnvironment }) {
   const wallets = useBridgeWallets(draft.route);
   const transfer = useBridgeTransfer(draft, wallets, environment);
   const panelsRef = useRef<HTMLDivElement>(null);
+  const quotedRoute = selectedProviderQuote(draft.route, transfer.quote.providers.offers)?.route;
+  const selectionLocked = Boolean(transfer.review) || transfer.isSubmitting;
+
+  useLayoutEffect(() => {
+    if (selectionLocked || !quotedRoute || quotedRoute.id === draft.route.id) return;
+    // Keep the form, fees, review, and submission on the same quoted provider.
+    dispatch({ type: "route", route: quotedRoute });
+  }, [dispatch, draft.route.id, quotedRoute, selectionLocked]);
 
   function editDraft(action: DraftAction) {
     dispatch(action);
-    if (action.type !== "route-menu") transfer.clearError();
+    transfer.clearError();
   }
 
   function connectMiden() {
@@ -65,12 +75,18 @@ function BridgeForm({ environment }: { environment: BridgeEnvironment }) {
 
   return (
     <>
-      {wallets.miden.error ? <FormAlert className="topbar-error max-w-295" role="alert">{errorMessage(wallets.miden.error)}</FormAlert> : null}
+      {wallets.miden.error ? <FormAlert className="topbar-error mx-auto w-full max-w-137 text-center" role="alert">{errorMessage(wallets.miden.error)}</FormAlert> : null}
       <section className="swap-stage mx-auto mt-6 flex w-full max-w-137 flex-col items-center gap-4 pb-10 mobile:mt-4">
           <h1 className="sr-only">Miden Bridge</h1>
           <BridgeTabs environment={environment}>
             <SwapPanels draft={draft} wallets={wallets} transfer={transfer} panelsRef={panelsRef} onChange={editDraft} />
-            <TransferRouteCard draft={draft} transfer={transfer} onChange={editDraft} onPrimaryAction={handlePrimaryAction}>
+            {transfer.quote.validation.valid ? (
+              <ProviderOptions route={draft.route} offers={transfer.quote.providers.offers}
+                ready={transfer.quote.providers.ready} loading={transfer.quote.providers.loading}
+                onRetry={() => { void transfer.quote.providers.refetch(); }}
+                onSelect={route => editDraft({ type: "route", route })} />
+            ) : null}
+            <TransferRouteCard draft={draft} transfer={transfer} onPrimaryAction={handlePrimaryAction}>
               {transfer.review ? (
                 <TransferReview review={transfer.review} quote={transfer.quote} walletsChanged={transfer.walletsChanged}
                   onCancel={transfer.cancelReview} onConfirm={transfer.confirmReview} />

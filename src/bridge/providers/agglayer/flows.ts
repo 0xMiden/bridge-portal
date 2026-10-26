@@ -8,6 +8,7 @@ import {
   agglayerConfig,
 } from "./agglayer";
 import { submitAgglayerDeposit } from "./deposit";
+import { quoteAgglayer } from "./quote";
 
 import { chainObservationSchema, depositStatusSchema, withdrawalStatusSchema, type ChainTxObservation } from "./status-schema";
 import type { Activity } from "../../core/models";
@@ -29,9 +30,7 @@ async function sourceTransaction(hash: string, signal: AbortSignal, network: Evm
 
 export const flows: ProviderFlows = {
   receive: {
-    async quote() {
-      return null;
-    },
+    quote: quoteAgglayer,
     async submit({ input, route, phase, record }) {
       const AGGLAYER_TESTNET = agglayerConfig(route.recovery);
       const { provider, address } = input.evmWallet;
@@ -81,9 +80,7 @@ export const flows: ProviderFlows = {
     },
   },
   send: {
-    async quote() {
-      return null;
-    },
+    quote: quoteAgglayer,
     async submit({ input, route, phase, record, update }) {
       const AGGLAYER_TESTNET = agglayerConfig(route.recovery);
       const wallet = input.midenWallet;
