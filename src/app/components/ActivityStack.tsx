@@ -2,7 +2,7 @@
 
 import { ActivityRow, ActivitySection } from "./ActivityRow";
 import { ChevronDown } from "lucide-react";
-import { useLayoutEffect, useRef, useState } from "react";
+import { useLayoutEffect, useRef } from "react";
 import type { Activity } from "../lib/bridge-presentation";
 import { animateWithMotionPreference, standardEase } from "../lib/motion";
 
@@ -15,11 +15,16 @@ import { animateWithMotionPreference, standardEase } from "../lib/motion";
 export function ActivityStack({
   activities,
   title,
+  expanded,
+  onExpandedChange,
+  onNavigate,
 }: {
   activities: Activity[];
   title: string;
+  expanded: boolean;
+  onExpandedChange: (expanded: boolean) => void;
+  onNavigate: () => void;
 }) {
-  const [expanded, setExpanded] = useState(false);
   const sectionRef = useRef<HTMLElement>(null);
   const prevHeight = useRef<number | null>(null);
 
@@ -54,7 +59,7 @@ export function ActivityStack({
 
   const toggle = () => {
     prevHeight.current = sectionRef.current?.getBoundingClientRect().height ?? null;
-    setExpanded((open) => !open);
+    onExpandedChange(!expanded);
   };
 
   if (activities.length === 0) return null;
@@ -82,7 +87,7 @@ export function ActivityStack({
       {expanded || activities.length === 1 ? (
         <div className="grid gap-2">
           {activities.map((activity) => (
-            <ActivityRow activity={activity} key={activity.id} />
+            <ActivityRow activity={activity} key={activity.id} onNavigate={onNavigate} />
           ))}
         </div>
       ) : (

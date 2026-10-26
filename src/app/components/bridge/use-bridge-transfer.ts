@@ -8,6 +8,7 @@ import { deriveCtaState } from "../../lib/bridge-presentation";
 import { preloadBridgeSubmission, submitBridgeTransfer } from "../../lib/bridge-submission";
 import { errorMessage } from "../../lib/wallet-errors";
 import { useActivityStore } from "../ActivityProvider";
+import { useLockNetworkSelection } from "../NetworkProvider";
 import { useBridgeQuote } from "./use-bridge-quote";
 import type { BridgeWallets } from "./use-bridge-wallets";
 
@@ -27,6 +28,7 @@ type TransferState =
 export function useBridgeTransfer(draft: { route: BridgeRoute; amount: string }, wallets: BridgeWallets, environment: BridgeEnvironment) {
   const router = useRouter();
   const activities = useActivityStore();
+  const lockNetworkSelection = useLockNetworkSelection();
   const [state, setState] = useState<TransferState>({ status: "editing", error: "" });
   const review = state.status === "editing" ? undefined : state.review;
   const { route, amount } = draft;
@@ -87,23 +89,28 @@ export function useBridgeTransfer(draft: { route: BridgeRoute; amount: string },
     setState({ status: "editing", error: "" });
     wallets.setError("");
     const midenAsset = wallets.miden.balance.balance;
-    await submitBridgeTransfer({
-      routeId: reviewed.route.id, environment, amount: reviewed.amount, quote: reviewed.quote,
-      ...reviewed.accounts,
-      insufficientBalance: quote.insufficientBalance, evmBalance: wallets.evm.balanceLabel,
-      evmWallet: wallets.evm,
-      midenWallet: wallets.miden,
-      midenAsset: midenAsset && midenAsset.amountRaw > 0n ? midenAsset : null,
-    }, {
-      openEvmWallet: wallets.openEvmWallet,
-      verifyBalanceCap: quote.balanceCap.verifyBalanceCap,
-      onError: setError,
-      onSubmittingChange: submitting => setState(current => submitting
-        ? { status: "submitting", review: reviewed, phase: "", error: current.error }
-        : { status: "editing", error: current.error }),
-      onPhaseChange: phase => setState(current => current.status === "submitting" ? { ...current, phase } : current),
-      activities, navigate: path => router.push(path),
-    });
+    const unlockNetworkSelection = lockNetworkSelection();
+    try {
+      await submitBridgeTransfer({
+        routeId: reviewed.route.id, environment, amount: reviewed.amount, quote: reviewed.quote,
+        ...reviewed.accounts,
+        insufficientBalance: quote.insufficientBalance, evmBalance: wallets.evm.balanceLabel,
+        evmWallet: wallets.evm,
+        midenWallet: wallets.miden,
+        midenAsset: midenAsset && midenAsset.amountRaw > 0n ? midenAsset : null,
+      }, {
+        openEvmWallet: wallets.openEvmWallet,
+        verifyBalanceCap: quote.balanceCap.verifyBalanceCap,
+        onError: setError,
+        onSubmittingChange: submitting => setState(current => submitting
+          ? { status: "submitting", review: reviewed, phase: "", error: current.error }
+          : { status: "editing", error: current.error }),
+        onPhaseChange: phase => setState(current => current.status === "submitting" ? { ...current, phase } : current),
+        activities, navigate: path => router.push(path),
+      });
+    } finally {
+      unlockNetworkSelection();
+    }
   }
 
   async function retryBalanceCap() {

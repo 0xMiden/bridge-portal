@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { headers } from "next/headers";
 import { Providers } from "./components/Providers";
+import { AppShell } from "./components/AppShell";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -69,7 +70,7 @@ export default async function RootLayout({
       suppressHydrationWarning
     >
       <body>
-        <Providers cookies={cookies}>{children}</Providers>
+        <Providers cookies={cookies}><AppShell>{children}</AppShell></Providers>
       </body>
     </html>
   );

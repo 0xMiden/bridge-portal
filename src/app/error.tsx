@@ -1,6 +1,5 @@
 "use client";
 
-import { PageShell } from "./components/ui/PageLayout";
 import { EmptyState } from "./components/ui/Feedback";
 import { Button } from "./components/ui/Button";
 import { useEffect } from "react";
@@ -20,17 +19,15 @@ export default function Error({
   }, [error]);
 
   return (
-    <PageShell className="app-shell">
-      <EmptyState>
-        <h1>Something went wrong</h1>
-        <p>
-          The bridge hit an unexpected error. Your funds and wallet connections
-          are unaffected — try again.
-        </p>
-        <Button variant="primary" className="primary-button mt-2.5" type="button" onClick={reset}>
-          Try again
-        </Button>
-      </EmptyState>
-    </PageShell>
+    <EmptyState>
+      <h1>Something went wrong</h1>
+      <p>
+        The bridge hit an unexpected error. Your funds and wallet connections
+        are unaffected — try again.
+      </p>
+      <Button variant="primary" className="primary-button mt-2.5" type="button" onClick={reset}>
+        Try again
+      </Button>
+    </EmptyState>
   );
 }
