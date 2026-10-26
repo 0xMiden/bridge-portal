@@ -37,14 +37,20 @@ export function useBridgeTransfer(draft: { route: BridgeRoute; amount: string },
   const { evmAddress, midenAccount } = wallets.accounts;
   const walletsChanged = Boolean(review && (review.accounts.midenAccount !== midenAccount ||
     review.accounts.evmAddress.toLowerCase() !== evmAddress.toLowerCase()));
-  const cta = deriveCtaState({
+  const action = deriveCtaState({
     mode: route.mode, amount, sourceTokenSymbol: route.source.symbol,
     sourceConnected: Boolean(route.mode === "receive" ? evmAddress : midenAccount),
     destinationConnected: Boolean(route.mode === "receive" ? midenAccount : evmAddress),
     insufficientBalance: quote.insufficientBalance,
-    quoteLoading: quote.query.isFetching && !quote.live,
+    quoteLoading: quote.providers.loading && !quote.live,
     isSubmitting, submitPhase: isSubmitting ? state.phase : "", evmNetworkLabel: wallets.evm.network.name,
   });
+  const cta = action.action === "review" ? {
+    ...action,
+    label: quote.live ? "Review transfer" : "No quotes available",
+    disabled: !quote.live,
+    opensReview: Boolean(quote.live),
+  } : action;
 
   useEffect(() => {
     if (Number(amount) > 0) preloadBridgeSubmission(route.provider);
@@ -62,14 +68,14 @@ export function useBridgeTransfer(draft: { route: BridgeRoute; amount: string },
       setError(quote.balanceCap.checking ? "" : quote.balanceCap.error);
       return;
     }
-    if (quote.fees.requiresQuote && !isQuoteReviewable(quote.query.data)) {
-      setError(quote.query.error ? errorMessage(quote.query.error) : "Refresh the quote before reviewing.");
-      void quote.query.refetch();
+    if (!isQuoteReviewable(quote.live)) {
+      setError("Refresh the quote before reviewing.");
+      void quote.providers.refetch();
       return;
     }
     setState({
       status: "reviewing", error: "",
-      review: { route, amount, accounts: wallets.accounts, quote: quote.fees.requiresQuote ? quote.query.data ?? undefined : undefined },
+      review: { route, amount, accounts: wallets.accounts, quote: quote.live },
     });
   }
 

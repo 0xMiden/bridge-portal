@@ -1,4 +1,4 @@
-import { EVM_ADDRESS, MIDEN_ADDRESS } from "../../fixtures/wallets";
+import { EVM_ADDRESS, MIDEN_ADDRESS, walletRequests } from "../../fixtures/wallets";
 import { findBridgeRoute } from "../../../src/bridge/core/routes";
 import { expect, test, type Page } from "@playwright/test";
 import { stubNetwork } from "../../fixtures/mock-network";
@@ -18,7 +18,7 @@ async function recordBridgeFrames(page: Page) {
     // Observe every committed UI state, including flashes too short for a
     // Playwright visibility assertion to catch.
     new MutationObserver(() => {
-      const route = document.querySelector(".selected-provider")?.textContent;
+      const route = document.querySelector(".transfer-route-card")?.getAttribute("data-provider");
       if (!route) return;
       const frame = {
         route,
@@ -32,7 +32,9 @@ async function recordBridgeFrames(page: Page) {
 }
 
 async function bridgeFrames(page: Page) {
-  return page.evaluate(() => (window as FrameWindow).bridgeFrames);
+  const frames = await page.evaluate(() => (window as FrameWindow).bridgeFrames);
+  expect(frames.length).toBeGreaterThan(0);
+  return frames;
 }
 
 test.beforeEach(async ({ page }) => {
@@ -110,7 +112,7 @@ test("Base simulation outages leave a readable error and a retryable, contained 
   await expect(bridge.preflight()).toContainText("1 USDCx");
 });
 
-test("unbroken quote errors wrap within the bridge card on desktop and mobile", async ({ page }) => {
+test("failed quotes show a contained retry state on desktop and mobile", async ({ page }) => {
   await page.route("**/api/xreserve/quote", (route) =>
     route.fulfill({ status: 502, json: { error: "x".repeat(240) } }));
   await page.goto("/?provider=xreserve");
@@ -118,11 +120,13 @@ test("unbroken quote errors wrap within the bridge card on desktop and mobile", 
   await bridge.waitForReady();
   await bridge.setChain("Base Sepolia");
   await bridge.fillAmount("1");
-  await expect(page.locator(".swap-card > .form-error")).toHaveText("x".repeat(240));
+  await expect(page.locator(".provider-card")).toContainText("No quotes available");
+  await expect(page.locator(".provider-card").getByRole("button", { name: "Retry", exact: true })).toBeVisible();
+  await expect(bridge.primaryButton()).toBeDisabled();
   for (const width of [1440, 390]) {
     await page.setViewportSize({ width, height: 900 });
     const card = await page.locator(".swap-card").boundingBox();
-    const error = await page.locator(".swap-card > .form-error").boundingBox();
+    const error = await page.locator(".provider-card").boundingBox();
     expect(card!.width).toBeLessThanOrEqual(Math.min(548, width));
     expect(error!.x + error!.width).toBeLessThanOrEqual(card!.x + card!.width);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
@@ -135,13 +139,13 @@ test("USDCx joins the shared form with Arc balances, exact amounts and deposit r
   await expect(page).toHaveURL(/provider=xreserve/);
   const bridge = new BridgePage(page);
   await bridge.waitForReady();
-  await expect(bridge.selectedProvider()).toContainText("USDCx");
+  await bridge.expectRoute("xreserve");
   await expect(page.locator(".mode-switch").getByRole("button", { name: "Withdraw", exact: true })).toBeEnabled();
   await expect(page.locator(".token-select-symbol")).toHaveText(["USDC", "USDCx"]);
   await expect(page.locator(".swap-box").first()).toContainText("Arc Testnet");
   await expect(page.locator(".swap-box").first()).toContainText("10.1234 USDC");
   await expect(page.getByRole("button", { name: "Arc Testnet wallet menu", exact: true })).toBeVisible();
-  expect.soft((await bridgeFrames(page)).filter((frame) => !frame.route.includes("USDCx") || frame.source !== "Arc Testnet")).toEqual([]);
+  expect.soft((await bridgeFrames(page)).filter((frame) => !frame.route.includes("xreserve") || frame.source !== "Arc Testnet")).toEqual([]);
   // Single-asset chains still expose a real, keyboard-operable token selector.
   for (const symbol of ["USDC", "USDCx"]) {
     const selector = page.getByRole("button", { name: `${symbol} — change token`, exact: true });
@@ -208,7 +212,7 @@ test("USDCx joins the shared form with Arc balances, exact amounts and deposit r
   await page.goto("/");
   await bridge.waitForReady();
   await expect(page.getByRole("button", { name: "Arc Testnet wallet menu", exact: true })).toBeVisible();
-  expect((await bridgeFrames(page)).filter((frame) => !frame.route.includes("USDCx") || frame.source !== "Arc Testnet" || /wrong network/i.test(frame.wallet))).toEqual([]);
+  expect((await bridgeFrames(page)).filter((frame) => !frame.route.includes("xreserve") || frame.source !== "Arc Testnet" || /wrong network/i.test(frame.wallet))).toEqual([]);
 
   await bridge.fillAmount("1.000001");
   await bridge.openPreflight();
@@ -287,7 +291,8 @@ test("Circle origins retain Miden USDCx, review the separate fee and restore the
     await expect(page.locator(".token-select-symbol")).toHaveText(["USDC", "USDCx"]);
     await expect(page.locator(".swap-box").last().locator(".swap-box-head strong")).toHaveText("Miden");
     await bridge.fillAmount("1");
-    await expect(page.locator(".quote-summary")).toContainText("0.25 USDC");
+    await expect(page.locator(".quote-summary")).toContainText("Network fee");
+    await expect(page.locator(".quote-summary")).not.toContainText("Circle fee");
     await bridge.openPreflight();
     await expect(bridge.preflight()).toContainText(label);
     await expect(bridge.preflight()).toContainText("1 USDCx");
@@ -301,9 +306,10 @@ test("Circle origins retain Miden USDCx, review the separate fee and restore the
   await page.goto("/");
   await bridge.waitForReady();
   await expect(origin).toHaveText("Arbitrum Sepolia");
-  expect((await bridgeFrames(page)).filter((frame) => frame.source !== "Arbitrum Sepolia" || !frame.route.includes("USDCx"))).toEqual([]);
+  expect((await bridgeFrames(page)).filter((frame) => frame.source !== "Arbitrum Sepolia" || !frame.route.includes("xreserve"))).toEqual([]);
   await bridge.fillAmount("1");
-  await expect(page.locator(".quote-summary")).toContainText("0.25 USDC");
+  await expect(page.locator(".quote-summary")).toContainText("Network fee");
+  await expect(page.locator(".quote-summary")).not.toContainText("Circle fee");
   await page.screenshot({ path: info.outputPath("usdcx-origins-desktop.png"), fullPage: true, animations: "disabled" });
   await page.setViewportSize({ width: 390, height: 844 });
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
@@ -314,13 +320,16 @@ test("Circle origins retain Miden USDCx, review the separate fee and restore the
 
 test("browsing routes leaves the wallet alone; confirming switches chains and a rejection can be retried", async ({ page }) => {
   await page.addInitScript(() => { window.addEventListener("DOMContentLoaded", () => { window.testWallets.rejectSwitch = true; }); });
-  // A successful switch reaches the deposit's first on-chain check. Stop there
-  // so this test exercises network selection without signing a deposit.
-  let arcReads = 0;
+  // Quotes use public reads. Wallet switching still happens only on confirmation.
+  let registered = true;
   await page.route("**/api/evm/arc-testnet/rpc", (route) => {
-    arcReads++;
-    const { id } = route.request().postDataJSON();
-    return route.fulfill({ json: { jsonrpc: "2.0", id, result: `0x${"00".repeat(32)}` } });
+    const { id, method, params } = route.request().postDataJSON();
+    if (method !== "eth_call" || params?.[0]?.to?.toLowerCase() !== arcConfig().xReserve.toLowerCase()) return route.fallback();
+    const { functionName } = decodeFunctionData({ abi: xReserveAbi, data: params[0].data });
+    if (functionName !== "isRemoteDomainRegistered" && functionName !== "getRemoteToken") throw new Error("Unexpected contract read");
+    return route.fulfill({ json: { jsonrpc: "2.0", id, result: encodeFunctionResult({
+      abi: xReserveAbi, functionName, result: functionName === "isRemoteDomainRegistered" ? registered : arcRecipient(arcConfig().faucetId),
+    }) } });
   });
   await page.goto("/?provider=xreserve");
   const bridge = new BridgePage(page);
@@ -330,20 +339,22 @@ test("browsing routes leaves the wallet alone; confirming switches chains and a 
   await bridge.fillAmount("1.000001");
   await expect(page.locator(".form-error")).toHaveCount(0);
   await bridge.openPreflight();
-  expect(arcReads).toBe(0);
+  expect((await walletRequests(page)).filter(request => request.method === "wallet_switchEthereumChain")).toHaveLength(0);
   await bridge.cancelPreflight();
   await expect(page.locator(".form-error")).toHaveCount(0);
   await bridge.openPreflight();
   await bridge.confirmPreflight();
   await expect(page.locator(".form-error").filter({ hasText: /cancelled/i })).toBeVisible();
-  expect(arcReads).toBe(0);
-  await expect(bridge.selectedProvider()).toContainText("USDCx");
+  expect((await walletRequests(page)).filter(request => request.method === "wallet_switchEthereumChain")).toHaveLength(1);
+  await bridge.expectRoute("xreserve");
   await expect(page.getByRole("textbox", { name: "Amount", exact: true })).toHaveValue("1.000001");
   await page.evaluate(() => { window.testWallets.rejectSwitch = false; });
   await bridge.openPreflight();
+  registered = false;
   await bridge.confirmPreflight();
   await expect(page.locator(".form-error")).toContainText("Miden deposits are not registered");
-  expect(arcReads).toBeGreaterThan(0);
+  expect((await walletRequests(page)).filter(request => request.method === "wallet_switchEthereumChain")).toHaveLength(2);
+  expect((await walletRequests(page)).filter(request => request.method === "eth_sendTransaction")).toHaveLength(0);
 });
 
 

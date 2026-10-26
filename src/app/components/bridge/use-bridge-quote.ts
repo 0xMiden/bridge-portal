@@ -4,8 +4,9 @@ import type { BridgeRoute } from "../../../bridge/core/routes";
 import { isValidAmount, validateTransferAmount } from "../../../bridge/core/rules";
 import { providerFee, quoteFor } from "../../lib/bridge-presentation";
 import { useSepoliaGasEstimate } from "../../lib/sepolia-gas";
+import { useMidenGasEstimate } from "../../lib/miden-gas";
 import { useBalanceCap } from "../../lib/use-balance-cap";
-import { useTransferQuote } from "../../lib/use-transfer-quote";
+import { useTransferQuotes } from "../../lib/use-transfer-quote";
 import { errorMessage } from "../../lib/wallet-errors";
 import type { BridgeWallets } from "./use-bridge-wallets";
 
@@ -20,9 +21,12 @@ export function useBridgeQuote(route: BridgeRoute, amount: string, wallets: Brid
   }, [route, amount]);
   const estimate = quoteFor(route, amount);
   const { fees } = estimate;
-  const query = useTransferQuote({ route, amount, ...wallets.accounts }, Boolean(review));
-  const live = review ? review.quote : query.data;
+  const providers = useTransferQuotes({ route, amount, ...wallets.accounts }, Boolean(review));
+  const { query } = providers;
+  const live = review ? review.quote : providers.offers.find(offer => offer.route.id === route.id)?.quote;
   const gas = useSepoliaGasEstimate(estimate.fees.sepoliaGasUnits, wallets.evm.token?.network ?? "sepolia");
+  const midenGas = useMidenGasEstimate(route.recovery,
+    validation.valid && route.mode === "send" && (route.provider === "xreserve" || route.provider === "epoch"));
   const balanceCap = useBalanceCap(route, amount, wallets.accounts.midenAccount);
   const capError = balanceCap.enabled && validation.valid && !balanceCap.checking ? balanceCap.error : "";
   const capBlocked = balanceCap.enabled && (balanceCap.checking || Boolean(balanceCap.error));
@@ -31,13 +35,13 @@ export function useBridgeQuote(route: BridgeRoute, amount: string, wallets: Brid
     Number(amount) > 0 && Number(amount) + (fees.charging === "additional" ? Number(live?.fee ?? 0) : 0) > Number(evmBalance?.balance);
 
   return {
-    estimate, fees, query, live, validation, balanceCap, capError, capBlocked, insufficientBalance,
+    estimate, fees, query, live, providers, validation, balanceCap, capError, capBlocked, insufficientBalance,
     amountError: validation.error || capError,
-    received: live?.received ?? (query.isFetching ? "…" : estimate.expectedReceived),
-    networkFee: gas.fee || (gas.loading ? "Estimating…" : estimate.networkFee),
+    received: live?.received ?? (providers.loading ? "…" : "—"),
+    networkFee: midenGas ?? (gas.fee || (gas.loading ? "Estimating…" : estimate.networkFee)),
     fee: live?.fee !== undefined
       ? providerFee(fees, live.fee, route.source.symbol, route.destination.symbol).value
-      : query.isFetching ? "Fetching quote…" : estimate.bridgeFee,
+      : query?.isFetching ? "Fetching quote…" : estimate.bridgeFee,
   };
 }
 

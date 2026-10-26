@@ -1,12 +1,14 @@
 import { expect, test } from "@playwright/test";
 import { stubNetwork } from "../../fixtures/mock-network";
 import { startOnTestnet } from "../../fixtures/testnet";
+import { BridgePage } from "../../pages/bridge-page";
 
 test("USD estimates follow the amount and selected token, and pricing failures stay unavailable", async ({ page }) => {
   await startOnTestnet(page);
   await stubNetwork(page);
   await page.route("**/api/xreserve/*quote", (route) => route.fulfill({ status: 502, json: { error: "Quote unavailable" } }));
   await page.goto("/?provider=agglayer&mode=receive");
+  await new BridgePage(page).waitForReady();
   const amount = page.getByRole("textbox", { name: "Amount", exact: true });
   const source = page.locator('.swap-box[data-side="source"] .fiat-amount');
   const destination = page.locator('.swap-box[data-side="destination"] .fiat-amount');
@@ -22,7 +24,7 @@ test("USD estimates follow the amount and selected token, and pricing failures s
   await page.getByRole("option", { name: "USDC Circle USDC", exact: true }).click();
   await amount.fill("1000");
   await expect(source).toHaveText("$999.80");
-  await expect(destination).toHaveText("$999.80");
+  await expect(destination).toHaveText("—");
   await page.getByRole("button", { name: "Reverse transfer direction" }).click();
   await amount.fill("1000");
   await expect(source).toHaveText("$999.80");

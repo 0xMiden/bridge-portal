@@ -11,7 +11,10 @@ import { observeXreserveDeposit } from "./status";
 export const flows: ProviderFlows = {
   receive: {
     async quote(input, signal) {
-      if (["arc-testnet", "arc"].includes(input.route.source.network)) return null;
+      if (["arc-testnet", "arc"].includes(input.route.source.network)) {
+        const { quoteArcDeposit } = await import("./deposit-quote");
+        return quoteArcDeposit(input, signal);
+      }
       const { quoteTransfer } = await import("./cctp-quote");
       return quoteTransfer(input, signal);
     },

@@ -1,37 +1,28 @@
 "use client";
-import { useQuery } from "@tanstack/react-query";
+import { useEffect, useState } from "react";
+import { useQueries } from "@tanstack/react-query";
 import type { QuoteRequest } from "../../bridge/core/quote";
-import { isValidAmount } from "../../bridge/core/rules";
-import { directionFor } from "../../bridge/providers/registry";
-import { quoteTransfer } from "../../bridge/quotes";
+import { availableProviderQuotes, providerQuoteRequests, transferQuoteOptions } from "./provider-quotes";
 
-/** All fee models share caching, cancellation, refresh and the frozen review. */
-export function useTransferQuote(input: QuoteRequest, frozen: boolean) {
-  const required = directionFor(input.route).fees(input.route).requiresQuote;
-  return useQuery({
-    queryKey: ["transfer-quote", input],
-    enabled:
-      required &&
-      !frozen &&
-      isValidAmount(input.amount) &&
-      Boolean(input.midenAccount && input.evmAddress),
-    queryFn: async ({ signal }) => {
-      // Debounce typing. Consuming the signal cancels obsolete requests and delays.
-      await new Promise<void>((resolve, reject) => {
-        const timer = setTimeout(resolve, 400);
-        signal.addEventListener(
-          "abort",
-          () => {
-            clearTimeout(timer);
-            reject(signal.reason);
-          },
-          { once: true },
-        );
-      });
-      return quoteTransfer(input, signal);
-    },
-    staleTime: 30000,
-    refetchInterval: frozen ? false : 45000,
-    retry: false,
-  });
+/** Query every compatible provider independently; selection reuses the same quote. */
+export function useTransferQuotes(input: QuoteRequest, frozen: boolean) {
+  const requests = providerQuoteRequests(input);
+  const options = requests.map(request => transferQuoteOptions(request, frozen));
+  const results = useQueries({ queries: options });
+  const offers = availableProviderQuotes(requests, results);
+  const [, expire] = useState(0);
+  const nextExpiry = Math.min(...offers.map(({ quote }) => quote.validity.kind === "time" ? quote.validity.expiresAt : Infinity));
+  useEffect(() => {
+    if (frozen || !Number.isFinite(nextExpiry)) return;
+    const timer = setTimeout(() => expire(value => value + 1), Math.max(0, nextExpiry - Date.now()) + 1);
+    return () => clearTimeout(timer);
+  }, [nextExpiry, frozen]);
+
+  return {
+    offers,
+    ready: frozen || options.some(option => option.enabled),
+    loading: results.some(result => result.isFetching),
+    query: results[requests.findIndex(request => request.route.id === input.route.id)],
+    refetch: () => Promise.all(results.map(result => result.refetch())),
+  };
 }

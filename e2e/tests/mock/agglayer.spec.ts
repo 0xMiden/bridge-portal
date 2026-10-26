@@ -6,13 +6,13 @@ test("Agglayer receive: select, restore and submit a deposit", async ({ bridge, 
   await bridge.setRoute("AggLayer");
   await page.reload();
   await bridge.waitForReady();
-  await expect(bridge.selectedProvider()).toContainText("Agglayer");
+  await bridge.expectRoute("agglayer");
   await expect(page.locator(".mode-switch button[aria-pressed='true']"))
     .toHaveText("Deposit");
 
   await page.goto("/?provider=agglayer&mode=receive");
   await bridge.waitForReady();
-  await expect(bridge.selectedProvider()).toContainText("Agglayer");
+  await bridge.expectRoute("agglayer");
   acceptAgglayerDeposit(page);
   await bridge.fillAmount("0.01");
   await bridge.submit();
@@ -37,7 +37,7 @@ test("Agglayer withdrawal: select, restore and review a Sepolia withdrawal", asy
   await bridge.setMode("Send");
   await page.reload();
   await bridge.waitForReady();
-  await expect(bridge.selectedProvider()).toContainText("Agglayer");
+  await bridge.expectRoute("agglayer");
   await expect(withdraw).toHaveAttribute("aria-pressed", "true");
 
   await page.goto("/?provider=agglayer&mode=receive");
@@ -46,7 +46,7 @@ test("Agglayer withdrawal: select, restore and review a Sepolia withdrawal", asy
 
   await page.goto("/?provider=agglayer&mode=send");
   await bridge.waitForReady();
-  await expect(bridge.selectedProvider()).toContainText("Agglayer");
+  await bridge.expectRoute("agglayer");
   await expect(withdraw).toHaveAttribute("aria-pressed", "true");
   await bridge.fillAmount("0.01");
   await bridge.openPreflight();

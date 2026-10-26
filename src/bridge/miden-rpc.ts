@@ -2,6 +2,22 @@ import { configMidenNetwork, type BridgeConfig } from "../config/bridge-config";
 import { midenNetworks } from "../config/environment";
 import type { MidenNetwork } from "./core/assets";
 
+/** The live verification rate is in the native fee asset's smallest units. */
+export async function getMidenVerificationBaseFee(recovery: BridgeConfig): Promise<number> {
+  const { Endpoint, RpcClient } = await import("@miden-sdk/miden-sdk");
+  const rpc = new RpcClient(new Endpoint(configMidenNetwork(recovery).rpcUrl));
+  const resources: { free(): void }[] = [rpc];
+  try {
+    const header = await rpc.getBlockHeaderByNumber();
+    resources.push(header);
+    const fee = header.verificationBaseFee();
+    if (!Number.isInteger(fee) || fee < 0 || fee > 0xffffffff) {
+      throw new Error("Miden network fee is unavailable.");
+    }
+    return fee;
+  } finally { resources.reverse().forEach(resource => resource.free()); }
+}
+
 /** Read the chain head on the transfer's Miden network. */
 export async function getCurrentMidenBlock(recovery?: BridgeConfig): Promise<number> {
   const { Endpoint, RpcClient } = await import("@miden-sdk/miden-sdk");

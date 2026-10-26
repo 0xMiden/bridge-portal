@@ -30,6 +30,7 @@ test("mainnet tokens select matching Miden assets and explain unsupported precis
   await page.route("**/api/evm/ethereum/gas**", route =>
     route.fulfill({ json: { gasPriceWei: "1200000000", gwei: "1.2" } }));
   await selectNetwork(page, "Mainnet");
+  await bridge.waitForReady();
   await bridge.setChain("Ethereum");
   for (const [symbol, name] of [["USDT", "Tether USD"], ["WBTC", "Wrapped BTC"], ["PYUSD", "PayPal USD"], ["WSOL", "Wrapped SOL"]]) {
     await bridge.fillAmount("0.1");
@@ -39,7 +40,7 @@ test("mainnet tokens select matching Miden assets and explain unsupported precis
     await expect(page.locator(".swap-box[data-side='destination']").getByRole("button", { name: `${symbol} — change token`, exact: true })).toBeVisible();
     await expect(page.getByRole("button", { name: "Reverse transfer direction" })).toBeDisabled();
     await bridge.fillAmount("0.1");
-    await expect(bridge.selectedProvider()).toContainText("Agglayer");
+    await bridge.expectRoute("agglayer");
   }
   await page.reload();
   await expect(page.locator(".swap-box[data-side='source']").getByRole("button", { name: "WSOL — change token", exact: true })).toBeVisible();
@@ -72,11 +73,11 @@ test("network selection isolates forms, preferences and tabs", async ({ bridge, 
   await expect(page.getByRole("option", { name: /Epoch/ })).toHaveCount(0);
   await page.getByRole("option", { name: "ETH Ether", exact: true }).click();
   await bridge.fillAmount("0.02");
-  await expect(bridge.selectedProvider()).toContainText("Agglayer");
+  await bridge.expectRoute("agglayer");
   await expect(page.locator(".topbar-error")).toHaveCount(0);
   await page.reload();
   await expect(page.getByRole("combobox", { name: "Bridge network" })).toHaveText("Mainnet");
-  await expect(bridge.selectedProvider()).toContainText("Agglayer");
+  await bridge.expectRoute("agglayer");
   await expect(page).toHaveURL(/\/$/);
 
   const second = await context.newPage();
@@ -93,7 +94,7 @@ test("network selection isolates forms, preferences and tabs", async ({ bridge, 
   await page.screenshot({ path: info.outputPath("mainnet-mobile.png"), fullPage: true, animations: "disabled" });
   await selectNetwork(page, "Testnet");
   await expect(page).toHaveURL(/\/$/);
-  await expect(bridge.selectedProvider()).toContainText("Agglayer");
+  await bridge.expectRoute("agglayer");
   await expect(page.getByRole("textbox", { name: "Amount", exact: true })).toHaveValue("");
   await page.screenshot({ path: info.outputPath("testnet-mobile.png"), fullPage: true, animations: "disabled" });
 });

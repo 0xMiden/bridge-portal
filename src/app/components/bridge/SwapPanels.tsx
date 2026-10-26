@@ -8,7 +8,6 @@ import { flowModes } from "../../../bridge/core/models";
 import { reverseBridgeRoute } from "../../../bridge/core/routes";
 import { bridgeProviders } from "../../../bridge/providers/registry";
 import { animateWithMotionPreference, standardEase } from "../../lib/motion";
-import { errorMessage } from "../../lib/wallet-errors";
 import { ChainSelect } from "../ChainSelect";
 import { FiatAmount } from "../FiatAmount";
 import { TokenSelect } from "../TokenSelect";
@@ -72,7 +71,7 @@ export function SwapPanels({ draft, wallets, transfer, panelsRef, onChange }: {
         ))}
       </div>
       {quote.amountError ? <FormAlert id="amount-error">{quote.amountError}</FormAlert>
-        : transfer.error || quote.query.error ? <FormAlert role="alert">{transfer.error || errorMessage(quote.query.error)}</FormAlert> : null}
+        : transfer.error ? <FormAlert role="alert">{transfer.error}</FormAlert> : null}
       {quote.balanceCap.enabled && !quote.balanceCap.checking && quote.balanceCap.status === "unavailable" && quote.validation.valid ? (
         <div id="balance-cap-status" className="mt-4 mx-0.5 text-sm text-muted-foreground wrap-anywhere">
           <button type="button" className="mt-1 block min-h-11 p-0 font-semibold text-foreground underline underline-offset-3 hover:text-accent-foreground" onClick={transfer.retryBalanceCap}>Retry balance check</button>
@@ -146,7 +145,7 @@ function MidenBalance({ wallet }: { wallet: BridgeWallets["miden"] }) {
   if (wallet.balance.balance) return (
     <>
       Available {wallet.balanceText}
-      <button type="button" className="grid size-4 shrink-0 place-items-center rounded-md hover:text-foreground mobile:-m-2.5 mobile:size-11" onClick={() => void wallet.balance.refresh().catch(() => {})}
+      <button type="button" className="-mx-3 -my-3 grid size-11 shrink-0 place-items-center rounded-md hover:text-foreground" onClick={() => void wallet.balance.refresh().catch(() => {})}
         disabled={wallet.balance.loading} aria-label="Refresh Miden balance" title="Refresh Miden balance">
         <RefreshCcw size={12} aria-hidden="true" />
       </button>

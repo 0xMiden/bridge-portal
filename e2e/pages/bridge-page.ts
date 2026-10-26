@@ -30,20 +30,21 @@ export class BridgePage {
   }
 
   async setRoute(route: Route): Promise<void> {
+    const provider = route === "USDCx" ? "xreserve" : route.toLowerCase();
     // Assets/networks define the route; the provider picker only contains
     // compatible providers and must never silently switch assets.
-    if (!new RegExp(route, "i").test((await this.selectedProvider().textContent()) ?? "")) {
+    if ((await this.page.locator(".transfer-route-card").getAttribute("data-provider")) !== provider) {
       await this.setChain("Sepolia");
       await this.page.locator(".token-select-trigger").first().click();
       const token = route === "AggLayer" ? "ETH Ether" : route === "USDCx" ? "USDC Circle USDC" : "USDC Epoch test USDC";
       await this.page.getByRole("listbox", { name: "Token", exact: true })
         .getByRole("option", { name: token, exact: true }).click();
     }
-    // Case-insensitive: the semantic route name ("AggLayer") differs from the
-    // UI label casing ("Agglayer", lowercase L).
-    await expect(this.selectedProvider()).toContainText(
-      new RegExp(route, "i"),
-    );
+    await this.expectRoute(provider);
+  }
+
+  async expectRoute(provider: string): Promise<void> {
+    await expect(this.page.locator(".transfer-route-card")).toHaveAttribute("data-provider", provider);
   }
 
   async setChain(label: string): Promise<void> {
@@ -71,10 +72,6 @@ export class BridgePage {
 
   primaryButton() {
     return this.actionDock().locator(".primary-button");
-  }
-
-  routeTrigger() {
-    return this.page.locator(".route-trigger");
   }
 
   selectedProvider() {

@@ -15,13 +15,11 @@ test("bridge boots, wallets connect, only compatible providers are offered", asy
     await expect(page.getByRole("tab", { name: "Bridge", exact: true })).toBeVisible();
   });
 
-  await test.step("USDCx is the default and incompatible providers are hidden", async () => {
-    await expect(bridge.selectedProvider()).toContainText("USDCx");
+  await test.step("Circle is the default and incompatible providers are hidden", async () => {
+    await bridge.expectRoute("xreserve");
     await bridge.fillAmount("0.01");
-    await bridge.routeTrigger().click();
-    await expect(bridge.providerOptions().getByRole("button")).toHaveCount(1);
-    await expect(bridge.providerOptions().getByRole("button")).toContainText("USDCx");
-    await page.keyboard.press("Escape");
+    await expect(bridge.providerOptions().locator(".provider-option")).toHaveCount(1);
+    await expect(bridge.selectedProvider()).toHaveText("Circle");
   });
 
   await test.step("quote summary shows a network fee", async () => {
@@ -40,7 +38,7 @@ test("launch links select the route but connected wallets determine both recipie
 
   await page.goto(`/?provider=agglayer&mode=receive&midenAccount=${midenAccount}`);
   await bridge.waitForReady();
-  await expect(bridge.selectedProvider()).toContainText("Agglayer");
+  await bridge.expectRoute("agglayer");
   await expect(page.getByRole("textbox", { name: /Miden account|address/ })).toHaveCount(0);
   await bridge.fillAmount("0.01");
   await bridge.openPreflight();
@@ -51,7 +49,7 @@ test("launch links select the route but connected wallets determine both recipie
 
   await page.goto(`/?provider=xreserve&mode=send&evmAddress=${evmAddress}`);
   await bridge.waitForReady();
-  await expect(bridge.selectedProvider()).toContainText("USDCx");
+  await bridge.expectRoute("xreserve");
   await expect(page.locator(".mode-switch button[aria-pressed='true']")).toHaveText("Withdraw");
   const withdrawalRequest = page.waitForRequest("**/api/xreserve/withdrawal-quote", { timeout: 20_000 });
   await bridge.fillAmount("2");
@@ -72,7 +70,7 @@ test("launch links select the route but connected wallets determine both recipie
   });
   await page.goto(`/?route=agglayer&intent=withdraw&mode=deposit&miden_account=${midenAccount}&account=${midenAccount}`);
   await bridge.waitForReady();
-  await expect(bridge.selectedProvider()).toContainText("USDCx");
+  await bridge.expectRoute("xreserve");
   await expect(page.locator(".mode-switch button[aria-pressed='true']")).toHaveText("Deposit");
 });
 
@@ -96,40 +94,34 @@ test("Activity navigation preserves the form and the reverse control swaps the w
   await expect(page.locator('.swap-box[data-side="destination"] .panel-wallet')).toHaveAttribute("data-wallet", "miden");
 });
 
-test("route stays hidden until a valid amount and expands only compatible providers", async ({ bridge, page }, info) => {
+test("routes appear below the form only after a valid amount and successful quote", async ({ bridge, page }, info) => {
   const details = page.locator(".transfer-route-details");
+  const providers = bridge.providerOptions();
   for (const amount of ["", "0", "-1", "abc", "1e3", "1.0000001"]) {
     await bridge.fillAmount(amount);
     await expect(details).toBeHidden();
-    await expect(bridge.routeTrigger()).toBeHidden();
+    await expect(providers).toBeHidden();
   }
   await bridge.fillAmount("1");
   await expect(details).toBeVisible();
-  await expect(bridge.providerOptions()).toBeHidden();
-  await bridge.routeTrigger().click();
-  await expect(bridge.providerOptions().getByRole("button")).toHaveCount(1);
-  await expect(bridge.providerOptions().getByRole("button")).toContainText("USDCx");
+  await expect(providers.locator(".provider-option")).toHaveCount(1);
+  await expect(bridge.selectedProvider()).toHaveText("Circle");
   await bridge.fillAmount("");
   await expect(details).toBeHidden();
-  await bridge.fillAmount("2");
-  await expect(bridge.providerOptions()).toBeHidden();
+  await expect(providers).toBeHidden();
 
   await bridge.setRoute("AggLayer");
-  await expect(details).toBeHidden();
   await bridge.fillAmount("0.01");
-  await bridge.routeTrigger().click();
-  const selected = bridge.providerOptions().getByRole("button", { name: /Agglayer/ });
-  await expect(bridge.providerOptions().getByRole("button")).toHaveCount(1);
-  await expect(selected).toHaveAttribute("aria-pressed", "true");
-  await selected.click();
-  await expect(bridge.providerOptions()).toBeHidden();
-  await expect(page.getByRole("textbox", { name: "Amount", exact: true })).toHaveValue("0.01");
+  await expect(providers.locator(".provider-option")).toHaveCount(1);
+  await expect(bridge.selectedProvider()).toHaveText("Agglayer");
   await expect(page.locator(".readonly-amount")).toContainText("0.01");
-  await page.screenshot({ path: info.outputPath("route-desktop.png"), fullPage: true, animations: "disabled" });
-  await page.setViewportSize({ width: 390, height: 844 });
-  await bridge.routeTrigger().click();
-  await expect(bridge.providerOptions()).toBeVisible();
-  await expect(page.getByRole("dialog")).toHaveCount(0);
-  await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
-  await page.screenshot({ path: info.outputPath("route-mobile.png"), fullPage: true, animations: "disabled" });
+  for (const width of [1440, 390]) {
+    await page.setViewportSize({ width, height: 900 });
+    const form = await page.locator(".swap-card").boundingBox();
+    const options = await page.locator(".provider-card").boundingBox();
+    expect(options!.y).toBeGreaterThanOrEqual(form!.y + form!.height);
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+    await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    await page.screenshot({ path: info.outputPath(`routes-${width}.png`), fullPage: true, animations: "disabled" });
+  }
 });

@@ -71,8 +71,8 @@ const depositFees = {
   label: "Circle fee",
   estimated: false,
   output: "exact",
-  eta: "Delivery time varies",
-  showEta: false,
+  eta: "1-3 min",
+  showEta: true,
   networkFee: "Arc gas (USDC)",
   bridgeFee: "Maximum 0 USDC",
   warning: "Keep some USDC on Arc for gas. Consume the delivered USDCx note in Bread.",
@@ -236,7 +236,7 @@ function resolveXreserveDepositState(activity: BridgeActivity): XreserveDepositS
 }
 
 export const xreserve: Provider = {
-  label: "USDCx",
+  label: "Circle",
   badge: "Testnet",
   directions,
   load: () => import("./flows"),
