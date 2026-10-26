@@ -2,9 +2,9 @@
 
 import { ActivityRow, ActivitySection } from "./ActivityRow";
 import { ChevronDown } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 import type { Activity } from "../lib/bridge-presentation";
-import { gsap, standardEase } from "../lib/gsap";
+import { animateWithMotionPreference, standardEase } from "../lib/motion";
 
 /**
  * Recent transfers as an Apple-style notification stack: collapsed, the latest
@@ -21,65 +21,39 @@ export function ActivityStack({
 }) {
   const [expanded, setExpanded] = useState(false);
   const sectionRef = useRef<HTMLElement>(null);
-  const prevHeight = useRef(0);
-  const didMount = useRef(false);
+  const prevHeight = useRef<number | null>(null);
 
   // Spring the section between its collapsed and expanded heights. Because the
   // card + history are a margin-auto centered group, animating this height makes
   // the whole component glide up/down as the list opens — the "move up springly"
-  // feel — while the revealed rows stagger in. Plain useEffect (not useGSAP) so
-  // we fully own cleanup: height/overflow are always cleared, otherwise the
-  // section stays pinned and overflow:hidden would clip the peek cards.
-  useEffect(() => {
-    if (!didMount.current) {
-      didMount.current = true;
-      return;
-    }
+  // feel — while the revealed rows stagger in. Measure before paint, after the
+  // previous animation is canceled, so rapid toggles start at the visible height
+  // and settle back to natural layout without clipping the peek cards.
+  useLayoutEffect(() => {
+    const start = prevHeight.current;
+    prevHeight.current = null;
     const el = sectionRef.current;
-    if (!el) return;
-    const reset = () => {
-      el.style.height = "";
-      el.style.overflow = "";
-    };
-    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
-      reset();
-      return;
-    }
-
-    gsap.killTweensOf(el);
+    if (!el || start === null) return;
     const target = el.offsetHeight;
-    const tweens = [
-      gsap.fromTo(
-        el,
-        { height: prevHeight.current || target, overflow: "hidden" },
-        { height: target, duration: 0.5, ease: "back.out(1.2)" },
-      ),
-    ];
-    if (expanded) {
-      const rows = el.querySelectorAll(".home-activity-item");
-      tweens.push(
-        gsap.from(Array.from(rows).slice(1), {
-          opacity: 0,
-          y: -6,
-          duration: 0.34,
-          ease: standardEase,
-          stagger: 0.045,
-          delay: 0.06,
-        }),
-      );
-    }
-    // Guaranteed clear once the spring settles — height/overflow must never
-    // linger (overflow:hidden would clip the collapsed stack's peek cards).
-    const clearTimer = window.setTimeout(reset, 700);
-    return () => {
-      window.clearTimeout(clearTimer);
-      tweens.forEach((t) => t.kill());
-      reset();
-    };
+    return animateWithMotionPreference(() => {
+      const animations = [el.animate(
+        [{ height: `${start}px`, overflow: "hidden" }, { height: `${target}px`, overflow: "hidden" }],
+        // The cubic curve preserves the original back-out overshoot of 1.2.
+        { duration: 500, easing: "cubic-bezier(0.333333, 1.4, 0.666667, 1)" },
+      )];
+      if (expanded) {
+        const rows = Array.from(el.querySelectorAll(".home-activity-item")).slice(1);
+        animations.push(...rows.map((row, index) => row.animate(
+          [{ opacity: 0, transform: "translateY(-6px)" }, { opacity: 1, transform: "none" }],
+          { duration: 340, easing: standardEase, delay: 60 + index * 45, fill: "backwards" },
+        )));
+      }
+      return animations;
+    });
   }, [expanded]);
 
   const toggle = () => {
-    prevHeight.current = sectionRef.current?.offsetHeight ?? 0;
+    prevHeight.current = sectionRef.current?.getBoundingClientRect().height ?? null;
     setExpanded((open) => !open);
   };
 
