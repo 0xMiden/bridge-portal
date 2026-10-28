@@ -6,6 +6,7 @@
     "node": ">=22.18.0"
   },
   "scripts": {
+    "postinstall": "patch-package --error-on-fail",
     "dev": "next dev --webpack",
     "build": "npm run check:config && next build --webpack",
     "start": "next start --hostname 0.0.0.0",
@@ -25,7 +26,7 @@
     "check:config": "node --experimental-strip-types scripts/check-wallet-config.mjs"
   },
   "dependencies": {
-    "@epoch-protocol/epoch-intents-sdk": "1.0.40-mainnet.0",
+    "@epoch-protocol/epoch-intents-sdk": "2.2.0",
     "@miden-sdk/miden-sdk": "0.17.6",
     "@miden-sdk/miden-wallet-adapter-base": "0.17.6",
     "@miden-sdk/miden-wallet-adapter-react": "0.17.6",
@@ -39,6 +40,7 @@
     "lucide-react": "^1.16.0",
     "next": "16.2.6",
     "next-themes": "^0.4.6",
+    "patch-package": "8.0.1",
     "react": "19.2.4",
     "react-dom": "19.2.4",
     "viem": "^2.56.3",
@@ -49,7 +51,7 @@
     "@wagmi/core": "2.22.1",
     "@wagmi/connectors": "6.2.0",
     "@miden-sdk/miden-sdk": "0.17.6",
-    "@epoch-protocol/epoch-commons-sdk": "0.1.21-mainnet.0"
+    "@epoch-protocol/epoch-commons-sdk": "2.1.0"
   },
   "devDependencies": {
     "@opennextjs/cloudflare": "^1.20.1",

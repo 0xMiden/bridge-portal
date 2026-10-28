@@ -696,7 +696,7 @@ describe("Cedar Epoch deposits", () => {
       expect(runEpochTransfer).toHaveBeenCalledOnce();
       expect(loadStoredActivities("mainnet")).toMatchObject([{
         routeSnapshot: { id: input.routeId, source: { network },
-          recovery: { document: { "bridge-providers": { epoch: { allocatorUrl: "https://miden-smallocator.epochprotocol.xyz" } } } } },
+          recovery: { document: { "bridge-providers": { epoch: { allocatorUrl: "https://mainnet-api.epochprotocol.xyz" } } } } },
         epochIntentNonce: "42", receivedAmount: "9.9",
       }]);
       expect(loadStoredActivities("testnet")).toMatchObject([history]);

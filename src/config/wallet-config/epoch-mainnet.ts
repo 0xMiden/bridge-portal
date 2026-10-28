@@ -2,9 +2,9 @@ import type { z } from "zod";
 import type { bridgeConfigSchema } from "./schema";
 
 // Portal rollout, independent of the pinned upstream fastBridge flag.
-// Allocator: 0xMiden/wallet-config#23. These USDC pairs were also verified
-// with live Cedar quotes in both directions on 2026-10-24.
-export const EPOCH_MAINNET_ALLOCATOR_URL = "https://miden-smallocator.epochprotocol.xyz";
+// Deployment: 0xMiden/wallet-config#23; USDC pairs verified in both directions
+// on 2026-10-24. Epoch's current mainnet API host was adopted on 2026-10-27.
+export const EPOCH_MAINNET_ALLOCATOR_URL = "https://mainnet-api.epochprotocol.xyz";
 const chains = {
   ethereum: { chainId: 1, address: "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48" },
   base: { chainId: 8453, address: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913" },

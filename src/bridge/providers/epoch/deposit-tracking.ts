@@ -1,4 +1,4 @@
-import { COMPACT_ABI, COMPACT_ADDRESS, getTokenId } from "@epoch-protocol/epoch-intents-sdk";
+import { COMPACT_ABI, getTokenId } from "@epoch-protocol/epoch-intents-sdk";
 import { decodeEventLog, decodeFunctionData, type Hex } from "viem";
 import type { EvmProvider } from "../../../wallets/evm/evm-wallet";
 
@@ -18,12 +18,12 @@ export type EpochDepositTracking = {
 type Deposit = Omit<EpochDepositEvidence, "sourceTxHash">;
 const isHash = (value: unknown): value is string => typeof value === "string" && /^0x[\da-f]{64}$/i.test(value);
 
-/** Observe the wallet boundary: SDK 1.0.40 omits deposit execution callbacks.
+/** Observe the wallet boundary: the SDK omits deposit execution callbacks.
  * Preserve the hash before its receipt waits or POST /compact can fail. Never
  * treat an ERC-20 approval as a submitted bridge transfer.
  */
-export function trackEpochDeposits(provider: EvmProvider, chainId: number, tracking: EpochDepositTracking): EvmProvider {
-  const compact = COMPACT_ADDRESS[chainId]?.toLowerCase();
+export function trackEpochDeposits(provider: EvmProvider, chainId: number, tracking: EpochDepositTracking & { compactAddress: string }): EvmProvider {
+  const compact = tracking.compactAddress.toLowerCase();
   const bundles = new Map<string, Deposit>();
   const published = new Set<string>();
   function deposit(value: unknown): Deposit | undefined {

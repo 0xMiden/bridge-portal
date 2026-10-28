@@ -13,13 +13,17 @@ const services = {
     agglayer: "https://bridge.miden-testnet.gateway.fm/api",
     attestation: "https://xreserve-api-testnet.circle.com",
     iris: "https://iris-api-sandbox.circle.com",
-    epoch: "https://testnet-dev.epochprotocol.xyz",
+    epoch: ["https://testnet-dev.epochprotocol.xyz"],
   },
   mainnet: {
     agglayer: "https://bridge-cedar-miden.eu-north-3.gateway.fm/api",
     attestation: "https://xreserve-api.circle.com",
     iris: "https://iris-api.circle.com",
-    epoch: "https://miden-smallocator.epochprotocol.xyz",
+    epoch: [
+      "https://mainnet-api.epochprotocol.xyz",
+      // Historical receipts retain the service root used for their transfer.
+      "https://miden-smallocator.epochprotocol.xyz",
+    ],
   },
 } as const;
 const token = z.object({ contractAddress: address, outputs: z.array(z.string().max(80)).max(32).optional() });
@@ -52,7 +56,7 @@ export const walletDocumentSchema = z.object({
   const allowed = services[doc.network];
   const p = doc["bridge-providers"];
   if (p.agglayer.indexerUrl !== allowed.agglayer || p.usdcx.attestationUrl !== allowed.attestation || p.usdcx.irisUrl !== allowed.iris ||
-      (p.epoch && p.epoch.allocatorUrl !== allowed.epoch)) invalid("Unapproved service URL");
+      (p.epoch && !allowed.epoch.some(url => url === p.epoch?.allocatorUrl))) invalid("Unapproved service URL");
   const arc = doc.network === "mainnet" ? "arc" : "arc-testnet";
   for (const [slug, chain] of Object.entries(doc.supportedEvmChains)) {
     const network = slug as keyof typeof ids;

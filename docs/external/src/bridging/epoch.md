@@ -47,9 +47,19 @@ npm install @epoch-protocol/epoch-intents-sdk \
 ```
 
 The snippets are type-checked against
-`@epoch-protocol/epoch-intents-sdk@1.0.39`,
-`@miden-sdk/miden-sdk@0.15.7`, Miden wallet adapter `0.15.1`, and
-`viem@2.51.0`.
+`@epoch-protocol/epoch-intents-sdk@2.2.0` (commons SDK `2.1.0`),
+`@miden-sdk/miden-sdk@0.17.6`, Miden wallet adapters `0.17.6`, and
+`viem@2.57.11`.
+
+SDK 2.2 requires a compatible allocator `/health` response containing deployment
+addresses, Compact lock/expiry settings and a Miden recall buffer. The portal
+also carries a versioned SDK patch, applied by `npm ci`, that permits omitted
+gasless metadata only with `allowGaslessSmartAccount: false`. Unpatched SDK 2.2.0
+still requires those fields even for wallet-paid transfers. The patch treats
+gasless capabilities as unavailable and resets partial token allowances before
+approval when the reset policy is unknown; it never invents deployment settings.
+Mainnet quotes were verified in both directions on October 28, 2026. Testnet's
+API still lacks bridge configuration and cannot currently quote with this SDK.
 
 The current reference uses:
 
@@ -95,6 +105,7 @@ export function createEpochSdk(
   return new EpochIntentSDK({
     apiBaseUrl: EPOCH_ALLOCATOR_URL,
     walletClient,
+    allowGaslessSmartAccount: false,
   });
 }
 ```
@@ -125,7 +136,7 @@ sequenceDiagram
 
 ### 1. Use the allocator's reclaim window
 
-Epoch SDK 1.0.39 supplies `recallBlocks` and `bindingAttachmentFelts` to the
+Epoch SDK 2.2.0 supplies `recallBlocks` and `bindingAttachmentFelts` to the
 collateral callback. Compute the absolute reclaim height from the chain head
 when creating the note. Do not put a precomputed reclaim height in the intent.
 The attachment binds the collateral to the intent and must be written unchanged.

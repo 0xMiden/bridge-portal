@@ -4,6 +4,8 @@
 
 ### Changes
 
+- [CHANGE] **Epoch SDK is upgraded to 2.2.0 with commons SDK 2.1.0.** Quotes and collateral use the API's deployment and timing configuration, fixing the stale Miden arbiter on Polygon withdrawals; deposit recovery follows its Compact address. A versioned patch supports explicitly wallet-paid flows when gasless metadata is omitted and conservatively resets partial allowances when reset policy is unavailable. Live quotes passed in both directions on Ethereum, Base, Arbitrum and Polygon on October 28, 2026. Testnet remains blocked by missing deployment/timing configuration.
+
 - [CHANGE] **Browser tests use simulated wallets without credentials.** Removed live testnet signing, seed-wallet creation, faucet funding, and the funded-account monitor. Production deploys follow successful `ci` on `main`.
 
 - [CHANGE] **Epoch testnet routes are re-enabled.** Sepolia ↔ Miden supports Epoch test USDC, DAI, USDT and WBTC using the v0.17 faucets published by [Epoch's faucet dashboard](https://userdashboard.epochprotocol.xyz/faucets). Retired USDC route IDs remain available for historical receipts; new selections use the current routes. Epoch mock tokens are labeled separately from Circle USDC.
@@ -29,6 +31,7 @@
 
 ### Fixes
 
+- [FIX] **Epoch mainnet uses `https://mainnet-api.epochprotocol.xyz`.** New quotes and transfers use Epoch's updated Smallocator API host; saved receipts retain compatibility with the previous service root.
 - [FIX] **DAI, USDT and WBTC display token logos.** Epoch token selectors and selected-token displays show the corresponding logo on both Sepolia and Miden.
 - [FIX] **Epoch rejects missing, zero or malformed output estimates before signing.** Preview and execution validate the allocator's output even when the SDK reports success, including the fresh quote requested immediately before collateral signing.
 - [FIX] **The Sepolia chain label retains its width beside the amount input.** Longer origin labels fit on mobile instead of collapsing to zero width when the input claims the grid width.

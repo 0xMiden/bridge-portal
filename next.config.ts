@@ -35,6 +35,13 @@ const nextConfig: NextConfig = {
   // Force ESM parsing for the SDK dist so the named exports resolve. Also alias
   // optional wallet-connector deps we don't use (pulled in by wagmi/AppKit).
   webpack: (config) => {
+    // Package versions alone cannot invalidate cached modules changed by a patch.
+    if (config.cache && typeof config.cache === "object") {
+      config.cache.buildDependencies = {
+        ...config.cache.buildDependencies,
+        epochSdkPatch: [ `${__dirname}/patches/@epoch-protocol+epoch-intents-sdk+2.2.0.patch` ],
+      };
+    }
     config.module = config.module ?? {};
     config.module.rules = config.module.rules ?? [];
     // @miden-sdk's wasm-bindgen glue re-exports its classes (NoteArray, …) through

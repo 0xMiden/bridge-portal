@@ -50,6 +50,7 @@ export function createEpochSdk(
   return new EpochIntentSDK({
     apiBaseUrl: EPOCH_ALLOCATOR_URL,
     walletClient,
+    allowGaslessSmartAccount: false,
   });
 }
 
