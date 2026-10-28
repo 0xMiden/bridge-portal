@@ -10,5 +10,5 @@ test("allocator URL defaults to the testnet-dev endpoint", () => {
 
 test("Cedar uses its mainnet allocator even when the legacy testnet override is set", () => {
   vi.stubEnv("NEXT_PUBLIC_EPOCH_ALLOCATOR_URL", "https://testnet-dev.epochprotocol.xyz");
-  expect(epochAllocatorUrl(currentBridgeConfig("mainnet"))).toBe("https://miden-smallocator.epochprotocol.xyz");
+  expect(epochAllocatorUrl(currentBridgeConfig("mainnet"))).toBe("https://mainnet-api.epochprotocol.xyz");
 });

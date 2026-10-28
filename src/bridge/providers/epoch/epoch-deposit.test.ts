@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { COMPACT_ABI, COMPACT_ADDRESS } from "@epoch-protocol/epoch-intents-sdk";
-import { createWalletClient, custom, decodeFunctionData, encodeAbiParameters, encodeEventTopics, type Hex } from "viem";
+import { COMPACT_ABI } from "@epoch-protocol/epoch-intents-sdk";
+import { epochWalletPaidHealth } from "../../../../test/epoch-service";
+import { createWalletClient, custom, decodeFunctionData, encodeAbiParameters, encodeEventTopics, erc20Abi, type Hex } from "viem";
 import { arbitrum } from "viem/chains";
 import { getWalletClient } from "@wagmi/core";
 import { findBridgeRoute } from "../../core/routes";
@@ -31,8 +32,10 @@ const SPONSOR = "0x1111111111111111111111111111111111111111";
 const MIDEN = "mm1recipient";
 const TX = `0x${"ab".repeat(32)}` as Hex;
 const APPROVAL = `0x${"cd".repeat(32)}` as Hex;
+// A service-configured deployment must be tracked even when SDK constants differ.
+const COMPACT = "0x2222222222222222222222222222222222222222";
 const route = findBridgeRoute("mainnet:epoch:arbitrum:receive")!;
-const depositId = BigInt("0x403e97d00e2e2b0719034769af88d065e77c8cc2239327c5edb3a432268e5831").toString();
+const depositId = BigInt("0x407c50057d83bedfcde2fb0caf88d065e77c8cc2239327c5edb3a432268e5831").toString();
 
 beforeEach(() => {
   vi.resetAllMocks();
@@ -48,10 +51,11 @@ beforeEach(() => {
 });
 afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 
-function setup(mode: "sequential" | "batch" | "rejected") {
+function setup(mode: "sequential" | "batch" | "rejected", health: unknown = epochWalletPaidHealth(COMPACT)) {
   let claimHash: Hex;
   let typehash: Hex;
   const sent: string[] = [];
+  const approvals: bigint[] = [];
   const beforeConfirmation: { hash: Hex; recorded: string[] }[] = [];
   let beforeAllocation: ReturnType<typeof loadStoredActivities> = [];
   function readDeposit(data: Hex) {
@@ -63,6 +67,12 @@ function setup(mode: "sequential" | "batch" | "rejected") {
     expect(amount).toBe(1_000_000n);
     [, , , claimHash, typehash] = call.args;
   }
+  function readApproval(data: Hex) {
+    const call = decodeFunctionData({ abi: erc20Abi, data });
+    if (call.functionName !== "approve") throw new Error("Expected an ERC-20 approval");
+    expect(call.args[0].toLowerCase()).toBe(COMPACT);
+    approvals.push(call.args[1]);
+  }
   const wallet = {
     request: vi.fn(async ({ method, params }: { method: string; params?: unknown }) => {
       const values = params as [{ to: string; data: Hex; calls: { to: string; data: Hex }[] }];
@@ -70,7 +80,8 @@ function setup(mode: "sequential" | "batch" | "rejected") {
       if (method === "eth_accounts") return [SPONSOR];
       if (method === "wallet_getCapabilities") return { "0xa4b1": { atomic: { status: mode === "batch" ? "supported" : "unsupported" } } };
       if (method === "eth_sendTransaction") {
-        if (values[0].to.toLowerCase() !== COMPACT_ADDRESS[42161].toLowerCase()) {
+        if (values[0].to.toLowerCase() !== COMPACT) {
+          readApproval(values[0].data);
           sent.push("approval");
           return APPROVAL;
         }
@@ -87,14 +98,17 @@ function setup(mode: "sequential" | "batch" | "rejected") {
       }
       if (method === "wallet_sendCalls") {
         expect(loadStoredActivities()).toEqual([]);
-        readDeposit(values[0].calls[1].data);
+        for (const call of values[0].calls) {
+          if (call.to.toLowerCase() === COMPACT) readDeposit(call.data);
+          else readApproval(call.data);
+        }
         sent.push("batch");
         return { id: "bundle-1" };
       }
       if (method === "wallet_getCallsStatus") return {
         id: "bundle-1", chainId: "0xa4b1", version: "2.0.0", status: 200,
         receipts: [{ transactionHash: TX, status: "0x1", blockNumber: "0x10", gasUsed: "0x10000", logs: [{
-          address: COMPACT_ADDRESS[42161],
+          address: COMPACT,
           topics: encodeEventTopics({ abi: COMPACT_ABI, eventName: "CompactRegistered", args: { sponsor: SPONSOR } }),
           data: encodeAbiParameters([{ type: "bytes32" }, { type: "bytes32" }], [claimHash, typehash]),
         }] }],
@@ -109,6 +123,7 @@ function setup(mode: "sequential" | "batch" | "rejected") {
     return Response.json({ error: "Internal server error", code: "INTERNAL_ERROR" }, { status: 500 });
   });
   vi.stubGlobal("fetch", vi.fn(async (url: string) => {
+    if (url.endsWith("/health")) return Response.json(health);
     if (url.includes("/suggested-nonce/")) return Response.json({ nonce: "0x42" });
     if (url.endsWith("/checkIfDepositNeeded")) return Response.json({ resourceLockRequired: true, tokenIn: "1000000", tokenOut: "918687", transactions: [] });
     if (url.endsWith("/compact")) return allocation();
@@ -123,7 +138,7 @@ function setup(mode: "sequential" | "batch" | "rejected") {
       request: { routeId: route.id, recovery: route.recovery, amount: "1", evmAddress: SPONSOR, midenAccount: MIDEN } },
   };
   const effects = { openEvmWallet: vi.fn(), verifyBalanceCap: vi.fn(async () => {}), onError: vi.fn(), onSubmittingChange: vi.fn(), onPhaseChange: vi.fn(), activities: new ActivityStore(activityPersistence), navigate: vi.fn() };
-  return { input, effects, allocation, sent, beforeConfirmation, allocationEvidence: () => ({ activities: beforeAllocation, claimHash }) };
+  return { input, effects, allocation, sent, approvals, beforeConfirmation, allocationEvidence: () => ({ activities: beforeAllocation, claimHash }) };
 }
 
 it.each(["sequential", "batch"] as const)("retains the real SDK's %s deposit across POST /compact HTTP 500 and reload", async mode => {
@@ -163,6 +178,25 @@ it("does not save an approval as a transfer when the deposit is rejected", async
   expect(loadStoredActivities()).toEqual([]);
   expect(effects.navigate).not.toHaveBeenCalled();
   expect(effects.onError).toHaveBeenCalledWith("You cancelled the request in your wallet.");
+});
+
+it.each(["sequential", "batch"] as const)("resets a partial allowance before a %s deposit when reset policy is unavailable", async mode => {
+  const { input, effects, allocation, approvals } = setup(mode);
+  rpc.readContract.mockImplementation(async ({ functionName }) => functionName === "getForcedWithdrawalStatus" ? [0, 0n] : 1n);
+  await submitBridgeTransfer(input, effects);
+  expect(approvals).toEqual([0n, 1_000_000n]);
+  expect(allocation).toHaveBeenCalledOnce();
+  expect(loadStoredActivities()).toMatchObject([{ sourceTxHash: TX, epochDepositId: depositId }]);
+});
+
+it("does not request a signature when the service lacks SDK 2.2 configuration", async () => {
+  const { input, effects, allocation, sent } = setup("sequential", { status: "healthy", allocatorAddresses: {} });
+  await submitBridgeTransfer(input, effects);
+  expect(getWalletClient).not.toHaveBeenCalled();
+  expect(sent).toEqual([]);
+  expect(allocation).not.toHaveBeenCalled();
+  expect(loadStoredActivities()).toEqual([]);
+  expect(effects.onError).toHaveBeenCalledWith(expect.stringContaining("no Compact address configured"));
 });
 
 it.each(["pending", "reverted", "rpc-error"] as const)("tracks an interrupted deposit with a %s source receipt", async state => {

@@ -1,0 +1,49 @@
+diff --git a/node_modules/@epoch-protocol/epoch-intents-sdk/dist/helpers/deposit-calls.js b/node_modules/@epoch-protocol/epoch-intents-sdk/dist/helpers/deposit-calls.js
+index f4da655..95c4ca1 100644
+--- a/node_modules/@epoch-protocol/epoch-intents-sdk/dist/helpers/deposit-calls.js
++++ b/node_modules/@epoch-protocol/epoch-intents-sdk/dist/helpers/deposit-calls.js
+@@ -35,9 +35,9 @@ export async function buildCompactDepositCalls(args) {
+     });
+     const requiredAmount = BigInt(compactData.amount.toString());
+     if (allowance < requiredAmount) {
+-        const resetTokens = APPROVE_RESET_TOKENS[chainId] ?? [];
++        const resetTokens = APPROVE_RESET_TOKENS[chainId];
+         if (allowance > 0n &&
+-            resetTokens.some((t) => t.toLowerCase() === tokenAddress.toLowerCase())) {
++            (!resetTokens || resetTokens.some((t) => t.toLowerCase() === tokenAddress.toLowerCase()))) {
+             calls.push({
+                 to: tokenAddress,
+                 data: encodeFunctionData({
+@@ -90,9 +90,9 @@ export function buildCompactDepositCallsFromAllowance(args) {
+     const tokenAddress = getAddress(compactData.token);
+     const requiredAmount = BigInt(compactData.amount.toString());
+     if (allowance < requiredAmount) {
+-        const resetTokens = APPROVE_RESET_TOKENS[chainId] ?? [];
++        const resetTokens = APPROVE_RESET_TOKENS[chainId];
+         if (allowance > 0n &&
+-            resetTokens.some((t) => t.toLowerCase() === tokenAddress.toLowerCase())) {
++            (!resetTokens || resetTokens.some((t) => t.toLowerCase() === tokenAddress.toLowerCase()))) {
+             calls.push({
+                 to: tokenAddress,
+                 data: encodeFunctionData({
+diff --git a/node_modules/@epoch-protocol/epoch-intents-sdk/dist/services/shared.js b/node_modules/@epoch-protocol/epoch-intents-sdk/dist/services/shared.js
+index 0711ce7..7f2881b 100644
+--- a/node_modules/@epoch-protocol/epoch-intents-sdk/dist/services/shared.js
++++ b/node_modules/@epoch-protocol/epoch-intents-sdk/dist/services/shared.js
+@@ -23,6 +23,16 @@ export async function fetchServiceHealth(config) {
+     if (health.status !== "healthy") {
+         throw new APIError("API service is unhealthy; configuration lookup failed", 503);
+     }
++    // Wallet-paid integrations can disable unavailable gasless capabilities.
++    // Contract addresses, expiry and reclaim configuration remain mandatory in
++    // resolveServiceConfiguration; never substitute deployment defaults here.
++    if (config.allowGaslessSmartAccount === false) {
++        health.delegationManagerAddresses ??= {};
++        health.metamaskStateless7702Implementations ??= {};
++        health.epochLegacy7702Implementations ??= {};
++        health.gaslessSupportedChainIds ??= [];
++        health.approveResetTokens ??= {};
++    }
+     if (!health.delegationManagerAddresses ||
+         !health.metamaskStateless7702Implementations ||
+         !health.epochLegacy7702Implementations ||

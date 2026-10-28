@@ -2,13 +2,18 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { EpochIntentSDK, EVM_TO_MIDEN_EXTRA_TYPESTRING, MIDEN_TO_EVM_EXTRA_TYPESTRING, TaskType } from "@epoch-protocol/epoch-intents-sdk";
 import { createWalletClient, http } from "viem";
 import { sepolia } from "viem/chains";
+import { epochWalletPaidHealth } from "../../../../test/epoch-service";
 
 vi.mock("@miden-sdk/miden-sdk", () => ({
   AccountId: { fromHex: (value: string) => ({ toString: () => value }) },
 }));
+vi.mock("viem", async original => ({
+  ...await original<typeof import("viem")>(),
+  createPublicClient: () => ({ readContract: async () => [0, 0n] }),
+}));
 
 import { EPOCH_MIDEN_USDC } from "../../core/assets";
-import { buildEpochTaskDataParams, buildEVMToMidenTaskDataParams, getCrossChainQuote, getEVMToMidenQuote } from "./bridge";
+import { buildCrossChainIntent, buildEpochTaskDataParams, buildEVMToMidenTaskDataParams, getCrossChainQuote, getEVMToMidenQuote } from "./bridge";
 
 const SPONSOR = "0x1111111111111111111111111111111111111111";
 const ACCOUNT = "0x387149ae66116cf114eebd60bb7381";
@@ -17,7 +22,17 @@ const sdk = new EpochIntentSDK({
   apiBaseUrl: "https://unused.invalid",
   walletClient: createWalletClient({ account: SPONSOR, chain: sepolia, transport: http() }),
 });
-afterEach(() => vi.restoreAllMocks());
+const midenSdk = new EpochIntentSDK({
+  apiBaseUrl: "https://unused.invalid",
+  walletClient: createWalletClient({ account: SPONSOR, chain: { ...sepolia, id: 999999999 }, transport: http() }),
+  allowGaslessSmartAccount: false,
+});
+const polygonWithdrawal = {
+  midenAccountId: ACCOUNT, midenFaucetId: "0xe69e6ca6e39df1b10c1e5399399feb",
+  midenAmount: "10000", evmRecipient: SPONSOR, destinationChainId: 137,
+  outputTokenAddress: "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359", minTokenOut: "9900",
+};
+afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); vi.useRealTimers(); });
 
 describe("Epoch SDK task data compatibility", () => {
   it("builds a Miden send accepted by the real SDK using its canonical witness", async () => {
@@ -47,6 +62,64 @@ describe("Epoch SDK task data compatibility", () => {
       midenRecipientAccount: ACCOUNT, midenFaucetId: "0x5b043dcb48d5721106f7a1ceb2b804",
     });
     expect(task.intentData).not.toHaveProperty("midenSourceAccount");
+  });
+
+  it("uses the service's Miden arbiter for both the Polygon withdrawal quote and allocation", async () => {
+    // Deliberately differ from SDK constants and the destination-chain arbiter.
+    const arbiter = "0x3333333333333333333333333333333333333333";
+    const health = epochWalletPaidHealth();
+    health.arbiterAddresses![999999999] = arbiter;
+    health.midenRecallBufferBlocks = 1200;
+    const requests: { endpoint: string; body: Record<string, unknown> }[] = [];
+    vi.stubGlobal("fetch", vi.fn(async (url: string, init?: RequestInit) => {
+      const endpoint = new URL(url).pathname;
+      if (endpoint === "/health") return Response.json(health);
+      if (endpoint.startsWith("/suggested-nonce/")) return Response.json({ nonce: "0x42" });
+      if (endpoint === "/miden-recipient") return Response.json({ midenP2IDRecipientAccountId: ACCOUNT, midenMinReclaimBlocks: 2500 });
+      if (endpoint === "/checkIfDepositNeeded" || endpoint === "/compact") {
+        requests.push({ endpoint, body: JSON.parse(String(init?.body)) });
+        return Response.json(endpoint === "/compact" ? { success: true } : {
+          resourceLockRequired: true, tokenIn: "10000", tokenOut: "9900", transactions: [],
+        });
+      }
+      throw new Error(`Unexpected Epoch request: ${url}`);
+    }));
+    const params = polygonWithdrawal;
+    const preFetchedQuote = await getCrossChainQuote(midenSdk, params, SPONSOR);
+    const noteId = `0x${"ab".repeat(32)}`;
+    const createMidenP2IDENote = vi.fn(async () => ({ success: true, noteId }));
+    vi.useFakeTimers(); // Skip the real SDK's collateral finalization delay.
+    const pending = buildCrossChainIntent(midenSdk, { ...params, preFetchedQuote, createMidenP2IDENote });
+    await vi.runAllTimersAsync();
+    const result = await pending;
+    expect(result.error).toBeUndefined();
+    expect(result.solveResult?.nonce).toBe("66");
+    expect(requests.map(request => request.endpoint)).toEqual(["/checkIfDepositNeeded", "/compact"]);
+    for (const { body } of requests) expect(body).toMatchObject({
+      chainId: "999999999",
+      compact: { arbiter, mandate: { destinationChainId: "137", tokenInAmount: "10000" } },
+    });
+    expect(requests[1].body).toMatchObject({ compact: { mandate: { midenNoteId: noteId } } });
+    expect(createMidenP2IDENote).toHaveBeenCalledExactlyOnceWith(params.midenFaucetId, "10000", ACCOUNT, 3700, expect.any(Array));
+  });
+
+  it.each([
+    { field: "arbiterAddresses", value: undefined, error: "no arbiter address" },
+    { field: "compactExpirySeconds", value: -1, error: "invalid compactExpirySeconds" },
+    { field: "status", value: "unhealthy", error: "API service is unhealthy" },
+  ])("still rejects invalid bridge configuration: $field", async ({ field, value, error }) => {
+    vi.stubGlobal("fetch", vi.fn(async () => Response.json({ ...epochWalletPaidHealth(), [field]: value })));
+    await expect(getCrossChainQuote(midenSdk, polygonWithdrawal, SPONSOR)).rejects.toThrow(error);
+    expect(fetch).toHaveBeenCalledExactlyOnceWith("https://unused.invalid/health", expect.any(Object));
+  });
+
+  it.each([true, undefined])("requires full gasless metadata unless explicitly disabled: %s", async allowGaslessSmartAccount => {
+    vi.stubGlobal("fetch", vi.fn(async () => Response.json(epochWalletPaidHealth())));
+    const gaslessSdk = new EpochIntentSDK({
+      apiBaseUrl: "https://unused.invalid", allowGaslessSmartAccount,
+      walletClient: createWalletClient({ account: SPONSOR, chain: sepolia, transport: http() }),
+    });
+    await expect(gaslessSdk.getHealthCheck()).rejects.toThrow("incomplete gasless configuration");
   });
 });
 

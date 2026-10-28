@@ -1,4 +1,11 @@
 import { test, expect } from "../../fixtures/bridge";
+import { epochWalletPaidHealth } from "../../../test/epoch-service";
+
+test.beforeEach(async ({ bridge, page }) => {
+  // Initialize the bridge's default network stubs before overriding Epoch health.
+  await bridge.waitForReady();
+  await page.route(/https:\/\/[^/]+\.epochprotocol\.xyz\/health$/, route => route.fulfill({ json: epochWalletPaidHealth() }));
+});
 
 for (const mode of ["receive", "send"] as const) {
   test(`Epoch ${mode}: restore a retired selection, quote the current faucet and review`, async ({ bridge, page }) => {
@@ -75,7 +82,7 @@ test("Epoch cannot reach review when the allocator has no estimate", async ({ br
 for (const [network, chainId] of [["ethereum", 1], ["base", 8453], ["arbitrum", 42161], ["polygon", 137]] as const) {
   for (const mode of ["receive", "send"] as const) {
     test(`Cedar Epoch ${network} ${mode}: quotes the selected chain and invalidates a changed amount`, async ({ bridge, page }) => {
-      const endpoint = "https://miden-smallocator.epochprotocol.xyz";
+      const endpoint = "https://mainnet-api.epochprotocol.xyz";
       await page.route(`${endpoint}/suggested-nonce/**`, route => route.fulfill({ json: { nonce: "1" } }));
       await page.route(`${endpoint}/checkIfDepositNeeded`, route => {
         const amount = route.request().postDataJSON().compact.mandate.tokenInAmount;

@@ -101,16 +101,32 @@ or build dependency on `token-list`.
 Bridge contracts, provider endpoints, and availability switches continue to
 come from the existing wallet-config documents, with one explicit portal rollout
 in `src/config/wallet-config/epoch-mainnet.ts`: Cedar USDCx ↔ native USDC on
-Ethereum, Base, Arbitrum and Polygon uses `https://miden-smallocator.epochprotocol.xyz`
+Ethereum, Base, Arbitrum and Polygon uses `https://mainnet-api.epochprotocol.xyz`
 and enables both Epoch directions independently of upstream's `fastBridge` flag.
 The pinned upstream files and revision remain intact; release validation checks
 the effective configuration and receipts save it. The faucet comes from the
 verified Cedar USDCx registry metadata. The allocator was confirmed via
 [wallet-config PR #23](https://github.com/0xMiden/wallet-config/pull/23) and live
-quotes in both directions on October 24, 2026. Quotes depend on the entered amount
-and current liquidity: preview requires a positive, unexpired matching quote,
+quotes in both directions on October 24, 2026. The portal adopted Epoch's current
+API host on October 27; historical receipts retain their original service root.
+Quotes depend on the entered amount and current liquidity: preview requires
+a positive, unexpired matching quote,
 and execution fetches and validates another quote before signing collateral.
-The Epoch mainnet SDK and commons graph are pinned together. The legacy
+Epoch intents SDK `2.2.0` and commons SDK `2.1.0` are pinned together.
+The SDK now requires deployment addresses, lock/expiry settings, Miden recall
+buffer and gasless configuration from the allocator's `/health` response.
+Deposit recovery tracks the service-configured Compact address.
+The portal explicitly disables gasless smart-account execution. A versioned
+`patch-package` fix lets SDK 2.2.0 treat omitted gasless metadata as unavailable
+capabilities in that mode, while keeping contract addresses and timing settings
+mandatory. If token approval-reset policy is absent, a partial allowance is
+reset to zero before approving the exact amount. `npm ci` applies the patch;
+Webpack's build cache also tracks it. Review and remove it when an upstream
+release supplies the same behavior.
+Live quotes for 0.01 USDC/USDCx succeeded in both directions on all four mainnet
+chains on October 28, 2026 (0.009995 out). This verifies quoting, not settlement.
+The testnet API still lacks required deployment/timing fields and is rejected
+before signing; restoring testnet requires a compatible Epoch API. The legacy
 `NEXT_PUBLIC_EPOCH_ALLOCATOR_URL` override applies only to testnet.
 `POLYGON_RPC_URL` optionally overrides Polygon's server-side read RPC.
 
