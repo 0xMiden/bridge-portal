@@ -2,7 +2,8 @@
 
 `npm run lint` enforces these gates in CI for the Circle quote and USDC approval
 implementation, withdrawal quote validation, their API handlers, the shared
-quote-validity model, CCTP/Arc status services, the complete Agglayer provider and its API handlers, and the shared EVM deposit,
+quote-validity model, CCTP/Arc status services, manual CCTP helper flows,
+Solana source validation and their API handlers, the complete Agglayer provider and its API handlers, and the shared EVM deposit,
 approval persistence, and transaction recovery helpers:
 
 | Gate | Limit |

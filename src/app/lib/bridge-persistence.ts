@@ -7,6 +7,8 @@ import { isBridgeProvider } from "../../bridge/providers/registry";
 import { type Activity } from "./bridge-presentation";
 
 import type { BridgeEnvironment } from "../../config/environment";
+import { helperActivitySchema } from "../../bridge/providers/xreserve/helper-types";
+import { arcRecipient, parseArcAmount } from "../../bridge/providers/xreserve/deposit-terms";
 
 export const activityStorageKey = "miden.bridge.ui.activities.v2";
 
@@ -94,6 +96,18 @@ function normalizeActivities(parsed: unknown): Activity[] {
     const route = receiptRouteSchema.safeParse(activity.routeSnapshot);
     if (!route.success) return [];
     const routeSnapshot = route.data;
+    if (routeSnapshot.transport === "cctp-helper") {
+      const helper = helperActivitySchema.safeParse(activity.cctpHelper);
+      if (!helper.success || !routeSnapshot.helperDeployment) return [];
+      try {
+        const auth = helper.data.authorization;
+        if (helper.data.stage === "source_failed" && activity.sourceTxHash !== helper.data.signature) return [];
+        if (JSON.stringify(auth.deployment) !== JSON.stringify(routeSnapshot.helperDeployment) || auth.deploymentId !== routeSnapshot.helperDeployment.deploymentId ||
+            auth.sourceAccount !== activity.solanaAddress || auth.grossAmount !== parseArcAmount(activity.amount).toString() ||
+            !activity.midenAccount || auth.midenRecipient !== arcRecipient(activity.midenAccount)) return [];
+      } catch { return []; }
+      activity = { ...activity, cctpHelper: helper.data };
+    } else if (activity.cctpHelper) return [];
     if (routeSnapshot.provider !== activity.provider || routeSnapshot.mode !== activity.mode ||
         activity.asset !== routeSnapshot.source.symbol || typeof activity.updatedAt !== "number" ||
         [activity.id, activity.amount, activity.summary, activity.eta, activity.txHash].some(value => typeof value !== "string")) return [];
@@ -109,8 +123,30 @@ export function loadStoredActivities(environment?: BridgeEnvironment): Activity[
   return activities.filter(activity => !environment || activity.environment === environment);
 }
 
+/** Submission cannot treat a corrupt manual row as evidence that no previous burn exists. */
+export function loadManualSubmissionActivities(): Activity[] {
+  const raw = window.localStorage.getItem(activityStorageKey);
+  const parsed: unknown = raw ? JSON.parse(raw) : [];
+  if (!Array.isArray(parsed)) throw new Error("Saved source history is invalid. Recover it before starting another burn.");
+  const ids = new Set<string>();
+  for (const value of parsed) {
+    if (!value || typeof value !== "object") continue;
+    const row = value as Record<string, unknown>, route = row.routeSnapshot;
+    if (!("cctpHelper" in row) && !(route && typeof route === "object" && "transport" in route && route.transport === "cctp-helper")) continue;
+    const normalized = normalizeActivities([value]);
+    if (normalized.length !== 1 || ids.has(normalized[0].id))
+      throw new Error("Saved manual source history is invalid. Recover it before starting another burn.");
+    ids.add(normalized[0].id);
+  }
+  return normalizeActivities(parsed);
+}
+
 export function saveActivities(activities: Activity[]) {
-  window.localStorage.setItem(activityStorageKey, JSON.stringify(activities));
+  // Ordinary activity writes must not erase a malformed manual row that the
+  // display reader omitted. Refuse that write and retain the original evidence.
+  const durable = loadManualSubmissionActivities();
+  const retained = durable.filter(activity => activity.cctpHelper && !activities.some(next => next.id === activity.id));
+  window.localStorage.setItem(activityStorageKey, JSON.stringify([...activities, ...retained]));
 }
 
 export const activityPersistence: ActivityPersistence = {

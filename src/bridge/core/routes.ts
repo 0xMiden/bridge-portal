@@ -3,6 +3,7 @@ import type { BridgeActivity, BridgeProvider, FlowMode } from "./models";
 import { currentBridgeConfig, type BridgeConfig } from "../../config/bridge-config";
 import type { BridgeEnvironment } from "../../config/environment";
 import { tokenRegistry } from "../../config/token-registry";
+import { assertHelperConfig, helperDeployments, type HelperDeployment } from "../../config/cctp-helper";
 
 export type BridgeRoute = {
   id: string;
@@ -13,11 +14,14 @@ export type BridgeRoute = {
   /** Keep paused directions addressable for existing activity receipts. */
   disabled?: boolean;
   recovery: BridgeConfig;
+  transport?: "cctp-helper";
+  execution?: "manual";
+  helperDeployment?: HelperDeployment;
 };
 
 function routesForConfig(config: BridgeConfig): readonly BridgeRoute[] {
   const { environment, document } = config;
-  return tokenRegistry[environment].flatMap(connection => {
+  const legacy: BridgeRoute[] = tokenRegistry[environment].flatMap(connection => {
     const { provider, evm, miden } = connection;
     const bridge = document.supportedEvmChains[evm.network]?.bridges[provider === "xreserve" ? "usdcx" : provider];
     return (["receive", "send"] as const).flatMap(mode => {
@@ -34,6 +38,19 @@ function routesForConfig(config: BridgeConfig): readonly BridgeRoute[] {
       }];
     });
   });
+  const deployments = helperDeployments.filter(entry => entry.environment === environment);
+  const destination = legacy.find(route => route.provider === "xreserve" && route.mode === "receive")?.destination;
+  if (!destination) return legacy;
+  const manual = (deployments.length ? deployments : [undefined]).map(deployment => {
+    if (deployment) assertHelperConfig(deployment, config);
+    return { id: `${environment}:cctp-helper-solana-manual${deployment ? `:${deployment.deploymentId}` : ""}`, provider: "xreserve", mode: "receive",
+      transport: "cctp-helper", execution: "manual", helperDeployment: deployment, recovery: config,
+      disabled: !deployment?.enabled || document.features.bridgeIn === false,
+      source: { kind: "spl", network: environment === "mainnet" ? "solana-mainnet" : "solana-devnet", symbol: "USDC", decimals: 6,
+        name: "Circle USDC", logo: "/asset-logos/usdc.svg", mint: deployment?.source.mint ?? (environment === "mainnet" ? "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v" : "4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU") }, destination,
+    } satisfies BridgeRoute;
+  });
+  return [...legacy, ...manual];
 }
 
 // Release configuration is fixed for the page lifetime; derive routes once.

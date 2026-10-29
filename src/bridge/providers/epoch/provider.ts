@@ -64,7 +64,7 @@ function quoteFees(route?: BridgeRoute) {
   const evm = route?.mode === "send" ? route.destination : route?.source;
   return {
     ...fees,
-    networkFee: evm && evm.kind !== "miden" ? `${evmNetworks[evm.network].name} gas` : "Network gas",
+    networkFee: evm && evm.kind !== "miden" && evm.kind !== "spl" ? `${evmNetworks[evm.network].name} gas` : "Network gas",
     warning: route?.recovery.environment === "mainnet"
       ? "A live quote is required for this amount. Check the output before confirming."
       : "Epoch uses mock tokens on Sepolia. Check the quoted output before confirming.",

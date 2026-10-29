@@ -2,7 +2,8 @@ import { tokenRegistry } from "../../config/token-registry";
 
 export type EvmNetwork = "sepolia" | "arc-testnet" | "base-sepolia" | "arbitrum-sepolia" | "ethereum" | "arc" | "base" | "arbitrum" | "polygon";
 export type MidenNetwork = "miden-testnet" | "miden-mainnet";
-export type BridgeNetwork = EvmNetwork | MidenNetwork;
+export type SolanaNetwork = "solana-devnet" | "solana-mainnet";
+export type BridgeNetwork = EvmNetwork | MidenNetwork | SolanaNetwork;
 
 type TokenMetadata = {
   symbol: string;
@@ -16,10 +17,12 @@ export type BridgeAsset = TokenMetadata & (
   | { network: EvmNetwork; kind: "native" }
   | { network: EvmNetwork; kind: "erc20"; address: `0x${string}` }
   | { network: MidenNetwork; kind: "miden"; faucetId: string }
+  | { network: SolanaNetwork; kind: "spl"; mint: string; decimals: 6; symbol: "USDC" }
 );
 
 export type MidenAsset = Extract<BridgeAsset, { kind: "miden" }>;
-export type EvmAsset = Exclude<BridgeAsset, MidenAsset>;
+export type EvmAsset = Extract<BridgeAsset, { kind: "native" | "erc20" }>;
+export type SplAsset = Extract<BridgeAsset, { kind: "spl" }>;
 
 // Compatibility exports for faucet actions and fixtures. Values come from the same
 // token connections used to build routes; no token addresses are maintained here.
@@ -58,6 +61,7 @@ export const EPOCH_SEPOLIA_WBTC = erc20("epoch-wbtc-to-miden", "sepolia");
 export const EPOCH_MIDEN_WBTC = connection("epoch-wbtc-to-miden").miden;
 
 export function assetKey(asset: BridgeAsset): string {
+  if (asset.kind === "spl") return `${asset.network}:spl:${asset.mint}`;
   const identifier = asset.kind === "erc20" ? asset.address
     : asset.kind === "miden" ? asset.faucetId : "native";
   return `${asset.network}:${asset.kind}:${identifier.toLowerCase()}`;

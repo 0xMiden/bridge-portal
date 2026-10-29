@@ -71,11 +71,11 @@ export function ActivityJourney({ receipt, needsClaim, children }: {
   const from = route ? networkLabels[route.source.network] : modes[activity.mode].from;
   const to = route ? networkLabels[route.destination.network] : modes[activity.mode].to;
   const sourceAddress = activity.mode === "send" ? activity.midenAccount
-    : activity.sourceTransaction?.from ?? activity.evmAddress ?? activity.epochSponsor;
+    : activity.solanaAddress ?? activity.sourceTransaction?.from ?? activity.evmAddress ?? activity.epochSponsor;
   const destinationAsset = destinationAssetSymbol(activity);
   const differentOutput = destinationAsset !== activity.asset || Number(receipt.receivedAmount) !== Number(activity.amount);
   const evmAsset = route?.source.kind === "miden" ? route.destination : route?.source;
-  const gas = useSepoliaGasEstimate(receipt.sepoliaGasUnits, evmAsset?.kind !== "miden" ? evmAsset?.network : undefined);
+  const gas = useSepoliaGasEstimate(receipt.sepoliaGasUnits, evmAsset?.kind !== "miden" && evmAsset?.kind !== "spl" ? evmAsset?.network : undefined);
   const networkFee = gas.fee ?? (gas.loading ? "Estimating…" : receipt.networkFee);
   const status = needsClaim ? { label: "Ready to claim", tone: "active" as const }
     : receipt.status ?? { label: "Complete", tone: "success" as const };

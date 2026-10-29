@@ -2,6 +2,7 @@ import Image from "next/image";
 import type { BridgeAsset, BridgeNetwork } from "../../bridge/core/assets";
 
 const networkLogos = {
+  "solana-mainnet": "/asset-logos/solana.svg", "solana-devnet": "/asset-logos/solana.svg",
   polygon: "/asset-logos/polygon.svg",
   ethereum: "/asset-logos/ethereum.svg", arc: "/asset-logos/arc.png", base: "/asset-logos/base.svg", arbitrum: "/asset-logos/arbitrum.svg", "miden-mainnet": "/asset-logos/miden.svg",
   sepolia: "/asset-logos/ethereum.svg",
