@@ -23,7 +23,8 @@
     "cf:preview": "npm run cf:build && opennextjs-cloudflare preview",
     "cf:deploy": "npm run cf:build && opennextjs-cloudflare deploy",
     "config:update": "node --experimental-strip-types scripts/sync-wallet-config.mjs",
-    "check:config": "node --experimental-strip-types scripts/check-wallet-config.mjs"
+    "check:config": "node --experimental-strip-types scripts/check-wallet-config.mjs",
+    "test:browser:helper": "node scripts/test-helper-browser.mjs"
   },
   "dependencies": {
     "@epoch-protocol/epoch-intents-sdk": "2.2.0",

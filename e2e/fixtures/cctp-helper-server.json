@@ -1,0 +1,9 @@
+[
+  {
+    "deploymentId": "synthetic-solana-manual-browser-v1",
+    "solanaRpc": "http://127.0.0.1:18441",
+    "arcRpc": "http://127.0.0.1:18442",
+    "irisApi": "http://127.0.0.1:18443",
+    "simulationCaller": "0x7777777777777777777777777777777777777777"
+  }
+]
