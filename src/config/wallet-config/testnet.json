@@ -147,6 +147,16 @@
       "faucetId": "0x7c6d1dc7fb7045913d524bbef017f5",
       "decimals": 8
     },
-    "usdcxFaucetId": "0x4cbdcaffe75f0a317482224dae6436"
+    "usdcxFaucetId": "0x4cbdcaffe75f0a317482224dae6436",
+    "agglayerTokens": [
+      {
+        "symbol": "USDC",
+        "name": "USDC",
+        "address": "0x2bb4ffd7e2c6d432b697554efd77fa13bdbefd69",
+        "decimals": 18,
+        "faucetId": "0xb41aed8db850a3d140fc2079216c60",
+        "midenDecimals": 8
+      }
+    ]
   }
 }

@@ -6,10 +6,11 @@ Additional token and network icons:
 - `paxg.svg`: [Web3 Icons, PAXG branded](https://github.com/0xa3k5/web3icons/blob/3cce0f390cf902f204a1b3d52f485bcc95d2fe9e/raw-svgs/tokens/branded/PAXG.svg), MIT. Tighter viewBox preserves the previous icon size.
 - `wbnb.svg`: [Web3 Icons, BNB branded](https://github.com/0xa3k5/web3icons/blob/3cce0f390cf902f204a1b3d52f485bcc95d2fe9e/raw-svgs/tokens/branded/BNB.svg), MIT. The BNB mark identifies Wrapped BNB, rendered white on a gold circle to match the previous icon.
 - `pyusd.svg`: [Web3 Icons, PYUSD background](https://github.com/0xa3k5/web3icons/blob/3cce0f390cf902f204a1b3d52f485bcc95d2fe9e/raw-svgs/tokens/background/PYUSD.svg), MIT. Circular clipping preserves the previous badge shape.
+- `usdg.svg`: [Official Global Dollar token-logo download](https://framerusercontent.com/assets/llo5qqG8OQbvOU2QpFJPTdUyn0.zip), `USDG Token/SVG/GDN_USDG_Token.svg`. Used unchanged following the [USDG brand guidelines](https://globaldollar.com/brand). This brand asset is not covered by the Web3 Icons MIT license below.
 
 The icons identify their tokens; their brands remain the property of their owners.
-The SVGs contain vector paths, with no embedded raster images. They are vendored
-at the revision above, with no runtime or build-time fetch from that repository.
+The SVGs contain vector paths, with no embedded raster images. They are bundled
+locally from the linked sources, with no runtime or build-time fetch.
 
 MIT License (Web3 Icons)
 

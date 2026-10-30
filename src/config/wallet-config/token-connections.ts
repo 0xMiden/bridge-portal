@@ -29,12 +29,10 @@ export const tokenConnectionsSchema = z.object({
   const assets = new Map<string, string>();
   const invalid = (message: string) => ctx.addIssue({ code: "custom", message });
   for (const environment of ["testnet", "mainnet"] as const) {
-    for (const { evm, miden, routes, provider } of registry[environment]) {
+    for (const { evm, miden, routes } of registry[environment]) {
       if (miden.network !== `miden-${environment}` || (environment === "testnet") !== /sepolia|testnet/.test(evm.network))
         invalid("Token connection network mismatch");
       if (!routes.receive && !routes.send) invalid("Token connection has no routes");
-      if (provider === "agglayer" && evm.kind === "erc20" && routes.send)
-        invalid("Agglayer ERC-20 withdrawals are not supported by the portal");
       for (const id of Object.values(routes)) {
         if (ids.has(id)) invalid(`Duplicate token connection route: ${id}`);
         ids.add(id);
@@ -81,9 +79,9 @@ export function assertTokenConnections(config: z.infer<typeof bridgeConfigSchema
         throw new Error("ETH token connection does not match verified configuration");
       continue;
     }
-    const listed = Object.values(bridge.tokens ?? {}).some(token => token.contractAddress.toLowerCase() === evm.address.toLowerCase());
+    // Local additions are verified on-chain without upgrading other providers' configuration.
     const verified = derived.agglayerTokens?.find(token => token.address.toLowerCase() === evm.address.toLowerCase());
-    if (!listed || !verified || verified.faucetId !== miden.faucetId || verified.decimals !== evm.decimals || verified.midenDecimals !== miden.decimals)
+    if (!verified || verified.faucetId !== miden.faucetId || verified.decimals !== evm.decimals || verified.midenDecimals !== miden.decimals)
       throw new Error(`Agglayer token connection does not match verified configuration: ${evm.symbol}`);
   }
   // Mainnet's configured ERC-20 list must not be silently narrowed by a second allowlist.

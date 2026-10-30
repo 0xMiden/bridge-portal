@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "version": 4,
+  "version": 5,
   "testnet": [
     {
       "provider": "epoch",
@@ -170,6 +170,31 @@
       "routes": {
         "receive": "agglayer-eth-to-miden",
         "send": "agglayer-eth-to-sepolia"
+      }
+    },
+    {
+      "provider": "agglayer",
+      "evm": {
+        "network": "sepolia",
+        "kind": "erc20",
+        "symbol": "USDC",
+        "logo": "/asset-logos/usdc.svg",
+        "name": "Epoch test USDC",
+        "decimals": 18,
+        "address": "0x2bb4ffd7e2c6d432b697554efd77fa13bdbefd69"
+      },
+      "miden": {
+        "network": "miden-testnet",
+        "kind": "miden",
+        "symbol": "USDC",
+        "logo": "/asset-logos/usdc.svg",
+        "name": "Agglayer test USDC",
+        "decimals": 8,
+        "faucetId": "0xb41aed8db850a3d140fc2079216c60"
+      },
+      "routes": {
+        "receive": "testnet:agglayer:sepolia:0x2bb4ffd7e2c6d432b697554efd77fa13bdbefd69:receive",
+        "send": "testnet:agglayer:sepolia:0x2bb4ffd7e2c6d432b697554efd77fa13bdbefd69:send"
       }
     },
     {
@@ -361,7 +386,8 @@
         "faucetId": "0x3084d3c389ececd15fda9770d18c8a"
       },
       "routes": {
-        "receive": "mainnet:agglayer:ethereum:0x2260fac5e5542a773aa44fbcfedf7c193bc2c599:receive"
+        "receive": "mainnet:agglayer:ethereum:0x2260fac5e5542a773aa44fbcfedf7c193bc2c599:receive",
+        "send": "mainnet:agglayer:ethereum:0x2260fac5e5542a773aa44fbcfedf7c193bc2c599:send"
       }
     },
     {
@@ -385,7 +411,8 @@
         "faucetId": "0xf4f3dd3678997811522164320be4be"
       },
       "routes": {
-        "receive": "mainnet:agglayer:ethereum:0xd31a59c85ae9d8edefec411d448f90841571b89c:receive"
+        "receive": "mainnet:agglayer:ethereum:0xd31a59c85ae9d8edefec411d448f90841571b89c:receive",
+        "send": "mainnet:agglayer:ethereum:0xd31a59c85ae9d8edefec411d448f90841571b89c:send"
       }
     },
     {
@@ -409,7 +436,8 @@
         "faucetId": "0x5fcca2d015cf44d15da1a641d4d06a"
       },
       "routes": {
-        "receive": "mainnet:agglayer:ethereum:0x85f17cf997934a597031b2e18a9ab6ebd4b9f6a4:receive"
+        "receive": "mainnet:agglayer:ethereum:0x85f17cf997934a597031b2e18a9ab6ebd4b9f6a4:receive",
+        "send": "mainnet:agglayer:ethereum:0x85f17cf997934a597031b2e18a9ab6ebd4b9f6a4:send"
       }
     },
     {
@@ -433,7 +461,8 @@
         "faucetId": "0x24b95ee2aa5c2ad1679a0316163375"
       },
       "routes": {
-        "receive": "mainnet:agglayer:ethereum:0x45804880de22913dafe09f4980848ece6ecbaf78:receive"
+        "receive": "mainnet:agglayer:ethereum:0x45804880de22913dafe09f4980848ece6ecbaf78:receive",
+        "send": "mainnet:agglayer:ethereum:0x45804880de22913dafe09f4980848ece6ecbaf78:send"
       }
     },
     {
@@ -457,7 +486,8 @@
         "faucetId": "0x5cb79d29507d3ad17bb6dc60279e89"
       },
       "routes": {
-        "receive": "mainnet:agglayer:ethereum:0xdac17f958d2ee523a2206206994597c13d831ec7:receive"
+        "receive": "mainnet:agglayer:ethereum:0xdac17f958d2ee523a2206206994597c13d831ec7:receive",
+        "send": "mainnet:agglayer:ethereum:0xdac17f958d2ee523a2206206994597c13d831ec7:send"
       }
     },
     {
@@ -481,7 +511,8 @@
         "faucetId": "0x79e82d69d99d9f116f43cb5c063c04"
       },
       "routes": {
-        "receive": "mainnet:agglayer:ethereum:0x418d75f65a02b3d53b2418fb8e1fe493759c7605:receive"
+        "receive": "mainnet:agglayer:ethereum:0x418d75f65a02b3d53b2418fb8e1fe493759c7605:receive",
+        "send": "mainnet:agglayer:ethereum:0x418d75f65a02b3d53b2418fb8e1fe493759c7605:send"
       }
     },
     {
@@ -505,7 +536,58 @@
         "faucetId": "0xeb4266c94493b091380b25349fddd3"
       },
       "routes": {
-        "receive": "mainnet:agglayer:ethereum:0x6c3ea9036406852006290770bedfcaba0e23a0e8:receive"
+        "receive": "mainnet:agglayer:ethereum:0x6c3ea9036406852006290770bedfcaba0e23a0e8:receive",
+        "send": "mainnet:agglayer:ethereum:0x6c3ea9036406852006290770bedfcaba0e23a0e8:send"
+      }
+    },
+    {
+      "provider": "agglayer",
+      "evm": {
+        "network": "ethereum",
+        "kind": "erc20",
+        "symbol": "POL",
+        "logo": "/asset-logos/polygon.svg",
+        "name": "Polygon Ecosystem Token",
+        "decimals": 18,
+        "address": "0x455e53cbb86018ac2b8092fdcd39d8444affc3f6"
+      },
+      "miden": {
+        "network": "miden-mainnet",
+        "kind": "miden",
+        "symbol": "POL",
+        "logo": "/asset-logos/polygon.svg",
+        "name": "Polygon Ecosystem Token",
+        "decimals": 8,
+        "faucetId": "0xa5b56b51edbda2514c711385dc6f31"
+      },
+      "routes": {
+        "receive": "mainnet:agglayer:ethereum:0x455e53cbb86018ac2b8092fdcd39d8444affc3f6:receive",
+        "send": "mainnet:agglayer:ethereum:0x455e53cbb86018ac2b8092fdcd39d8444affc3f6:send"
+      }
+    },
+    {
+      "provider": "agglayer",
+      "evm": {
+        "network": "ethereum",
+        "kind": "erc20",
+        "symbol": "USDG",
+        "logo": "/asset-logos/usdg.svg",
+        "name": "Global Dollar",
+        "decimals": 6,
+        "address": "0xe343167631d89b6ffc58b88d6b7fb0228795491d"
+      },
+      "miden": {
+        "network": "miden-mainnet",
+        "kind": "miden",
+        "symbol": "USDG",
+        "logo": "/asset-logos/usdg.svg",
+        "name": "Global Dollar",
+        "decimals": 6,
+        "faucetId": "0xfc340a73c8fb25d1412f3fa1fd6d3a"
+      },
+      "routes": {
+        "receive": "mainnet:agglayer:ethereum:0xe343167631d89b6ffc58b88d6b7fb0228795491d:receive",
+        "send": "mainnet:agglayer:ethereum:0xe343167631d89b6ffc58b88d6b7fb0228795491d:send"
       }
     },
     {
