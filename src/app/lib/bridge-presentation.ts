@@ -55,6 +55,7 @@ export const explorerUrls = {
 
 export const networkLabels: Record<BridgeNetwork, string> = {
   polygon: "Polygon",
+  robinhood: "Robinhood",
   ethereum: "Ethereum", arc: "Arc", base: "Base", arbitrum: "Arbitrum", "miden-mainnet": "Miden",
   sepolia: "Sepolia",
   "arc-testnet": "Arc Testnet",

@@ -7,7 +7,7 @@ import { getEpochReadOnlySdk } from "./sdk";
 
 /** Quote both directions without executing or requesting a signature. */
 export async function quoteEpochSend(input: QuoteRequest): Promise<QuoteResult> {
-  const { miden, evm, chain } = epochRouteAssets(input.route);
+  const { miden, evm, chain, tokenAddress } = epochRouteAssets(input.route);
   const address = evmAddress(input.evmAddress);
   const sdk = await getEpochReadOnlySdk(address, input.route.recovery);
   const quote = await getCrossChainQuote(
@@ -18,7 +18,7 @@ export async function quoteEpochSend(input: QuoteRequest): Promise<QuoteResult> 
       midenAmount: parseUnits(input.amount, miden.decimals).toString(),
       evmRecipient: address,
       destinationChainId: chain.id,
-      outputTokenAddress: evm.address,
+      outputTokenAddress: tokenAddress,
       minTokenOut: "0",
     },
     address,
@@ -27,7 +27,7 @@ export async function quoteEpochSend(input: QuoteRequest): Promise<QuoteResult> 
 }
 
 export async function quoteEpochReceive(input: QuoteRequest): Promise<QuoteResult> {
-  const { miden, evm } = epochRouteAssets(input.route);
+  const { miden, evm, tokenAddress } = epochRouteAssets(input.route);
   const address = evmAddress(input.evmAddress);
   const sdk = await getEpochReadOnlySdk(address, input.route.recovery, evm.network);
   const quote = await getEVMToMidenQuote(
@@ -35,7 +35,7 @@ export async function quoteEpochReceive(input: QuoteRequest): Promise<QuoteResul
     {
       destinationChainId: MIDEN_DESTINATION_CHAIN_ID,
       evmSourceAddress: address,
-      evmTokenAddress: evm.address,
+      evmTokenAddress: tokenAddress,
       evmAmount: input.amount,
       evmTokenDecimals: evm.decimals,
       midenRecipientId: input.midenAccount,
