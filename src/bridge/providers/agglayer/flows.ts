@@ -90,7 +90,7 @@ export const flows: ProviderFlows = {
       if (!/^0x[0-9a-fA-F]{40}$/.test(destination))
         throw new Error("Connect the destination EVM wallet.");
       if (!input.midenAsset)
-        throw new Error('Tap "Show balance" first so we can detect the Miden ETH you\'re sending.');
+        throw new Error(`Tap "Show balance" first so we can detect the Miden ${route.source.symbol} you're sending.`);
       if (route.source.kind !== "miden" || input.midenAsset.faucetId.toLowerCase() !== route.source.faucetId.toLowerCase() ||
           input.midenAsset.decimals !== route.source.decimals)
         throw new Error("The Miden asset changed. Refresh your balance and review the transfer again.");

@@ -32,13 +32,24 @@ test("mainnet tokens select matching Miden assets and explain unsupported precis
   await selectNetwork(page, "Mainnet");
   await bridge.waitForReady();
   await bridge.setChain("Ethereum");
-  for (const [symbol, name] of [["USDT", "Tether USD"], ["WBTC", "Wrapped BTC"], ["PYUSD", "PayPal USD"], ["WSOL", "Wrapped SOL"]]) {
+  for (const [symbol, name] of [
+    ["USDT", "Tether USD"], ["WBTC", "Wrapped BTC"], ["NEAR", "NEAR Protocol"], ["PAXG", "Pax Gold"],
+    ["WBNB", "Wrapped BNB"], ["PYUSD", "PayPal USD"], ["USDG", "Global Dollar"],
+    ["POL", "Polygon Ecosystem Token"], ["WSOL", "Wrapped SOL"],
+  ]) {
     await bridge.fillAmount("0.1");
     await page.locator(".swap-box[data-side='source']").getByRole("button", { name: /change token/ }).click();
     await page.getByRole("option", { name: `${symbol} ${name}`, exact: true }).click();
     await expect(page.getByRole("textbox", { name: "Amount", exact: true })).toHaveValue("");
     await expect(page.locator(".swap-box[data-side='destination']").getByRole("button", { name: `${symbol} — change token`, exact: true })).toBeVisible();
-    await expect(page.getByRole("button", { name: "Reverse transfer direction" })).toBeDisabled();
+    const reverse = page.getByRole("button", { name: "Reverse transfer direction" });
+    await expect(reverse).toBeEnabled();
+    await reverse.click();
+    await expect(page.getByRole("combobox", { name: /Destination chain/ })).toContainText("Ethereum");
+    await expect(page.locator(".swap-box[data-side='source']").getByRole("button", { name: `${symbol} — change token`, exact: true })).toBeVisible();
+    await bridge.fillAmount("0.1");
+    await bridge.expectRoute("agglayer");
+    await reverse.click();
     await bridge.fillAmount("0.1");
     await bridge.expectRoute("agglayer");
   }
@@ -55,6 +66,20 @@ test("mainnet tokens select matching Miden assets and explain unsupported precis
   await page.locator(".swap-box[data-side='source']").getByRole("button", { name: /change token/ }).click();
   await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await page.screenshot({ path: info.outputPath("mainnet-tokens-mobile.png"), fullPage: true, animations: "disabled" });
+});
+
+test("testnet USDC keeps its Agglayer faucet when reversing the transfer", async ({ bridge, page }) => {
+  await bridge.setRoute("AggLayer");
+  await page.locator(".swap-box[data-side='source']").getByRole("button", { name: /change token/ }).click();
+  await page.getByRole("option", { name: "USDC Epoch test USDC", exact: true }).click();
+  await bridge.fillAmount("0.1");
+  await bridge.expectRoute("agglayer");
+  await page.getByRole("button", { name: "Reverse transfer direction" }).click();
+  await expect(page.getByRole("combobox", { name: /Destination chain/ })).toContainText("Sepolia");
+  await bridge.fillAmount("0.1");
+  await bridge.expectRoute("agglayer");
+  await page.locator(".swap-box[data-side='source']").getByRole("button", { name: /change token/ }).click();
+  await expect(page.getByRole("option", { name: "USDC Agglayer test USDC", exact: true })).toHaveAttribute("aria-selected", "true");
 });
 
 test("network selection isolates forms, preferences and tabs", async ({ bridge, page, context }, info) => {

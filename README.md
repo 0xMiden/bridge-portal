@@ -143,7 +143,8 @@ npm run check:config
 The update command fetches both documents at that immutable revision, validates
 networks and approved services, and resolves the Miden bridge registry and Arc
 xReserve registry. Every configured mainnet Agglayer token must have a local
-connection and pass Ethereum/Miden ownership, faucet, and precision checks.
+connection. All local Agglayer connections, including additions beyond the pin,
+pass EVM/Miden ownership, faucet, and precision checks on import.
 The importer rejects a missing or mismatched connection instead of silently
 filtering tokens through a second allowlist. Source and destination precision
 are independent: for example, NEAR uses 24 decimals on Ethereum and 8 on Miden.
@@ -151,6 +152,7 @@ are independent: for example, NEAR uses 24 decimals on Ethereum and 8 on Miden.
 Both networks must validate before the existing files are replaced. Review the
 generated diff and run the checks before shipping it. Additional Epoch test
 tokens and their verified mappings remain in the local connections file.
+`AGGLAYER_SEPOLIA_RPC_URL` overrides Sepolia's import-time RPC.
 When changing token mappings, edit that file and rerun the import with the
 selected wallet-config revision; normal builds check it against the generated
 deployment metadata offline. Existing testnet/mainnet configuration files and
