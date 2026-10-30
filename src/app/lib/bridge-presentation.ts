@@ -17,6 +17,7 @@ import { activityState } from "../../bridge/activity";
 import { bridgeProviders, directionFor } from "../../bridge/providers/registry";
 import type { FeePolicy } from "../../bridge/core/provider";
 import type { Activity } from "../../bridge/core/models";
+import { isSolanaBytes } from "../../bridge/solana/identity";
 export type { Activity } from "../../bridge/core/models";
 
 export type Quote = BridgeQuote & {
@@ -54,6 +55,7 @@ export const explorerUrls = {
 };
 
 export const networkLabels: Record<BridgeNetwork, string> = {
+  "solana-mainnet": "Solana", "solana-devnet": "Solana Devnet",
   polygon: "Polygon",
   ethereum: "Ethereum", arc: "Arc", base: "Base", arbitrum: "Arbitrum", "miden-mainnet": "Miden",
   sepolia: "Sepolia",
@@ -85,7 +87,8 @@ export function quoteForActivity(activity: Activity): Quote {
 }
 
 export function providerFee(fees: FeePolicy, amount: string, sourceSymbol: string, destinationSymbol: string) {
-  const symbol = fees.charging === "deducted" ? destinationSymbol : sourceSymbol;
+  const denomination = fees.denomination ?? (fees.charging === "deducted" ? "destination" : "source");
+  const symbol = denomination === "destination" ? destinationSymbol : sourceSymbol;
   return { label: fees.label, value: `${amount} ${symbol}${fees.estimated ? " (estimated)" : ""}` };
 }
 
@@ -196,10 +199,15 @@ export interface ExplorerLink {
 }
 
 export function sourceExplorer(activity: BridgeActivity): ExplorerLink {
+  if (activity.cctpHelper) {
+    const signature = activity.cctpHelper.signature;
+    const valid = !!signature && isSolanaBytes(signature, 64);
+    return { label: "View on Solana Explorer", available: valid, href: valid ? `https://explorer.solana.com/tx/${signature}${activity.cctpHelper.authorization.deployment.source.network === "solana-devnet" ? "?cluster=devnet" : ""}` : undefined };
+  }
   if (activity.mode === "receive") {
     const tx = fullHash(directionFor(activity).activityDetails(activity).sourceHash);
     const source = activityRoute(activity)?.source;
-    const explorer = source && source.kind !== "miden" ? evmNetworks[source.network].blockExplorers.default : evmNetworks.sepolia.blockExplorers.default;
+    const explorer = source && source.kind !== "miden" && source.kind !== "spl" ? evmNetworks[source.network].blockExplorers.default : evmNetworks.sepolia.blockExplorers.default;
     return {
       label: `View on ${explorer.name}`,
       href: tx ? `${explorer.url}/tx/${tx}` : undefined,
@@ -237,7 +245,7 @@ export function destinationExplorer(activity: BridgeActivity): ExplorerLink {
   // fulfils and the tx hash is captured — never a broken/list URL.
   const sepoliaTx = fullHash(directionFor(activity).activityDetails(activity).destinationHash);
   const destination = activityRoute(activity)?.destination;
-  const explorer = destination && destination.kind !== "miden" ? evmNetworks[destination.network].blockExplorers.default : evmNetworks.sepolia.blockExplorers.default;
+  const explorer = destination && destination.kind !== "miden" && destination.kind !== "spl" ? evmNetworks[destination.network].blockExplorers.default : evmNetworks.sepolia.blockExplorers.default;
   return {
     label: `View on ${explorer.name}`,
     href: sepoliaTx ? `${explorer.url}/tx/${sepoliaTx}` : undefined,
@@ -265,7 +273,7 @@ export function buildDiagnostics(
     tool: "miden-bridge-portal",
     activityId: activity.id,
     environment: activity.environment ?? "testnet",
-    recovery: activityRoute(activity)?.recovery,
+    recovery: activity.cctpHelper ? undefined : activityRoute(activity)?.recovery,
     route: bridgeProviders[activity.provider].label,
     provider: activity.provider,
     direction: activity.mode,
@@ -317,5 +325,10 @@ export function buildDiagnostics(
       xreserveMidenBlock: activity.xreserveMidenBlock,
     }),
     lastMonitorError: extra.monitorError || undefined,
+    manual: activity.cctpHelper ? { execution: "manual", deploymentId: activity.cctpHelper.authorization.deploymentId,
+      authorization: activity.cctpHelper.authorization, attemptId: activity.cctpHelper.attemptId, stage: activity.cctpHelper.stage,
+      signature: activity.cctpHelper.signature, eventAccount: activity.cctpHelper.eventAccount,
+      scanStartSlot: activity.cctpHelper.scanStartSlot, lastValidBlockHeight: activity.cctpHelper.lastValidBlockHeight,
+      reason: activity.cctpHelper.reason, sourceEvidence: activity.cctpHelper.sourceEvidence } : undefined,
   };
 }

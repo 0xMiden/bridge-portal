@@ -28,6 +28,8 @@ export function TransferReview({ review, quote, walletsChanged, onCancel, onConf
   const total = fees.charging === "additional" && review.quote?.fee !== undefined && Number(review.quote.fee) > 0
     ? formatUnits(parseUnits(amount, route.source.decimals) + parseUnits(review.quote.fee, route.source.decimals), route.source.decimals) : undefined;
 
+  const warning = <p className="preflight-note rounded-md bg-surface-muted p-3 text-xs text-muted-foreground">{estimate.warning}</p>;
+
   return (
     <Dialog label={`Review ${route.mode}`} onClose={onCancel} initialFocusRef={confirmRef}>
         <div className="preflight-head justify-between items-center gap-2 flex">
@@ -42,27 +44,31 @@ export function TransferReview({ review, quote, walletsChanged, onCancel, onConf
           <div className="preflight-path gap-7 mb-3 grid">
             {(["source", "destination"] as const).map(side => (
               <ReviewAccount key={side} side={side} asset={route[side]}
-                account={route[side].kind === "miden" ? accounts.midenAccount : accounts.evmAddress} />
+                account={route[side].kind === "miden" ? accounts.midenAccount : route[side].kind === "spl" ? accounts.sourceIdentity?.address ?? "" : accounts.evmAddress} />
             ))}
           </div>
           <DetailsList items={[
             (route.source.symbol !== route.destination.symbol || Number(amount) !== Number(received)) && {
-              label: fees.estimated ? "Estimated received" : "You receive", value: `${received} ${route.destination.symbol}`,
+              label: route.transport === "cctp-helper" ? "At least" : fees.estimated ? "Estimated received" : "You receive", value: `${received} ${route.destination.symbol}`,
             },
             (estimate.minReceived !== "Not quoted" && Number(estimate.minReceived) !== Number(received)) && {
               label: "Minimum received", value: `${estimate.minReceived} ${route.destination.symbol}`,
             },
-            { label: "Provider", value: bridgeProviders[route.provider].label },
+            { label: "Provider", value: route.transport === "cctp-helper" ? "Circle · manual Arc execution" : bridgeProviders[route.provider].label },
             fees.showEta && { label: "Estimated time", value: estimate.eta },
             { label: "Network fee", value: quote.networkFee },
+            review.quote?.kind === "cctp-helper" && { label: "Solana transaction fee", value: `${formatUnits(BigInt(review.quote.sourceFeeLamports), 9)} SOL` },
+            review.quote?.kind === "cctp-helper" && { label: "Circle event-account rent", value: `${formatUnits(BigInt(review.quote.eventRentLamports), 9)} SOL (not reclaimed in v1)` },
+            review.quote?.kind === "cctp-helper" && { label: "Arc execution", value: "Separate manual transaction and Arc gas required" },
             { label: fees.label, value: quote.fee },
             total !== undefined && { label: `Total ${route.source.symbol}`, value: `${total} ${route.source.symbol}` },
           ]} />
-          {route.provider === "xreserve" ? <p className="preflight-note rounded-md bg-surface-muted p-3 text-xs text-muted-foreground">{estimate.warning}</p> : null}
+          {route.provider === "xreserve" && route.transport !== "cctp-helper" ? warning : null}
           {walletsChanged ? <FormAlert role="alert">Your connected wallet changed. Close this review and review the transfer again.</FormAlert> : null}
           {quote.capError ? <FormAlert role="alert">{quote.capError}</FormAlert> : null}
         </div>
         <div className="preflight-actions shrink-0 mobile:border-t mobile:border-border mobile:pt-3 mobile:pb-[max(12px,env(safe-area-inset-bottom))]">
+          {route.transport === "cctp-helper" ? <div className="mb-3">{warning}</div> : null}
           <Button type="button" variant="primary" className="primary-button preflight-confirm" ref={confirmRef}
             disabled={walletsChanged || quote.capBlocked} onClick={onConfirm}>
             Confirm in wallet<ArrowRight size={18} aria-hidden="true" />

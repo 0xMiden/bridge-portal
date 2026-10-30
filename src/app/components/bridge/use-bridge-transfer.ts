@@ -1,6 +1,6 @@
-import { useEffect, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { isQuoteReviewable, type TransferQuote } from "../../../bridge/core/quote";
+import { isQuoteReviewable, sameSourceIdentity, type TransferQuote } from "../../../bridge/core/quote";
 import type { BridgeRoute } from "../../../bridge/core/routes";
 import { validateTransferAmount } from "../../../bridge/core/rules";
 import type { BridgeEnvironment } from "../../../config/environment";
@@ -17,6 +17,7 @@ export interface ReviewedTransfer {
   amount: string;
   accounts: BridgeWallets["accounts"];
   quote?: TransferQuote;
+  solanaProvider?: BridgeWallets["solana"]["selection"];
 }
 
 type TransferState =
@@ -30,22 +31,28 @@ export function useBridgeTransfer(draft: { route: BridgeRoute; amount: string },
   const activities = useActivityStore();
   const lockNetworkSelection = useLockNetworkSelection();
   const [state, setState] = useState<TransferState>({ status: "editing", error: "" });
+  const attempt = useRef<string | undefined>(undefined);
+  const liveWallets = useRef(wallets);
+  useLayoutEffect(() => { liveWallets.current = wallets; }, [wallets]);
   const review = state.status === "editing" ? undefined : state.review;
   const { route, amount } = draft;
   const quote = useBridgeQuote(route, amount, wallets, review);
   const isSubmitting = state.status === "submitting";
   const { evmAddress, midenAccount } = wallets.accounts;
   const walletsChanged = Boolean(review && (review.accounts.midenAccount !== midenAccount ||
-    review.accounts.evmAddress.toLowerCase() !== evmAddress.toLowerCase()));
+    review.accounts.evmAddress.toLowerCase() !== evmAddress.toLowerCase() || !sameSourceIdentity(review.accounts.sourceIdentity, wallets.accounts.sourceIdentity) ||
+    review.solanaProvider?.provider !== (route.source.kind === "spl" ? wallets.solana.selection?.provider : undefined)));
   const action = deriveCtaState({
     mode: route.mode, amount, sourceTokenSymbol: route.source.symbol,
-    sourceConnected: Boolean(route.mode === "receive" ? evmAddress : midenAccount),
+    sourceConnected: Boolean(route.source.kind === "spl" ? wallets.solana.address : route.mode === "receive" ? evmAddress : midenAccount),
     destinationConnected: Boolean(route.mode === "receive" ? midenAccount : evmAddress),
     insufficientBalance: quote.insufficientBalance,
     quoteLoading: quote.providers.loading && !quote.live,
-    isSubmitting, submitPhase: isSubmitting ? state.phase : "", evmNetworkLabel: wallets.evm.network.name,
+    isSubmitting, submitPhase: isSubmitting ? state.phase : "", evmNetworkLabel: route.source.kind === "spl" ? "Phantom (Solana)" : wallets.evm.network.name,
   });
-  const cta = action.action === "review" ? {
+  const cta = route.transport === "cctp-helper" && route.disabled
+    ? { ...action, label: "Route unavailable", disabled: true }
+    : action.action === "review" ? {
     ...action,
     label: quote.live ? "Review transfer" : "No quotes available",
     disabled: !quote.live,
@@ -75,7 +82,7 @@ export function useBridgeTransfer(draft: { route: BridgeRoute; amount: string },
     }
     setState({
       status: "reviewing", error: "",
-      review: { route, amount, accounts: wallets.accounts, quote: quote.live },
+      review: { route, amount, accounts: wallets.accounts, quote: quote.live, solanaProvider: route.source.kind === "spl" ? wallets.solana.selection : undefined },
     });
   }
 
@@ -92,6 +99,7 @@ export function useBridgeTransfer(draft: { route: BridgeRoute; amount: string },
       return;
     }
     const reviewed = state.review;
+    if (reviewed.route.transport === "cctp-helper") attempt.current ??= crypto.randomUUID();
     setState({ status: "editing", error: "" });
     wallets.setError("");
     const midenAsset = wallets.miden.balance.balance;
@@ -104,6 +112,13 @@ export function useBridgeTransfer(draft: { route: BridgeRoute; amount: string },
         evmWallet: wallets.evm,
         midenWallet: wallets.miden,
         midenAsset: midenAsset && midenAsset.amountRaw > 0n ? midenAsset : null,
+        solanaWallet: reviewed.solanaProvider, helperAttemptId: attempt.current,
+        assertCurrentWallets: () => {
+          const current = liveWallets.current;
+          if (!current.miden.connected || current.accounts.midenAccount !== reviewed.accounts.midenAccount ||
+              !sameSourceIdentity(current.accounts.sourceIdentity, reviewed.accounts.sourceIdentity) || current.solana.selection?.provider !== reviewed.solanaProvider?.provider)
+            throw new Error("Your connected account or recipient changed. Review again.");
+        },
       }, {
         openEvmWallet: wallets.openEvmWallet,
         verifyBalanceCap: quote.balanceCap.verifyBalanceCap,

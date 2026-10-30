@@ -60,7 +60,8 @@ function BridgeForm({ environment }: { environment: BridgeEnvironment }) {
   function handlePrimaryAction() {
     switch (transfer.cta.action) {
       case "connect-source":
-        if (draft.route.mode === "receive") void wallets.openEvmWallet();
+        if (draft.route.source.kind === "spl") void wallets.solana.connect();
+        else if (draft.route.mode === "receive") void wallets.openEvmWallet();
         else connectMiden();
         break;
       case "connect-destination":

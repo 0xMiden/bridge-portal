@@ -13,6 +13,7 @@ import { formatAgo } from "../lib/relative-time";
 import { useActivityTracking } from "../lib/use-activity-tracking";
 import { useBridgeEnvironment, useSelectBridgeEnvironment } from "./NetworkProvider";
 import { ActivityJourney } from "./ActivityJourney";
+import { ManualHelperActions } from "./ManualHelperActions";
 
 type Tracking = ReturnType<typeof useActivityTracking>;
 type LoadedActivityProps = Pick<Tracking, "monitorError" | "lastCheckedAt" | "refresh" | "receiptSaved"> & {
@@ -61,7 +62,7 @@ function LoadedActivity({ activity, monitorError, lastCheckedAt, refresh, receip
         <ActivityNotice role="alert">
           <p>This receipt could not be saved in your browser. Download it before refreshing or closing this tab. Do not submit the transfer again.</p>
           <ButtonAnchor variant="secondary" className="secondary-button" download={`miden-bridge-${activity.id}.json`}
-            href={`data:application/json;charset=utf-8,${encodeURIComponent(JSON.stringify(activity, null, 2))}`}>
+            href={`data:application/json;charset=utf-8,${encodeURIComponent(JSON.stringify(activity.cctpHelper ? buildDiagnostics(activity) : activity, null, 2))}`}>
             Download receipt
           </ButtonAnchor>
         </ActivityNotice>
@@ -70,6 +71,7 @@ function LoadedActivity({ activity, monitorError, lastCheckedAt, refresh, receip
         <ActivityProgress progress={model.progress} lastCheckedAt={lastCheckedAt} refresh={refresh} receiptSaved={receiptSaved} claimGuidance={needsClaim ? model.guidance : null} />
         {model.guidance && !needsClaim && <ActivityGuidance guidance={model.guidance} />}
       </ActivityJourney>
+      {activity.cctpHelper && <ManualHelperActions activity={activity} refresh={refresh} />}
       {monitorError && model.progress.kind === "tracked" && (
         <FormAlert compact>{monitorError}</FormAlert>
       )}
