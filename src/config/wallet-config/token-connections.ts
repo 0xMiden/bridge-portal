@@ -1,7 +1,8 @@
 import { z } from "zod";
 import type { bridgeConfigSchema } from "./schema";
+import type { EvmAsset, MidenAsset } from "../../bridge/core/assets";
 
-const evmNetwork = z.enum(["sepolia", "arc-testnet", "base-sepolia", "arbitrum-sepolia", "ethereum", "arc", "base", "arbitrum", "polygon"]);
+const evmNetwork = z.enum(["sepolia", "arc-testnet", "base-sepolia", "arbitrum-sepolia", "ethereum", "arc", "base", "arbitrum", "polygon", "robinhood"]);
 export const tokenLogoSchema = z.string().regex(/^\/asset-logos\/[a-z0-9-]+\.(svg|png)$/);
 const metadata = { symbol: z.string().min(1).max(11), name: z.string().min(1).max(100).optional(), logo: tokenLogoSchema };
 const evmMetadata = { ...metadata, network: evmNetwork, decimals: z.int().min(0).max(255) };
@@ -48,6 +49,26 @@ export const tokenConnectionsSchema = z.object({
   }
 });
 
+/** Validate both current routes and self-contained historical receipt snapshots. */
+export function matchesMainnetEpochPair(config: z.infer<typeof bridgeConfigSchema>, evm: EvmAsset, miden: MidenAsset): boolean {
+  const token = config.document.supportedEvmChains[evm.network]?.bridges.epoch?.tokens[evm.symbol];
+  if (!token) return false;
+  const native = token.contractAddress === "0x0000000000000000000000000000000000000000";
+  if ((evm.kind === "native") !== native) return false;
+  if (evm.kind === "erc20" && evm.address.toLowerCase() !== token.contractAddress.toLowerCase()) return false;
+  if (native && evm.symbol !== (evm.network === "polygon" ? "POL" : "ETH")) return false;
+  const output = config.document["bridge-providers"].epoch?.outputs?.[token.outputs?.[0] ?? ""];
+  if (output?.faucetId !== miden.faucetId) return false;
+  if (evm.symbol === "USDC") return miden.symbol === "USDCx" && miden.faucetId === config.derived.usdcxFaucetId &&
+    evm.decimals === 6 && miden.decimals === 6;
+  if (evm.symbol === "ETH") return miden.symbol === "ETH" && miden.faucetId === config.derived.eth.faucetId &&
+    evm.decimals === 18 && miden.decimals === config.derived.eth.decimals;
+  if (evm.symbol !== "POL" && evm.symbol !== "USDG") return false;
+  const verified = config.derived.agglayerTokens?.find(token => token.symbol === evm.symbol);
+  return Boolean(verified && miden.symbol === evm.symbol && miden.faucetId === verified.faucetId &&
+    evm.decimals === verified.decimals && miden.decimals === verified.midenDecimals);
+}
+
 /** Local token pairs must agree with the pinned deployments and verified registry metadata. */
 export function assertTokenConnections(config: z.infer<typeof bridgeConfigSchema>, connections: readonly TokenConnection[]) {
   const { document, derived, environment } = config;
@@ -57,10 +78,10 @@ export function assertTokenConnections(config: z.infer<typeof bridgeConfigSchema
     if (!bridge || miden.network !== `miden-${environment}`) throw new Error(`Unconfigured token connection: ${provider}/${evm.network}`);
     if (provider === "epoch") {
       const token = bridge.tokens?.[evm.symbol];
-      if (environment === "mainnet" && (!token || evm.symbol !== "USDC" || evm.decimals !== 6 ||
-          miden.symbol !== "USDCx" || miden.decimals !== 6 || miden.faucetId !== derived.usdcxFaucetId ||
-          miden.faucetId !== document["bridge-providers"].epoch?.outputs?.[token.outputs?.[0] ?? ""]?.faucetId))
-        throw new Error("Epoch token connection does not match verified configuration");
+      if (environment === "mainnet") {
+        if (!matchesMainnetEpochPair(config, evm, miden)) throw new Error("Epoch token connection does not match verified configuration");
+        continue;
+      }
       if (token && (evm.kind !== "erc20" || token.contractAddress.toLowerCase() !== evm.address.toLowerCase()))
         throw new Error("Epoch token connection does not match wallet-config");
       const output = token?.outputs?.[0];

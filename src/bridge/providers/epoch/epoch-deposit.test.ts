@@ -1,8 +1,8 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { COMPACT_ABI } from "@epoch-protocol/epoch-intents-sdk";
 import { epochWalletPaidHealth } from "../../../../test/epoch-service";
-import { createWalletClient, custom, decodeFunctionData, encodeAbiParameters, encodeEventTopics, erc20Abi, type Hex } from "viem";
-import { arbitrum } from "viem/chains";
+import { createWalletClient, custom, decodeFunctionData, encodeAbiParameters, encodeEventTopics, erc20Abi, formatUnits, parseUnits, type Hex } from "viem";
+import { evmNetworks } from "../../../config/evm-networks";
 import { getWalletClient } from "@wagmi/core";
 import { findBridgeRoute } from "../../core/routes";
 import { submitBridgeTransfer, type TransferSubmission } from "../../../app/lib/bridge-submission";
@@ -51,19 +51,29 @@ beforeEach(() => {
 });
 afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 
-function setup(mode: "sequential" | "batch" | "rejected", health: unknown = epochWalletPaidHealth(COMPACT)) {
+function setup(mode: "sequential" | "batch" | "rejected", health: unknown = epochWalletPaidHealth(COMPACT), selected = route) {
+  const source = selected.source;
+  if (source.kind === "miden") throw new Error("Expected an EVM deposit");
+  const chain = evmNetworks[source.network];
+  const chainHex = `0x${chain.id.toString(16)}`;
   let claimHash: Hex;
   let typehash: Hex;
   const sent: string[] = [];
   const approvals: bigint[] = [];
   const beforeConfirmation: { hash: Hex; recorded: string[] }[] = [];
   let beforeAllocation: ReturnType<typeof loadStoredActivities> = [];
-  function readDeposit(data: Hex) {
+  function readDeposit(data: Hex, value?: Hex) {
     const call = decodeFunctionData({ abi: COMPACT_ABI, data });
-    if (call.functionName !== "depositERC20AndRegister") throw new Error("Expected a Compact deposit");
+    if (source.kind === "native") {
+      if (call.functionName !== "depositNativeAndRegister") throw new Error("Expected a native Compact deposit");
+      expect(BigInt(value ?? 0)).toBe(1_000_000_000_000_000_000n);
+      [, claimHash, typehash] = call.args;
+      return;
+    }
+    if (source.kind !== "erc20" || call.functionName !== "depositERC20AndRegister") throw new Error("Expected a Compact deposit");
     const [token, lockTag, amount] = call.args;
     expect(lockTag).toBeDefined();
-    expect(token.toLowerCase()).toBe("0xaf88d065e77c8cc2239327c5edb3a432268e5831");
+    expect(token.toLowerCase()).toBe(source.address.toLowerCase());
     expect(amount).toBe(1_000_000n);
     [, , , claimHash, typehash] = call.args;
   }
@@ -75,10 +85,10 @@ function setup(mode: "sequential" | "batch" | "rejected", health: unknown = epoc
   }
   const wallet = {
     request: vi.fn(async ({ method, params }: { method: string; params?: unknown }) => {
-      const values = params as [{ to: string; data: Hex; calls: { to: string; data: Hex }[] }];
-      if (method === "eth_chainId") return "0xa4b1";
+      const values = params as [{ to: string; data: Hex; value?: Hex; calls: { to: string; data: Hex; value?: Hex }[] }];
+      if (method === "eth_chainId") return chainHex;
       if (method === "eth_accounts") return [SPONSOR];
-      if (method === "wallet_getCapabilities") return { "0xa4b1": { atomic: { status: mode === "batch" ? "supported" : "unsupported" } } };
+      if (method === "wallet_getCapabilities") return { [chainHex]: { atomic: { status: mode === "batch" ? "supported" : "unsupported" } } };
       if (method === "eth_sendTransaction") {
         if (values[0].to.toLowerCase() !== COMPACT) {
           readApproval(values[0].data);
@@ -86,7 +96,7 @@ function setup(mode: "sequential" | "batch" | "rejected", health: unknown = epoc
           return APPROVAL;
         }
         if (mode === "rejected") throw { code: 4001, message: "User rejected request" };
-        readDeposit(values[0].data);
+        readDeposit(values[0].data, values[0].value);
         sent.push("deposit");
         return TX;
       }
@@ -99,14 +109,14 @@ function setup(mode: "sequential" | "batch" | "rejected", health: unknown = epoc
       if (method === "wallet_sendCalls") {
         expect(loadStoredActivities()).toEqual([]);
         for (const call of values[0].calls) {
-          if (call.to.toLowerCase() === COMPACT) readDeposit(call.data);
+          if (call.to.toLowerCase() === COMPACT) readDeposit(call.data, call.value);
           else readApproval(call.data);
         }
         sent.push("batch");
         return { id: "bundle-1" };
       }
       if (method === "wallet_getCallsStatus") return {
-        id: "bundle-1", chainId: "0xa4b1", version: "2.0.0", status: 200,
+        id: "bundle-1", chainId: chainHex, version: "2.0.0", status: 200,
         receipts: [{ transactionHash: TX, status: "0x1", blockNumber: "0x10", gasUsed: "0x10000", logs: [{
           address: COMPACT,
           topics: encodeEventTopics({ abi: COMPACT_ABI, eventName: "CompactRegistered", args: { sponsor: SPONSOR } }),
@@ -116,7 +126,7 @@ function setup(mode: "sequential" | "batch" | "rejected", health: unknown = epoc
       throw new Error(`Unexpected wallet method ${method}`);
     }),
   };
-  const client = createWalletClient({ account: SPONSOR, chain: arbitrum, transport: custom(wallet, { retryCount: 0 }) });
+  const client = createWalletClient({ account: SPONSOR, chain, transport: custom(wallet, { retryCount: 0 }) });
   vi.mocked(getWalletClient).mockResolvedValue(client as Awaited<ReturnType<typeof getWalletClient>>);
   const allocation = vi.fn(() => {
     beforeAllocation = loadStoredActivities();
@@ -125,17 +135,17 @@ function setup(mode: "sequential" | "batch" | "rejected", health: unknown = epoc
   vi.stubGlobal("fetch", vi.fn(async (url: string) => {
     if (url.endsWith("/health")) return Response.json(health);
     if (url.includes("/suggested-nonce/")) return Response.json({ nonce: "0x42" });
-    if (url.endsWith("/checkIfDepositNeeded")) return Response.json({ resourceLockRequired: true, tokenIn: "1000000", tokenOut: "918687", transactions: [] });
+    if (url.endsWith("/checkIfDepositNeeded")) return Response.json({ resourceLockRequired: true, tokenIn: parseUnits("1", source.decimals).toString(), tokenOut: "918687", transactions: [] });
     if (url.endsWith("/compact")) return allocation();
     throw new Error(`Unexpected HTTP request ${url}`);
   }));
   const input: TransferSubmission = {
-    routeId: route.id, environment: "mainnet", amount: "1", insufficientBalance: false, evmBalance: "10 USDC",
+    routeId: selected.id, environment: "mainnet", amount: "1", insufficientBalance: false, evmBalance: "10 USDC",
     evmAddress: SPONSOR, midenAccount: MIDEN, midenAsset: null,
     evmWallet: { connected: true, address: SPONSOR, provider: wallet as EvmProvider },
     midenWallet: { connected: true, address: MIDEN },
-    quote: { kind: "epoch", received: "0.918687", validity: { kind: "time", expiresAt: Date.now() + 60000 },
-      request: { routeId: route.id, recovery: route.recovery, amount: "1", evmAddress: SPONSOR, midenAccount: MIDEN } },
+    quote: { kind: "epoch", received: formatUnits(918687n, selected.destination.decimals), validity: { kind: "time", expiresAt: Date.now() + 60000 },
+      request: { routeId: selected.id, recovery: selected.recovery, amount: "1", evmAddress: SPONSOR, midenAccount: MIDEN } },
   };
   const effects = { openEvmWallet: vi.fn(), verifyBalanceCap: vi.fn(async () => {}), onError: vi.fn(), onSubmittingChange: vi.fn(), onPhaseChange: vi.fn(), activities: new ActivityStore(activityPersistence), navigate: vi.fn() };
   return { input, effects, allocation, sent, approvals, beforeConfirmation, allocationEvidence: () => ({ activities: beforeAllocation, claimHash }) };
@@ -178,6 +188,36 @@ it("does not save an approval as a transfer when the deposit is rejected", async
   expect(loadStoredActivities()).toEqual([]);
   expect(effects.navigate).not.toHaveBeenCalled();
   expect(effects.onError).toHaveBeenCalledWith("You cancelled the request in your wallet.");
+});
+
+it.each(["ethereum:eth", "arbitrum:eth", "base:eth", "polygon:pol", "robinhood:eth"])(
+  "%s deposits native value without approval and retains recovery evidence after allocator failure",
+  async pair => {
+    const selected = findBridgeRoute(`mainnet:epoch:${pair}:receive`)!;
+    const { input, effects, allocation, sent, approvals, beforeConfirmation } = setup("sequential", undefined, selected);
+    await submitBridgeTransfer(input, effects);
+    expect(allocation).toHaveBeenCalledOnce();
+    expect(sent).toEqual(["deposit"]);
+    expect(approvals).toEqual([]);
+    expect(beforeConfirmation).toEqual([{ hash: TX, recorded: [TX] }]);
+    const [stored] = loadStoredActivities();
+    const nativeId = (BigInt(depositId) & ~((1n << 160n) - 1n)).toString();
+    expect(stored).toMatchObject({ sourceTxHash: TX, epochDepositId: nativeId,
+      routeSnapshot: { id: selected.id, source: { kind: "native", network: selected.source.network } } });
+    expect(stored.epochClaimHash).toMatch(/^0x[\da-f]{64}$/i);
+    rpc.getTransactionReceipt.mockResolvedValue({ status: "success" });
+    expect((await observeActivity(stored, new AbortController().signal))?.patch).toMatchObject({ epochDepositConfirmed: true });
+  },
+);
+
+it("persists a Robinhood USDG deposit with its own token and faucet", async () => {
+  const selected = findBridgeRoute("mainnet:epoch:robinhood:usdg:receive")!;
+  const { input, effects, allocation, sent } = setup("sequential", undefined, selected);
+  await submitBridgeTransfer(input, effects);
+  expect(allocation).toHaveBeenCalledOnce();
+  expect(sent).toEqual(["approval", "deposit"]);
+  expect(loadStoredActivities()).toMatchObject([{ sourceTxHash: TX,
+    routeSnapshot: { id: selected.id, destination: { faucetId: "0xfc340a73c8fb25d1412f3fa1fd6d3a" } } }]);
 });
 
 it.each(["sequential", "batch"] as const)("resets a partial allowance before a %s deposit when reset policy is unavailable", async mode => {

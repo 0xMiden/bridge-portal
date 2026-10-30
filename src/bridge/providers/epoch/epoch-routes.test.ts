@@ -64,6 +64,20 @@ describe.each([
   ].map(chain => ({ ...chain, name: `Cedar ${chain.network}`, route: `mainnet:epoch:${chain.network}`,
     evmDecimals: 6, faucet: "0xe69e6ca6e39df1b10c1e5399399feb", midenDecimals: 6,
     sendUnits: 1250000n, sendOutput: "125", receiveOutput: "125", symbol: "USDC", midenSymbol: "USDCx" })),
+  ...[
+    { network: "ethereum", chainId: 1, symbol: "ETH", faucet: "0x419f8f4bff72959132aa7cea15a4c1" },
+    { network: "base", chainId: 8453, symbol: "ETH", faucet: "0x419f8f4bff72959132aa7cea15a4c1" },
+    { network: "arbitrum", chainId: 42161, symbol: "ETH", faucet: "0x419f8f4bff72959132aa7cea15a4c1" },
+    { network: "robinhood", chainId: 4663, symbol: "ETH", faucet: "0x419f8f4bff72959132aa7cea15a4c1" },
+    { network: "polygon", chainId: 137, symbol: "POL", faucet: "0xa5b56b51edbda2514c711385dc6f31" },
+  ].map(chain => ({ ...chain, name: `${chain.network} native ${chain.symbol}`,
+    route: `mainnet:epoch:${chain.network}:${chain.symbol.toLowerCase()}`,
+    evm: "0x0000000000000000000000000000000000000000", evmDecimals: 18, midenDecimals: 8,
+    sendUnits: 125000000n, sendOutput: "0.000000000125", receiveOutput: "1.25", midenSymbol: chain.symbol })),
+  { name: "Robinhood USDG", network: "robinhood", chainId: 4663, route: "mainnet:epoch:robinhood:usdg",
+    evm: "0x5fc5360D0400a0Fd4f2af552ADD042D716F1d168", evmDecimals: 6,
+    faucet: "0xfc340a73c8fb25d1412f3fa1fd6d3a", midenDecimals: 6,
+    sendUnits: 1250000n, sendOutput: "125", receiveOutput: "125", symbol: "USDG", midenSymbol: "USDG" },
 ])("Epoch route token inputs: $name", (expected) => {
   function route(mode: "send" | "receive"): BridgeRoute {
     const registered = defaultBridgeRoute("epoch", mode)!;
@@ -75,7 +89,7 @@ describe.each([
     };
   }
 
-  it("uses the same source faucet and destination ERC20 for send quotes and execution", async () => {
+  it("uses the same source faucet and destination asset for send quotes and execution", async () => {
     const selected = route("send");
     expect(selected.disabled).toBeFalsy();
     const preview = await quoteEpochSend({ route: selected, amount: "1.25", evmAddress: account, midenAccount });
@@ -96,7 +110,7 @@ describe.each([
     expect(result.intentNonce).toBe("42");
   });
 
-  it("uses the same source ERC20 and destination faucet for receive quotes and execution", async () => {
+  it("uses the same source asset and destination faucet for receive quotes and execution", async () => {
     const selected = route("receive");
     expect(selected.disabled).toBeFalsy();
     const preview = await quoteEpochReceive({ route: selected, amount: "1.25", evmAddress: account, midenAccount });

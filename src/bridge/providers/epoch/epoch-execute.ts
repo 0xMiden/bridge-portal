@@ -140,7 +140,7 @@ async function runEpochSend(
 
   const sdk = await getEpochReadOnlySdk(evmRecipient, args.route.recovery);
 
-  const { miden, evm, chain } = epochRouteAssets(args.route);
+  const { miden, evm, chain, tokenAddress } = epochRouteAssets(args.route);
   const params: CrossChainIntentParams = {
     midenAccountId: senderAddress,
     midenFaucetId: miden.faucetId,
@@ -150,7 +150,7 @@ async function runEpochSend(
     ).toString(),
     evmRecipient,
     destinationChainId: chain.id,
-    outputTokenAddress: evm.address,
+    outputTokenAddress: tokenAddress,
     minTokenOut,
   };
 
@@ -199,16 +199,16 @@ async function runEpochReceive(
   const evmSource = args.evmAddress.trim() as `0x${string}`;
   const midenRecipient = args.midenAccount.trim();
 
-  const { miden, evm, chain } = epochRouteAssets(args.route);
+  const { miden, evm, chain, tokenAddress } = epochRouteAssets(args.route);
   const sdk = await getEpochSdk(args.route.recovery, evm.network, {
-    sponsor: evmSource, token: evm.address, amount: parseUnits(args.amount, evm.decimals).toString(),
+    sponsor: evmSource, token: tokenAddress, amount: parseUnits(args.amount, evm.decimals).toString(),
     onSubmitted: source => args.onSubmitted?.(source),
   });
   if (!sdk) throw new Error(`Connect a ${chain.name} wallet to bridge via Epoch.`);
   const params: EVMToMidenIntentParams = {
     destinationChainId: MIDEN_DESTINATION_CHAIN_ID,
     evmSourceAddress: evmSource,
-    evmTokenAddress: evm.address,
+    evmTokenAddress: tokenAddress,
     evmAmount: args.amount,
     evmTokenDecimals: evm.decimals,
     midenRecipientId: midenRecipient,
