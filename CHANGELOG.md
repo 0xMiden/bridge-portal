@@ -4,6 +4,8 @@
 
 ### Changes
 
+- [FIX] **Wallet-config imports accept Epoch's current mainnet USDCx format.** Omitted output references resolve through the existing verified USDCx faucet mapping. Explicitly incomplete output mappings and unresolved testnet outputs remain invalid.
+
 - [CHANGE] **Agglayer matches the wallet's configured tokens in both directions.** Ethereum ↔ Miden supports ETH, WBTC, wSOL, NEAR, PAXG, USDT, WBNB, PYUSD, USDG and POL; Sepolia ↔ Miden adds Agglayer test USDC. USDG/POL have price feeds for deposit balance limits.
 
 - [CHANGE] **Epoch SDK is upgraded to 2.2.0 with commons SDK 2.1.0.** Quotes and collateral use the API's deployment and timing configuration, fixing the stale Miden arbiter on Polygon withdrawals; deposit recovery follows its Compact address. A versioned patch supports explicitly wallet-paid flows when gasless metadata is omitted and conservatively resets partial allowances when reset policy is unavailable. Live quotes passed in both directions on Ethereum, Base, Arbitrum and Polygon on October 28, 2026. Testnet remains blocked by missing deployment/timing configuration.
