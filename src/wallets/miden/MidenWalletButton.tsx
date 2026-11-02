@@ -4,7 +4,7 @@ import { Menu, MenuTrigger } from "../../app/components/ui/Menu";
 
 import { Copy, LogOut, RefreshCcw } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { midenWalletIdentity, shortAddress } from "../identity";
+import { midenWalletIdentity } from "../identity";
 import { WalletMenu, WalletMenuItem, WalletButton } from "../WalletMenu";
 import { WalletBrandIcon } from "../WalletBrandIcon";
 import { useMidenWallet } from "./useMidenWallet";
@@ -66,7 +66,7 @@ export function MidenWalletButton() {
         name="Bread wallet"
         subtitle={
           wallet.connected
-            ? `${shortAddress(wallet.address)} · ${wallet.balanceText}`
+            ? `${wallet.address} · ${wallet.balanceText}`
             : wallet.connecting
               ? "Connection pending"
               : wallet.ready
