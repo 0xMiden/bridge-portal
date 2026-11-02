@@ -9,6 +9,7 @@ import { useBalanceCap } from "../../lib/use-balance-cap";
 import { useTransferQuotes } from "../../lib/use-transfer-quote";
 import { errorMessage } from "../../lib/wallet-errors";
 import type { BridgeWallets } from "./use-bridge-wallets";
+import { parseArcAmount } from "../../../bridge/providers/xreserve/deposit-terms";
 
 export function useBridgeQuote(route: BridgeRoute, amount: string, wallets: BridgeWallets, review?: { quote?: TransferQuote }) {
   const validation = useMemo(() => {
@@ -31,8 +32,9 @@ export function useBridgeQuote(route: BridgeRoute, amount: string, wallets: Brid
   const capError = balanceCap.enabled && validation.valid && !balanceCap.checking ? balanceCap.error : "";
   const capBlocked = balanceCap.enabled && (balanceCap.checking || Boolean(balanceCap.error));
   const evmBalance = wallets.evm.balance.balance;
-  const insufficientBalance = route.mode === "receive" && wallets.evm.connected && Boolean(evmBalance) &&
-    Number(amount) > 0 && Number(amount) + (fees.charging === "additional" ? Number(live?.fee ?? 0) : 0) > Number(evmBalance?.balance);
+  const insufficientBalance = route.source.kind === "spl" ? validation.valid && !!wallets.solana.balance.data &&
+    parseArcAmount(amount) > wallets.solana.balance.data.amount : route.mode === "receive" && wallets.evm.connected && Boolean(evmBalance) &&
+      Number(amount) > 0 && Number(amount) + (fees.charging === "additional" ? Number(live?.fee ?? 0) : 0) > Number(evmBalance?.balance);
 
   return {
     estimate, fees, query, live, providers, validation, balanceCap, capError, capBlocked, insufficientBalance,

@@ -1,0 +1,70 @@
+[
+  {
+    "schemaVersion": 1,
+    "deploymentId": "synthetic-solana-manual-browser-v1",
+    "environment": "testnet",
+    "enabled": true,
+    "helper": {
+      "address": "0x1111111111111111111111111111111111111111",
+      "runtimeHash": "0x5e3ce470a8506d55e59815db7232a08774174ae0c7fdb2fbc81a49e4e242b0d6",
+      "deploymentBlock": "1",
+      "abiVersion": 1
+    },
+    "arc": {
+      "chainId": 5042002,
+      "messageTransmitter": {
+        "address": "0x2222222222222222222222222222222222222222",
+        "runtimeHash": "0x5e3ce470a8506d55e59815db7232a08774174ae0c7fdb2fbc81a49e4e242b0d6"
+      },
+      "tokenMessenger": {
+        "address": "0x3333333333333333333333333333333333333333",
+        "runtimeHash": "0x5e3ce470a8506d55e59815db7232a08774174ae0c7fdb2fbc81a49e4e242b0d6"
+      },
+      "tokenMinter": {
+        "address": "0x4444444444444444444444444444444444444444",
+        "runtimeHash": "0x5e3ce470a8506d55e59815db7232a08774174ae0c7fdb2fbc81a49e4e242b0d6"
+      },
+      "usdc": {
+        "address": "0x5555555555555555555555555555555555555555",
+        "runtimeHash": "0x5e3ce470a8506d55e59815db7232a08774174ae0c7fdb2fbc81a49e4e242b0d6"
+      },
+      "xReserve": {
+        "address": "0x6666666666666666666666666666666666666666",
+        "runtimeHash": "0x5e3ce470a8506d55e59815db7232a08774174ae0c7fdb2fbc81a49e4e242b0d6"
+      },
+      "gatewayWallet": {
+        "address": "0x9999999999999999999999999999999999999999",
+        "runtimeHash": "0x5e3ce470a8506d55e59815db7232a08774174ae0c7fdb2fbc81a49e4e242b0d6"
+      },
+      "gatewayMinter": {
+        "address": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "runtimeHash": "0x5e3ce470a8506d55e59815db7232a08774174ae0c7fdb2fbc81a49e4e242b0d6"
+      }
+    },
+    "miden": {
+      "domain": 10007,
+      "faucetId": "0x4cbdcaffe75f0a317482224dae6436",
+      "recipientCodec": "miden-0.17.1-v1",
+      "remoteDomainDepositor": "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+    },
+    "source": {
+      "network": "solana-devnet",
+      "genesisHash": "11111111111111111111111111111111",
+      "mint": "4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU",
+      "tokenMessengerProgram": "CCTPV2vPZJS2u2BBsUoscuikbYjnpFmbFsvVuJdgUMQe",
+      "messageTransmitterProgram": "CCTPV2Sm4AdWt5296sk4P66VBZ7bEhcARwFaaS9YPbeC",
+      "idlHash": "46c195982ce970f90131f79e9b86eeadcb0d589d08f701f5506aa8ad4fa9e81d",
+      "finality": "finalized",
+      "history": "unqualified",
+      "startSlot": "1"
+    },
+    "qualification": {
+      "evidenceHash": "0x73dd3032d83dc39921b7c8dca9c73e55e74294faf5e27869af936f3b2d5ac3a7",
+      "helperAsDepositor": true,
+      "zeroRemoteFee": true,
+      "arcRuntime": true,
+      "phantomSignOnly": true,
+      "sourcePrograms": true
+    }
+  }
+]

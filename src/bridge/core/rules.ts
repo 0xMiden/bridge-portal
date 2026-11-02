@@ -22,6 +22,10 @@ export function validateTransferAmount(route: BridgeRoute, amount: string): void
   if (!/^(?:0|[1-9]\d*)(?:\.\d+)?$/.test(value) || !isValidAmount(value) || decimals > route.source.decimals) {
     throw new Error(`Enter a positive ${route.source.symbol} amount with at most ${route.source.decimals} decimal places.`);
   }
+  if (route.transport === "cctp-helper") {
+    const [whole, fraction = ""] = value.split(".");
+    if (BigInt(whole + fraction.padEnd(6, "0")) > 9223372034707292160n) throw new Error("USDC amount exceeds the supported Miden limit.");
+  }
   if (route.provider === "agglayer" && route.mode === "receive") {
     const [whole, fraction = ""] = value.split(".");
     const precision = route.destination.decimals;

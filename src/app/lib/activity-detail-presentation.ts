@@ -32,7 +32,7 @@ export function activityDetailFor(activity: Activity) {
         details.fee === undefined
           ? { label: quote.fees.label, value: quote.bridgeFee }
           : providerFee(quote.fees, details.fee, activity.asset, quote.asset),
-      receivedLabel: complete
+      receivedLabel: activity.cctpHelper ? "At least" : complete
         ? "Received"
         : quote.fees.estimated
           ? "Estimated received"

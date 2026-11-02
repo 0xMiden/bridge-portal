@@ -43,7 +43,9 @@ function reduceDraft(state: BridgeDraft, action: DraftAction): BridgeDraft {
     }
     case "route": {
       const route = action.route;
-      if (route.disabled || bridgeProviders[route.provider].disabled) return state;
+      // An unavailable manual source can be inspected, while admission stays gated.
+      if (route.disabled && route.transport !== "cctp-helper") return state;
+      if (bridgeProviders[route.provider].disabled) return state;
       if (route.id === state.route.id) return state;
       return {
         route,

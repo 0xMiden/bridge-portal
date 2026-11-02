@@ -1,0 +1,126 @@
+{
+  "sourcePin": "ec16e95d28ee47f7832df4203ae07b5981d146fc",
+  "miden": {
+    "accountHex": "0x8110548cc41852010140bd1325ff08",
+    "bytes32": "0x000000000000000000000000000000008110548cc41852010140bd1325ff0800",
+    "mainnet": "mm1azq3q4yvcsv9yqgpgz73xf0lpqcg7zgd_qr7qqq9wr6w",
+    "testnet": "mtst1azq3q4yvcsv9yqgpgz73xf0lpq0w9upu_qr7qqq9wr6w"
+  },
+  "hook": "0x0000000000000000000000000000000000000000000000000000000000000001000000000000000000000000000000008110548cc41852010140bd1325ff0800",
+  "helperBytes32": "0000000000000000000000001111111111111111111111111111111111111111",
+  "helperPubkey": "111111111111EnrGHeqCd5UQ2jTW2Mo32o6a2GG",
+  "instructionHex": "6ff53e83cc6cdf9b40420f00000000001a000000000000000000000000000000111111111111111111111111111111111111111100000000000000000000000011111111111111111111111111111111111111116400000000000000d0070000400000000000000000000000000000000000000000000000000000000000000000000001000000000000000000000000000000008110548cc41852010140bd1325ff0800",
+  "accounts": [
+    {
+      "name": "owner",
+      "address": "AKnL4NNf3DGWZJS6cPknBuEGnVsV4A4m5tgebLHaRSZ9",
+      "isSigner": true,
+      "isWritable": false
+    },
+    {
+      "name": "event_rent_payer",
+      "address": "AKnL4NNf3DGWZJS6cPknBuEGnVsV4A4m5tgebLHaRSZ9",
+      "isSigner": true,
+      "isWritable": true
+    },
+    {
+      "name": "sender_authority_pda",
+      "address": "45hzrGLQ2EGo1Ln7QpXjDwb589GDQ9H2aEXXw6ds6BFE",
+      "isSigner": false,
+      "isWritable": false
+    },
+    {
+      "name": "burn_token_account",
+      "address": "H1AviagU5Y17z77v1F9qZPJ9kCbCsL4ewiZABNfGYoRs",
+      "isSigner": false,
+      "isWritable": true
+    },
+    {
+      "name": "denylist_account",
+      "address": "E3Xqru8YwphjTCrScDZiEkkXFhUaZq8DvauQjs2q86MU",
+      "isSigner": false,
+      "isWritable": false
+    },
+    {
+      "name": "message_transmitter",
+      "address": "W1k5ijkaSTo5iA5zChNpfzcy796fLhkBxfmJuR8W8HU",
+      "isSigner": false,
+      "isWritable": true
+    },
+    {
+      "name": "token_messenger",
+      "address": "AawthJCGRmggpfv9MMWV6Jmo9cue4gL9wUZgRBShg58W",
+      "isSigner": false,
+      "isWritable": false
+    },
+    {
+      "name": "remote_token_messenger",
+      "address": "2mfHPyiRdSkp2dJxmhMPvhfZCPDKDtzPQ5GUj1YB8n18",
+      "isSigner": false,
+      "isWritable": false
+    },
+    {
+      "name": "token_minter",
+      "address": "E1bQJ8eMMn3zmeSewW3HQ8zmJr7KR75JonbwAtWx2bux",
+      "isSigner": false,
+      "isWritable": false
+    },
+    {
+      "name": "local_token",
+      "address": "7MwmWTK2R9Na6rnoSAEt5gytFmSZj9WLVdazvxvru9AU",
+      "isSigner": false,
+      "isWritable": true
+    },
+    {
+      "name": "burn_token_mint",
+      "address": "4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU",
+      "isSigner": false,
+      "isWritable": true
+    },
+    {
+      "name": "message_sent_event_data",
+      "address": "9hSR6S7WPtxmTojgo6GG3k4yDPecgJY292j7xrsUGWBu",
+      "isSigner": true,
+      "isWritable": true
+    },
+    {
+      "name": "message_transmitter_program",
+      "address": "CCTPV2Sm4AdWt5296sk4P66VBZ7bEhcARwFaaS9YPbeC",
+      "isSigner": false,
+      "isWritable": false
+    },
+    {
+      "name": "token_messenger_minter_program",
+      "address": "CCTPV2vPZJS2u2BBsUoscuikbYjnpFmbFsvVuJdgUMQe",
+      "isSigner": false,
+      "isWritable": false
+    },
+    {
+      "name": "token_program",
+      "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+      "isSigner": false,
+      "isWritable": false
+    },
+    {
+      "name": "system_program",
+      "address": "11111111111111111111111111111111",
+      "isSigner": false,
+      "isWritable": false
+    },
+    {
+      "name": "event_authority",
+      "address": "6TCCnJ9R1m1RXFzyoH7GYH2J6NJDtZaUvfipPuLWxHNd",
+      "isSigner": false,
+      "isWritable": false
+    },
+    {
+      "name": "program",
+      "address": "CCTPV2vPZJS2u2BBsUoscuikbYjnpFmbFsvVuJdgUMQe",
+      "isSigner": false,
+      "isWritable": false
+    }
+  ],
+  "serializedBytes": 864,
+  "signaturesValid": true,
+  "networkCalls": 0
+}

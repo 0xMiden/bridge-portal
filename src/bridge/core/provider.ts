@@ -19,6 +19,8 @@ export type PhaseDefinition = {
 
 export type FeePolicy = {
   charging: "none" | "included" | "additional" | "deducted";
+  /** Display currency; omitted retains destination for deducted fees, source otherwise. */
+  denomination?: "source" | "destination";
   requiresQuote: boolean;
   label: string;
   estimated: boolean;

@@ -15,6 +15,8 @@ import { EvmWalletControl } from "./EvmWalletControl";
 import type { BridgeDraft, DraftAction } from "./use-bridge-draft";
 import type { BridgeTransfer } from "./use-bridge-transfer";
 import type { BridgeWallets } from "./use-bridge-wallets";
+import { PhantomSolanaWalletControl } from "../../../wallets/solana/PhantomSolanaWalletControl";
+import { MANUAL_UNAVAILABLE } from "../../../config/cctp-helper";
 
 const MidenWalletButton = dynamic(
   () => import("../../../wallets/miden/MidenWalletButton").then(mod => mod.MidenWalletButton),
@@ -54,6 +56,8 @@ export function SwapPanels({ draft, wallets, transfer, panelsRef, onChange }: {
   return (
     <Card className="swap-card" data-provider={route.provider} aria-label="Miden bridge" ref={cardRef}>
       {wallets.error ? <FormAlert compact role="alert">{wallets.error}</FormAlert> : null}
+      {route.source.kind === "spl" && wallets.solana.error ? <FormAlert compact role="alert">{wallets.solana.error}</FormAlert> : null}
+      {route.transport === "cctp-helper" && route.disabled ? <FormAlert compact>{MANUAL_UNAVAILABLE}</FormAlert> : null}
       <div className="mode-switch grid grid-cols-2 gap-2 rounded-xl border border-border bg-field p-1" role="group" aria-label="Cross-chain direction" data-active={route.mode}>
         {flowModes.map(mode => (
           <button className="min-h-10 rounded-[8px] text-[15px]/normal font-medium text-muted-foreground transition hover:text-foreground
@@ -67,7 +71,7 @@ export function SwapPanels({ draft, wallets, transfer, panelsRef, onChange }: {
       </div>
       <div className="swap-panels relative mt-4 grid gap-4" ref={panelsRef}>
         {(["source", "destination"] as const).map(side => (
-          <TransferPanel key={route[side].kind === "miden" ? "miden" : "evm"} side={side} draft={draft} wallets={wallets} quote={quote} onChange={onChange} />
+          <TransferPanel key={route[side].kind} side={side} draft={draft} wallets={wallets} quote={quote} onChange={onChange} />
         ))}
       </div>
       {quote.amountError ? <FormAlert id="amount-error">{quote.amountError}</FormAlert>
@@ -102,24 +106,24 @@ function TransferPanel({ side, draft, wallets, quote, onChange }: {
         <ChainSelect route={route} side={side} onSelectRoute={selectRoute} />
       </div>
       <div className="panel-wallet col-start-2 row-start-1 min-w-0 max-w-43 justify-self-end max-[380px]:col-span-2 max-[380px]:col-start-1 max-[380px]:row-start-2" data-wallet={isMiden ? "miden" : "evm"}>
-        {isMiden ? <MidenWalletButton /> : <EvmWalletControl wallet={wallets.evm} onConnect={wallets.openEvmWallet} onError={wallets.setError} />}
+        {isMiden ? <MidenWalletButton /> : route[side].kind === "spl" ? <PhantomSolanaWalletControl wallet={wallets.solana} /> : <EvmWalletControl wallet={wallets.evm} onConnect={wallets.openEvmWallet} onError={wallets.setError} />}
       </div>
       {isSource ? (
-        <label className="col-start-1 row-start-2 min-w-0 max-[380px]:row-start-3">
+        <label className="col-start-1 row-start-2 min-w-0 max-[380px]:row-start-3 max-[360px]:col-span-2">
           <input className={amountClasses} aria-label="Amount" aria-invalid={Boolean(quote.amountError)}
             aria-describedby={quote.amountError ? "amount-error" : undefined}
             inputMode="decimal" placeholder="0" value={amount}
             onChange={event => onChange({ type: "amount", amount: event.target.value })} />
         </label>
       ) : (
-        <div className="readonly-amount col-start-1 row-start-2 min-w-0 max-[380px]:row-start-3" aria-label="Expected received"><strong className={amountClasses}>{quote.received}</strong></div>
+        <div className="readonly-amount col-start-1 row-start-2 min-w-0 max-[380px]:row-start-3 max-[360px]:col-span-2" aria-label="Expected received"><strong className={amountClasses}>{quote.received}</strong></div>
       )}
-      <div className="col-start-2 row-start-2 min-w-0 justify-self-end max-[380px]:row-start-3">
+      <div className="col-start-2 row-start-2 min-w-0 justify-self-end max-[380px]:row-start-3 max-[360px]:row-start-4">
         <TokenSelect route={route} side={side} onSelectRoute={selectRoute} />
       </div>
-      <div className="col-span-2 row-start-3 flex min-h-5 items-center justify-between gap-2 max-[380px]:row-start-4">
+      <div className="col-span-2 row-start-3 flex min-h-5 items-center justify-between gap-2 max-[380px]:row-start-4 max-[360px]:row-start-5">
         <FiatAmount amount={isSource ? amount : quote.received} symbol={route[side].symbol} />
-        <small className="balance-line flex min-w-0 max-w-3/4 items-center justify-end gap-1.5 text-xs/normal text-muted-foreground">{isMiden ? <MidenBalance wallet={wallets.miden} /> : <EvmBalance wallet={wallets.evm} />}</small>
+        <small className="balance-line flex min-w-0 max-w-3/4 items-center justify-end gap-1.5 text-xs/normal text-muted-foreground">{isMiden ? <MidenBalance wallet={wallets.miden} /> : route[side].kind === "spl" ? wallets.solana.connected ? wallets.solana.balance.isFetching ? "Loading Solana balance…" : wallets.solana.balanceText : null : <EvmBalance wallet={wallets.evm} />}</small>
       </div>
       {isSource ? (
         <button className="swap-divider absolute -bottom-[31px] left-1/2 z-2 grid size-11 -translate-x-1/2 place-items-center rounded-xl border border-border bg-surface

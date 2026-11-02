@@ -18,6 +18,7 @@ export async function quoteTransfer(
         amount: input.amount,
         midenAccount: input.midenAccount,
         evmAddress: input.evmAddress,
+        sourceIdentity: input.sourceIdentity,
       },
     }
   );

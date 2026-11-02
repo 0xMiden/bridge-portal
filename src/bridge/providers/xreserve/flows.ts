@@ -11,6 +11,7 @@ import { observeXreserveDeposit } from "./status";
 export const flows: ProviderFlows = {
   receive: {
     async quote(input, signal) {
+      if (input.route.transport === "cctp-helper") return (await import("./helper-manual")).quoteManualTransfer(input, signal);
       if (["arc-testnet", "arc"].includes(input.route.source.network)) {
         const { quoteArcDeposit } = await import("./deposit-quote");
         return quoteArcDeposit(input, signal);
@@ -18,7 +19,9 @@ export const flows: ProviderFlows = {
       const { quoteTransfer } = await import("./cctp-quote");
       return quoteTransfer(input, signal);
     },
-    async submit({ input, route, phase, record, update }) {
+    async submit(context) {
+      if (context.route.transport === "cctp-helper") return (await import("./helper-manual")).submitManualHelper(context);
+      const { input, route, phase, record, update } = context;
       const { provider, address } = input.evmWallet;
       if (!provider || !address) throw new Error("Connect your Ethereum wallet.");
       const recipient = input.midenAccount;
@@ -26,7 +29,7 @@ export const flows: ProviderFlows = {
         throw new Error("Connect your Bread wallet or paste a Miden account to receive into.");
       const { depositOnArc } = await import("./deposit");
       const sourceName =
-        route.source.kind === "miden" ? "Miden" : evmNetworks[route.source.network].name;
+        route.source.kind === "miden" ? "Miden" : route.source.kind === "spl" ? "Solana" : evmNetworks[route.source.network].name;
       const labels = {
         checking: "Checking deposit…",
         approving: "Approve USDC in your wallet…",
@@ -53,7 +56,7 @@ export const flows: ProviderFlows = {
             midenAccount: recipient,
             receivedAmount: input.amount.trim(),
           });
-          if (route.source.kind !== "miden")
+          if (route.source.kind !== "miden" && route.source.kind !== "spl")
             void captureSourceTransaction(route.source.network, sourceTxHash)
               .then((sourceTransaction) => {
                 if (sourceTransaction) update({ sourceTransaction });
@@ -74,11 +77,13 @@ export const flows: ProviderFlows = {
       }
     },
     monitor: {
-      canPoll: (activity) =>
+      canPoll: (activity) => activity.cctpHelper ? !!activity.cctpHelper.signature && activity.cctpHelper.stage !== "source_failed" :
         activity.status !== "complete" &&
         activity.status !== "failed" &&
         Boolean(activity.sourceTxHash),
-      observe: observeXreserveDeposit,
+      observe: (activity, signal) => activity.cctpHelper
+        ? import("./helper-manual").then(module => module.observeManualHelper(activity, signal))
+        : observeXreserveDeposit(activity, signal),
     },
   },
   send: {

@@ -1,6 +1,6 @@
 import { queryOptions, type UseQueryResult } from "@tanstack/react-query";
 import { sameAsset } from "../../bridge/core/assets";
-import { isQuoteReviewable, type QuoteRequest, type TransferQuote } from "../../bridge/core/quote";
+import { isQuoteReviewable, sameSourceIdentity, type QuoteRequest, type TransferQuote } from "../../bridge/core/quote";
 import { routeEnvironment, routesForEnvironment, type BridgeRoute } from "../../bridge/core/routes";
 import { isValidAmount, validateTransferAmount } from "../../bridge/core/rules";
 import { bridgeProviders } from "../../bridge/providers/registry";
@@ -28,7 +28,7 @@ export function transferQuoteOptions(input: QuoteRequest, frozen: boolean) {
   try { validateTransferAmount(input.route, input.amount); valid = true; } catch { /* Wait for a valid amount. */ }
   return queryOptions({
     queryKey: ["transfer-quote", input],
-    enabled: !frozen && valid && Boolean(input.midenAccount && input.evmAddress),
+    enabled: !frozen && valid && Boolean(input.midenAccount && (input.route.transport === "cctp-helper" ? input.sourceIdentity?.address : input.evmAddress)),
     queryFn: async ({ signal }) => {
       // Cancel the typing delay and discard late responses when the request changes.
       await new Promise<void>((resolve, reject) => {
@@ -57,7 +57,7 @@ export function availableProviderQuotes(
     if (!result?.isSuccess || !isQuoteReviewable(quote) || !isValidAmount(quote.received)) return [];
     if (quote.request.routeId !== input.route.id || quote.request.amount !== input.amount ||
       quote.request.midenAccount !== input.midenAccount ||
-      quote.request.evmAddress.toLowerCase() !== input.evmAddress.toLowerCase()) return [];
+      quote.request.evmAddress.toLowerCase() !== input.evmAddress.toLowerCase() || !sameSourceIdentity(quote.request.sourceIdentity, input.sourceIdentity)) return [];
     return [{ route: input.route, quote }];
   });
 }

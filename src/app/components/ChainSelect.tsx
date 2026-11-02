@@ -18,7 +18,7 @@ export function ChainSelect({
   onSelectRoute: (route: BridgeRoute) => void;
 }) {
   const asset = route[side];
-  const routes = routesForEnvironment(routeEnvironment(route)).filter((option) => !option.disabled && option.mode === route.mode && !bridgeProviders[option.provider].disabled);
+  const routes = routesForEnvironment(routeEnvironment(route)).filter((option) => (!option.disabled || option.transport === "cctp-helper") && option.mode === route.mode && !bridgeProviders[option.provider].disabled);
   const networks = [...new Set(routes.map((option) => option[side].network))];
   const label = networkLabels[asset.network];
   const menuLabel = side === "source" ? "Origin chain" : "Destination chain";

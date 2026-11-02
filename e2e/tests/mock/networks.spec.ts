@@ -2,6 +2,8 @@ import type { Page } from "@playwright/test";
 import { test, expect } from "../../fixtures/bridge";
 import { stubNetwork } from "../../fixtures/mock-network";
 import { routesForEnvironment } from "../../../src/bridge/core/routes";
+import { BridgePage } from "../../pages/bridge-page";
+import { installPhantom } from "../../helper/phantom";
 import { startOnTestnet } from "../../fixtures/testnet";
 
 async function selectNetwork(page: Page, network: "Mainnet" | "Testnet") {
@@ -24,6 +26,29 @@ test("routes load on a fresh visit without remote configuration or registry disc
   await page.reload();
   await expect(page.getByRole("textbox", { name: "Amount", exact: true })).toBeVisible();
   expect(configRequests).toEqual([]);
+});
+
+test("an unqualified Solana source is viewable but cannot quote or submit", async ({ page }) => {
+  const signatures = await installPhantom(page); // Also installs wallets and the testnet session.
+  await stubNetwork(page); await page.goto("/");
+  const bridge = new BridgePage(page); await bridge.waitForReady();
+  const manualRequests: string[] = [];
+  await page.route("**/api/cctp-helper/**", route => {
+    manualRequests.push(route.request().url());
+    return route.fulfill({ status: 503, json: { reason: "route_unavailable" } });
+  });
+  await bridge.setChain("Solana Devnet");
+  await expect(page.locator('.swap-box[data-side="source"] .swap-box-head')).toContainText("Solana Devnet");
+  await expect(page.getByText("Manual Solana deposits are not configured in this build.", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Connect Phantom (Solana)", exact: true }).click();
+  await bridge.fillAmount("1");
+  await expect(bridge.primaryButton()).toHaveText("Route unavailable");
+  await expect(bridge.primaryButton()).toBeDisabled();
+  await expect(bridge.preflight()).toHaveCount(0);
+  expect(manualRequests).toEqual([]); expect(signatures).toHaveLength(0);
+  expect(await page.evaluate(() => window.helperFixture.walletCalls)).toBe(0);
+  await bridge.setChain("Arc Testnet");
+  await expect(page.locator('.swap-box[data-side="source"] .swap-box-head')).toContainText("Arc Testnet");
 });
 
 test("mainnet tokens select matching Miden assets and explain unsupported precision", async ({ bridge, page }, info) => {

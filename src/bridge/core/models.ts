@@ -2,6 +2,7 @@ import type { SourceTransaction } from "../evm/source-transaction";
 import type { ActivityStatus } from "./activity-status";
 import type { BridgeRoute } from "./routes";
 import type { BridgeEnvironment } from "../../config/environment";
+import type { HelperActivity } from "../providers/xreserve/helper-types";
 
 export type BridgeProvider = "agglayer" | "epoch" | "xreserve";
 export const flowModes = ["receive", "send"] as const;
@@ -77,6 +78,8 @@ export type BridgeActivity = {
   receivedAmount?: string;
   /** Owner tags for per-account filtering of account-derived history. */
   evmAddress?: string;
+  solanaAddress?: string;
+  cctpHelper?: HelperActivity;
   midenAccount?: string;
   /** Source-relative ordering hint (higher = newer) for merged remote history. */
   sortKey?: number;
