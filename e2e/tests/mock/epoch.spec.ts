@@ -79,21 +79,39 @@ test("Epoch cannot reach review when the allocator has no estimate", async ({ br
 });
 
 
-for (const [network, chainId] of [["ethereum", 1], ["base", 8453], ["arbitrum", 42161], ["polygon", 137]] as const) {
+const mainnetPairs = [
+  ...([["ethereum", 1], ["base", 8453], ["arbitrum", 42161], ["polygon", 137]] as const).map(([network, chainId]) => ({
+    network, chainId, token: "USDC", suffix: "", amount: "1", faucet: "0xe69e6ca6e39df1b10c1e5399399feb",
+    receiveUnits: "1000000", sendUnits: "1000000", receiveOut: "991878", sendOut: "991878", received: "0.991878", native: false,
+  })),
+  ...([["ethereum", 1], ["base", 8453], ["arbitrum", 42161], ["robinhood", 4663]] as const).map(([network, chainId]) => ({
+    network, chainId, token: "ETH", suffix: ":eth", amount: "0.01", faucet: "0x419f8f4bff72959132aa7cea15a4c1",
+    receiveUnits: "10000000000000000", sendUnits: "1000000", receiveOut: "999500", sendOut: "9995000000000000", received: "0.009995", native: true,
+  })),
+  { network: "polygon", chainId: 137, token: "POL", suffix: ":pol", amount: "0.1", faucet: "0xa5b56b51edbda2514c711385dc6f31",
+    receiveUnits: "100000000000000000", sendUnits: "10000000", receiveOut: "9995000", sendOut: "99950000000000000", received: "0.09995", native: true },
+  { network: "robinhood", chainId: 4663, token: "USDG", suffix: ":usdg", amount: "1", faucet: "0xfc340a73c8fb25d1412f3fa1fd6d3a",
+    receiveUnits: "1000000", sendUnits: "1000000", receiveOut: "999500", sendOut: "999500", received: "0.9995", native: false },
+];
+
+for (const pair of mainnetPairs) {
+  const { network, chainId } = pair;
+  const hasAgglayerQuote = network === "ethereum" && pair.token === "ETH";
   for (const mode of ["receive", "send"] as const) {
-    test(`Cedar Epoch ${network} ${mode}: quotes the selected chain and invalidates a changed amount`, async ({ bridge, page }) => {
+    test(`Cedar Epoch ${network} ${pair.token} ${mode}: quotes the selected chain and invalidates a changed amount`, async ({ bridge, page }) => {
       const endpoint = "https://mainnet-api.epochprotocol.xyz";
       await page.route(`${endpoint}/suggested-nonce/**`, route => route.fulfill({ json: { nonce: "1" } }));
       await page.route(`${endpoint}/checkIfDepositNeeded`, route => {
         const amount = route.request().postDataJSON().compact.mandate.tokenInAmount;
-        return route.fulfill({ json: { tokenOut: amount === "1000000" ? "991878" : "0" } });
+        return route.fulfill({ json: { tokenOut: amount === (mode === "send" ? pair.sendUnits : pair.receiveUnits)
+          ? (mode === "send" ? pair.sendOut : pair.receiveOut) : "0" } });
       });
       await page.route("**/api/evm/*/gas**", route => route.fulfill({ json: { gasPriceWei: "1200000000", gwei: "1.2" } }));
-      await page.evaluate(({ network, mode }) => {
+      await page.evaluate(({ network, suffix, mode }) => {
         localStorage.setItem("miden.bridge.ui.route.mainnet", "epoch");
         localStorage.setItem("miden.bridge.ui.mode.mainnet", mode);
-        localStorage.setItem("miden.bridge.ui.route.mainnet.id", `mainnet:epoch:${network}:${mode}`);
-      }, { network, mode });
+        localStorage.setItem("miden.bridge.ui.route.mainnet.id", `mainnet:epoch:${network}${suffix}:${mode}`);
+      }, { network, suffix: pair.suffix, mode });
       await page.getByRole("combobox", { name: "Bridge network" }).click();
       await page.getByRole("option", { name: "Mainnet", exact: true }).click();
       await bridge.expectRoute("epoch");
@@ -101,20 +119,33 @@ for (const [network, chainId] of [["ethereum", 1], ["base", 8453], ["arbitrum", 
       await page.getByRole("menuitem", { name: "Connect wallet", exact: true }).click();
       await expect(page.locator('[data-wallet="miden"] .wallet-pill')).toHaveAttribute("data-connected", "true");
       const request = page.waitForRequest(`${endpoint}/checkIfDepositNeeded`, { timeout: 20_000 });
-      await bridge.fillAmount("1");
+      await bridge.fillAmount(pair.amount);
       const payload = (await request).postDataJSON();
       expect(payload.chainId).toBe(String(mode === "send" ? 999999999 : chainId));
       expect(payload.compact.mandate).toMatchObject({
         destinationChainId: String(mode === "send" ? chainId : 999999999),
-        midenFaucetId: "0xe69e6ca6e39df1b10c1e5399399feb", tokenInAmount: "1000000",
+        midenFaucetId: pair.faucet, tokenInAmount: mode === "send" ? pair.sendUnits : pair.receiveUnits,
       });
+      if (pair.native) expect(payload.compact.mandate).toMatchObject({
+        tokenIn: "0x0000000000000000000000000000000000000000",
+        tokenOut: "0x0000000000000000000000000000000000000000",
+      });
+      if (hasAgglayerQuote) await page.locator("label.provider-option")
+        .filter({ has: page.getByRole("radio", { name: "Epoch", exact: true }) }).click();
+      await expect(bridge.selectedProvider()).toHaveText("Epoch");
       await bridge.openPreflight();
-      await expect(bridge.preflight()).toContainText("0.991878");
+      await expect(bridge.preflight()).toContainText(pair.received);
       if (network === "polygon" && mode === "receive") await expect(bridge.preflight()).toContainText("POL");
       await bridge.cancelPreflight();
       await bridge.fillAmount("0.5");
-      await expect(page.locator(".provider-card")).toContainText("No quotes available");
-      await expect(bridge.primaryButton()).toBeDisabled();
+      if (hasAgglayerQuote) {
+        await bridge.expectRoute("agglayer");
+        await expect(page.locator(".provider-card")).not.toContainText("Epoch");
+        await expect(page.locator(".provider-card")).not.toContainText(pair.received);
+      } else {
+        await expect(page.locator(".provider-card")).toContainText("No quotes available");
+        await expect(bridge.primaryButton()).toBeDisabled();
+      }
       await expect(bridge.preflight()).toBeHidden();
       expect(await bridge.readActivities()).toEqual([]);
     });

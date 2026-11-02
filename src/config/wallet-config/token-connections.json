@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "version": 5,
+  "version": 6,
   "testnet": [
     {
       "provider": "epoch",
@@ -728,6 +728,141 @@
       "routes": {
         "receive": "mainnet:epoch:polygon:receive",
         "send": "mainnet:epoch:polygon:send"
+      }
+    },
+    {
+      "provider": "epoch",
+      "evm": {
+        "network": "ethereum",
+        "kind": "native",
+        "symbol": "ETH",
+        "logo": "/asset-logos/ethereum.svg",
+        "decimals": 18
+      },
+      "miden": {
+        "network": "miden-mainnet",
+        "kind": "miden",
+        "symbol": "ETH",
+        "logo": "/asset-logos/ethereum.svg",
+        "faucetId": "0x419f8f4bff72959132aa7cea15a4c1",
+        "decimals": 8
+      },
+      "routes": {
+        "receive": "mainnet:epoch:ethereum:eth:receive",
+        "send": "mainnet:epoch:ethereum:eth:send"
+      }
+    },
+    {
+      "provider": "epoch",
+      "evm": {
+        "network": "arbitrum",
+        "kind": "native",
+        "symbol": "ETH",
+        "logo": "/asset-logos/ethereum.svg",
+        "decimals": 18
+      },
+      "miden": {
+        "network": "miden-mainnet",
+        "kind": "miden",
+        "symbol": "ETH",
+        "logo": "/asset-logos/ethereum.svg",
+        "faucetId": "0x419f8f4bff72959132aa7cea15a4c1",
+        "decimals": 8
+      },
+      "routes": {
+        "receive": "mainnet:epoch:arbitrum:eth:receive",
+        "send": "mainnet:epoch:arbitrum:eth:send"
+      }
+    },
+    {
+      "provider": "epoch",
+      "evm": {
+        "network": "base",
+        "kind": "native",
+        "symbol": "ETH",
+        "logo": "/asset-logos/ethereum.svg",
+        "decimals": 18
+      },
+      "miden": {
+        "network": "miden-mainnet",
+        "kind": "miden",
+        "symbol": "ETH",
+        "logo": "/asset-logos/ethereum.svg",
+        "faucetId": "0x419f8f4bff72959132aa7cea15a4c1",
+        "decimals": 8
+      },
+      "routes": {
+        "receive": "mainnet:epoch:base:eth:receive",
+        "send": "mainnet:epoch:base:eth:send"
+      }
+    },
+    {
+      "provider": "epoch",
+      "evm": {
+        "network": "robinhood",
+        "kind": "native",
+        "symbol": "ETH",
+        "logo": "/asset-logos/ethereum.svg",
+        "decimals": 18
+      },
+      "miden": {
+        "network": "miden-mainnet",
+        "kind": "miden",
+        "symbol": "ETH",
+        "logo": "/asset-logos/ethereum.svg",
+        "faucetId": "0x419f8f4bff72959132aa7cea15a4c1",
+        "decimals": 8
+      },
+      "routes": {
+        "receive": "mainnet:epoch:robinhood:eth:receive",
+        "send": "mainnet:epoch:robinhood:eth:send"
+      }
+    },
+    {
+      "provider": "epoch",
+      "evm": {
+        "network": "polygon",
+        "kind": "native",
+        "symbol": "POL",
+        "logo": "/asset-logos/polygon.svg",
+        "decimals": 18
+      },
+      "miden": {
+        "network": "miden-mainnet",
+        "kind": "miden",
+        "symbol": "POL",
+        "logo": "/asset-logos/polygon.svg",
+        "name": "Polygon Ecosystem Token",
+        "decimals": 8,
+        "faucetId": "0xa5b56b51edbda2514c711385dc6f31"
+      },
+      "routes": {
+        "receive": "mainnet:epoch:polygon:pol:receive",
+        "send": "mainnet:epoch:polygon:pol:send"
+      }
+    },
+    {
+      "provider": "epoch",
+      "evm": {
+        "network": "robinhood",
+        "kind": "erc20",
+        "symbol": "USDG",
+        "logo": "/asset-logos/usdg.svg",
+        "decimals": 6,
+        "address": "0x5fc5360D0400a0Fd4f2af552ADD042D716F1d168"
+      },
+      "miden": {
+        "network": "miden-mainnet",
+        "kind": "miden",
+        "symbol": "USDG",
+        "logo": "/asset-logos/usdg.svg",
+        "name": "Global Dollar",
+        "decimals": 6,
+        "faucetId": "0xfc340a73c8fb25d1412f3fa1fd6d3a"
+      },
+      "routes": {
+        "receive": "mainnet:epoch:robinhood:usdg:receive",
+        "send": "mainnet:epoch:robinhood:usdg:send"
       }
     }
   ]

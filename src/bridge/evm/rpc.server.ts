@@ -25,6 +25,7 @@ export function evmRpcUrls(network: EvmNetwork): string[] {
       process.env.ARBITRUM_RPC_URL,
       ...evmNetworks.arbitrum.rpcUrls.default.http,
     ],
+    robinhood: [process.env.ROBINHOOD_RPC_URL, ...evmNetworks.robinhood.rpcUrls.default.http],
     polygon: [
       process.env.POLYGON_RPC_URL,
       ...evmNetworks.polygon.rpcUrls.default.http,

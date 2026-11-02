@@ -185,6 +185,8 @@ it.each([
 ])("offers the real Agglayer adapter's payout for %s after checking the bridge", async (routeId, amount, received, network) => {
   // Exercise the production adapter, viem codec, query cache and selector together.
   await bridgeProviders.agglayer.load();
+  // Native ETH now has an Epoch offer too; this scenario owns Agglayer's RPC behavior.
+  adapter("epoch", vi.fn(async () => null));
   let paused = false;
   const rpc = vi.fn(async (_url: string, init: RequestInit) => {
     const body = JSON.parse(String(init.body));

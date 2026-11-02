@@ -27,7 +27,7 @@ it("imports mainnet Epoch's implicit USDCx output and resolves its verified fauc
 
   const imported = bridgeConfigSchema.parse(source);
   const effective = bridgeConfigSchema.parse(withPortalEpochRoutes(imported));
-  expect(effective.document["bridge-providers"].epoch?.outputs).toEqual({
+  expect(effective.document["bridge-providers"].epoch?.outputs).toMatchObject({
     USDCx: { faucetId: "0xe69e6ca6e39df1b10c1e5399399feb" },
   });
   expect(effective.document.supportedEvmChains.ethereum?.bridges.epoch?.tokens?.USDC.outputs).toEqual(["USDCx"]);
@@ -125,9 +125,10 @@ it("preserves shared provider fields and additional tokens in recovery snapshots
     ...chain.bridges.agglayer!,
     ...chain.bridges.usdcx!,
     ...chain.bridges.epoch!,
+    tokens: { ...chain.bridges.epoch!.tokens, USDC: chain.bridges.epoch!.tokens.USDC,
+      EXTRA: { contractAddress: "0x1111111111111111111111111111111111111111" as const } },
     executor: config.document.supportedEvmChains["arc-testnet"]!.bridges.usdcx!.executor,
   };
-  shared.tokens.EXTRA = { contractAddress: "0x1111111111111111111111111111111111111111" };
   chain.bridges = { agglayer: shared, usdcx: shared, epoch: shared };
 
   const parsed = bridgeConfigSchema.parse(config);

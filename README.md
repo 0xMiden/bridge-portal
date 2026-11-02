@@ -5,8 +5,8 @@ cross-chain Receive/Send surface.
 
 The app serves both networks at `/`. The network selector remembers the choice
 for the current tab and resets the transfer form and Miden wallet session. New
-tabs default to mainnet. Mainnet supports Agglayer ETH and Circle USDCx; testnet
-also retains Epoch routes. `/activity/:id` receipts automatically use their saved
+tabs default to mainnet. Mainnet supports Agglayer, Circle USDCx, and Epoch routes;
+testnet also retains these providers. `/activity/:id` receipts automatically use their saved
 network, including existing testnet transfers.
 
 ## Product model
@@ -66,6 +66,8 @@ automatically and require no wallet credentials. In brief:
 | `ARC_MAINNET_RPC_URL` | server | Arc mainnet RPC. |
 | `BASE_RPC_URL` | server | Base mainnet RPC. |
 | `ARBITRUM_RPC_URL` | server | Arbitrum mainnet RPC. |
+| `POLYGON_RPC_URL` | server | Polygon mainnet RPC. |
+| `ROBINHOOD_RPC_URL` | server | Robinhood mainnet RPC. |
 | `AGGLAYER_SEPOLIA_RPC_URL` | server | Sepolia RPC. |
 | `EVM_RPC_URL` | server | Secondary Sepolia RPC fallback. |
 | `ARC_TESTNET_RPC_URL` | server | Arc Testnet RPC. |
@@ -100,12 +102,20 @@ for route assets and the asset exports used by faucet actions. There is no runti
 or build dependency on `token-list`.
 Bridge contracts, provider endpoints, and availability switches continue to
 come from the existing wallet-config documents, with one explicit portal rollout
-in `src/config/wallet-config/epoch-mainnet.ts`: Cedar USDCx ↔ native USDC on
-Ethereum, Base, Arbitrum and Polygon uses `https://mainnet-api.epochprotocol.xyz`
-and enables both Epoch directions independently of upstream's `fastBridge` flag.
+in `src/config/wallet-config/epoch-mainnet.ts`. It uses
+`https://mainnet-api.epochprotocol.xyz` and enables both Epoch directions
+independently of upstream's `fastBridge` flag for these pairs:
+
+- USDC ↔ Miden USDCx on Ethereum, Base, Arbitrum and Polygon.
+- Native ETH ↔ Miden ETH on Ethereum, Base, Arbitrum and Robinhood.
+- Native POL ↔ Miden POL on Polygon.
+- USDG ↔ Miden USDG on Robinhood.
+
 The pinned upstream files and revision remain intact; release validation checks
-the effective configuration and receipts save it. The faucet comes from the
-verified Cedar USDCx registry metadata. The allocator was confirmed via
+the effective configuration and receipts save it. Faucets and token precisions
+come from the verified Miden registry metadata. Native deposits send ETH/POL
+directly to Compact without an ERC-20 approval, and retain deposit evidence for
+recovery. Robinhood uses chain ID 4663. The allocator was confirmed via
 [wallet-config PR #23](https://github.com/0xMiden/wallet-config/pull/23) and live
 quotes in both directions on October 24, 2026. The portal adopted Epoch's current
 API host on October 27; historical receipts retain their original service root.
@@ -123,12 +133,12 @@ mandatory. If token approval-reset policy is absent, a partial allowance is
 reset to zero before approving the exact amount. `npm ci` applies the patch;
 Webpack's build cache also tracks it. Review and remove it when an upstream
 release supplies the same behavior.
-Live quotes for 0.01 USDC/USDCx succeeded in both directions on all four mainnet
-chains on October 28, 2026 (0.009995 out). This verifies quoting, not settlement.
+Live quotes for all ten pairs succeeded in both directions on October 30, 2026.
+This verifies quoting, not settlement.
 The testnet API still lacks required deployment/timing fields and is rejected
 before signing; restoring testnet requires a compatible Epoch API. The legacy
 `NEXT_PUBLIC_EPOCH_ALLOCATOR_URL` override applies only to testnet.
-`POLYGON_RPC_URL` optionally overrides Polygon's server-side read RPC.
+`POLYGON_RPC_URL` and `ROBINHOOD_RPC_URL` optionally override their server-side read RPCs.
 
 An absent direction is not
 implemented; `disabled` keeps retired connections addressable.

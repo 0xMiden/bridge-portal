@@ -1,9 +1,9 @@
 import { z } from "zod";
 import { bridgeConfigSchema } from "../../config/wallet-config/schema";
-import { tokenLogoSchema } from "../../config/wallet-config/token-connections";
+import { matchesMainnetEpochPair, tokenLogoSchema } from "../../config/wallet-config/token-connections";
 import { evmAddressSchema } from "../evm/evm-schema";
 
-const network = z.enum(["sepolia", "arc-testnet", "base-sepolia", "arbitrum-sepolia", "ethereum", "arc", "base", "arbitrum", "polygon"]);
+const network = z.enum(["sepolia", "arc-testnet", "base-sepolia", "arbitrum-sepolia", "ethereum", "arc", "base", "arbitrum", "polygon", "robinhood"]);
 const metadata = { symbol: z.string().min(1).max(11), name: z.string().max(100).optional(), logo: tokenLogoSchema.optional(), decimals: z.int().min(0).max(18) };
 const asset = z.discriminatedUnion("kind", [
   z.object({ ...metadata, kind: z.literal("native"), network }),
@@ -21,12 +21,9 @@ export const receiptRouteSchema = z.object({
   const bridge = route.recovery.document.supportedEvmChains[evm.network]?.bridges;
   const derived = route.recovery.derived;
   if (route.provider === "epoch") {
-    if (!bridge?.epoch || evm.kind !== "erc20") return false;
-    if (route.recovery.environment === "testnet") return true;
-    const token = bridge.epoch.tokens?.USDC;
-    return evm.address.toLowerCase() === token?.contractAddress.toLowerCase() &&
-      miden.faucetId === derived.usdcxFaucetId && miden.decimals === 6 && evm.decimals === 6 &&
-      miden.faucetId === route.recovery.document["bridge-providers"].epoch?.outputs?.[token?.outputs?.[0] ?? ""]?.faucetId;
+    if (!bridge?.epoch) return false;
+    if (route.recovery.environment === "testnet") return evm.kind === "erc20";
+    return matchesMainnetEpochPair(route.recovery, evm, miden);
   }
   if (route.provider === "xreserve") return evm.kind === "erc20" &&
     evm.address.toLowerCase() === bridge?.usdcx?.tokens?.USDC?.contractAddress.toLowerCase() &&

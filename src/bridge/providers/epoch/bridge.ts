@@ -72,7 +72,8 @@ export function buildEpochTaskDataParams(
   const taskDataParams = {
     taskType: TaskType.GetTokenOut,
     intentData: {
-      // isNative must be false — tokenIn is zero-address (Miden-sourced) but tokenOut is a real EVM token
+      // Miden collateral is not an EVM native deposit. Preserve the output address,
+      // including zero for native ETH/POL delivered by the solver.
       isNative: false,
       depositTokenAddress: ZERO_ADDRESS,
       tokenInAmount: params.midenAmount,
@@ -108,7 +109,7 @@ export function buildEVMToMidenTaskDataParams(params: EVMToMidenIntentParams) {
   const taskDataParams = {
     taskType: TaskType.GetTokenOut,
     intentData: {
-      isNative: false,
+      isNative: params.evmTokenAddress === ZERO_ADDRESS,
       depositTokenAddress: params.evmTokenAddress,
       tokenInAmount: amountInWei,
       outputTokenAddress: ZERO_ADDRESS,
@@ -140,7 +141,7 @@ export async function getEVMToMidenQuote(
     sponsorAddress: sponsorAddress as `0x${string}`,
     taskTypeString,
     intentData,
-    isNative: false,
+    isNative: params.evmTokenAddress === ZERO_ADDRESS,
   });
 
   requireEstimate(quoteResult, params.minTokenOut);
@@ -161,7 +162,7 @@ export async function buildEVMToMidenIntent(
 
   try {
     const solveResult = await sdk.solveIntent({
-      isNative: false,
+      isNative: params.evmTokenAddress === ZERO_ADDRESS,
       sponsorAddress: params.evmSourceAddress as `0x${string}`,
       taskTypeString,
       intentData,

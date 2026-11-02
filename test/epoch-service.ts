@@ -2,7 +2,7 @@ import type { HealthCheckResponse } from "@epoch-protocol/epoch-intents-sdk";
 
 /** Simulated SDK 2.2 service contract, not a claim about deployed API readiness. */
 export function epochServiceHealth(compactAddress = "0x00000000000000171ede64904551eedf3c6c9788"): HealthCheckResponse {
-  const chains = [1, 137, 8453, 42161, 11155111, 999999999];
+  const chains = [1, 137, 4663, 8453, 42161, 11155111, 999999999];
   return {
     status: "healthy",
     allocatorAddresses: Object.fromEntries(chains.map(id => [id, "0xC7a2E29b7ef4543a3e7c50057d83beDfCdE2fb0C"])),

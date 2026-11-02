@@ -11,10 +11,11 @@ const networks = {
   base: { environment: "mainnet", chainId: 8453, circleDomain: 6, agglayer: false, epoch: true },
   arbitrum: { environment: "mainnet", chainId: 42161, circleDomain: 3, agglayer: false, epoch: true },
   polygon: { environment: "mainnet", chainId: 137, circleDomain: 7, agglayer: false, epoch: true },
+  robinhood: { environment: "mainnet", chainId: 4663, circleDomain: null, agglayer: false, epoch: true },
 } as const satisfies Record<string, {
   environment: z.infer<typeof environmentSchema>;
   chainId: number;
-  circleDomain: number;
+  circleDomain: number | null;
   agglayer: boolean;
   epoch: boolean;
 }>;
@@ -80,7 +81,7 @@ const bridge = z.object({
 });
 const agglayerBridge = bridge.extend({ contractAddress: address, midenBridgeId: account });
 const circleBridge = bridge.extend({ domain: uint32, tokens: usdcTokens, deposit });
-const epochBridge = bridge.extend({ tokens: usdcTokens });
+const epochBridge = bridge.extend({ tokens: tokens.refine(value => Object.keys(value).length > 0) });
 
 const walletDocument = z.object({
   network: environmentSchema,
@@ -153,12 +154,15 @@ function validateAgglayerDeployment(network: Network, chain: Chain, ctx: z.Refin
   }
 }
 
-function allowsImplicitEpochOutput(doc: WalletDocument, epoch: z.infer<typeof epochBridge>) {
+function allowsImplicitEpochOutput(doc: WalletDocument, symbol: string, entry: z.infer<typeof token>) {
+  // Historical snapshots can carry unused tokens from shared provider fields.
+  // Active portal pairs separately require a resolved output in assertTokenConnections.
+  if (symbol !== "USDC" && entry.outputs === undefined) return true;
   const provider = doc["bridge-providers"].epoch;
   if (doc.network !== "mainnet" || provider?.allocatorUrl !== epochMainnetAllocatorUrl) return false;
   // Current mainnet documents omit USDCx references; withPortalEpochRoutes
   // resolves them from the verified Circle faucet before routes are used.
-  return epoch.tokens.USDC.outputs === undefined && provider.outputs === undefined;
+  return symbol === "USDC" && entry.outputs === undefined && provider.outputs === undefined;
 }
 
 function validateEpochDeployment(doc: WalletDocument, network: Network, chain: Chain, ctx: z.RefinementCtx) {
@@ -170,10 +174,10 @@ function validateEpochDeployment(doc: WalletDocument, network: Network, chain: C
     invalid(ctx, path, "Unsupported Epoch deployment");
   }
   if (!epoch.depositEnabled && !epoch.withdrawalEnabled) return;
-  if (allowsImplicitEpochOutput(doc, epoch)) return;
-  const output = epoch.tokens.USDC.outputs?.[0];
-  if (!output || !provider?.outputs?.[output]) {
-    invalid(ctx, [...path, "tokens", "USDC", "outputs"], "Unresolved Epoch output");
+  for (const [symbol, entry] of Object.entries(epoch.tokens)) {
+    if (allowsImplicitEpochOutput(doc, symbol, entry)) continue;
+    const output = entry.outputs?.[0];
+    if (!output || !provider?.outputs?.[output]) invalid(ctx, [...path, "tokens", symbol, "outputs"], "Unresolved Epoch output");
   }
 }
 
