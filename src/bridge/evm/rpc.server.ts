@@ -66,6 +66,14 @@ type RpcResponse = { jsonrpc: "2.0"; id: string | number } & (
   | { error: { code: number; message: string; data?: unknown }; result?: never }
 );
 
+function publicRpcError(error: { code: number; message: string; data?: unknown }) {
+  const data = typeof error.data === "string" && error.data.length <= 65_538 && /^0x(?:[0-9a-fA-F]{2})*$/.test(error.data)
+    ? error.data : undefined;
+  const reverted = error.code === 3 || (error.code === -32000 && (data !== undefined || /execution reverted/i.test(error.message)));
+  return { code: error.code, message: reverted ? "execution reverted" : "EVM RPC request failed.",
+    ...(data === undefined ? {} : { data }) };
+}
+
 /** Retry transport failures, preserving contract errors for viem to decode. */
 export async function forwardEvmRpc(
   network: EvmNetwork,
@@ -88,13 +96,14 @@ export async function forwardEvmRpc(
       const payload = await response.json();
       if (!payload || typeof payload !== "object" || Array.isArray(payload) ||
           payload.jsonrpc !== "2.0" || payload.id !== body.id) continue;
-      if (payload.error && typeof payload.error.code === "number" && typeof payload.error.message === "string") {
+      if (payload.error && Number.isSafeInteger(payload.error.code) && typeof payload.error.message === "string") {
         // EIP-1474 availability/limit errors can arrive over HTTP 200.
         // Invalid requests and contract reverts must still reach the caller.
         if (payload.error.code === -32002 || payload.error.code === -32005) continue;
-        return { jsonrpc: "2.0", id: body.id, error: payload.error };
+        if ("result" in payload) continue;
+        return { jsonrpc: "2.0", id: body.id, error: publicRpcError(payload.error) };
       }
-      if ("result" in payload && !("error" in payload)) return payload;
+      if ("result" in payload && !("error" in payload)) return { jsonrpc: "2.0", id: body.id, result: payload.result };
     } catch {
       // Network failure, timeout, or malformed response: try this network's next RPC.
     }

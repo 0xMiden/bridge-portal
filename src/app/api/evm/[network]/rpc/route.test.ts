@@ -115,7 +115,8 @@ it.each([
   };
   const fetch = vi.fn().mockResolvedValue(Response.json(result));
   vi.stubGlobal("fetch", fetch);
-  expect(await (await post(request())).json()).toEqual(result);
+  expect(await (await post(request())).json()).toEqual({ ...result, error: { ...error,
+    message: error.code === -32602 ? "EVM RPC request failed." : "execution reverted" } });
   expect(fetch).toHaveBeenCalledTimes(1);
 });
 it("serves Ethereum reads when PublicNode is unavailable and Merkle is rate-limited", async () => {
@@ -181,6 +182,26 @@ it("rejects unconfigured networks before making upstream calls", async () => {
   vi.stubGlobal("fetch", fetch);
   expect((await POST(request(), context("mainnet"))).status).toBe(400);
   expect(fetch).not.toHaveBeenCalled();
+});
+it.each(["https://private-rpc.invalid/key-sentinel", { cause: "key-sentinel", data: "0x1234" }, "0x" + "ab".repeat(32_769)])(
+  "removes provider text, nested data and oversized error payloads %#", async data => {
+    const fetch = vi.fn().mockResolvedValue(Response.json({ jsonrpc: "2.0", id: 7,
+      endpoint: "key-sentinel", error: { code: -32602, message: "private-rpc.invalid/key-sentinel", data, cause: "key-sentinel" } }));
+    vi.stubGlobal("fetch", fetch);
+    expect(await (await post(request())).json()).toEqual({ jsonrpc: "2.0", id: 7,
+      error: { code: -32602, message: "EVM RPC request failed." } });
+    expect(fetch).toHaveBeenCalledTimes(1);
+  },
+);
+it("retains bounded hex revert data without leaking provider message or envelope extras", async () => {
+  vi.stubGlobal("fetch", vi.fn().mockResolvedValue(Response.json({ jsonrpc: "2.0", id: 7, endpoint: "key-sentinel",
+    error: { code: 3, message: "execution reverted at private-rpc.invalid/key-sentinel", data: "0x12345678", cause: "key-sentinel" } })));
+  expect(await (await post(request())).json()).toEqual({ jsonrpc: "2.0", id: 7,
+    error: { code: 3, message: "execution reverted", data: "0x12345678" } });
+});
+it("reconstructs successful EVM envelopes without unrelated provider fields", async () => {
+  vi.stubGlobal("fetch", vi.fn().mockResolvedValue(Response.json({ jsonrpc: "2.0", id: 7, result: null, endpoint: "key-sentinel" })));
+  expect(await (await post(request())).json()).toEqual({ jsonrpc: "2.0", id: 7, result: null });
 });
 it("retries malformed upstream responses and mismatched request IDs", async () => {
   const result = { jsonrpc: "2.0", id: 7, result: null };
