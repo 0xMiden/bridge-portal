@@ -1,5 +1,5 @@
 import { COMPACT_ABI, getTokenId } from "@epoch-protocol/epoch-intents-sdk";
-import { decodeEventLog, decodeFunctionData, type Hex } from "viem";
+import { decodeEventLog, decodeFunctionData, zeroAddress, type Hex } from "viem";
 import type { EvmProvider } from "../../../wallets/evm/evm-wallet";
 
 export type EpochDepositEvidence = {
@@ -28,12 +28,17 @@ export function trackEpochDeposits(provider: EvmProvider, chainId: number, track
   const published = new Set<string>();
   function deposit(value: unknown): Deposit | undefined {
     if (!value || typeof value !== "object") return;
-    const call = value as { to?: string; from?: string; data?: Hex; chainId?: string };
+    const call = value as { to?: string; from?: string; data?: Hex; chainId?: string; value?: string | bigint };
     if (call.to?.toLowerCase() !== compact || !call.data ||
         (call.from && call.from.toLowerCase() !== tracking.sponsor.toLowerCase()) ||
         (call.chainId && Number(call.chainId) !== chainId)) return;
     try {
       const decoded = decodeFunctionData({ abi: COMPACT_ABI, data: call.data });
+      if (decoded.functionName === "depositNativeAndRegister") {
+        const [lockTag, claimHash] = decoded.args;
+        if (tracking.token !== zeroAddress || BigInt(call.value ?? 0).toString() !== tracking.amount) return;
+        return { epochDepositId: getTokenId(BigInt(lockTag), 0n).toString(), epochClaimHash: claimHash };
+      }
       if (decoded.functionName !== "depositERC20AndRegister") return;
       const [token, lockTag, amount, claimHash] = decoded.args;
       if (token.toLowerCase() !== tracking.token.toLowerCase() || amount.toString() !== tracking.amount) return;

@@ -2,6 +2,7 @@ import { evmNetworks } from "../evm-networks.ts";
 import { evmNetworkNames } from "../evm-network-names.ts";
 import { z } from "zod";
 import type { bridgeConfigSchema } from "./schema";
+import type { EvmAsset, MidenAsset } from "../../bridge/core/assets";
 
 const evmNetwork = z.enum(evmNetworkNames);
 export const tokenLogoSchema = z.string().regex(/^\/asset-logos\/[a-z0-9-]+\.(svg|png)$/);
@@ -31,12 +32,10 @@ export const tokenConnectionsSchema = z.object({
   const assets = new Map<string, string>();
   const invalid = (message: string) => ctx.addIssue({ code: "custom", message });
   for (const environment of ["testnet", "mainnet"] as const) {
-    for (const { evm, miden, routes, provider } of registry[environment]) {
+    for (const { evm, miden, routes } of registry[environment]) {
       if (miden.network !== `miden-${environment}` || (environment === "testnet") !== (evmNetworks[evm.network].testnet === true))
         invalid("Token connection network mismatch");
       if (!routes.receive && !routes.send) invalid("Token connection has no routes");
-      if (provider === "agglayer" && evm.kind === "erc20" && routes.send)
-        invalid("Agglayer ERC-20 withdrawals are not supported by the portal");
       for (const id of Object.values(routes)) {
         if (ids.has(id)) invalid(`Duplicate token connection route: ${id}`);
         ids.add(id);
@@ -52,6 +51,26 @@ export const tokenConnectionsSchema = z.object({
   }
 });
 
+/** Validate both current routes and self-contained historical receipt snapshots. */
+export function matchesMainnetEpochPair(config: z.infer<typeof bridgeConfigSchema>, evm: EvmAsset, miden: MidenAsset): boolean {
+  const token = config.document.supportedEvmChains[evm.network]?.bridges.epoch?.tokens[evm.symbol];
+  if (!token) return false;
+  const native = token.contractAddress === "0x0000000000000000000000000000000000000000";
+  if ((evm.kind === "native") !== native) return false;
+  if (evm.kind === "erc20" && evm.address.toLowerCase() !== token.contractAddress.toLowerCase()) return false;
+  if (native && evm.symbol !== (evm.network === "polygon" ? "POL" : "ETH")) return false;
+  const output = config.document["bridge-providers"].epoch?.outputs?.[token.outputs?.[0] ?? ""];
+  if (output?.faucetId !== miden.faucetId) return false;
+  if (evm.symbol === "USDC") return miden.symbol === "USDCx" && miden.faucetId === config.derived.usdcxFaucetId &&
+    evm.decimals === 6 && miden.decimals === 6;
+  if (evm.symbol === "ETH") return miden.symbol === "ETH" && miden.faucetId === config.derived.eth.faucetId &&
+    evm.decimals === 18 && miden.decimals === config.derived.eth.decimals;
+  if (evm.symbol !== "POL" && evm.symbol !== "USDG") return false;
+  const verified = config.derived.agglayerTokens?.find(token => token.symbol === evm.symbol);
+  return Boolean(verified && miden.symbol === evm.symbol && miden.faucetId === verified.faucetId &&
+    evm.decimals === verified.decimals && miden.decimals === verified.midenDecimals);
+}
+
 /** Local token pairs must agree with the pinned deployments and verified registry metadata. */
 export function assertTokenConnections(config: z.infer<typeof bridgeConfigSchema>, connections: readonly TokenConnection[]) {
   const { document, derived, environment } = config;
@@ -61,10 +80,10 @@ export function assertTokenConnections(config: z.infer<typeof bridgeConfigSchema
     if (!bridge || miden.network !== `miden-${environment}`) throw new Error(`Unconfigured token connection: ${provider}/${evm.network}`);
     if (provider === "epoch") {
       const token = bridge.tokens?.[evm.symbol];
-      if (environment === "mainnet" && (!token || evm.symbol !== "USDC" || evm.decimals !== 6 ||
-          miden.symbol !== "USDCx" || miden.decimals !== 6 || miden.faucetId !== derived.usdcxFaucetId ||
-          miden.faucetId !== document["bridge-providers"].epoch?.outputs?.[token.outputs?.[0] ?? ""]?.faucetId))
-        throw new Error("Epoch token connection does not match verified configuration");
+      if (environment === "mainnet") {
+        if (!matchesMainnetEpochPair(config, evm, miden)) throw new Error("Epoch token connection does not match verified configuration");
+        continue;
+      }
       if (token && (evm.kind !== "erc20" || token.contractAddress.toLowerCase() !== evm.address.toLowerCase()))
         throw new Error("Epoch token connection does not match wallet-config");
       const output = token?.outputs?.[0];
@@ -83,9 +102,9 @@ export function assertTokenConnections(config: z.infer<typeof bridgeConfigSchema
         throw new Error("ETH token connection does not match verified configuration");
       continue;
     }
-    const listed = Object.values(bridge.tokens ?? {}).some(token => token.contractAddress.toLowerCase() === evm.address.toLowerCase());
+    // Local additions are verified on-chain without upgrading other providers' configuration.
     const verified = derived.agglayerTokens?.find(token => token.address.toLowerCase() === evm.address.toLowerCase());
-    if (!listed || !verified || verified.faucetId !== miden.faucetId || verified.decimals !== evm.decimals || verified.midenDecimals !== miden.decimals)
+    if (!verified || verified.faucetId !== miden.faucetId || verified.decimals !== evm.decimals || verified.midenDecimals !== miden.decimals)
       throw new Error(`Agglayer token connection does not match verified configuration: ${evm.symbol}`);
   }
   // Mainnet's configured ERC-20 list must not be silently narrowed by a second allowlist.

@@ -578,6 +578,8 @@ describe("Ethereum ERC-20 deposits", () => {
     ["PYUSD", "1.234567", 1_234_567n, "0x6c3ea9036406852006290770bedfcaba0e23a0e8"],
     ["WSOL", "0.123456780", 123_456_780n, "0xd31a59c85ae9d8edefec411d448f90841571b89c"],
     ["NEAR", "0.123456780000000000000000", 123_456_780_000_000_000_000_000n, "0x85f17cf997934a597031b2e18a9ab6ebd4b9f6a4"],
+    ["USDG", "1.234567", 1_234_567n, "0xe343167631d89b6ffc58b88d6b7fb0228795491d"],
+    ["POL", "0.123456780000000000", 123_456_780_000_000_000n, "0x455e53cbb86018ac2b8092fdcd39d8444affc3f6"],
   ] as const)("deposits %s in source units with zero ETH value and keeps its receipt", async (symbol, amount, units, token) => {
     const { input, effects, transactions } = deposit(symbol, amount);
     await submitBridgeTransfer(input, effects);
@@ -667,6 +669,39 @@ describe("Ethereum ERC-20 deposits", () => {
     expect(effects.onError).toHaveBeenCalledWith(expect.stringMatching(message));
     expect(evmRequest).not.toHaveBeenCalled();
     expect(loadStoredActivities()).toMatchObject([history]);
+  });
+});
+
+describe("Agglayer token withdrawals", () => {
+  it.each([
+    ["mainnet", "USDT", "1.234567", 1_234_567n, "0x5cb79d29507d3ad17bb6dc60279e89"],
+    ["mainnet", "NEAR", "0.12345678", 12_345_678n, "0x5fcca2d015cf44d15da1a641d4d06a"],
+    ["mainnet", "USDG", "1.234567", 1_234_567n, "0xfc340a73c8fb25d1412f3fa1fd6d3a"],
+    ["mainnet", "POL", "0.12345678", 12_345_678n, "0xa5b56b51edbda2514c711385dc6f31"],
+    ["testnet", "USDC", "0.12345678", 12_345_678n, "0xb41aed8db850a3d140fc2079216c60"],
+  ] as const)("withdraws %s %s using Miden units and retains the route in its receipt", async (environment, symbol, amount, units, faucetId) => {
+    const route = routesForEnvironment(environment).find(route =>
+      route.provider === "agglayer" && route.mode === "send" && route.source.symbol === symbol);
+    expect(route, `Missing ${environment} ${symbol} withdrawal`).toBeDefined();
+    const account = environment === "mainnet" ? "mm1aqu8zjdwvcgkeug5a67kpwmnsyv2qgp7" : MIDEN_ACCOUNT;
+    const { input, effects } = setup({
+      environment, routeId: route!.id, amount, midenAccount: account,
+      midenWallet: { connected: true, address: account, requestTransaction: vi.fn(), waitForTransaction: vi.fn() },
+      midenAsset: { faucetId, decimals: route!.source.decimals, amountRaw: units * 2n, symbol },
+    });
+    vi.mocked(runAgglayerSend).mockImplementation(async ({ onSubmitted }) => {
+      onSubmitted({ requestId: "withdrawal-request", noteId: `0x${"12".repeat(32)}` });
+      return { txId: "withdrawal-request", txHash: TX_HASH };
+    });
+    await submitBridgeTransfer(input, effects);
+    expect(effects.onError).not.toHaveBeenCalled();
+    expect(runAgglayerSend).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({
+      amount: units, faucetId, destinationAddress: EVM_ADDRESS, senderAddress: account,
+    }), route!.recovery);
+    expect(loadStoredActivities(environment)).toEqual(expect.arrayContaining([expect.objectContaining({
+      asset: symbol, amount, sourceTxHash: TX_HASH, status: "source_finality",
+      routeSnapshot: route, midenWalletRequestId: "withdrawal-request",
+    })]));
   });
 });
 

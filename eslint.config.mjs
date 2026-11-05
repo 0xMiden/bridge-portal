@@ -8,9 +8,10 @@ const eslintConfig = defineConfig([
   ...nextVitals,
   ...nextTs,
   {
-    // Apply the gates to the quote, approval, and status implementations, including
+    // Apply the gates to wallet schemas, quote, approval, and status implementations, including
     // helpers added later. Consumer-only adaptations keep the shared policy here.
     files: [
+      "src/config/wallet-config/schema*.ts",
       "src/bridge/core/quote.ts",
       "src/bridge/evm/approval-store.ts",
       "src/bridge/miden-address*.ts",

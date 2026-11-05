@@ -43,11 +43,16 @@ async function deriveWalletConfig(source) {
     });
     if (native.length !== 1 || native[0].decimals < 0 || native[0].decimals > 18 || !Number.isSafeInteger(rollupId) || rollupId <= 0)
         throw new Error("Unable to resolve native ETH from the Miden bridge registry");
-    let agglayerTokens;
-    if (environment === "mainnet") {
-        const ethereum = createPublicClient({ transport: http(process.env.ETHEREUM_RPC_URL?.trim() || "https://ethereum-rpc.publicnode.com", { timeout: 15_000, retryCount: 0 }) });
-        if (await ethereum.getChainId() !== 1)
-            throw new Error("Expected an Ethereum mainnet RPC");
+    const agglayerTokens = [];
+    const connections = tokenRegistry[environment].filter(pair => pair.provider === "agglayer" &&
+        pair.evm.network === evmNetwork && pair.evm.kind === "erc20");
+    if (connections.length) {
+        const rpcUrl = environment === "mainnet"
+            ? process.env.ETHEREUM_RPC_URL?.trim() || "https://ethereum-rpc.publicnode.com"
+            : process.env.AGGLAYER_SEPOLIA_RPC_URL?.trim() || "https://ethereum-sepolia-rpc.publicnode.com";
+        const evm = createPublicClient({ transport: http(rpcUrl, { timeout: 15_000, retryCount: 0 }) });
+        if (await evm.getChainId() !== document.supportedEvmChains[evmNetwork].chainId)
+            throw new Error(`Expected a ${evmNetwork} RPC`);
         const registered = (proof.getStorageMapEntries(registrySlot) ?? []).flatMap(entry => {
             if (entry.value().toU64s()[0] !== 1n)
                 return [];
@@ -60,21 +65,17 @@ async function deriveWalletConfig(source) {
             return [{ address, scale: Number(hi[2]),
                     faucetId: `0x${prefix.toString(16).padStart(16, "0")}${(suffix >> 8n).toString(16).padStart(14, "0")}` }];
         });
-        agglayerTokens = [];
-        for (const [symbol, { contractAddress: listed }] of Object.entries(bridge.tokens ?? {})) {
-            const address = listed.toLowerCase();
-            const connection = tokenRegistry[environment].find(pair => pair.provider === "agglayer" &&
-                pair.evm.network === evmNetwork && pair.evm.kind === "erc20" && pair.evm.address.toLowerCase() === address);
-            if (!connection)
-                throw new Error(`Missing local token connection for ${symbol}`);
+        for (const connection of connections) {
+            const { symbol } = connection.evm;
+            const address = connection.evm.address.toLowerCase();
             const matches = registered.filter(token => token.address === address);
             if (matches.length !== 1)
-                throw new Error(`Expected one registered mainnet faucet for ${symbol}`);
+                throw new Error(`Expected one registered ${environment} faucet for ${symbol}`);
             const { faucetId, scale } = matches[0];
             const [decimals, chainSymbol, name, faucet] = await Promise.all([
-                ethereum.readContract({ address, abi: erc20Abi, functionName: "decimals" }),
-                ethereum.readContract({ address, abi: erc20Abi, functionName: "symbol" }),
-                ethereum.readContract({ address, abi: erc20Abi, functionName: "name" }),
+                evm.readContract({ address, abi: erc20Abi, functionName: "decimals" }),
+                evm.readContract({ address, abi: erc20Abi, functionName: "symbol" }),
+                evm.readContract({ address, abi: erc20Abi, functionName: "name" }),
                 rpc.getAccountProof(AccountId.fromHex(faucetId), AccountStorageRequirements.fromSlotAndKeysArray([])),
             ]);
             const midenDecimals = Number(storageValue(faucet, "miden::standards::faucets::fungible::token_config")[2]);
@@ -90,7 +91,7 @@ async function deriveWalletConfig(source) {
             agglayerTokens.push({ symbol, name, address, decimals, faucetId, midenDecimals });
         }
     }
-    return { ...source, derived: { ...source.derived, rollupId, eth: native[0], ...(agglayerTokens ? { agglayerTokens } : {}) } };
+    return { ...source, derived: { ...source.derived, rollupId, eth: native[0], agglayerTokens } };
 }
 
 const revision = process.argv[2];

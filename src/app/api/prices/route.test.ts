@@ -42,6 +42,8 @@ it.each([
   ["NEAR", "NEAR"],
   ["DAI", "DAI"],
   ["USDT", "USDT"],
+  ["USDG", "USDG"],
+  ["POL", "POL"],
 ])("prices %s through the %s USD market, preserving the provider's decimal", async (token, market) => {
   fetchMock.mockResolvedValueOnce(spot(market, "1.00000000000000000001"));
   const response = await read(token);
