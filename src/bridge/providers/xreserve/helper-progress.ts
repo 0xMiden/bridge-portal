@@ -42,6 +42,7 @@ function mergeCompletion(previous?: HelperCompletion, incoming?: HelperCompletio
 function progressStage(previous: HelperActivity, incoming: HelperActivity) {
   if (previous.stage === "source_failed") return previous.stage;
   if (previous.sourceEvidence && incoming.stage === "source_failed") return previous.stage;
+  if (incoming.stage === "needs_attention") return incoming.stage;
   return order[incoming.stage] < order[previous.stage] ? previous.stage : incoming.stage;
 }
 function earliestAnchor(previous: HelperActivity, incoming: HelperActivity) {
@@ -56,7 +57,8 @@ export function mergeHelperProgress(previous: HelperActivity, incoming: HelperAc
   if (!sameAttempt(previous, incoming) || contradictsProof(previous, incoming)) return { accepted: false, helper: previous };
   // Stale polls cannot clear review evidence or erase verified delivery.
   const clearsReview = previous.completion?.needsAttention && !incoming.completion?.needsAttention;
-  const disputesDelivery = previous.stage === "delivered" && incoming.completion?.needsAttention;
+  const incomingReview = incoming.stage === "needs_attention" || incoming.completion?.needsAttention;
+  const disputesDelivery = previous.stage === "delivered" && incomingReview;
   if (clearsReview || disputesDelivery) return { accepted: false, helper: previous };
   const completion = mergeCompletion(previous.completion, incoming.completion);
   const stage = completion?.needsAttention ? completion.stage : progressStage(previous, incoming);

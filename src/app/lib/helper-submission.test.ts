@@ -10,6 +10,8 @@ import { prepareHelperSolana } from "../../bridge/providers/xreserve/helper-sola
 import { observeManualHelper, resendManualHelper } from "../../bridge/providers/xreserve/helper-manual";
 import golden from "../../bridge/providers/xreserve/fixtures/manual/solana-golden.json";
 import { createActivity } from "./bridge-presentation";
+import { validateManualSource } from "../../bridge/solana/source-transaction";
+import { guardSolanaTransaction } from "../../bridge/solana/rpc";
 
 vi.mock("../../config/cctp-helper-public.json", async () => ({ default: (await import("../../bridge/providers/xreserve/fixtures/manual/deployment.json")).default }));
 const { rpc } = vi.hoisted(() => ({ rpc: { getGenesisHash: vi.fn(), getBlockHeight: vi.fn(), sendRawTransaction: vi.fn() } }));
@@ -272,13 +274,18 @@ describe("actual ActivityStore acknowledgment and manual reentry", () => {
     rows[0].cctpHelper.signature = "NOT_A_SIGNATURE"; storage.set(activityStorageKey, JSON.stringify(rows));
     expect(loadStoredActivities()).toHaveLength(0);
   });
-  it.each(["source_finalized", "ready"] as const)("retains %s progress while recording a current warning", async stage => {
-    const { input, effects, store } = await setup(); await submitBridgeTransfer(input, effects);
+  it.each(["source_finalized", "ready"] as const)("retains %s progress when the actual provider returns a policy/history warning", async stage => {
+    const { input, effects, store, fixture } = await setup(); await submitBridgeTransfer(input, effects);
     const activity = store.getSnapshot().receipts[0].activity;
-    const original = { ...activity, cctpHelper: { ...activity.cctpHelper!, stage } };
-    const next = applyActivityPatch(original, { cctpHelper: { ...original.cctpHelper, stage: "needs_attention", reason: "attestation_invalid" } });
+    const source = await validateManualSource(guardSolanaTransaction(fixture.raw, fixture.signature), deployment);
+    const original = { ...activity, cctpHelper: { ...activity.cctpHelper!, stage, sourceEvidence: source, signedBytes: undefined } };
+    vi.stubGlobal("fetch", vi.fn(async () => Response.json({ state: "needs_attention", reason: "history_unavailable" })));
+    const observed = await observeManualHelper(original, new AbortController().signal);
+    expect(observed.patch).toEqual({});
+    expect(observed.warning).toContain("export requires current simulation");
+    const next = applyActivityPatch(original, observed.patch);
     expect(next.cctpHelper?.stage).toBe(stage); expect(next.cctpHelper?.signature).toBe(original.cctpHelper.signature);
-    expect(next.cctpHelper?.reason).toBe("attestation_invalid");
+    expect(next.cctpHelper?.sourceEvidence).toEqual(source);
     expect(next.status).toBe("source_finality");
   });
   it.each(["source_finalized", "ready"] as const)("retains %s on HTTP outage; export still requires fresh validation", async stage => {

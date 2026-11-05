@@ -10,7 +10,8 @@ import { authorization, deployment, signedFixture } from "./providers/xreserve/f
 import { validateManualSource } from "./solana/source-transaction";
 import { guardSolanaTransaction } from "./solana/rpc";
 import { validateManualHelperAttestation } from "./providers/xreserve/helper-manual.server";
-import { validateHelperCompletion } from "./providers/xreserve/helper-manual";
+import { observeManualHelper, requestHelperObservation, validateHelperCompletion } from "./providers/xreserve/helper-manual";
+import { mergeHelperProgress } from "./providers/xreserve/helper-progress";
 import { helperActivitySchema } from "./providers/xreserve/helper-types";
 import { deriveArcNoteId } from "./providers/xreserve/delivery";
 import { browserMidenSdk } from "../../test/miden-sdk";
@@ -185,6 +186,10 @@ it("keeps a unique-to-ambiguous reserve receipt loadable and review-only with it
   store.patch(current.id, staleDelivery);
   expect(loadStoredActivities()[0]).toEqual(saved);
 
+  await expectSourceBurnBlocked(store);
+});
+
+async function expectSourceBurnBlocked(store: ActivityStore) {
   vi.stubGlobal("navigator", { locks: { request: async (_name: string, _options: unknown, operation: (lock: object) => unknown) => operation({}) } });
   const network = vi.fn(); vi.stubGlobal("fetch", network);
   const effects: SubmissionEffects = { activities: store, openEvmWallet: vi.fn(async () => {}), onError: vi.fn(),
@@ -198,7 +203,7 @@ it("keeps a unique-to-ambiguous reserve receipt loadable and review-only with it
   expect(effects.navigate).toHaveBeenCalledWith(`/activity/${current.id}`);
   expect(effects.onSubmittingChange).not.toHaveBeenCalled();
   expect(network).not.toHaveBeenCalled();
-});
+}
 
 it.each([false, true])("keeps verified delivery unchanged after later ambiguity (claim recorded: %s)", claimed => {
   const { store } = persistence();
@@ -231,4 +236,55 @@ it.each([false, true])("does not replay a queued unique delivery over another ta
   expect(saved.cctpHelper?.completion?.needsAttention).toBe(true);
   expect(saved.cctpHelper?.completion?.intent).toBeUndefined();
   expect(saved.xreserveMidenBlock).toBeUndefined();
+});
+
+it.each(["ready", "attested"] as const)("keeps an actual source-contradiction review after loading %s and blocks stale export/new burn", async stage => {
+  const { store } = persistence();
+  const legacy = { ...current, xreserveNoteId: undefined, xreserveMidenBlock: undefined, xreserveArcTxHash: undefined,
+    cctpHelper: { ...current.cctpHelper!, schemaVersion: stage === "ready" ? 1 as const : 2 as const,
+      execution: stage === "ready" ? "manual" as const : "automatic" as const, stage, completion: undefined } };
+  helperActivitySchema.parse(legacy.cctpHelper);
+  saveActivities([legacy]); store.sync();
+  const saved = store.get(current.id)!.activity;
+  expect(saved.cctpHelper?.stage).toBe("attested");
+  expect(saved.cctpHelper?.completion).toBeUndefined();
+  const fetchMock = vi.fn<typeof fetch>(async () => Response.json({ state: "source_failed",
+    sourceTransaction: saved.cctpHelper!.signature, slot: "106", error: "Instruction failed" }));
+  vi.stubGlobal("fetch", fetchMock);
+  const observed = await observeManualHelper(saved, new AbortController().signal);
+  expect(observed.patch.cctpHelper?.stage).toBe("needs_attention");
+  helperActivitySchema.parse(observed.patch.cctpHelper);
+  const merged = applyActivityPatch(saved, observed.patch);
+  expect(merged.cctpHelper?.stage).toBe("needs_attention");
+  store.patch(current.id, observed.patch);
+  const [reviewed] = loadManualSubmissionActivities();
+  expect(reviewed.cctpHelper?.stage).toBe("needs_attention");
+  expect(activityState(reviewed).phase).toBe("needs_attention");
+  expect(reviewed.cctpHelper?.sourceEvidence).toEqual(saved.cctpHelper?.sourceEvidence);
+  expect(reviewed.cctpHelper?.bundle).toEqual(saved.cctpHelper?.bundle);
+  expect(reviewed.cctpHelper?.signature).toBe(saved.cctpHelper?.signature);
+  expect(reviewed.cctpHelper?.authorization).toEqual(saved.cctpHelper?.authorization);
+  expect(reviewed.status).not.toBe("complete");
+  // Export always requests a fresh check; the old bundle is not a ready response.
+  const exported = await requestHelperObservation(reviewed, undefined, { exportCall: true });
+  expect(exported.state).toBe("source_failed");
+  expect(JSON.parse(String(fetchMock.mock.lastCall?.[1]?.body))).toMatchObject({
+    exportCall: true, sourceTransaction: saved.cctpHelper?.signature,
+  });
+  await expectSourceBurnBlocked(store);
+});
+
+it.each([false, true])("rejects an actual source-contradiction observation after verified delivery (claim recorded: %s)", async claimed => {
+  const { store } = persistence();
+  store.patch(current.id, { cctpHelper: { ...current.cctpHelper!, stage: "delivered" }, xreserveMidenBlock: 200,
+    destinationTxAt: 1_700_000_000_050, ...(claimed ? { claimTxHash: hash(20) } : {}) });
+  const [delivered] = loadManualSubmissionActivities();
+  vi.stubGlobal("fetch", vi.fn(async () => Response.json({ state: "source_failed",
+    sourceTransaction: delivered.cctpHelper!.signature, slot: "106", error: "Instruction failed" })));
+  const observed = await observeManualHelper(delivered, new AbortController().signal);
+  expect(observed.patch.cctpHelper?.stage).toBe("needs_attention");
+  expect(mergeHelperProgress(delivered.cctpHelper!, observed.patch.cctpHelper!).accepted).toBe(false);
+  expect(applyActivityPatch(delivered, observed.patch)).toEqual(delivered);
+  store.patch(current.id, observed.patch);
+  expect(loadManualSubmissionActivities()).toEqual([delivered]);
 });
