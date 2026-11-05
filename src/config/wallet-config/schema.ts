@@ -1,5 +1,5 @@
 import { evmNetworks } from "../evm-networks.ts";
-import sources from "../cctp-evm-sources.json";
+import sources from "../cctp-evm-sources.json" with { type: "json" };
 import type { EvmNetworkName } from "../evm-network-names.ts";
 import { z } from "zod";
 
