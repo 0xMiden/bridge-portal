@@ -150,8 +150,10 @@ describe("finite finalized helper discovery", () => {
     const { client, input } = await fixture();
     await observeHelperCompletion(asClient(client), deployment, { ...input, anchor: { block: "4500", hash: hash(4500) } });
     expect(client.getLogs).toHaveBeenLastCalledWith(expect.objectContaining({ fromBlock: 4500n, toBlock: 5000n }));
-    await observeHelperCompletion(asClient(client), deployment, { ...input, scan: { nextBlock: "4500", checkpoint: { block: "4499", hash: hash(1) } } });
+    const corrupt = { nextBlock: "4500", checkpoint: { block: "4499", hash: hash(1) } };
+    const reset = await observeHelperCompletion(asClient(client), deployment, { ...input, scan: corrupt });
     expect(client.getLogs).toHaveBeenLastCalledWith(expect.objectContaining({ fromBlock: 1n }));
+    expect(reset.scan).toMatchObject({ nextBlock: "2001", resetFrom: corrupt });
     client.getBlock.mockImplementation(async ({ blockNumber }) => ({ number: blockNumber === 4500n ? 100n : blockNumber ?? 5000n, hash: hash(blockNumber ?? 5000n) }));
     await observeHelperCompletion(asClient(client), deployment, { ...input, anchor: { block: "4500", hash: hash(4500) } });
     expect(client.getLogs).toHaveBeenLastCalledWith(expect.objectContaining({ fromBlock: 1n }));

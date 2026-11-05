@@ -2,11 +2,16 @@ import { z } from "zod";
 import { address, bytes32, decimal } from "../../../config/cctp-helper";
 
 export const arcCheckpointSchema = z.object({ block: decimal, hash: bytes32 }).strict();
-export const arcScanSchema = z.object({ nextBlock: decimal, checkpoint: arcCheckpointSchema }).strict();
+const arcCursorSchema = z.object({ nextBlock: decimal, checkpoint: arcCheckpointSchema }).strict();
+export const arcScanSchema = arcCursorSchema.extend({ resetFrom: arcCursorSchema.optional() }).strict();
 export const helperCompletionSchema = z.object({
   schemaVersion: z.literal(1),
   stage: z.enum(["attested", "arc_deposited", "reserve_attested"]),
-  scan: arcScanSchema.optional(),
+  // Cursor corruption must not discard a proven transfer or release its source lock.
+  scan: z.preprocess(value => {
+    const parsed = arcScanSchema.safeParse(value);
+    return parsed.success ? parsed.data : undefined;
+  }, arcScanSchema.optional()),
   catchingUp: z.boolean(),
   warning: z.string().max(400).optional(),
   needsAttention: z.boolean().optional(),
@@ -26,5 +31,6 @@ export const helperCompletionSchema = z.object({
   if (value.needsAttention && value.intent) context.addIssue({ code: "custom", message: "Ambiguous authorization cannot select a reserve nonce." });
 });
 export type ArcCheckpoint = z.infer<typeof arcCheckpointSchema>;
+export type ArcCursor = z.infer<typeof arcCursorSchema>;
 export type ArcScan = z.infer<typeof arcScanSchema>;
 export type HelperCompletion = z.infer<typeof helperCompletionSchema>;

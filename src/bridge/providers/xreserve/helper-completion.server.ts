@@ -9,7 +9,7 @@ import { decodeCctpMessage } from "./cctp-message";
 import { arcRecipient } from "./deposit-terms";
 import { helperAbi, helperMessageAbi } from "./helper-abi";
 import { getArcDepositAttestation, readDeposit } from "./arc-status-server";
-import type { ArcCheckpoint, ArcScan, HelperCompletion } from "./helper-completion-types";
+import type { ArcCheckpoint, ArcCursor, ArcScan, HelperCompletion } from "./helper-completion-types";
 
 export const HELPER_SCAN_BLOCKS = 2000n;
 const MAX_LOGS = 64;
@@ -129,26 +129,27 @@ async function initialBlock(client: Client, deployment: HelperDestination, input
   // A cursor saves work; it never establishes completion or releases a source lock.
   if (input.scan) {
     const next = await validatedStart(client, input.scan.checkpoint, BigInt(input.scan.nextBlock), floor, head);
-    if (next !== undefined) return next;
+    if (next !== undefined) return { block: next, resetFrom: input.scan.resetFrom };
   }
+  const resetFrom = input.scan ? { nextBlock: input.scan.nextBlock, checkpoint: input.scan.checkpoint } : undefined;
   if (input.anchor) {
     const anchor = await validatedStart(client, input.anchor, BigInt(input.anchor.block), floor, head);
-    if (anchor !== undefined) return anchor;
+    if (anchor !== undefined) return { block: anchor, resetFrom };
   }
-  return floor;
+  return { block: floor, resetFrom };
 }
 
 type Page = { hash?: Hex; scan?: ArcScan; catchingUp: boolean; ambiguous?: boolean };
-async function emptyPageCheckpoint(client: Client, toBlock: bigint): Promise<ArcScan> {
+async function emptyPageCheckpoint(client: Client, toBlock: bigint, resetFrom?: ArcCursor): Promise<ArcScan> {
   const block = await client.getBlock({ blockNumber: toBlock });
   if (!block.hash || block.number !== toBlock) throw new Error("Arc checkpoint unavailable.");
   const check = await client.getBlock({ blockNumber: toBlock });
   if (check.hash !== block.hash) throw new Error("Arc checkpoint changed.");
-  return { nextBlock: (toBlock + 1n).toString(), checkpoint: { block: toBlock.toString(), hash: block.hash } };
+  return { nextBlock: (toBlock + 1n).toString(), checkpoint: { block: toBlock.toString(), hash: block.hash }, ...(resetFrom ? { resetFrom } : {}) };
 }
 
 async function readPage(client: Client, deployment: HelperDestination, input: CompletionInput, head: bigint): Promise<Page> {
-  const fromBlock = await initialBlock(client, deployment, input, head);
+  const start = await initialBlock(client, deployment, input, head), fromBlock = start.block;
   const toBlock = fromBlock + HELPER_SCAN_BLOCKS - 1n < head ? fromBlock + HELPER_SCAN_BLOCKS - 1n : head;
   if (fromBlock > head) return { scan: input.scan, catchingUp: false };
   const message = decodeCctpMessage(input.message);
@@ -161,7 +162,7 @@ async function readPage(client: Client, deployment: HelperDestination, input: Co
   }
   if (logs.length > 1) return { scan: input.scan, catchingUp: true, ambiguous: true };
   if (logs.length === 1) return { hash: logs[0].transactionHash, scan: input.scan, catchingUp: false };
-  return { scan: await emptyPageCheckpoint(client, toBlock), catchingUp: toBlock < head };
+  return { scan: await emptyPageCheckpoint(client, toBlock, start.resetFrom), catchingUp: toBlock < head };
 }
 
 async function readCompletion(client: Client, deployment: HelperDestination, input: CompletionInput, head: bigint, page: Page): Promise<HelperCompletion> {
