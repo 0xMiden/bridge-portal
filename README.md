@@ -21,26 +21,34 @@ e.g. [why we ship single-thread WASM without cross-origin isolation
 
 ## Prerequisites
 
-For local testnet transfers you need:
-
-- **A Miden testnet wallet** — the MidenFi extension (or the Bread wallet). It
-  supplies the Miden testnet account and signs the Miden-side transactions. Its
-  connected account is used automatically as the Receive destination. Both
-  wallets must be connected; recipient addresses cannot be entered manually.
-- **Miden testnet funds** — from the Miden faucet at
-  `https://faucet.testnet.miden.io`.
-- **Sepolia funds** — an EVM wallet (WalletConnect or a `window.ethereum`
-  extension) holding Sepolia ETH from any public Sepolia faucet, for the
-  AggLayer deposit leg.
-- **Node 22+** and npm.
+Use **Node 22.18.0** (also pinned in `.nvmrc`) and npm. Source wallets need
+native gas and the asset for their selected route: Phantom with Devnet SOL and
+native USDC for Solana, or an EVM wallet with the corresponding network funds.
+A connected Miden wallet supplies the Receive destination from its selected
+account. Claiming an included note is a separate wallet action. Incoming USDCx
+can cover claim fees when the wallet/protocol permits and the amount suffices;
+check the current fee rather than universally requiring a prefunded recipient.
 
 ## Local development
 
 ```bash
-cp .env.example .env.local   # optional — every var has an in-code fallback
-npm install
+git clone --branch feat/cctp-all-sources https://github.com/0xMiden/bridge-portal.git
+cd bridge-portal
+node --version  # v22.18.0
+cp .env.example .env.local
+npm ci
 npm run dev
 ```
+
+For the production Node server, configure `.env.local`, then use:
+
+```bash
+npm run build
+npm run start
+```
+
+Restart `npm run start` with the same server inputs. Public `NEXT_PUBLIC_*`
+changes require rebuilding. Keep private provider inputs out of browser values.
 
 The dev server defaults to `http://localhost:3000/`. `GET /health` is liveness;
 `GET /health/deep` checks Sepolia, Miden RPC, Epoch, and AggLayer.
@@ -55,13 +63,16 @@ local extension testing through `window.ethereum`.
 ### Environment variables
 
 All variables and their defaults are documented in
-[`.env.example`](.env.example). Every var has an in-code fallback, so the app
-boots with none of them set. Browser tests configure their mock wallets
+[`.env.example`](.env.example). The app boots without overrides; helper routes
+fail closed until qualified public identities and server providers are available.
+Browser tests configure their mock wallets
 automatically and require no wallet credentials. In brief:
 
 | Var | Scope | Purpose |
 | --- | --- | --- |
 | `BRIDGE_API_BASE` | server | Proxy target for `/api/bridge/*`. |
+| `CCTP_HELPER_SERVERS_JSON` | server | Private Solana helper provider rows, replacing the tracked server registry. |
+| `CCTP_EVM_HELPER_SERVERS_JSON` | server | Private EVM helper provider rows, replacing the tracked server registry. |
 | `ETHEREUM_RPC_URL` | server | Ethereum mainnet RPC. |
 | `ARC_MAINNET_RPC_URL` | server | Arc mainnet RPC. |
 | `BASE_RPC_URL` | server | Base mainnet RPC. |
@@ -83,6 +94,87 @@ automatically and require no wallet credentials. In brief:
 `NEXT_PUBLIC_*` vars are inlined into the client bundle at **build time** — set
 them before `npm run build` / the Docker or Cloudflare build, not just at
 runtime.
+
+## CCTP helper configuration and recovery
+
+The qualified public helper registries and tracked server registries are currently
+empty. This branch does not enable a helper route. A release owner must first earn
+the five Solana qualification proofs and publish the matching public deployment;
+private provider configuration alone cannot activate it. Unqualified sources and
+mainnet helpers remain unavailable. Existing direct and Generic Executor routes
+retain priority, and inactive EVM helper manual/export support remains intact.
+
+For an accepted deployment, set `CCTP_HELPER_SERVERS_JSON` server-side to an array
+with exactly one row for its trusted `deploymentId`. The following is a shape
+example with unusable placeholders, not an activation profile:
+
+```json
+[
+  {
+    "deploymentId": "<qualified-release-id>",
+    "solanaRpc": "https://<history-capable-solana-provider>",
+    "arcRpc": "https://<finalized-arc-provider>",
+    "irisApi": "https://iris-api-sandbox.circle.com",
+    "simulationCaller": "<public-read-only-payer-address>"
+  }
+]
+```
+
+EVM rows use `CCTP_EVM_HELPER_SERVERS_JSON` and `sourceRpc` instead of
+`solanaRpc`. A present variable replaces the entire corresponding tracked array;
+empty, malformed, duplicate or incomplete configuration fails closed. Only an
+absent variable uses tracked rows. URLs require HTTPS, except loopback HTTP for
+local tests, and cannot contain username/password credentials. Circle must use
+the official sandbox origin for testnet or `https://iris-api.circle.com` for
+mainnet; this environment rule does not qualify a mainnet route. Providers must
+retain the configured source boundary and support finalized Arc reads/logs.
+`simulationCaller` is a public address for read-only simulation, never a key.
+
+For local Node, edit these values in the ignored `.env.local`; do not shell-evaluate
+that file. In Cloudflare, install these variables as runtime Worker secrets through
+your deployment's secret-binding mechanism. The pinned OpenNext adapter exposes
+string bindings to server `process.env` before request handling. No server
+filesystem/config file is required. Do not put private URLs in public deployment
+JSON, `NEXT_PUBLIC_*`, browser props or recovery exports. Missing or invalid
+providers return `503 route_unavailable`; check these server variables and the
+selected qualified deployment before retrying.
+
+The ordinary Receive flow uses Phantom and the connected Miden Testnet account;
+no Arc wallet is needed when the independent worker executes the helper call.
+Activity retains authenticated progress through reloads. Its normal recovery
+screen accepts the original Solana source signature; an optional Arc transaction
+hash is only a locator that must pass full receipt verification. Recover the
+original transfer instead of creating another burn. When offered, download the
+verified call for a separately funded independent Arc payer to revalidate and
+execute. Temporary provider/worker outages do not prove failure or permit a
+replacement burn. Miden note inclusion means delivery; claim/consume in the
+recipient wallet makes the funds available and is reported separately.
+
+The incoming worker and existing downstream xReserve minter run independently of
+the browser. For local testnet worker use without AWS login:
+
+```bash
+git clone --branch test/cctp-local-signer https://github.com/0xMiden/miden-usdcx.git miden-usdcx-local
+```
+
+Follow that branch's [worker instructions](https://github.com/0xMiden/miden-usdcx/blob/test/cctp-local-signer/README.md):
+use its `config.local.example.json`, an operator-owned ignored `0600` dotenv file,
+a fresh dedicated Arc Testnet gas payer, explicit finite caps, one initialization
+and ordinary restarts with the same profile/key and intact SQLite journal. Never
+source the dotenv file, pass a private key on the command line, reuse an unknown
+sender history or delete a journal to retry. Production KMS support is separate
+and remains available. The existing downstream minter's operator must confirm
+current readiness; the frontend does not start or replace that service. Actual
+Phantom, provider, worker and end-to-end claim qualification remain release gates.
+
+The compiler-owned ABI is copied byte-for-byte to
+`src/bridge/providers/xreserve/abi/MidenCctpDepositHelper.json` from backend commit
+`1670643e29026ecd782e029d8b6b16ced576db37`, SHA256
+`237b93bc9629d086e6408754b97e400c9a780de3568bd1976f99059949cd201a`.
+The helper source SHA256 is
+`82a77d61051fd6f8e18f7fc44a59e6ce060083eeb5eb8f79613f5039399e473f`.
+The minimal TypeScript calls/getters/event are checked against this artifact;
+regenerate it in the backend owner rather than editing the copy independently.
 
 ## Network configuration and upgrades
 
@@ -273,6 +365,7 @@ npm run typecheck        # tsc --noEmit
 npm run lint             # eslint
 npm run check:config     # generated network configs validate offline
 npm run check:wasm-size  # st wasm under 24 MiB
+npm run check:usdcx-note # exact existing USDCx note identity
 npm run test             # vitest run
 npm run build            # next build --webpack
 ```
@@ -282,9 +375,13 @@ npm run build            # next build --webpack
 ```bash
 npm run playwright:install     # one-time: chromium + deps
 npm run test:browser           # production app; simulated external wallets and responses
+node --test scripts/test-helper-browser-guards.test.mjs
+npm run test:browser:helper    # isolated loopback-only helper fixtures
 ```
 
-CI runs the browser suite on pull requests and pushes to `main`. Production
+CI runs unit/type/lint/config/WASM/note checks, ordinary and isolated helper
+browsers, Cloudflare and Docker builds on pull requests, manual dispatch and
+pushes to `main` or `feat/cctp-all-sources`. Production
 deployment follows successful CI on `main`. Playwright runs the ordinary production build with the real wallet providers.
 Fixtures inject extension transports and intercept remote responses. Transaction
 checks inspect calldata or deserialize Miden wallet requests using the shipped
@@ -292,6 +389,10 @@ browser WASM; simulated acceptance is supplied only after checking the request.
 The browser runner supplies a placeholder public WalletConnect project ID and
 intercepts wallet discovery responses. No private keys, seeds, funded accounts,
 Reown account, or live signing are used.
+
+The helper runner requires Node 22.18.0, replaces registries only in its owned
+isolated copy and verifies that source registries and the dependency lock remain
+unchanged. Its synthetic qualification flags never alter production registries.
 
 Passing CI verifies UI, lifecycle, transaction construction and recovery under
 controlled external responses. It does not verify live proving, broadcasting,

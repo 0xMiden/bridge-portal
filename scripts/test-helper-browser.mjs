@@ -25,7 +25,15 @@ await fs.mkdir(evidenceRoot, { recursive: true });
 const runRoot = await fs.mkdtemp(path.join(evidenceRoot, "run-"));
 const reuseFixture = options.get("--reuse-fixture");
 const fixtureRoot = await fs.realpath(reuseFixture ?? await fs.mkdtemp(path.join(os.tmpdir(), "miden-helper-browser-")));
+const contains = (parent, child) => {
+  const relative = path.relative(parent, child);
+  return relative === "" || (relative !== ".." && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative));
+};
+for (const root of [sourceRoot, await fs.realpath(testRoot)])
+  assert(!contains(root, fixtureRoot) && !contains(fixtureRoot, root), "Source and fixture directories must be disjoint.");
 const logPath = path.join(runRoot, "commands.jsonl");
+const releasePaths = ["cctp-helper-public", "cctp-helper-server", "cctp-evm-helper-public", "cctp-evm-helper-server"].map(name => `src/config/${name}.json`);
+let sourceBinding;
 const owned = ["e2e/fixtures/cctp-helper-public.json", "e2e/fixtures/cctp-helper-server.json",
   "e2e/helper", "e2e/tests/helper/cctp-helper.spec.ts", "playwright.helper.config.ts", "scripts/test-helper-browser.mjs"];
 const excluded = new Set(["node_modules", ".git", ".next", ".open-next", ".wrangler", ".vercel", "coverage", "test-results", "playwright-report", ".cache", ".npmrc", ".yarnrc.yml", ".aws", ".ssh", ".config"]);
@@ -63,6 +71,11 @@ async function command(label, args, cwd, extraEnv = {}, executable = process.exe
 async function hashes(root, files) {
   return Promise.all(files.sort().map(async name => ({ path: name, sha256: sha(await fs.readFile(path.join(root, name))) })));
 }
+async function assertSourceUnchanged() {
+  if (!sourceBinding) return;
+  assert.equal(sha(await fs.readFile(path.join(sourceRoot, "package-lock.json"))), sourceBinding.lockHash, "Source dependency lock changed during the fixture run.");
+  assert.deepEqual(await hashes(sourceRoot, releasePaths), sourceBinding.releaseRegistries, "Source release registries changed during the fixture run.");
+}
 async function enumerate(root, relative = "") {
   const stat = await fs.lstat(path.join(root, relative));
   assert(!stat.isSymbolicLink(), `Refusing source symlink: ${relative}`);
@@ -96,6 +109,9 @@ try {
   const initialLock = await fs.readFile(path.join(sourceRoot, "package-lock.json"));
   manifest.sourceHash = sha(json(manifest.files));
   manifest.lockHash = sha(initialLock);
+  manifest.releaseRegistries = await hashes(sourceRoot, releasePaths);
+  sourceBinding = { lockHash: manifest.lockHash, releaseRegistries: manifest.releaseRegistries };
+  for (const name of releasePaths) assert(Array.isArray(JSON.parse(await fs.readFile(path.join(sourceRoot, name), "utf8"))), "Release registry must be an array.");
   if (reuseFixture) {
     const marker = JSON.parse(await fs.readFile(path.join(fixtureRoot, ".helper-fixture.json"), "utf8"));
     assert(marker.testOnly === true && marker.sourceRoot === fixtureRoot, "Refusing an unowned fixture directory.");
@@ -127,9 +143,6 @@ try {
     await fs.mkdir(path.dirname(target), { recursive: true });
     await fs.copyFile(path.join(testRoot, item), target);
   }
-  const releasePaths = ["cctp-helper-public", "cctp-helper-server", "cctp-evm-helper-public", "cctp-evm-helper-server"].map(name => `src/config/${name}.json`);
-  manifest.releaseRegistries = await hashes(sourceRoot, releasePaths);
-  for (const name of releasePaths) assert(Array.isArray(JSON.parse(await fs.readFile(path.join(sourceRoot, name), "utf8"))), "Release registry must be an array.");
   // Clone only an exact installed dependency graph. A symlink outside the build
   // root breaks Next standalone tracing. CoW copies keep writes owned and fall
   // back to ordinary copies where the filesystem does not support cloning.
@@ -158,8 +171,13 @@ try {
   const publicFixture = JSON.parse(await fs.readFile(path.join(fixtureRoot, "e2e/fixtures/cctp-helper-public.json"), "utf8"));
   const privateFixture = JSON.parse(await fs.readFile(path.join(fixtureRoot, "e2e/fixtures/cctp-helper-server.json"), "utf8"));
   for (const row of privateFixture) Object.assign(row, services.endpoints);
+  const providerSentinel = "helper-private-provider-sentinel";
+  for (const row of privateFixture) row.solanaRpc += `?key=${providerSentinel}`;
+  environment.CCTP_HELPER_SERVERS_JSON = JSON.stringify(privateFixture);
   await fs.writeFile(path.join(fixtureRoot, "src/config/cctp-helper-public.json"), json(publicFixture));
-  await fs.writeFile(path.join(fixtureRoot, "src/config/cctp-helper-server.json"), json(privateFixture));
+  // Exercise the actual request-time env resolver, with no tracked provider fallback.
+  for (const name of releasePaths.filter(name => name !== "src/config/cctp-helper-public.json"))
+    await fs.writeFile(path.join(fixtureRoot, name), json([]));
   await fs.writeFile(path.join(fixtureRoot, ".helper-fixture.json"), json({ testOnly: true, runRoot, sourceRoot: fixtureRoot, sourceHash: manifest.sourceHash }));
   // Redirect only the official reserve read boundary inside this owned Node process.
   // The production source and release configuration remain byte-identical.
@@ -167,17 +185,21 @@ try {
     NODE_OPTIONS: `--import=${path.join(fixtureRoot, "e2e/helper/fetch-fixtures.mjs")}` });
   const port = await loopbackPort();
   Object.assign(environment, { HELPER_BROWSER_RUN_ROOT: runRoot, HELPER_BROWSER_PORT: String(port), HELPER_FIXTURE_CONTROL_URL: services.controlUrl });
-  manifest.fixtureFiles = await hashes(fixtureRoot, ["src/config/cctp-helper-public.json", "src/config/cctp-helper-server.json", "playwright.helper.config.ts"]);
+  manifest.fixtureFiles = await hashes(fixtureRoot, [...releasePaths, "playwright.helper.config.ts"]);
+  manifest.providerInput = { source: "server-runtime-env", trackedProvidersEmpty: true, sentinelSha256: sha(providerSentinel) };
   await fs.writeFile(path.join(runRoot, "manifest.json"), json(manifest));
   const dedicated = await command("helper-collection", [playwright, "test", "--config", "playwright.helper.config.ts", "--list", "--reporter=list"], fixtureRoot);
   assert(/Total: [1-9]\d* tests?/.test(dedicated) && dedicated.includes("Solana manual"), "Dedicated collection must include nonzero manual Solana tests.");
   await command("fixture-config", ["--experimental-strip-types", "scripts/check-wallet-config.mjs"], fixtureRoot);
   await command("fixture-build", ["node_modules/next/dist/bin/next", "build", "--webpack"], fixtureRoot);
+  for (const name of await enumerate(fixtureRoot, ".next/static"))
+    assert(!(await fs.readFile(path.join(fixtureRoot, name))).includes(Buffer.from(providerSentinel)), "Private provider sentinel entered a browser asset.");
   manifest.buildId = (await fs.readFile(path.join(fixtureRoot, ".next/BUILD_ID"), "utf8")).trim();
   manifest.buildManifestHash = sha(await fs.readFile(path.join(fixtureRoot, ".next/build-manifest.json")));
   await fs.writeFile(path.join(runRoot, "manifest.json"), json(manifest));
   if (options.has("--http-only")) {
     await command("helper-http", ["e2e/helper/http-smoke.mjs"], fixtureRoot);
+    await assertSourceUnchanged();
     await fs.writeFile(path.join(runRoot, "result.json"), json({ state: "http-passed-browser-not-run", sourceHash: manifest.sourceHash, fixtureRoot, testOnly: true }));
     console.log(`HTTP checks passed; browser acceptance NOT RUN. Evidence: ${runRoot}`);
   } else {
@@ -189,8 +211,7 @@ try {
   await command("helper-execution", args, fixtureRoot);
   const report = JSON.parse(await fs.readFile(path.join(runRoot, "playwright-results.json"), "utf8"));
   assert(report.stats.expected > 0 && report.stats.unexpected === 0 && report.stats.skipped === 0, "Zero/skipped/failed tests are not a pass.");
-  assert.equal(sha(await fs.readFile(path.join(sourceRoot, "package-lock.json"))), manifest.lockHash, "Writer lock changed during test run; repeat against the new candidate.");
-  assert.deepEqual(await hashes(sourceRoot, releasePaths), manifest.releaseRegistries, "Source release registries changed during the fixture run.");
+  await assertSourceUnchanged();
   await fs.writeFile(path.join(runRoot, "result.json"), json({ state: "passed", sourceHash: manifest.sourceHash, stats: report.stats, fixtureRoot, testOnly: true }));
   console.log(`Helper browser proof passed against ${manifest.sourceHash}. Evidence: ${runRoot}`);
   }
@@ -200,6 +221,14 @@ try {
   console.error(error);
   console.error(`Evidence: ${runRoot}; isolated copy retained at ${fixtureRoot}`);
 } finally {
+  try {
+    await assertSourceUnchanged();
+    if (sourceBinding) await fs.writeFile(path.join(runRoot, "source-integrity.json"), json({ state: "unchanged", ...sourceBinding }));
+  } catch (error) {
+    process.exitCode = 1;
+    await fs.writeFile(path.join(runRoot, "result.json"), json({ state: "failed", error: String(error), fixtureRoot, testOnly: true }));
+    console.error(error);
+  }
   await stopOwned();
   process.removeListener("SIGINT", interrupt);
   process.removeListener("SIGTERM", interrupt);

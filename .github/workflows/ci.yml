@@ -2,8 +2,9 @@ name: ci
 
 on:
   pull_request:
+  workflow_dispatch:
   push:
-    branches: [main]
+    branches: [main, feat/cctp-all-sources]
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
@@ -21,9 +22,10 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 22.18.0
           cache: npm
       - run: npm ci
+      - run: node --test scripts/test-helper-browser-guards.test.mjs
       - run: npm run check:config
       - run: npm run typecheck
       - run: npm run lint
@@ -40,7 +42,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 22.18.0
           cache: npm
       - run: npm ci
       - run: npx playwright install --with-deps chromium
@@ -53,16 +55,36 @@ jobs:
           path: test-results/
           retention-days: 7
 
+  helper:
+    name: isolated helper browser
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.18.0
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:browser:helper
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: helper-browser-results
+          path: test-results/helper-runs/
+          retention-days: 7
+
   cloudflare:
     name: Cloudflare build
-    needs: [check, mock]
+    needs: [check, mock, helper]
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 22.18.0
           cache: npm
       - run: npm ci
       - run: npm run cf:build
