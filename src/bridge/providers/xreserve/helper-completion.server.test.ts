@@ -73,6 +73,21 @@ describe("finalized helper/transmitter/reserve receipt binding", () => {
     const { source, message } = await fixture();
     expect(validateHelperMessage(source, message, {}).net).toBe(999990n);
   });
+  it("ignores unrelated CCTP receives in an otherwise unambiguous permissionless wrapper", async () => {
+    const { receipt, input, client } = await fixture();
+    const unrelated = { ...receipt.logs[0], topics: structuredClone(receipt.logs[0].topics), logIndex: 3 };
+    unrelated.topics[1] = pad(deployment.arc.tokenMessenger.address); unrelated.topics[2] = hash(2222);
+    receipt.logs.push(unrelated);
+    await expect(verifyHelperReceipt(asClient(client), receipt, deployment, input, 5000n)).resolves.toMatchObject({ arc: { transactionHash: txHash } });
+  });
+  it("classifies a finalized identical multi-deposit wrapper as review without selecting proof or advancing cursor", async () => {
+    const { receipt, input, client } = await fixture();
+    receipt.logs.push({ ...receipt.logs[1], logIndex: 3 });
+    const scan = { nextBlock: "1", checkpoint: { block: "1", hash: hash(1) } };
+    const result = await observeHelperCompletion(asClient(client), deployment, { ...input, arcHash: txHash, scan });
+    expect(result).toMatchObject({ needsAttention: true, scan, warning: expect.stringContaining("multiple matching") });
+    expect(result.arc).toBeUndefined(); expect(result.intent).toBeUndefined();
+  });
   it.each(["reverted", "future", "block-hash", "removed", "helper-address", "helper-nonce", "helper-amount", "transmitter", "caller", "sender", "body", "finality", "reserve-depositor", "reserve-amount", "reserve-fee", "reserve-hook", "reserve-faucet", "reserve-token", "double-deposit"])("rejects %s tuple mutation", async mutation => {
     const { receipt, input, client } = await fixture();
     if (mutation === "reverted") receipt.status = "reverted";

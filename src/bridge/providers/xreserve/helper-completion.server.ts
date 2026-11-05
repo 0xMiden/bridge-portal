@@ -15,6 +15,7 @@ export const HELPER_SCAN_BLOCKS = 2000n;
 const MAX_LOGS = 64;
 const MAX_RECEIPT_LOGS = 256;
 const depositedEvent = getAbiItem({ abi: helperAbi, name: "DepositedToMiden" });
+class AmbiguousHelperReceipt extends Error {}
 
 /** Every observation has one finite page and a shared wall-clock/body budget. */
 export function completionClient(server: Pick<HelperServer, "arcRpc">) {
@@ -67,7 +68,8 @@ function readHelperEvent(receipt: TransactionReceipt, deployment: HelperDestinat
   const message = decodeCctpMessage(input.message);
   const events = parseEventLogs({ abi: helperAbi, eventName: "DepositedToMiden", strict: true,
     logs: receipt.logs.filter(log => log.address.toLowerCase() === deployment.helper.address) });
-  if (events.length !== 1) throw new Error("Ambiguous helper execution.");
+  if (events.length > 1) throw new AmbiguousHelperReceipt("Multiple helper executions.");
+  if (events.length !== 1) throw new Error("Missing matching helper execution.");
   const event = events[0], args = event.args;
   if (args.sourceDomain !== message.transfer.sourceDomain || args.cctpNonce !== message.nonce) throw new Error("Helper source/nonce mismatch.");
   if (args.midenRecipient !== input.recipient || args.amount.toString() !== input.netAmount) throw new Error("Helper recipient/principal mismatch.");
@@ -77,8 +79,10 @@ function readHelperEvent(receipt: TransactionReceipt, deployment: HelperDestinat
 function readAuthenticatedReceive(receipt: TransactionReceipt, deployment: HelperDestination, input: CompletionInput) {
   const message = decodeCctpMessage(input.message);
   const received = parseEventLogs({ abi: helperMessageAbi, eventName: "MessageReceived", strict: true,
-    logs: receipt.logs.filter(log => log.address.toLowerCase() === deployment.arc.messageTransmitter.address) });
-  if (received.length !== 1) throw new Error("Ambiguous authenticated CCTP receive.");
+    logs: receipt.logs.filter(log => log.address.toLowerCase() === deployment.arc.messageTransmitter.address) })
+    .filter(({ args }) => args.caller.toLowerCase() === deployment.helper.address && args.sourceDomain === message.transfer.sourceDomain && args.nonce === message.nonce);
+  if (received.length > 1) throw new AmbiguousHelperReceipt("Multiple matching CCTP receives.");
+  if (received.length !== 1) throw new Error("Missing matching authenticated CCTP receive.");
   const event = received[0], args = event.args;
   if (args.caller.toLowerCase() !== deployment.helper.address || args.sourceDomain !== message.transfer.sourceDomain || args.nonce !== message.nonce)
     throw new Error("CCTP caller/source/nonce mismatch.");
@@ -89,13 +93,14 @@ function readAuthenticatedReceive(receipt: TransactionReceipt, deployment: Helpe
 }
 
 function readHelperReserve(receipt: TransactionReceipt, deployment: HelperDestination, input: CompletionInput) {
-  const deposit = readDeposit(receipt, input.recovery);
-  if (deposit.sender !== deployment.helper.address || deposit.amount !== input.netAmount || arcRecipient(deposit.recipient) !== input.recipient)
-    throw new Error("Reserve deposit does not match helper execution.");
   const events = parseEventLogs({ abi: xReserveAbi, eventName: "DepositedToRemote", strict: true,
     logs: receipt.logs.filter(log => log.address.toLowerCase() === deployment.arc.xReserve.address) })
     .filter(log => log.args.remoteDomain === deployment.miden.domain && log.args.localToken.toLowerCase() === deployment.arc.usdc.address);
-  if (events.length !== 1) throw new Error("Ambiguous reserve deposit.");
+  if (events.length > 1) throw new AmbiguousHelperReceipt("Multiple supported reserve deposits.");
+  if (events.length !== 1) throw new Error("Missing supported reserve deposit.");
+  const deposit = readDeposit(receipt, input.recovery);
+  if (deposit.sender !== deployment.helper.address || deposit.amount !== input.netAmount || arcRecipient(deposit.recipient) !== input.recipient)
+    throw new Error("Reserve deposit does not match helper execution.");
   return { deposit, logIndex: events[0].logIndex };
 }
 
@@ -187,8 +192,11 @@ export async function observeHelperCompletion(client: Client, deployment: Helper
     const page = input.arcHash ? { hash: input.arcHash, scan: input.scan, catchingUp: false }
       : await readPage(client, deployment, input, head.number);
     return await readCompletion(client, deployment, input, head.number, page);
-  } catch {
+  } catch (error) {
+    const ambiguous = error instanceof AmbiguousHelperReceipt;
     return { schemaVersion: 1, stage: "attested", catchingUp: true, scan: input.scan,
-      warning: "Arc completion could not be verified. Saved progress and source locks are retained; tracking will retry." };
+      needsAttention: ambiguous || undefined,
+      warning: ambiguous ? "Arc execution contains multiple matching events. Keep the transaction hashes for review; do not burn again."
+        : "Arc completion could not be checked. Keep this transfer's source signature and try again; do not burn again." };
   }
 }

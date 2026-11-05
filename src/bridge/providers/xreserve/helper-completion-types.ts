@@ -19,7 +19,12 @@ export const helperCompletionSchema = z.object({
     faucet: z.string().regex(/^0x[0-9a-f]{30}$/), sender: address, nonce: bytes32,
     payload: z.templateLiteral(["0x", z.string().max(480).regex(/^[0-9a-f]+$/)]), messageHash: bytes32,
   }).strict().optional(),
-}).strict();
+}).strict().superRefine((value, context) => {
+  if (value.stage !== "attested" && !value.arc) context.addIssue({ code: "custom", message: "Destination progress requires its verified Arc receipt." });
+  if (value.stage === "reserve_attested" && !value.intent) context.addIssue({ code: "custom", message: "Reserve progress requires its distinct authorization." });
+  if (value.intent && value.stage !== "reserve_attested") context.addIssue({ code: "custom", message: "Selected authorization requires verified reserve progress." });
+  if (value.needsAttention && value.intent) context.addIssue({ code: "custom", message: "Ambiguous authorization cannot select a reserve nonce." });
+});
 export type ArcCheckpoint = z.infer<typeof arcCheckpointSchema>;
 export type ArcScan = z.infer<typeof arcScanSchema>;
 export type HelperCompletion = z.infer<typeof helperCompletionSchema>;
