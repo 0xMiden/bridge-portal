@@ -99,12 +99,21 @@ describe("finalized helper/transmitter/reserve receipt binding", () => {
     const result = await observeHelperCompletion(asClient(client), deployment, input);
     expect(result.stage).toBe("attested"); expect(result.arc).toBeUndefined(); expect(result.intent).toBeUndefined();
   });
+  it("a caller's different recovery reserve cannot select an RPC contract or Circle lookup", async () => {
+    const { client, input } = await fixture();
+    const changed = structuredClone(recovery);
+    changed.document.supportedEvmChains["arc-testnet"]!.bridges.usdcx!.deposit = { route: "xreserve", xReserve: deployment.helper.address };
+    expect((await observeHelperCompletion(asClient(client), deployment, { ...input, recovery: changed })).arc).toBeUndefined();
+    expect(client.getBlock).not.toHaveBeenCalled(); expect(circle).not.toHaveBeenCalled();
+  });
   it("deduplicates exact payload bytes and fails closed for differing matching reserve nonces", async () => {
     const { recipient } = await fixture();
     const deposit = { amount: "999990", recipient: `0x${recipient.slice(34, 64)}`, faucet: deployment.miden.faucetId, sender: deployment.helper.address };
     const row = { remoteDomain: 10007, payload: payload(recipient), attestation: "0x12" as Hex };
     expect(findDepositAttestation([row, { ...row }], deposit, recovery).intent?.nonce).toBe(reserveNonce);
-    expect(findDepositAttestation([row, { ...row, payload: payload(recipient, hash(801)) }], deposit, recovery)).toMatchObject({ warning: expect.stringContaining("multiple matching") });
+    const ambiguous = findDepositAttestation([row, { ...row, payload: payload(recipient, hash(801)) }], deposit, recovery);
+    expect(ambiguous).toMatchObject({ warning: expect.stringContaining("multiple matching") });
+    expect(ambiguous.candidates).toHaveLength(2); expect(ambiguous.intent).toBeUndefined();
     expect(findDepositAttestation([{ ...row, messageHash: hash(4) }], deposit, recovery).intent).toBeUndefined();
   });
 });
@@ -127,6 +136,9 @@ describe("finite finalized helper discovery", () => {
     await observeHelperCompletion(asClient(client), deployment, { ...input, anchor: { block: "4500", hash: hash(4500) } });
     expect(client.getLogs).toHaveBeenLastCalledWith(expect.objectContaining({ fromBlock: 4500n, toBlock: 5000n }));
     await observeHelperCompletion(asClient(client), deployment, { ...input, scan: { nextBlock: "4500", checkpoint: { block: "4499", hash: hash(1) } } });
+    expect(client.getLogs).toHaveBeenLastCalledWith(expect.objectContaining({ fromBlock: 1n }));
+    client.getBlock.mockImplementation(async ({ blockNumber }) => ({ number: blockNumber === 4500n ? 100n : blockNumber ?? 5000n, hash: hash(blockNumber ?? 5000n) }));
+    await observeHelperCompletion(asClient(client), deployment, { ...input, anchor: { block: "4500", hash: hash(4500) } });
     expect(client.getLogs).toHaveBeenLastCalledWith(expect.objectContaining({ fromBlock: 1n }));
   });
   it.each(["timeout", "429", "overfull", "noncanonical", "wrong-hash"])("preserves cursor and source locks on %s", async failure => {

@@ -21,7 +21,7 @@ const attestationsSchema = z.object({
 });
 type Attestation = z.infer<typeof attestationsSchema>["attestations"][number];
 type Deposit = Omit<ArcDepositIntent, "nonce">;
-type AttestationResult = { intent?: ArcDepositIntent; warning?: string };
+type AttestationResult = { intent?: ArcDepositIntent; warning?: string; candidates?: { payload: Hex; messageHash: Hex; nonce: Hex }[] };
 
 export class UnsupportedArcDepositError extends Error {
   name = "UnsupportedArcDepositError";
@@ -87,7 +87,7 @@ function readMatchingIntent(attestation: Attestation, deposit: Deposit, recovery
 export function findDepositAttestation(attestations: Attestation[], deposit: Deposit, recovery?: BridgeConfig): AttestationResult {
   const arc = arcConfig(recovery);
   let unreadable = false;
-  const matches = new Map<string, ArcDepositIntent>();
+  const matches = new Map<string, ReturnType<typeof readMatchingIntent>>();
   for (const attestation of attestations) {
     if (attestation.remoteDomain !== arc.midenDomain || !attestation.attestation) continue;
     try {
@@ -98,7 +98,8 @@ export function findDepositAttestation(attestations: Attestation[], deposit: Dep
       unreadable = true;
     }
   }
-  if (matches.size > 1) return { warning: "Circle returned multiple matching deposit nonces. Attribution needs review." };
+  if (matches.size > 1) return { warning: "Circle returned multiple matching deposit nonces. Attribution needs review.",
+    candidates: [...matches.values()].map(intent => ({ payload: intent.payload, messageHash: intent.messageHash, nonce: intent.nonce as Hex })) };
   if (matches.size === 1) return { intent: [...matches.values()][0] };
   return unreadable ? { warning: "Circle returned details that do not match this deposit. Tracking will retry." } : {};
 }

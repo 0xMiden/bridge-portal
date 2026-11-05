@@ -116,7 +116,7 @@ async function validatedStart(client: Client, checkpoint: ArcCheckpoint, next: b
   if (number < floor || number > head) return;
   if (next < floor || next > head + 1n || next > number + 1n) return;
   const block = await client.getBlock({ blockNumber: number });
-  return block.hash === checkpoint.hash ? next : undefined;
+  return block.number === number && block.hash === checkpoint.hash ? next : undefined;
 }
 
 async function initialBlock(client: Client, deployment: HelperDestination, input: CompletionInput, head: bigint) {
@@ -167,7 +167,8 @@ async function readCompletion(client: Client, deployment: HelperDestination, inp
   const verified = await verifyHelperReceipt(client, receipt, deployment, input, head);
   const attested = await getArcDepositAttestation(page.hash, verified.deposit, input.recovery);
   const result: HelperCompletion = { schemaVersion: 1, stage: "arc_deposited", catchingUp: false, scan: page.scan,
-    arc: verified.arc, warning: attested.warning, needsAttention: attested.warning?.includes("multiple matching") || undefined };
+    arc: verified.arc, warning: attested.warning, candidates: attested.candidates,
+    needsAttention: attested.warning?.includes("multiple matching") || undefined };
   const intent = attested.intent;
   if (intent?.payload && intent.messageHash) {
     result.stage = "reserve_attested";

@@ -10,6 +10,8 @@ export const helperCompletionSchema = z.object({
   catchingUp: z.boolean(),
   warning: z.string().max(400).optional(),
   needsAttention: z.boolean().optional(),
+  candidates: z.array(z.object({ payload: z.templateLiteral(["0x", z.string().max(480).regex(/^[0-9a-f]+$/)]),
+    messageHash: bytes32, nonce: bytes32 }).strict()).max(64).optional(),
   arc: z.object({ transactionHash: bytes32, block: decimal, blockHash: bytes32,
     helperLogIndex: z.int().nonnegative(), messageLogIndex: z.int().nonnegative(), reserveLogIndex: z.int().nonnegative(),
   }).strict().optional(),
