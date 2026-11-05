@@ -20,7 +20,12 @@ export function normalizeActivityState<T extends BridgeActivity>(activity: T): T
 
 /** Merge observations without allowing stale polls to regress a terminal transfer. */
 export function applyActivityPatch(activity: Activity, patch: Partial<Activity>): Activity {
-  if (activity.cctpHelper && patch.cctpHelper) patch = { ...patch, cctpHelper: mergeHelperProgress(activity.cctpHelper, patch.cctpHelper) };
+  if (activity.cctpHelper && patch.cctpHelper) {
+    const merged = mergeHelperProgress(activity.cctpHelper, patch.cctpHelper);
+    // Receipt fields from a conflicting observation belong to its rejected proof.
+    if (!merged.accepted) return activity;
+    patch = { ...patch, cctpHelper: merged.helper };
+  }
   const previous = activityState(activity);
   const observed = Object.fromEntries(Object.entries(patch).filter(([, value]) => value !== undefined));
   let next = normalizeActivityState({ ...activity, ...observed, updatedAt: Date.now() });

@@ -108,8 +108,8 @@ describe("normal Solana signature recovery and durable migration", () => {
         arc: { transactionHash: `0x${"03".repeat(32)}` as const, block: "200", blockHash: `0x${"02".repeat(32)}` as const, helperLogIndex: 2, messageLogIndex: 0, reserveLogIndex: 1 } } };
     const stale = { ...helper, stage: "attested" as const, completion: { schemaVersion: 1 as const, stage: "attested" as const, catchingUp: true },
       authorization: { ...helper.authorization, arcAnchor: { block: "150", hash: `0x${"04".repeat(32)}` as const } } };
-    expect(mergeHelperProgress(helper, stale)).toMatchObject({ stage: "arc_deposited", completion: { arc: helper.completion.arc }, authorization: { arcAnchor: helper.authorization.arcAnchor } });
-    expect(mergeHelperProgress(helper, { ...stale, signature: "1".repeat(64) })).toEqual(helper);
+    expect(mergeHelperProgress(helper, stale)).toMatchObject({ accepted: true, helper: { stage: "arc_deposited", completion: { arc: helper.completion.arc }, authorization: { arcAnchor: helper.authorization.arcAnchor } } });
+    expect(mergeHelperProgress(helper, { ...stale, signature: "1".repeat(64) })).toEqual({ accepted: false, helper });
   });
   it("accepts canonical lower cursor resets and refuses stale resets or stale copies of the corrupt hint", async () => {
     const { activity } = await fixture();
@@ -118,12 +118,12 @@ describe("normal Solana signature recovery and durable migration", () => {
     const helper = { ...activity.cctpHelper!, stage: "attested" as const,
       completion: { schemaVersion: 1 as const, stage: "attested" as const, catchingUp: true, scan: corrupt } };
     const reset = { nextBlock: "2001", checkpoint: { block: "2000", hash: hash(2000) }, resetFrom: corrupt };
-    const repaired = mergeHelperProgress(helper, { ...helper, completion: { ...helper.completion, scan: reset } });
+    const repaired = mergeHelperProgress(helper, { ...helper, completion: { ...helper.completion, scan: reset } }).helper;
     expect(repaired.completion?.scan).toEqual(reset);
     const advanced = { nextBlock: "4001", checkpoint: { block: "4000", hash: hash(4000) }, resetFrom: corrupt };
-    const current = mergeHelperProgress(repaired, { ...repaired, completion: { ...helper.completion, scan: advanced } });
-    expect(mergeHelperProgress(current, helper).completion?.scan).toEqual(advanced);
-    expect(mergeHelperProgress(current, { ...helper, completion: { ...helper.completion, scan: reset } }).completion?.scan).toEqual(advanced);
+    const current = mergeHelperProgress(repaired, { ...repaired, completion: { ...helper.completion, scan: advanced } }).helper;
+    expect(mergeHelperProgress(current, helper).helper.completion?.scan).toEqual(advanced);
+    expect(mergeHelperProgress(current, { ...helper, completion: { ...helper.completion, scan: reset } }).helper.completion?.scan).toEqual(advanced);
     expect(current.signature).toBe(helper.signature); expect(current.stage).toBe("attested");
   });
   it("drops malformed efficiency hints at storage load while preserving the source/bundle and burn lock", async () => {

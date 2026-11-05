@@ -32,8 +32,11 @@ function mergeScan(previous?: ArcScan, incoming?: ArcScan) {
 }
 function mergeCompletion(previous?: HelperCompletion, incoming?: HelperCompletion): HelperCompletion | undefined {
   if (!incoming) return previous;
-  const stage = previous && order[previous.stage] > order[incoming.stage] ? previous.stage : incoming.stage;
   const scan = mergeScan(previous?.scan, incoming.scan);
+  // Ambiguity is review-only evidence, not a later stage of a selected nonce.
+  const review = previous?.needsAttention ? previous : incoming.needsAttention ? incoming : undefined;
+  if (review) return { ...review, scan, arc: review.arc ?? previous?.arc, intent: undefined };
+  const stage = previous && order[previous.stage] > order[incoming.stage] ? previous.stage : incoming.stage;
   return { ...previous, ...incoming, stage, scan, arc: incoming.arc ?? previous?.arc, intent: incoming.intent ?? previous?.intent };
 }
 function progressStage(previous: HelperActivity, incoming: HelperActivity) {
@@ -49,14 +52,19 @@ function earliestAnchor(previous: HelperActivity, incoming: HelperActivity) {
 }
 
 /** Concurrent polls merge into the newest durable proof, never into their stale copy. */
-export function mergeHelperProgress(previous: HelperActivity, incoming: HelperActivity): HelperActivity {
-  if (!sameAttempt(previous, incoming) || contradictsProof(previous, incoming)) return previous;
-  const stage = progressStage(previous, incoming);
+export function mergeHelperProgress(previous: HelperActivity, incoming: HelperActivity): { accepted: boolean; helper: HelperActivity } {
+  if (!sameAttempt(previous, incoming) || contradictsProof(previous, incoming)) return { accepted: false, helper: previous };
+  // Stale polls cannot clear review evidence or erase verified delivery.
+  const clearsReview = previous.completion?.needsAttention && !incoming.completion?.needsAttention;
+  const disputesDelivery = previous.stage === "delivered" && incoming.completion?.needsAttention;
+  if (clearsReview || disputesDelivery) return { accepted: false, helper: previous };
+  const completion = mergeCompletion(previous.completion, incoming.completion);
+  const stage = completion?.needsAttention ? completion.stage : progressStage(previous, incoming);
   const sourceEvidence = incoming.sourceEvidence ?? previous.sourceEvidence, bundle = incoming.bundle ?? previous.bundle;
   const sourceResolved = stage === "source_failed" || !!sourceEvidence || !!bundle;
-  return { ...previous, ...incoming, stage, sourceEvidence, bundle,
-    completion: mergeCompletion(previous.completion, incoming.completion), signature: incoming.signature ?? previous.signature,
+  return { accepted: true, helper: { ...previous, ...incoming, stage, sourceEvidence, bundle,
+    completion, signature: incoming.signature ?? previous.signature,
     signedBytes: sourceResolved ? undefined : incoming.signedBytes ?? previous.signedBytes,
     authorization: { ...incoming.authorization, arcAnchor: earliestAnchor(previous, incoming) },
-  };
+  } };
 }
