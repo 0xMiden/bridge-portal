@@ -111,7 +111,7 @@ async function submitBridgeTransferLocked(input: TransferSubmission, effects: Su
       const helper = activity.cctpHelper, auth = helper?.authorization;
       return helper && auth && helper.attemptId !== input.helperAttemptId &&
         manualIntentKey(auth.deployment, auth.sourceAccount, auth.grossAmount, auth.midenRecipient) === intent &&
-        helper.stage !== "source_failed";
+        !["source_failed", "delivered"].includes(helper.stage);
     });
     if (unresolved) { effects.navigate(`/activity/${unresolved.id}`); effects.onError("Recover the existing source attempt. Do not burn again."); return; }
   }

@@ -17,7 +17,7 @@ declare global {
       mode: WalletMode;
       walletCalls: number;
       storageFailure: "none" | "reviewed" | "signed";
-      storageWrites: { id: string; attemptId: string; stage: string; signedBytes?: string }[];
+      storageWrites: { id: string; attemptId: string; stage: string; signedBytes?: string; arcAnchor?: { block: string; hash: string } }[];
       changeAccount: () => void;
       replaceProvider: () => void;
       disconnect: () => void;
@@ -84,8 +84,8 @@ export async function installPhantom(page: Page, mode: WalletMode = "normal") {
     const setItem = Storage.prototype.setItem;
     Storage.prototype.setItem = function (key: string, value: string) {
       if (key === "miden.bridge.ui.activities.v2") {
-        const rows = JSON.parse(value) as { id: string; cctpHelper?: { attemptId: string; stage: string; signedBytes?: string } }[];
-        for (const row of rows) if (row.cctpHelper) window.helperFixture.storageWrites.push({ id: row.id, attemptId: row.cctpHelper.attemptId, stage: row.cctpHelper.stage, signedBytes: row.cctpHelper.signedBytes });
+        const rows = JSON.parse(value) as { id: string; cctpHelper?: { attemptId: string; stage: string; signedBytes?: string; authorization: { arcAnchor?: { block: string; hash: string } } } }[];
+        for (const row of rows) if (row.cctpHelper) window.helperFixture.storageWrites.push({ id: row.id, attemptId: row.cctpHelper.attemptId, stage: row.cctpHelper.stage, signedBytes: row.cctpHelper.signedBytes, arcAnchor: row.cctpHelper.authorization.arcAnchor });
         if (window.helperFixture.storageFailure !== "none" && rows.some(row => row.cctpHelper && (window.helperFixture.storageFailure === "reviewed" || row.cctpHelper.signedBytes)))
           throw new DOMException("Fixture storage quota exhausted", "QuotaExceededError");
       }

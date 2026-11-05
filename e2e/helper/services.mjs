@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { helperReceiptFixture } from "./receipt-fixture.mjs";
 import { createHash } from "node:crypto";
 import fs from "node:fs/promises";
 import http from "node:http";
@@ -217,6 +218,31 @@ export async function startFixtureServices({ fixtureRoot, runRoot }) {
   async function arc(method, params) {
     if (method === "eth_chainId") return `0x${deployment.arc.chainId.toString(16)}`;
     if (method === "eth_blockNumber") return "0x69";
+    if (method === "eth_getBlockByNumber") {
+      const number = params[0] === "finalized" || params[0] === "latest" ? (scenario.arcCompleted ? "0x6a" : "0x69") : params[0];
+      return { number, hash: `0x${BigInt(number).toString(16).padStart(64, "0")}`, parentHash: `0x${"00".repeat(32)}`,
+        timestamp: "0x69000000", transactions: [], gasLimit: "0x1c9c380", gasUsed: "0x0", extraData: "0x", logsBloom: `0x${"00".repeat(256)}`,
+        miner: `0x${"00".repeat(20)}`, receiptsRoot: `0x${"00".repeat(32)}`, stateRoot: `0x${"00".repeat(32)}`, transactionsRoot: `0x${"00".repeat(32)}` };
+    }
+    if (method === "eth_getLogs") {
+      if (scenario.arcUnavailable) throw new Error("Synthetic Arc history unavailable");
+      if (!scenario.arcCompleted) return [];
+      const record = [...transactions.values()][0];
+      if (!record) return [];
+      const completed = helperReceiptFixture(deployment, record, await attested(record), scenario);
+      const filter = params[0];
+      assert.equal(filter.address.toLowerCase(), deployment.helper.address);
+      assert.equal(filter.topics.length, 4);
+      if (BigInt(filter.fromBlock) > 106n || BigInt(filter.toBlock) < 106n) return [];
+      return completed.receipt.logs.filter(log => log.address === deployment.helper.address && log.topics.every((topic, index) => topic === filter.topics[index]));
+    }
+    if (method === "eth_getTransactionReceipt") {
+      if (scenario.arcUnavailable || !scenario.arcCompleted) return null;
+      const record = [...transactions.values()][0];
+      if (!record) return null;
+      const completed = helperReceiptFixture(deployment, record, await attested(record), scenario);
+      return params[0] === completed.hash ? completed.receipt : null;
+    }
     if (method === "eth_getCode") {
       assert([deployment.helper, ...Object.values(deployment.arc).filter(value => typeof value === "object")].some(value => value.address === params[0].toLowerCase()));
       return scenario.codeMismatch === params[0].toLowerCase() ? "0x60016000" : "0x60006000";
@@ -318,13 +344,21 @@ export async function startFixtureServices({ fixtureRoot, runRoot }) {
     const url = new URL(request.url, "http://127.0.0.1");
     assert.equal(request.method, "GET"); calls.push({ kind: "iris", method: url.pathname });
     if (url.pathname === "/v2/burn/USDC/fees/5/26") return reply(response, [{ finalityThreshold: 2000, minimumFee: scenario.feeBps }]);
+    if (url.pathname === "/v1/attestations") {
+      const record = [...transactions.values()][0];
+      if (!scenario.arcCompleted || !scenario.reserveAttested || !record) return reply(response, { attestations: [] });
+      const completed = helperReceiptFixture(deployment, record, await attested(record), scenario);
+      assert.equal(url.searchParams.get("txHash"), completed.hash);
+      const row = payload => ({ remoteDomain: 10007, payload, messageHash: keccak256(payload), attestation: `0x${"ab".repeat(65)}` });
+      return reply(response, { attestations: scenario.reserveAmbiguous ? [row(completed.payload), row(completed.alternatePayload)] : [row(completed.payload)] });
+    }
     assert.equal(url.pathname, "/v2/messages/5");
     const record = transactions.get(url.searchParams.get("transactionHash"));
     const row = record && !scenario.attestationPending ? await attested(record) : null;
     reply(response, { sourceTxHash: row?.sourceTxHash ?? url.searchParams.get("transactionHash"),
       messages: row ? (scenario.mutation === "ambiguous" ? [row, { ...row }] : [row]) : [] });
   });
-  const state = () => ({ scenario, calls, sends, simulations, transactions: [...transactions.values()].map(({ sourceMessage, raw, ...value }) => ({ ...value, sourceMessage: `0x${sourceMessage.toString("hex")}`, raw })) });
+  const state = () => ({ scenario, calls, sends, simulations, arcHashes: [...transactions.keys()].map(signature => keccak256(`0x${Buffer.from(signature).toString("hex")}`)), transactions: [...transactions.values()].map(({ sourceMessage, raw, ...value }) => ({ ...value, sourceMessage: `0x${sourceMessage.toString("hex")}`, raw })) });
   const controlUrl = await listen(async (request, response) => {
     assert(!request.headers.origin, "Fixture controls are test-process only.");
     const url = new URL(request.url, "http://127.0.0.1");

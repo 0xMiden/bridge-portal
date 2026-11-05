@@ -220,6 +220,10 @@ export function sourceExplorer(activity: BridgeActivity): ExplorerLink {
 }
 
 export function destinationExplorer(activity: BridgeActivity): ExplorerLink {
+  if (activity.cctpHelper && fullHash(activity.xreserveNoteId)) return {
+    label: "View exact note on Midenscan", available: activity.xreserveMidenBlock !== undefined,
+    href: `${midenNetworks[activity.environment ?? "testnet"].explorer}/note/${activity.xreserveNoteId}`,
+  };
   if (activity.mode === "receive") {
     // Midenscan's /tx/ page errors on a cold load (it only renders after a
     // manual refresh — its own message says so), so a deep link to the Miden
@@ -322,10 +326,10 @@ export function buildDiagnostics(
     }),
     lastMonitorError: extra.monitorError || undefined,
     manualEvm: activity.cctpEvmHelper,
-    manual: activity.cctpHelper ? { execution: "manual", deploymentId: activity.cctpHelper.authorization.deploymentId,
+    manual: activity.cctpHelper ? { execution: activity.cctpHelper.execution, deploymentId: activity.cctpHelper.authorization.deploymentId,
       authorization: activity.cctpHelper.authorization, attemptId: activity.cctpHelper.attemptId, stage: activity.cctpHelper.stage,
       signature: activity.cctpHelper.signature, eventAccount: activity.cctpHelper.eventAccount,
       scanStartSlot: activity.cctpHelper.scanStartSlot, lastValidBlockHeight: activity.cctpHelper.lastValidBlockHeight,
-      reason: activity.cctpHelper.reason, sourceEvidence: activity.cctpHelper.sourceEvidence } : undefined,
+      reason: activity.cctpHelper.reason, sourceEvidence: activity.cctpHelper.sourceEvidence, completion: activity.cctpHelper.completion } : undefined,
   };
 }

@@ -2,6 +2,7 @@ import type { Activity, BridgeActivity } from "./core/models";
 import { directionFor } from "./providers/registry";
 import { activityStartedAt, stampLegTimes } from "./core/rules";
 import { shortAddress } from "../wallets/identity";
+import { mergeHelperProgress } from "./providers/xreserve/helper-progress";
 
 /** One interpretation for storage, polling, history and receipts. */
 export function activityState(activity: BridgeActivity) {
@@ -19,6 +20,7 @@ export function normalizeActivityState<T extends BridgeActivity>(activity: T): T
 
 /** Merge observations without allowing stale polls to regress a terminal transfer. */
 export function applyActivityPatch(activity: Activity, patch: Partial<Activity>): Activity {
+  if (activity.cctpHelper && patch.cctpHelper) patch = { ...patch, cctpHelper: mergeHelperProgress(activity.cctpHelper, patch.cctpHelper) };
   const previous = activityState(activity);
   const observed = Object.fromEntries(Object.entries(patch).filter(([, value]) => value !== undefined));
   let next = normalizeActivityState({ ...activity, ...observed, updatedAt: Date.now() });

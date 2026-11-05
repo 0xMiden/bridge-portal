@@ -1,12 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { encodeFunctionData } from "viem";
-import { validateManualHelperAttestation, manualApi, manualRequestJson, limitManualRequest } from "./helper-manual.server";
+import { encodeFunctionData, keccak256 } from "viem";
+import { validateManualHelperAttestation, manualApi, manualRequestJson, limitManualRequest, helperObservationRequestSchema } from "./helper-manual.server";
 import { validateManualSource } from "../../solana/source-transaction";
 import { guardSolanaTransaction } from "../../solana/rpc";
 import { authorization, deployment, event, signedFixture } from "./fixtures/manual/test-fixture";
-import { validateBundleForActivity } from "./helper-manual";
+import { validateBundleForActivity, sameHelperDeployment } from "./helper-manual";
 import { helperAbi } from "./helper-abi";
-import type { HelperActivity } from "./helper-types";
+import { helperActivitySchema, migrateHelperActivity, type HelperActivity } from "./helper-types";
+import { currentBridgeConfig } from "../../../config/bridge-config";
 
 vi.mock("server-only", () => ({}));
 const { simulate, destination } = vi.hoisted(() => ({ simulate: vi.fn(), destination: vi.fn() }));
@@ -66,6 +67,7 @@ describe("manual attestation admission and public export", () => {
     const bundle = (await validateManualHelperAttestation(source, iris, deployment, server))!;
     bundle.source.message = field(bundle.source.message, 248, 32, 1);
     bundle.message = field(bundle.message, 248, 32, 1);
+    bundle.messageHash = keccak256(bundle.message);
     bundle.call.data = encodeFunctionData({ abi: helperAbi, functionName: "receiveAndDeposit", args: [bundle.message, bundle.attestation] });
     expect(() => validateBundleForActivity(bundle, helper)).toThrow("source bytes");
   });
@@ -79,9 +81,39 @@ describe("manual attestation admission and public export", () => {
     await expect(validateManualHelperAttestation(source, iris, deployment, server)).resolves.toBeNull();
     expect(simulate).not.toHaveBeenCalled();
   });
+  it("migrates a genuine old manual ready bundle with its original notice to pending tracking", async () => {
+    const { source, iris, helper } = await fixture();
+    const bundle = (await validateManualHelperAttestation(source, iris, deployment, server))!;
+    bundle.notice = "A separate transaction on Arc is still required. USDCx has not been delivered.";
+    const saved = helperActivitySchema.parse({ ...helper, stage: "ready", sourceEvidence: source, signedBytes: undefined, bundle });
+    expect(migrateHelperActivity(saved)).toMatchObject({ schemaVersion: 2, stage: "attested", bundle: { notice: bundle.notice } });
+  });
+  it("does not replace a previously completed Circle message with a different assigned nonce", async () => {
+    const { source, iris, helper } = await fixture();
+    const bundle = (await validateManualHelperAttestation(source, iris, deployment, server))!;
+    iris.messages[0].message = field(iris.messages[0].message, 12, 32, 2);
+    const conflicting = (await validateManualHelperAttestation(source, iris, deployment, server))!;
+    expect(() => validateBundleForActivity(conflicting, { ...helper, bundle })).toThrow("different completed message");
+  });
+  it("compares historical immutable identity independently from admission and refreshed qualification metadata", () => {
+    const refreshed = structuredClone(deployment); refreshed.enabled = false;
+    refreshed.qualification.evidenceHash = `0x${"01".repeat(32)}`;
+    expect(sameHelperDeployment(deployment, refreshed)).toBe(true);
+    refreshed.arc.usdc.address = deployment.helper.address;
+    expect(sameHelperDeployment(deployment, refreshed)).toBe(false);
+  });
 });
 
 describe("bounded manual HTTP behavior", () => {
+  it("rejects caller RPC/range/address overrides and nonallowlisted recovery service roots", async () => {
+    const { source } = await fixture();
+    const base = { schemaVersion: 2, deploymentId: deployment.deploymentId, sourceTransaction: source.sourceTransaction };
+    for (const extra of [{ arcRpc: "http://169.254.169.254" }, { helper: deployment.helper.address }, { fromBlock: "0", toBlock: "999999" }])
+      expect(helperObservationRequestSchema.safeParse({ ...base, ...extra }).success).toBe(false);
+    const recovery = structuredClone(currentBridgeConfig("testnet"));
+    recovery.document["bridge-providers"].usdcx.attestationUrl = "http://169.254.169.254";
+    expect(helperObservationRequestSchema.safeParse({ ...base, recovery }).success).toBe(false);
+  });
   it("returns sanitized malformed-body400 and actual deployment throttle429", async () => {
     const bad = await manualApi(() => manualRequestJson(new Request("http://localhost", { method: "POST", body: "{" })));
     expect(bad.status).toBe(400); expect(await bad.json()).toEqual({ reason: "invalid_request" });

@@ -14,7 +14,7 @@ export const event = Keypair.fromSeed(new Uint8Array(32).fill(2));
 export const recipient = golden.miden.bytes32 as `0x${string}`;
 export function authorization(): ManualAuthorization {
   return { execution: "manual", sourceDomain: 5, sourceAccount: owner.publicKey.toBase58(), deployment, deploymentId: deployment.deploymentId,
-    grossAmount: "1000000", maxCctpFee: "100", minimumNet: "999900", midenRecipient: recipient, checkedAt: new Date().toISOString(), finality: 2000 };
+    arcAnchor: { block: "100", hash: `0x${"64".padStart(64, "0")}` }, grossAmount: "1000000", maxCctpFee: "100", minimumNet: "999900", midenRecipient: recipient, checkedAt: new Date().toISOString(), finality: 2000 };
 }
 const uint = (number: number | bigint | string, size: number, little = false) => {
   const value = Buffer.from(BigInt(number).toString(16).padStart(size * 2, "0"), "hex");

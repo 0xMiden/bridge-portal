@@ -18,7 +18,7 @@ const asset = z.discriminatedUnion("kind", [
 export const receiptRouteSchema = z.object({
   id: z.string().min(1).max(200), provider: z.enum(["epoch", "agglayer", "xreserve"]), mode: z.enum(["send", "receive"]),
   source: asset, destination: asset, recovery: bridgeConfigSchema, disabled: z.boolean().optional(),
-  transport: z.enum(["cctp-helper", "cctp-helper-evm"]).optional(), execution: z.literal("manual").optional(), helperDeployment: helperDeploymentSchema.optional(), evmHelperDeployment: evmHelperDeploymentSchema.optional(),
+  transport: z.enum(["cctp-helper", "cctp-helper-evm"]).optional(), execution: z.enum(["manual", "automatic"]).optional(), helperDeployment: helperDeploymentSchema.optional(), evmHelperDeployment: evmHelperDeploymentSchema.optional(),
 }).refine(route => {
   const miden = route.mode === "receive" ? route.destination : route.source;
   const evm = route.mode === "receive" ? route.source : route.destination;
@@ -31,7 +31,7 @@ export const receiptRouteSchema = z.object({
   }
   if (route.transport === "cctp-helper") {
     const deployment = route.helperDeployment;
-    return route.execution === "manual" && route.mode === "receive" && route.provider === "xreserve" && evm.kind === "spl" && !!deployment &&
+    return (route.execution === "manual" || route.execution === "automatic") && route.mode === "receive" && route.provider === "xreserve" && evm.kind === "spl" && !!deployment &&
       deployment.environment === route.recovery.environment && deployment.source.network === evm.network && deployment.source.mint === evm.mint &&
       deployment.miden.faucetId === miden.faucetId && miden.faucetId === route.recovery.derived.usdcxFaucetId && miden.decimals === 6;
   }

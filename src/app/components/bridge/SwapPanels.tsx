@@ -59,8 +59,8 @@ export function SwapPanels({ draft, wallets, transfer, panelsRef, onChange }: {
     <Card className="swap-card" data-provider={route.provider} aria-label="Miden bridge" ref={cardRef}>
       {wallets.error ? <FormAlert compact role="alert">{wallets.error}</FormAlert> : null}
       {route.source.kind === "spl" && wallets.solana.error ? <FormAlert compact role="alert">{wallets.solana.error}</FormAlert> : null}
-      <Link className="text-xs underline" href="/recovery">Recover a saved EVM source attempt</Link>
-      {route.execution === "manual" && route.disabled ? <FormAlert compact>{route.transport === "cctp-helper-evm" ? EVM_HELPER_UNAVAILABLE : MANUAL_UNAVAILABLE}</FormAlert> : null}
+      <Link className="text-xs underline" href="/recovery">Recover a source transfer</Link>
+      {route.transport && route.disabled ? <FormAlert compact>{route.transport === "cctp-helper-evm" ? EVM_HELPER_UNAVAILABLE : MANUAL_UNAVAILABLE}</FormAlert> : null}
       <div className="mode-switch grid grid-cols-2 gap-2 rounded-xl border border-border bg-field p-1" role="group" aria-label="Cross-chain direction" data-active={route.mode}>
         {flowModes.map(mode => (
           <button className="min-h-10 rounded-[8px] text-[15px]/normal font-medium text-muted-foreground transition hover:text-foreground

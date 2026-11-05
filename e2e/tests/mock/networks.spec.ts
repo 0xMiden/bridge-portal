@@ -39,7 +39,7 @@ test("an unqualified Solana source is viewable but cannot quote or submit", asyn
   });
   await bridge.setChain("Solana Devnet");
   await expect(page.locator('.swap-box[data-side="source"] .swap-box-head')).toContainText("Solana Devnet");
-  await expect(page.getByText("Manual Solana deposits are not configured in this build.", { exact: true })).toBeVisible();
+  await expect(page.getByText("Solana helper deposits are not configured in this build.", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Connect Phantom (Solana)", exact: true }).click();
   await bridge.fillAmount("1");
   await expect(bridge.primaryButton()).toHaveText("Route unavailable");

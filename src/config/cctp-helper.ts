@@ -4,7 +4,7 @@ import type { BridgeConfig } from "./bridge-config";
 import { isSolanaBytes } from "../bridge/solana/identity";
 
 export const CIRCLE_SOLANA_IDL_HASH = "46c195982ce970f90131f79e9b86eeadcb0d589d08f701f5506aa8ad4fa9e81d";
-export const MANUAL_UNAVAILABLE = "Manual Solana deposits are not configured in this build.";
+export const MANUAL_UNAVAILABLE = "Solana helper deposits are not configured in this build.";
 export const decimal = z.string().max(20).regex(/^(0|[1-9]\d*)$/);
 export const bytes32 = z.templateLiteral(["0x", z.string().regex(/^[0-9a-f]{64}$/)]);
 export const address = z.templateLiteral(["0x", z.string().regex(/^[0-9a-f]{40}$/)]).refine(value => BigInt(value) !== 0n);

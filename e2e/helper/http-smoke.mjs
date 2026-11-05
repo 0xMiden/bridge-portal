@@ -26,7 +26,7 @@ async function post(url, data, expected = 200) {
   const body = await response.json(); assert.equal(response.status, expected, JSON.stringify(body)); return body;
 }
 async function observe(signature, id = deployment.deploymentId) {
-  const response = await fetch(`${base}/api/cctp-helper/manual/attestation?deploymentId=${id}&sourceTransaction=${signature}`, { signal: AbortSignal.timeout(15_000) });
+  const response = await fetch(`${base}/api/cctp-helper/manual/attestation`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ schemaVersion: 2, deploymentId: id, sourceTransaction: signature, exportCall: true }), signal: AbortSignal.timeout(15_000) });
   assert.equal(response.status, 200); return response.json();
 }
 async function change(data) { await post(`${control}/scenario`, data); }
@@ -43,7 +43,7 @@ try {
   const owner = Keypair.fromSeed(new Uint8Array(32).fill(1)), event = Keypair.fromSeed(new Uint8Array(32).fill(2));
   const input = { deploymentId: deployment.deploymentId, sourceDomain: 5, sourceAccount: owner.publicKey.toBase58(), grossAmount: "1000000", midenRecipient: golden.miden.bytes32 };
   const quote = await post(`${base}/api/cctp-helper/manual/quote`, input);
-  assert.equal(quote.maxCctpFee, "10"); assert.equal(quote.minimumNet, "999990"); assert.equal(quote.execution, "manual");
+  assert.equal(quote.maxCctpFee, "10"); assert.equal(quote.minimumNet, "999990"); assert.equal(quote.execution, "automatic");
   assert.equal(quote.midenRecipient, golden.miden.bytes32); assert.equal(quote.sourceAccount, owner.publicKey.toBase58());
   assert(!("minimumSponsoredNet" in quote)); record("actual Next quote traverses source state, fee and destination ABI preflight");
   await post(`${base}/api/cctp-helper/manual/quote`, { ...input, rpcUrl: "https://not-allowed.invalid" }, 400);
@@ -76,7 +76,7 @@ try {
   const call = decodeFunctionData({ abi: parseAbi(["function receiveAndDeposit(bytes,bytes)"]), data: bundle.call.data });
   assert.equal(call.functionName, "receiveAndDeposit"); assert.deepEqual(call.args, [bundle.message, bundle.attestation]);
   assert.equal(bundle.call.to, deployment.helper.address); assert.equal(bundle.call.value, "0");
-  assert.equal(bundle.notice, "A separate transaction on Arc is still required. USDCx has not been delivered.");
+  assert.equal(bundle.notice, "Waiting for Arc execution. Exporting a call does not deliver USDCx.");
   assert(!/signedBytes|secretKey|privateKey|solanaRpc|arcRpc|irisApi/.test(JSON.stringify(bundle)));
   record("actual Next RPC admission, finalized source occurrence, attestation authentication and exact manual calldata");
   await change({ feeBps: "0" });

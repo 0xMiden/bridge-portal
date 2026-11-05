@@ -14,7 +14,7 @@ const testRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), ".."
 const options = new Map();
 for (let i = 2; i < process.argv.length; i += 2) {
   const key = process.argv[i], value = process.argv[i + 1];
-  assert(["--source", "--evidence", "--grep", "--http-only"].includes(key) && value, `Unknown or incomplete option: ${key}`);
+  assert(["--source", "--evidence", "--grep", "--http-only", "--reuse-fixture"].includes(key) && value, `Unknown or incomplete option: ${key}`);
   options.set(key, value);
 }
 assert(process.versions.node === "22.18.0", "Use Node 22.18.0 for the fixture build and browser suite.");
@@ -23,7 +23,8 @@ assert(!options.has("--http-only") || options.get("--http-only") === "true", "--
 const evidenceRoot = path.resolve(options.get("--evidence") ?? path.join(testRoot, "test-results/helper-runs"));
 await fs.mkdir(evidenceRoot, { recursive: true });
 const runRoot = await fs.mkdtemp(path.join(evidenceRoot, "run-"));
-const fixtureRoot = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), "miden-helper-browser-")));
+const reuseFixture = options.get("--reuse-fixture");
+const fixtureRoot = await fs.realpath(reuseFixture ?? await fs.mkdtemp(path.join(os.tmpdir(), "miden-helper-browser-")));
 const logPath = path.join(runRoot, "commands.jsonl");
 const owned = ["e2e/fixtures/cctp-helper-public.json", "e2e/fixtures/cctp-helper-server.json",
   "e2e/helper", "e2e/tests/helper/cctp-helper.spec.ts", "playwright.helper.config.ts", "scripts/test-helper-browser.mjs"];
@@ -95,6 +96,22 @@ try {
   const initialLock = await fs.readFile(path.join(sourceRoot, "package-lock.json"));
   manifest.sourceHash = sha(json(manifest.files));
   manifest.lockHash = sha(initialLock);
+  if (reuseFixture) {
+    const marker = JSON.parse(await fs.readFile(path.join(fixtureRoot, ".helper-fixture.json"), "utf8"));
+    assert(marker.testOnly === true && marker.sourceRoot === fixtureRoot, "Refusing an unowned fixture directory.");
+    const previous = JSON.parse(await fs.readFile(path.join(marker.runRoot, "manifest.json"), "utf8"));
+    assert(previous.testOnly === true && previous.sourceRoot === sourceRoot && previous.fixtureRoot === fixtureRoot, "Fixture source ownership changed.");
+    assert.equal(previous.sourceHash, marker.sourceHash, "Previous fixture/source binding changed.");
+    assert.equal(previous.lockHash, manifest.lockHash, "Dependency changes require a fresh fixture copy.");
+    assert(previous.files.every(entry => files.includes(entry.path)), "Deleted source files require a fresh fixture copy.");
+    const preserved = [...new Set([...previous.files, ...previous.testFiles, ...previous.fixtureFiles].map(entry => entry.path)), ".helper-fixture.json"];
+    assert(preserved.every(name => !path.isAbsolute(name) && !name.split(path.sep).includes("..") && isSource(name)), "Invalid prior source path.");
+    const archive = path.join(runRoot, "prior-fixture-source.tar");
+    await command("archive-prior-fixture", ["-cf", archive, "-C", fixtureRoot, "--", ...preserved], fixtureRoot, {}, "/usr/bin/tar");
+    await fs.copyFile(path.join(marker.runRoot, "manifest.json"), path.join(runRoot, "prior-manifest.json"));
+    manifest.reuse = { previousRunRoot: marker.runRoot, previousSourceHash: previous.sourceHash, archive, archiveHash: sha(await fs.readFile(archive)) };
+    await fs.writeFile(path.join(marker.runRoot, "fixture-reused.json"), json({ nextRunRoot: runRoot, archive, archiveHash: manifest.reuse.archiveHash }));
+  }
   for (const entry of manifest.files) {
     const from = path.join(sourceRoot, entry.path), to = path.join(fixtureRoot, entry.path);
     assert((await fs.lstat(from)).isFile(), `Refusing non-file source: ${entry.path}`);
@@ -110,10 +127,9 @@ try {
     await fs.mkdir(path.dirname(target), { recursive: true });
     await fs.copyFile(path.join(testRoot, item), target);
   }
-  for (const name of ["public", "server"]) {
-    const release = JSON.parse(await fs.readFile(path.join(sourceRoot, `src/config/cctp-helper-${name}.json`), "utf8"));
-    assert(Array.isArray(release) && release.every(entry => name === "public" && entry.enabled === false), "Release helper entries must be absent/disabled.");
-  }
+  const releasePaths = ["cctp-helper-public", "cctp-helper-server", "cctp-evm-helper-public", "cctp-evm-helper-server"].map(name => `src/config/${name}.json`);
+  manifest.releaseRegistries = await hashes(sourceRoot, releasePaths);
+  for (const name of releasePaths) assert(Array.isArray(JSON.parse(await fs.readFile(path.join(sourceRoot, name), "utf8"))), "Release registry must be an array.");
   // Clone only an exact installed dependency graph. A symlink outside the build
   // root breaks Next standalone tracing. CoW copies keep writes owned and fall
   // back to ordinary copies where the filesystem does not support cloning.
@@ -123,7 +139,10 @@ try {
     assert(installed[name], `Missing dependency ${name}; install the candidate lock before this runner.`);
     for (const key of ["version", "resolved", "integrity"]) assert.equal(installed[name][key], pkg[key], `Dependency drift: ${name}:${key}`);
   }
-  if (process.platform === "darwin") {
+  if (reuseFixture) {
+    const retained = JSON.parse(await fs.readFile(path.join(fixtureRoot, "node_modules/.package-lock.json"), "utf8")).packages;
+    assert.deepEqual(retained, installed, "Retained fixture dependency graph differs from the installed source graph.");
+  } else if (process.platform === "darwin") {
     await command("clone-dependencies", ["-cR", path.join(sourceRoot, "node_modules"), path.join(fixtureRoot, "node_modules")], fixtureRoot, {}, "/bin/cp");
   } else {
     await fs.cp(path.join(sourceRoot, "node_modules"), path.join(fixtureRoot, "node_modules"), {
@@ -142,6 +161,10 @@ try {
   await fs.writeFile(path.join(fixtureRoot, "src/config/cctp-helper-public.json"), json(publicFixture));
   await fs.writeFile(path.join(fixtureRoot, "src/config/cctp-helper-server.json"), json(privateFixture));
   await fs.writeFile(path.join(fixtureRoot, ".helper-fixture.json"), json({ testOnly: true, runRoot, sourceRoot: fixtureRoot, sourceHash: manifest.sourceHash }));
+  // Redirect only the official reserve read boundary inside this owned Node process.
+  // The production source and release configuration remain byte-identical.
+  Object.assign(environment, { HELPER_FIXTURE_CIRCLE_URL: services.endpoints.irisApi,
+    NODE_OPTIONS: `--import=${path.join(fixtureRoot, "e2e/helper/fetch-fixtures.mjs")}` });
   const port = await loopbackPort();
   Object.assign(environment, { HELPER_BROWSER_RUN_ROOT: runRoot, HELPER_BROWSER_PORT: String(port), HELPER_FIXTURE_CONTROL_URL: services.controlUrl });
   manifest.fixtureFiles = await hashes(fixtureRoot, ["src/config/cctp-helper-public.json", "src/config/cctp-helper-server.json", "playwright.helper.config.ts"]);
@@ -167,6 +190,7 @@ try {
   const report = JSON.parse(await fs.readFile(path.join(runRoot, "playwright-results.json"), "utf8"));
   assert(report.stats.expected > 0 && report.stats.unexpected === 0 && report.stats.skipped === 0, "Zero/skipped/failed tests are not a pass.");
   assert.equal(sha(await fs.readFile(path.join(sourceRoot, "package-lock.json"))), manifest.lockHash, "Writer lock changed during test run; repeat against the new candidate.");
+  assert.deepEqual(await hashes(sourceRoot, releasePaths), manifest.releaseRegistries, "Source release registries changed during the fixture run.");
   await fs.writeFile(path.join(runRoot, "result.json"), json({ state: "passed", sourceHash: manifest.sourceHash, stats: report.stats, fixtureRoot, testOnly: true }));
   console.log(`Helper browser proof passed against ${manifest.sourceHash}. Evidence: ${runRoot}`);
   }

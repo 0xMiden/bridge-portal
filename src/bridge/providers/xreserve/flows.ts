@@ -79,7 +79,7 @@ export const flows: ProviderFlows = {
       }
     },
     monitor: {
-      canPoll: (activity) => activity.cctpEvmHelper ? !!activity.cctpEvmHelper.hash && activity.cctpEvmHelper.stage !== "source_failed" : activity.cctpHelper ? !!activity.cctpHelper.signature && activity.cctpHelper.stage !== "source_failed" :
+      canPoll: (activity) => activity.cctpEvmHelper ? !!activity.cctpEvmHelper.hash && activity.cctpEvmHelper.stage !== "source_failed" : activity.cctpHelper ? !!activity.cctpHelper.signature && !["source_failed", "delivered"].includes(activity.cctpHelper.stage) :
         activity.status !== "complete" &&
         activity.status !== "failed" &&
         Boolean(activity.sourceTxHash),

@@ -5,15 +5,17 @@ import { BridgePage } from "../../pages/bridge-page";
 import { stubNetwork } from "../../fixtures/mock-network";
 import { installPhantom, RECIPIENT, RECIPIENT_ADDRESS, SOURCE_ACCOUNT, type WalletMode } from "../../helper/phantom";
 import fixture from "../../fixtures/cctp-helper-public.json";
+import { midenLimitsResponse, midenNoteResponse, requestedMidenNote } from "../../helper/miden-note";
 
 const deployment = fixture[0];
 const control = process.env.HELPER_FIXTURE_CONTROL_URL;
 if (!control || new URL(control).hostname !== "127.0.0.1") throw new Error("Owned loopback fixtures are required.");
 const callAbi = parseAbi(["function receiveAndDeposit(bytes message,bytes attestation)"]);
-const notice = "A separate transaction on Arc is still required. USDCx has not been delivered.";
+const notice = "Waiting for Arc execution. Exporting a call does not deliver USDCx.";
 type FixtureState = {
   sends: { signature: string; bytes: string }[];
   simulations: { bytes: string }[];
+  arcHashes: string[];
   calls: { kind: string; method: string; params?: unknown[] }[];
 };
 async function scenario(request: APIRequestContext, changes: Record<string, unknown>, reset = false) {
@@ -74,9 +76,9 @@ async function readSavedHelper(bridge: BridgePage) {
 test.describe("Solana manual source and Arc handoff", () => {
   let manualHttpStatuses: Record<string, number> = {};
   test.beforeEach(async ({ page, request }) => {
-    // All cases share the real per-deployment 180 RPC/minute limit. Space their
-    // synthetic bursts instead of weakening or bypassing production admission.
-    await new Promise(resolve => setTimeout(resolve, 30_000));
+    // The measured peak is 42 RPCs/case. Four case bursts/minute remain below
+    // the actual 180 RPC limit; afterEach rejects any rate-limit interference.
+    await new Promise(resolve => setTimeout(resolve, 15_000));
     await scenario(request, {}, true);
     manualHttpStatuses = {};
     page.on("response", response => {
@@ -128,7 +130,7 @@ test.describe("Solana manual source and Arc handoff", () => {
     await page.screenshot({ path: path.join(screenshots, "happy-transfer-review.png"), fullPage: true, animations: "disabled" });
     await bridge.confirmPreflight();
     await bridge.waitForActivityPage();
-    await expect(page.getByRole("article", { name: "Transfer receipt", exact: true }).getByText("Ready for manual Arc execution", { exact: true })).toBeVisible();
+    await expect(page.getByRole("article", { name: "Transfer receipt", exact: true }).getByText("Waiting for Arc execution", { exact: true })).toBeVisible();
     await pendingIsNotDelivered(page);
     await page.screenshot({ path: path.join(screenshots, "happy-manual-ready.png"), fullPage: true, animations: "disabled" });
     const { helper } = await readSavedHelper(bridge);
@@ -138,7 +140,7 @@ test.describe("Solana manual source and Arc handoff", () => {
     expect(state.sends[0].bytes).toBe(signatures[0].signedBytes);
     expect(state.simulations.length).toBeGreaterThan(0);
     const downloadPromise = page.waitForEvent("download");
-    await page.getByRole("button", { name: "Download manual Arc call", exact: true }).click();
+    await page.getByRole("button", { name: "Download verified Arc call", exact: true }).click();
     const download = await downloadPromise;
     await download.saveAs(path.join(screenshots, "happy-manual-call.json"));
     const stream = await download.createReadStream();
@@ -161,7 +163,7 @@ test.describe("Solana manual source and Arc handoff", () => {
     await scenario(request, { helperSimulationFails: true });
     const unexpectedDownloads: string[] = [];
     page.on("download", item => unexpectedDownloads.push(item.suggestedFilename()));
-    await page.getByRole("button", { name: "Download manual Arc call", exact: true }).click();
+    await page.getByRole("button", { name: "Download verified Arc call", exact: true }).click();
     await expect(page.getByText(/not currently validated/i)).toBeVisible();
     expect(unexpectedDownloads).toEqual([]);
   });
@@ -181,7 +183,7 @@ test.describe("Solana manual source and Arc handoff", () => {
     await page.unroute("**/api/cctp-helper/manual/rpc?*");
     await scenario(request, { policy: null });
     await page.getByRole("button", { name: "Retry saved source transaction", exact: true }).click();
-    await expect(page.getByRole("button", { name: "Download manual Arc call", exact: true })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Download verified Arc call", exact: true })).toBeVisible();
     const state = await fixtureState(request);
     expect(state.sends).toHaveLength(1); expect(state.sends[0].bytes).toBe(signatures[0].signedBytes);
     expect(signatures).toHaveLength(1); await pendingIsNotDelivered(page);
@@ -197,7 +199,7 @@ test.describe("Solana manual source and Arc handoff", () => {
     const attemptId = before.helper.attemptId;
     await page.reload();
     await scenario(request, { finalized: true });
-    await expect(page.getByRole("article", { name: "Transfer receipt", exact: true }).getByText("Ready for manual Arc execution", { exact: true })).toBeVisible();
+    await expect(page.getByRole("article", { name: "Transfer receipt", exact: true }).getByText("Waiting for Arc execution", { exact: true })).toBeVisible();
     const after = await readSavedHelper(bridge);
     expect(after.helper.attemptId).toBe(attemptId); expect(after.helper.signature).toBe(signature);
     expect(signatures).toHaveLength(1);
@@ -218,12 +220,12 @@ test.describe("Solana manual source and Arc handoff", () => {
       expect((await fixtureState(request)).sends).toHaveLength(0);
       expect(signatures).toHaveLength(barrier === "reviewed" ? 0 : 1);
       expect(await page.evaluate(() => window.helperFixture.walletCalls)).toBe(barrier === "reviewed" ? 0 : 1);
-      await expect(page.getByRole("button", { name: "Download manual Arc call", exact: true })).toHaveCount(0);
+      await expect(page.getByRole("button", { name: "Download verified Arc call", exact: true })).toHaveCount(0);
       const attempt = await page.evaluate(() => window.helperFixture.storageWrites[0].attemptId);
       await page.evaluate(() => { window.helperFixture.storageFailure = "none"; });
       await bridge.submit();
       await bridge.waitForActivityPage();
-      await expect(page.getByRole("article", { name: "Transfer receipt", exact: true }).getByText("Ready for manual Arc execution", { exact: true })).toBeVisible();
+      await expect(page.getByRole("article", { name: "Transfer receipt", exact: true }).getByText("Waiting for Arc execution", { exact: true })).toBeVisible();
       expect((await readSavedHelper(bridge)).helper.attemptId).toBe(attempt);
       expect(signatures).toHaveLength(1);
       expect((await fixtureState(request)).sends).toEqual([{ signature: (await readSavedHelper(bridge)).helper.signature, bytes: signatures[0].signedBytes }]);
@@ -239,7 +241,7 @@ test.describe("Solana manual source and Arc handoff", () => {
       await expect.poll(() => page.evaluate(() => window.helperFixture.walletCalls)).toBe(1);
       await expect(page.getByText(/rejected|unsupported|changed|signatures|sign-only|Review again|review again/i).last()).toBeVisible();
       expect((await fixtureState(request)).sends).toHaveLength(0);
-      await expect(page.getByRole("button", { name: "Download manual Arc call", exact: true })).toHaveCount(0);
+      await expect(page.getByRole("button", { name: "Download verified Arc call", exact: true })).toHaveCount(0);
     });
   }
 
@@ -276,17 +278,15 @@ test.describe("Solana manual source and Arc handoff", () => {
     await bridge.submit(); await bridge.waitForActivityPage();
     await expect.poll(async () => (await fixtureState(request)).sends.length).toBe(1);
     const { helper } = await readSavedHelper(bridge);
-    const url = `/api/cctp-helper/manual/attestation?deploymentId=${deployment.deploymentId}&sourceTransaction=${helper.signature}`;
     for (const mutation of ["source-signature", "source-ambiguous", "source-hook", "source-account", "envelope", "amount", "helper", "hook", "finality", "expiry", "ambiguous", "attestation"]) {
       await scenario(request, { mutation, attestationPending: false });
-      const response = await page.request.get(url);
+      const response = await page.request.post("/api/cctp-helper/manual/attestation", { data: { schemaVersion: 2, deploymentId: deployment.deploymentId, sourceTransaction: helper.signature, exportCall: true } });
       expect(response.ok(), mutation).toBe(true);
       const result = await response.json();
       expect(result.state, mutation).toBe("needs_attention"); expect(result.bundle, mutation).toBeUndefined();
-      await expect(page.getByRole("button", { name: "Download manual Arc call", exact: true })).toHaveCount(0);
     }
     await scenario(request, { mutation: "none", helperSimulationFails: true });
-    const rejected = await (await page.request.get(url)).json();
+    const rejected = await (await page.request.post("/api/cctp-helper/manual/attestation", { data: { schemaVersion: 2, deploymentId: deployment.deploymentId, sourceTransaction: helper.signature, exportCall: true } })).json();
     expect(rejected.state).toBe("needs_attention"); expect(rejected.bundle).toBeUndefined();
     expect(signatures).toHaveLength(1); expect((await fixtureState(request)).sends).toHaveLength(1);
   });
@@ -303,7 +303,7 @@ test.describe("Solana manual source and Arc handoff", () => {
     const after = await readSavedHelper(bridge);
     expect(after.helper.attemptId).toBe(before.helper.attemptId); expect(after.helper.signature).toBe(before.helper.signature);
     expect(signatures).toHaveLength(1); expect((await fixtureState(request)).sends).toHaveLength(1);
-    await expect(page.getByRole("button", { name: /burn again|new burn|Download manual Arc call/i })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: /burn again|new burn|Download verified Arc call/i })).toHaveCount(0);
   });
 
   test("equivalent amount formatting after reload cannot bypass an unresolved source attempt", async ({ page, request }) => {
@@ -325,4 +325,126 @@ test.describe("Solana manual source and Arc handoff", () => {
     expect(signatures).toHaveLength(1);
     expect((await fixtureState(request)).sends).toHaveLength(1);
   });
+
+  test("automatic completion tracks any payer through distinct reserve nonce and exact Miden note across reload", async ({ page, request }) => {
+    await scenario(request, { executedFee: "7" });
+    const { bridge, signatures } = await openSolana(page);
+    await bridge.submit(); await bridge.waitForActivityPage();
+    await expect(page.getByRole("button", { name: "Download verified Arc call", exact: true })).toBeVisible();
+    const writes = await page.evaluate(() => window.helperFixture.storageWrites);
+    expect(writes[0].stage).toBe("signing");
+    expect(writes[0].arcAnchor).toEqual({ block: "105", hash: `0x${"69".padStart(64, "0")}` });
+    const { helper } = await readSavedHelper(bridge);
+    await scenario(request, { arcCompleted: true, helperSimulationFails: true,
+      policy: { functionName: "paused", target: deployment.arc.gatewayWallet.address, value: true } });
+    await page.getByRole("button", { name: "Refresh status", exact: true }).click();
+    await expect(page.getByRole("link", { name: "Verified Arc transaction", exact: true })).toBeVisible();
+    await expect(page.getByText("Deposited on Arc; waiting for reserve authorization", { exact: true }).first()).toBeVisible();
+    let unrelated = true;
+    const lookedUp: string[] = [];
+    await page.route(/https:\/\/rpc\.testnet\.miden\.io\//, async route => {
+      const pathname = new URL(route.request().url()).pathname;
+      const headers = { "content-type": "application/grpc-web+proto", "grpc-status": "0", "access-control-allow-origin": "*", "access-control-expose-headers": "grpc-status" };
+      if (route.request().method() === "OPTIONS") return route.fulfill({ status: 200, headers: { ...headers, "access-control-allow-headers": "*" } });
+      if (pathname.endsWith("GetLimits")) return route.fulfill({ status: 200, headers, body: midenLimitsResponse() });
+      if (!pathname.endsWith("GetNotesById")) return route.abort();
+      const id = requestedMidenNote(route.request().postDataBuffer()!); lookedUp.push(id);
+      return route.fulfill({ status: 200, headers, body: midenNoteResponse(unrelated ? `0x${"01".repeat(32)}` : id, deployment.miden.faucetId) });
+    });
+    await scenario(request, { reserveAttested: true });
+    await page.getByRole("button", { name: "Refresh status", exact: true }).click();
+    await expect.poll(() => lookedUp.length).toBeGreaterThan(0);
+    let rows = await bridge.readActivities();
+    expect(rows[0].status).not.toBe("complete");
+    const tuple = rows[0].cctpHelper as { bundle: { cctpNonce: string; netAmount: string }; completion: { intent: { nonce: string } } };
+    expect(tuple.bundle.cctpNonce).not.toBe(tuple.completion.intent.nonce);
+    expect(tuple.bundle.netAmount).toBe("999993");
+    unrelated = false;
+    await page.getByRole("button", { name: "Refresh status", exact: true }).click();
+    await expect(page.getByText("USDCx note included in Miden block 42.", { exact: true })).toBeVisible();
+    await expect(page.getByRole("article", { name: "Transfer receipt", exact: true })).toContainText("Delivered");
+    await expect(page.getByRole("article", { name: "Transfer receipt", exact: true })).toContainText("0.999993");
+    await expect(page.getByRole("article", { name: "Transfer receipt", exact: true })).toContainText("CCTP fee paid");
+    await expect(page.getByRole("link", { name: "View exact note on Midenscan", exact: true })).toBeVisible();
+    rows = await bridge.readActivities(); expect(rows[0].status).toBe("complete");
+    expect(rows[0].xreserveMidenBlock).toBe(42);
+    expect((rows[0].cctpHelper as { signature: string }).signature).toBe(helper.signature);
+    await page.reload();
+    await expect(page.getByText("USDCx note included in Miden block 42.", { exact: true })).toBeVisible();
+    expect((await bridge.readActivities())[0].status).toBe("complete");
+    expect((await page.evaluate(() => window.testWallets.requests)).filter(row => row.wallet === "evm")).toEqual([]);
+    expect(signatures).toHaveLength(1); expect((await fixtureState(request)).sends).toHaveLength(1);
+    await page.screenshot({ path: path.join(process.env.HELPER_BROWSER_RUN_ROOT!, "automatic-delivered.png"), fullPage: true });
+  });
+
+  test("normal signature import after storage loss is recovery-only; wrong Arc hash cannot advance cursor or unlock source", async ({ page, request }) => {
+    const { bridge, signatures } = await openSolana(page);
+    await bridge.submit(); await bridge.waitForActivityPage();
+    await expect(page.getByRole("button", { name: "Download verified Arc call", exact: true })).toBeVisible();
+    const { helper } = await readSavedHelper(bridge);
+    await page.evaluate(() => localStorage.removeItem("miden.bridge.ui.activities.v2"));
+    await page.goto("/recovery");
+    await page.getByRole("textbox", { name: "Original Solana signature", exact: true }).fill(helper.signature!);
+    await page.getByRole("button", { name: "Recover Solana transfer", exact: true }).click();
+    await page.getByRole("link", { name: "Recover original attempt", exact: true }).click();
+    await expect(page.getByRole("button", { name: "Download verified Arc call", exact: true })).toBeVisible();
+    let rows = await bridge.readActivities();
+    const imported = rows[0].cctpHelper as { recoveryOnly: boolean; signature: string; signedBytes?: string; blockhash?: string; completion?: { scan?: unknown } };
+    expect(imported.recoveryOnly).toBe(true); expect(imported.signature).toBe(helper.signature);
+    expect(imported.signedBytes).toBeUndefined(); expect(imported.blockhash).toBeUndefined();
+    // A corrupt high hint must be replaced by the server's lower canonical page,
+    // rather than winning the cross-tab numeric maximum forever.
+    await page.evaluate(() => {
+      const rows = JSON.parse(localStorage.getItem("miden.bridge.ui.activities.v2")!);
+      rows[0].cctpHelper.completion.scan = { nextBlock: "99999", checkpoint: { block: "99998", hash: `0x${"01".repeat(32)}` } };
+      localStorage.setItem("miden.bridge.ui.activities.v2", JSON.stringify(rows));
+    });
+    await page.reload();
+    await expect.poll(async () => ((await bridge.readActivities())[0].cctpHelper as { completion: { scan: { nextBlock: string } } }).completion.scan.nextBlock).toBe("106");
+    await page.evaluate(() => {
+      const rows = JSON.parse(localStorage.getItem("miden.bridge.ui.activities.v2")!);
+      rows[0].cctpHelper.completion.scan = { nextBlock: "corrupt", checkpoint: {} };
+      localStorage.setItem("miden.bridge.ui.activities.v2", JSON.stringify(rows));
+    });
+    await page.reload();
+    await expect.poll(async () => ((await bridge.readActivities())[0].cctpHelper as { completion: { scan?: { nextBlock: string } } }).completion.scan?.nextBlock).toBe("106");
+    rows = await bridge.readActivities();
+    const scan = (rows[0].cctpHelper as { completion?: { scan?: unknown } }).completion?.scan;
+    await page.getByRole("textbox", { name: "Arc transaction hash", exact: true }).fill(`0x${"01".repeat(32)}`);
+    await page.getByRole("button", { name: "Verify Arc transaction", exact: true }).click();
+    await expect(page.getByRole("alert").filter({ hasText: "no verified matching finalized completion" })).toBeVisible();
+    rows = await bridge.readActivities(); expect((rows[0].cctpHelper as { completion?: { scan?: unknown } }).completion?.scan).toEqual(scan);
+    await scenario(request, { arcCompleted: true, helperSimulationFails: true });
+    const [arcHash] = (await fixtureState(request)).arcHashes;
+    await page.getByRole("textbox", { name: "Arc transaction hash", exact: true }).fill(arcHash);
+    await page.getByRole("button", { name: "Verify Arc transaction", exact: true }).click();
+    await expect(page.getByRole("link", { name: "Verified Arc transaction", exact: true })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Retry saved source transaction", exact: true })).toHaveCount(0);
+    expect(signatures).toHaveLength(1); expect((await fixtureState(request)).sends).toHaveLength(1);
+    await page.screenshot({ path: path.join(process.env.HELPER_BROWSER_RUN_ROOT!, "signature-import-arc-verified.png"), fullPage: true });
+  });
+
+
+  test("ambiguous reserve payloads remain review-only across reload and later partial API answers", async ({ page, request }) => {
+    const { bridge, signatures } = await openSolana(page);
+    await bridge.submit(); await bridge.waitForActivityPage();
+    await expect(page.getByRole("button", { name: "Download verified Arc call", exact: true })).toBeVisible();
+    await scenario(request, { arcCompleted: true, reserveAttested: true, reserveAmbiguous: true, helperSimulationFails: true });
+    await page.getByRole("button", { name: "Refresh status", exact: true }).click();
+    await expect(page.getByText("Reserve authorization needs review", { exact: true })).toBeVisible();
+    let rows = await bridge.readActivities();
+    const completion = (rows[0].cctpHelper as { completion: { candidates: unknown[]; intent?: unknown } }).completion;
+    expect(completion.candidates).toHaveLength(2); expect(completion.intent).toBeUndefined();
+    expect(rows[0].status).not.toBe("complete"); expect(rows[0].xreserveNoteId).toBeUndefined();
+    await scenario(request, { reserveAmbiguous: false }); await page.reload();
+    await expect(page.getByText("Reserve authorization needs review", { exact: true })).toBeVisible();
+    await page.getByRole("button", { name: "Refresh status", exact: true }).click();
+    await expect(page.getByText(/conflicting completion evidence/)).toBeVisible();
+    rows = await bridge.readActivities();
+    expect((rows[0].cctpHelper as { completion: { candidates: unknown[] } }).completion.candidates).toHaveLength(2);
+    expect(rows[0].status).not.toBe("complete"); expect(rows[0].xreserveNoteId).toBeUndefined();
+    expect(signatures).toHaveLength(1); expect((await fixtureState(request)).sends).toHaveLength(1);
+    await page.screenshot({ path: path.join(process.env.HELPER_BROWSER_RUN_ROOT!, "ambiguous-reserve-review.png"), fullPage: true });
+  });
+
 });

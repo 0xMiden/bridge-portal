@@ -272,21 +272,23 @@ describe("actual ActivityStore acknowledgment and manual reentry", () => {
     rows[0].cctpHelper.signature = "NOT_A_SIGNATURE"; storage.set(activityStorageKey, JSON.stringify(rows));
     expect(loadStoredActivities()).toHaveLength(0);
   });
-  it.each(["source_finalized", "ready"] as const)("surfaces current attention after %s while preserving source evidence", async stage => {
+  it.each(["source_finalized", "ready"] as const)("retains %s progress while recording a current warning", async stage => {
     const { input, effects, store } = await setup(); await submitBridgeTransfer(input, effects);
     const activity = store.getSnapshot().receipts[0].activity;
     const original = { ...activity, cctpHelper: { ...activity.cctpHelper!, stage } };
     const next = applyActivityPatch(original, { cctpHelper: { ...original.cctpHelper, stage: "needs_attention", reason: "attestation_invalid" } });
-    expect(next.cctpHelper?.stage).toBe("needs_attention"); expect(next.cctpHelper?.signature).toBe(original.cctpHelper.signature);
+    expect(next.cctpHelper?.stage).toBe(stage); expect(next.cctpHelper?.signature).toBe(original.cctpHelper.signature);
+    expect(next.cctpHelper?.reason).toBe("attestation_invalid");
     expect(next.status).toBe("source_finality");
   });
-  it.each(["source_finalized", "ready"] as const)("revokes %s on HTTP validation failure without losing its signature", async stage => {
+  it.each(["source_finalized", "ready"] as const)("retains %s on HTTP outage; export still requires fresh validation", async stage => {
     const { input, effects, store } = await setup(); await submitBridgeTransfer(input, effects);
     const saved = store.getSnapshot().receipts[0].activity;
     const activity = { ...saved, cctpHelper: { ...saved.cctpHelper!, stage } };
     vi.stubGlobal("fetch", vi.fn(async () => Response.json({ error: "Unavailable" }, { status: 503 })));
     const observation = await observeManualHelper(activity, new AbortController().signal);
     const next = applyActivityPatch(activity, observation.patch);
-    expect(next.cctpHelper?.stage).toBe("needs_attention"); expect(next.cctpHelper?.signature).toBe(saved.cctpHelper?.signature);
+    expect(next.cctpHelper?.stage).toBe(stage); expect(next.cctpHelper?.signature).toBe(saved.cctpHelper?.signature);
+    expect(observation.warning).toContain("temporarily unavailable");
   });
 });

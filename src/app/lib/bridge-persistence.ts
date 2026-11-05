@@ -10,7 +10,8 @@ import { isBridgeProvider } from "../../bridge/providers/registry";
 import { type Activity } from "./bridge-presentation";
 
 import type { BridgeEnvironment } from "../../config/environment";
-import { helperActivitySchema } from "../../bridge/providers/xreserve/helper-types";
+import { helperActivitySchema, migrateHelperActivity } from "../../bridge/providers/xreserve/helper-types";
+import { validateBundleForActivity, validateHelperCompletion, validateSavedHelperSource } from "../../bridge/providers/xreserve/helper-manual";
 import { arcRecipient, parseArcAmount } from "../../bridge/providers/xreserve/deposit-terms";
 
 export const activityStorageKey = "miden.bridge.ui.activities.v2";
@@ -121,7 +122,19 @@ function normalizeActivities(parsed: unknown): Activity[] {
             auth.sourceAccount !== activity.solanaAddress || auth.grossAmount !== parseArcAmount(activity.amount).toString() ||
             !activity.midenAccount || auth.midenRecipient !== arcRecipient(activity.midenAccount)) return [];
       } catch { return []; }
-      activity = { ...activity, cctpHelper: helper.data };
+      const row = migrateHelperActivity(helper.data);
+      activity = { ...activity, cctpHelper: row };
+      try {
+        validateSavedHelperSource(row);
+        if (row.bundle) validateBundleForActivity(row.bundle, row);
+        if (row.completion) {
+          if (!row.bundle) return [];
+          validateHelperCompletion({ ...activity, routeSnapshot }, row.bundle, row.completion);
+        }
+        if (["arc_deposited", "reserve_attested", "delivered"].includes(row.stage) && !row.completion?.arc) return [];
+        if (["reserve_attested", "delivered"].includes(row.stage) && !row.completion?.intent) return [];
+        if (row.stage === "delivered" && (!activity.xreserveNoteId || activity.xreserveMidenBlock === undefined)) return [];
+      } catch { return []; }
     } else if (activity.cctpHelper) return [];
     if (routeSnapshot.provider !== activity.provider || routeSnapshot.mode !== activity.mode ||
         activity.asset !== routeSnapshot.source.symbol || typeof activity.updatedAt !== "number" ||

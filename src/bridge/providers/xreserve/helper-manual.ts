@@ -7,6 +7,7 @@ import { assertMidenAccountNetwork } from "../../../wallets/miden/network";
 import type { QuoteRequest, QuoteResult } from "../../core/quote";
 import type { Activity } from "../../core/models";
 import type { SubmissionContext } from "../../core/submission";
+import type { ActivityObservation } from "../../core/provider";
 import { validateMidenRecipient } from "../../miden-address";
 import { assertSolanaGenesis, createSolanaConnection } from "../../solana/rpc";
 import { arcRecipient, parseArcAmount } from "./deposit-terms";
@@ -16,9 +17,15 @@ import { decodeCctpMessage, matchAttestedMessage } from "./cctp-message";
 import { prepareHelperSolana, validateHelperTransactionBytes, verifySignedSolana } from "./helper-solana";
 import { manualBundleSchema, manualObservationSchema, manualQuoteSchema, type HelperActivity, type ManualAuthorization, type ManualBundle, type ManualQuote, type ManualObservation } from "./helper-types";
 import { withManualSourceLock } from "./helper-submission-lock";
+import { activityRoute } from "../../core/routes";
+import { configKey } from "../../../config/bridge-config";
+import { helperCompletionSchema, type HelperCompletion } from "./helper-completion-types";
+import { parseArcDepositIntent } from "./attestation";
+import { keccak256 } from "viem";
 
 export function sameHelperDeployment(left: HelperDeployment, right: HelperDeployment) {
-  return JSON.stringify({ ...left, enabled: false }) === JSON.stringify({ ...right, enabled: false });
+  // Admission and refreshed qualification evidence do not change an executed transfer's identity.
+  return configKey({ ...left, enabled: false, qualification: null }) === configKey({ ...right, enabled: false, qualification: null });
 }
 async function manualJson(url: string, init?: RequestInit) {
   const response = await fetch(url, { ...init, cache: "no-store" });
@@ -32,7 +39,7 @@ export async function refreshManualQuote(auth: Pick<ManualQuote, "deploymentId" 
 }
 export function assertFreshManualQuote(reviewed: ManualQuote, fresh: ManualQuote) {
   assertManualAmounts(fresh);
-  for (const field of ["deploymentId", "sourceDomain", "sourceAccount", "grossAmount", "midenRecipient", "execution"] as const)
+  for (const field of ["deploymentId", "sourceDomain", "sourceAccount", "grossAmount", "midenRecipient"] as const)
     if (reviewed[field] !== fresh[field]) throw new Error("The manual quote changed its reviewed transfer terms.");
   const age = Date.now() - Date.parse(fresh.checkedAt);
   if (age < -5000 || age > 30_000 || BigInt(fresh.maxCctpFee) > BigInt(reviewed.maxCctpFee))
@@ -67,6 +74,7 @@ type SourceReview = { auth: ManualAuthorization; selection: PhantomSelection; at
 const sessions = new Map<string, Session>();
 
 async function assertValidity(connection: SourceConnection, helper: HelperActivity) {
+  if (helper.recoveryOnly || !helper.lastValidBlockHeight || !helper.blockhash) throw new Error("Imported recovery cannot sign or resend a source transaction.");
   await assertSolanaGenesis(connection, helper.authorization.deployment);
   const height = await connection.getBlockHeight("confirmed");
   if (!Number.isSafeInteger(height) || height < 0 || BigInt(height) > BigInt(helper.lastValidBlockHeight))
@@ -78,6 +86,8 @@ export async function submitManualHelper(context: SubmissionContext) {
   context.phase("Checking manual route and Solana fees…");
   const fresh = await refreshManualQuote(auth);
   assertFreshManualQuote(auth, fresh);
+  if (!fresh.arcAnchor) throw new Error("A finalized Arc discovery anchor is required before signing.");
+  if (!auth.arcAnchor || BigInt(fresh.arcAnchor.block) < BigInt(auth.arcAnchor.block)) auth.arcAnchor = fresh.arcAnchor;
   const connection = createSolanaConnection(auth.deployment);
   await assertSolanaGenesis(connection, auth.deployment);
   const session = await sourceSession(context, review, connection);
@@ -112,7 +122,7 @@ async function sourceSession(context: SubmissionContext, review: SourceReview, c
   if (quote?.kind !== "cctp-helper") throw new Error("Solana fee or event-account rent increased. Refresh and review again.");
   if (BigInt(prepared.sourceFeeLamports) > BigInt(quote.sourceFeeLamports) || BigInt(prepared.eventRentLamports) > BigInt(quote.eventRentLamports))
     throw new Error("Solana fee or event-account rent increased. Refresh and review again.");
-  const created: Session = { prepared, helper: { schemaVersion: 1, execution: "manual", authorization: review.auth, attemptId: review.attemptId, stage: "signing",
+  const created: Session = { prepared, helper: { schemaVersion: 2, execution: "automatic", authorization: review.auth, attemptId: review.attemptId, stage: "signing",
     eventAccount: prepared.eventAccount, scanStartSlot: prepared.scanStartSlot, blockhash: prepared.blockhash,
     lastValidBlockHeight: prepared.lastValidBlockHeight, sourceFeeLamports: prepared.sourceFeeLamports, eventRentLamports: prepared.eventRentLamports } };
   sessions.set(review.attemptId, created);
@@ -189,6 +199,10 @@ async function broadcastSavedSource(context: SubmissionContext, connection: Sour
 
 export function validateBundleForActivity(bundle: ManualBundle, helper: HelperActivity): ManualBundle {
   const value = manualBundleSchema.parse(bundle), auth = helper.authorization;
+  assertManualAmounts(auth);
+  if (helper.bundle && helper.bundle.message !== value.message) throw new Error("Circle returned a different completed message for this source. Preserve the original evidence.");
+  if (value.messageHash && value.messageHash !== keccak256(value.message)) throw new Error("Attested message hash mismatch.");
+  if (value.attestationHash && value.attestationHash !== keccak256(value.attestation)) throw new Error("Attestation hash mismatch.");
   assertBundleReview(value, helper);
   const decoded = decodeCctpMessage(value.message), original = decodeCctpMessage(value.source.message);
   assertSourceProtocol(original.transfer);
@@ -236,33 +250,110 @@ function assertSourceOccurrence(source: ManualBundle["source"], helper: HelperAc
     throw new Error(message);
 }
 
+export function validateSavedHelperSource(helper: HelperActivity) {
+  const source = helper.sourceEvidence, auth = helper.authorization;
+  if (!source) return;
+  assertManualAmounts(auth);
+  if (source.sourceTransaction !== helper.signature || source.eventAccount !== helper.eventAccount) throw new Error("Saved source identity mismatch.");
+  const fields = ["sourceAccount", "grossAmount", "maxCctpFee", "midenRecipient"] as const;
+  if (fields.some(field => source[field] !== auth[field])) throw new Error("Saved source terms mismatch.");
+  const message = decodeCctpMessage(source.message);
+  assertSourceProtocol(message.transfer);
+  assertSourceEndpoints(message.transfer, auth.deployment);
+  assertSourceEconomicIntent(message.transfer, auth);
+  assertSourceOccurrence(source, helper);
+}
+
 function assertAttestedExecution(value: ManualBundle, original: ReturnType<typeof decodeCctpMessage>, decoded: ReturnType<typeof decodeCctpMessage>, auth: ManualAuthorization) {
   const message = "Manual handoff fee or finality mismatch.";
+  if (BigInt(decoded.nonce) === 0n) throw new Error("A completed Circle message requires its assigned nonce.");
   if (!matchAttestedMessage(original, decoded) || decoded.finalityThresholdExecuted < 2000 || decoded.expirationBlock !== 0n) throw new Error(message);
   if (decoded.feeExecuted > BigInt(auth.maxCctpFee)) throw new Error(message);
   if (decoded.feeExecuted.toString() !== value.feeExecuted || (BigInt(auth.grossAmount) - decoded.feeExecuted).toString() !== value.netAmount || value.cctpNonce !== decoded.nonce)
     throw new Error(message);
 }
 
-export async function observeManualHelper(activity: Activity, signal: AbortSignal) {
+export async function observeManualHelper(activity: Activity, signal: AbortSignal): Promise<ActivityObservation> {
   try { return await observeManualHelperVerified(activity, signal); }
   catch (error) {
     if (signal.aborted || !activity.cctpHelper) throw error;
-    return { patch: { cctpHelper: { ...activity.cctpHelper, stage: "needs_attention" as const, reason: "Fresh source and manual-call validation is unavailable." } },
-      warning: "Manual execution remains pending. Refresh validation before exporting; do not burn again." };
+    return { patch: {}, warning: "Transfer status is temporarily unavailable. Saved progress is retained; do not burn again." };
   }
 }
 async function observeManualHelperVerified(activity: Activity, signal: AbortSignal) {
   const helper = activity.cctpHelper;
   if (!helper?.signature) return { patch: {}, warning: "This attempt needs its original tab to finish saving/signing. Do not create another burn." };
-  const observation = manualObservationSchema.parse(await manualJson(`/api/cctp-helper/manual/attestation?deploymentId=${encodeURIComponent(helper.authorization.deploymentId)}&sourceTransaction=${encodeURIComponent(helper.signature)}`, { signal }));
+  const observation = await requestHelperObservation(activity, signal);
   switch (observation.state) {
+    case "tracking": return trackingObservation(activity, validateBundleForActivity(observation.bundle, helper), observation.completion, signal);
     case "ready": {
       const bundle = validateBundleForActivity(observation.bundle, helper);
       return { patch: { cctpHelper: { ...helper, stage: "ready" as const, bundle, sourceEvidence: bundle.source, signedBytes: undefined, reason: undefined } } };
     }
     case "source_failed": return failedSourceObservation(helper, observation);
+    case "source_verified": return { patch: {} };
     default: return pendingSourceObservation(helper, observation);
+  }
+}
+
+export async function requestHelperObservation(activity: Activity, signal?: AbortSignal, options: { exportCall?: boolean; arcHash?: `0x${string}` } = {}) {
+  const helper = activity.cctpHelper;
+  if (!helper?.signature) throw new Error("The original source signature is required.");
+  const response = await manualJson("/api/cctp-helper/manual/attestation", { method: "POST", signal, headers: { "content-type": "application/json" },
+    body: JSON.stringify({ schemaVersion: 2, deploymentId: helper.authorization.deploymentId, sourceTransaction: helper.signature,
+      recovery: activityRoute(activity)?.recovery, anchor: helper.authorization.arcAnchor, scan: helper.completion?.scan,
+      ...(helper.completion?.arc ? { arcHash: helper.completion.arc.transactionHash } : {}), ...options }) });
+  return manualObservationSchema.parse(response);
+}
+
+/** Recheck persisted tuple/nonce bindings before deriving a recipient note. */
+export function validateHelperCompletion(activity: Activity, bundle: ManualBundle, completion: HelperCompletion) {
+  const helper = activity.cctpHelper;
+  if (!helper) throw new Error("Missing saved helper activity.");
+  helperCompletionSchema.parse(completion);
+  if (helper.completion?.needsAttention && completion.intent) throw new Error("Earlier ambiguous completion evidence needs review before selecting a reserve nonce.");
+  validateBundleForActivity(bundle, helper);
+  const intent = completion.intent;
+  if (!intent) return;
+  const parsed = parseArcDepositIntent(intent.payload, activityRoute(activity)?.recovery);
+  if (keccak256(intent.payload) !== intent.messageHash) throw new Error("Reserve payload hash mismatch.");
+  const fields = ["nonce", "amount", "sender", "recipient", "faucet"] as const;
+  if (fields.some(field => parsed[field] !== intent[field])) throw new Error("Reserve payload binding mismatch.");
+  if (intent.amount !== bundle.netAmount || intent.sender !== helper.authorization.deployment.helper.address) throw new Error("Reserve principal/depositor mismatch.");
+  if (arcRecipient(intent.recipient) !== helper.authorization.midenRecipient || intent.faucet !== helper.authorization.deployment.miden.faucetId)
+    throw new Error("Reserve destination mismatch.");
+}
+
+async function trackingObservation(activity: Activity, bundle: ManualBundle, completion: HelperCompletion, signal: AbortSignal) {
+  const helper = activity.cctpHelper;
+  if (!helper) throw new Error("Missing saved helper activity.");
+  signal.throwIfAborted();
+  if (helper.completion?.needsAttention) return { patch: {}, warning: "This transfer has conflicting completion evidence. Keep its transaction hashes for review; do not burn again." };
+  validateHelperCompletion(activity, bundle, completion);
+  const updated = { ...helper, schemaVersion: 2 as const, execution: "automatic" as const, stage: completion.stage,
+    bundle, sourceEvidence: bundle.source, signedBytes: undefined, completion, reason: completion.warning };
+  const patch: Partial<Activity> = { cctpHelper: updated, receivedAmount: formatUnits(BigInt(bundle.netAmount), 6),
+    summary: `Receive ${formatUnits(BigInt(bundle.netAmount), 6)} USDCx on Miden`,
+    ...(completion.arc ? { xreserveArcTxHash: completion.arc.transactionHash } : {}) };
+  if (completion.intent && !completion.needsAttention) return checkHelperDelivery(activity, patch, completion, signal);
+  return { patch, warning: completion.warning ?? (completion.catchingUp ? "Checking finalized Arc history in bounded pages. Older imports may take longer." : undefined) };
+}
+
+async function checkHelperDelivery(activity: Activity, patch: Partial<Activity>, completion: HelperCompletion, signal: AbortSignal) {
+  if (!completion.intent || !patch.cctpHelper) throw new Error("Missing reserve authorization.");
+  try {
+    const { checkArcDelivery } = await import("./delivery");
+    const delivery = await checkArcDelivery(completion.intent, activityRoute(activity)?.recovery);
+    signal.throwIfAborted();
+    patch.xreserveNoteId = delivery.noteId;
+    if (delivery.block !== undefined) {
+      patch.xreserveMidenBlock = delivery.block; patch.cctpHelper = { ...patch.cctpHelper, stage: "delivered" };
+      patch.destinationTxAt = activity.destinationTxAt ?? Date.now();
+    }
+    return { patch, warning: completion.warning };
+  } catch {
+    signal.throwIfAborted();
+    return { patch, warning: "Reserve authorization is verified. Exact Miden note lookup will retry." };
   }
 }
 
@@ -273,8 +364,12 @@ function failedSourceObservation(helper: HelperActivity, observation: Extract<Ma
 }
 
 function pendingSourceObservation(helper: HelperActivity, observation: Extract<ManualObservation, { state: "pending" | "needs_attention" }>) {
-  if (helper.stage === "ready" || helper.sourceEvidence) return { patch: { cctpHelper: { ...helper, stage: "needs_attention" as const, reason: observation.reason } },
-    warning: "Manual execution remains pending. Fresh validation is currently unavailable; export is disabled." };
+  if (observation.state === "pending" && observation.source) {
+    const verified = { ...helper, sourceEvidence: observation.source, signedBytes: undefined, stage: "source_finalized" as const };
+    validateSavedHelperSource(verified);
+    return { patch: { cctpHelper: verified } };
+  }
+  if (helper.bundle || helper.sourceEvidence) return { patch: {}, warning: "Fresh status is unavailable. Last verified progress is retained; export requires current simulation." };
   const stage = observation.state === "needs_attention" ? "needs_attention" as const
     : observation.reason === "attestation_pending" ? "source_finalized" as const : "source_unknown" as const;
   const clearPacket = observation.state === "pending" && observation.reason === "attestation_pending";
@@ -287,7 +382,7 @@ export async function resendManualHelper(activity: Activity, save: (patch: Parti
 }
 async function resendManualHelperLocked(activity: Activity, save: (patch: Partial<Activity>) => void) {
   const helper = activity.cctpHelper;
-  if (!helper?.signedBytes || !helper.signature) throw new Error("There are no saved source bytes to resend. Check source history.");
+  if (!helper?.signedBytes || !helper.signature || helper.recoveryOnly) throw new Error("There are no saved source bytes to resend. Check source history.");
   const { transaction, authorization } = await validateHelperTransactionBytes(Buffer.from(helper.signedBytes, "base64"), helper.authorization.deployment, true);
   for (const field of ["sourceAccount", "grossAmount", "maxCctpFee", "midenRecipient"] as const)
     if (authorization[field] !== helper.authorization[field]) throw new Error("Saved source transaction does not match the review.");

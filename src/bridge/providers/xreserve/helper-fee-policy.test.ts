@@ -176,7 +176,7 @@ describe("phase-specific Circle fee-recipient admission through actual productio
     const signed = await signedFixture();
     expect((await sourceRequest("sendTransaction", signed.transaction.serialize().toString("base64"))).status).toBe(200);
     await change({ sourceFailed: true });
-    const observation = await readManualHelperTransfer(deployment.deploymentId, signed.signature);
+    const observation = await readManualHelperTransfer(deployment.deploymentId, signed.signature, { exportCall: true });
     expect(observation.state).toBe("source_failed");
     const route = routesForEnvironment("testnet").find(value => value.transport === "cctp-helper")!;
     const activity = createActivity(route, "1", { sourceTxHash: signed.signature, solanaAddress: signed.authorization.sourceAccount, midenAccount: golden.miden.accountHex,
@@ -199,7 +199,7 @@ describe("phase-specific Circle fee-recipient admission through actual productio
     const signed = await signedFixture();
     expect((await sourceRequest("sendTransaction", signed.transaction.serialize().toString("base64"))).status).toBe(200);
     await change(mutation);
-    expect((await readManualHelperTransfer(deployment.deploymentId, signed.signature)).state).toBe("ready");
+    expect((await readManualHelperTransfer(deployment.deploymentId, signed.signature, { exportCall: true })).state).toBe("ready");
     await expect(quoteManualHelper(input())).rejects.toThrow();
     expect((await state()).sends).toHaveLength(1);
   });
@@ -209,31 +209,31 @@ describe("phase-specific Circle fee-recipient admission through actual productio
     await change({ executedFee: "0", ...(failure === "zero" ? { feeRecipient: `0x${"00".repeat(20)}` }
       : failure === "blacklisted" ? { policy: { functionName: "isBlacklisted", principal: `0x${"88".repeat(20)}`, value: true } }
       : { feeRecipientResult: failure }) });
-    expect((await readManualHelperTransfer(deployment.deploymentId, signed.signature)).state).toBe("ready");
+    expect((await readManualHelperTransfer(deployment.deploymentId, signed.signature, { exportCall: true })).state).toBe("ready");
     expect((await state()).sends).toHaveLength(1);
   });
   it("historical Gateway allowance covers authenticated net while native USDC mint allowance still covers gross", async () => {
     const signed = await signedFixture();
     expect((await sourceRequest("sendTransaction", signed.transaction.serialize().toString("base64"))).status).toBe(200);
     await change({ executedFee: "10", policy: { functionName: "allowance", value: "999990" } });
-    const observed = await readManualHelperTransfer(deployment.deploymentId, signed.signature);
+    const observed = await readManualHelperTransfer(deployment.deploymentId, signed.signature, { exportCall: true });
     expect(observed.state).toBe("ready");
     if (observed.state === "ready") expect(observed.bundle.netAmount).toBe("999990");
     await expect(quoteManualHelper(input())).rejects.toThrow();
     await change({ policy: { functionName: "minterAllowance", value: "999990" } });
-    expect(await readManualHelperTransfer(deployment.deploymentId, signed.signature)).toEqual({ state: "needs_attention", reason: "attestation_invalid" });
+    expect(await readManualHelperTransfer(deployment.deploymentId, signed.signature, { exportCall: true })).toEqual({ state: "needs_attention", reason: "attestation_invalid" });
     expect((await state()).sends).toHaveLength(1);
   });
   it("historical finalized F=0 remains exportable for self recipient; F>0 fails full helper simulation", async () => {
     const signed = await signedFixture(), response = await sourceRequest("sendTransaction", signed.transaction.serialize().toString("base64"));
     expect(response.status).toBe(200);
     await change({ feeRecipient: deployment.helper.address, executedFee: "0" });
-    const zero = await readManualHelperTransfer(deployment.deploymentId, signed.signature);
+    const zero = await readManualHelperTransfer(deployment.deploymentId, signed.signature, { exportCall: true });
     expect(zero.state).toBe("ready"); if (zero.state === "ready") expect(zero.bundle.feeExecuted).toBe("0");
     await change({ executedFee: "1" });
-    expect(await readManualHelperTransfer(deployment.deploymentId, signed.signature)).toEqual({ state: "needs_attention", reason: "attestation_invalid" });
+    expect(await readManualHelperTransfer(deployment.deploymentId, signed.signature, { exportCall: true })).toEqual({ state: "needs_attention", reason: "attestation_invalid" });
     await change({ feeRecipient: `0x${"88".repeat(20)}` });
-    expect((await readManualHelperTransfer(deployment.deploymentId, signed.signature)).state).toBe("ready");
+    expect((await readManualHelperTransfer(deployment.deploymentId, signed.signature, { exportCall: true })).state).toBe("ready");
     expect((await state()).sends).toHaveLength(1);
   });
 });

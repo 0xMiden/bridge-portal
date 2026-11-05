@@ -17,7 +17,7 @@ export type BridgeRoute = {
   disabled?: boolean;
   recovery: BridgeConfig;
   transport?: "cctp-helper" | "cctp-helper-evm";
-  execution?: "manual";
+  execution?: "manual" | "automatic";
   helperDeployment?: HelperDeployment;
   evmHelperDeployment?: EvmHelperDeployment;
 };
@@ -47,7 +47,7 @@ function routesForConfig(config: BridgeConfig): readonly BridgeRoute[] {
   const manual = (deployments.length ? deployments : [undefined]).map(deployment => {
     if (deployment) assertHelperConfig(deployment, config);
     return { id: `${environment}:cctp-helper-solana-manual${deployment ? `:${deployment.deploymentId}` : ""}`, provider: "xreserve", mode: "receive",
-      transport: "cctp-helper", execution: "manual", helperDeployment: deployment, recovery: config,
+      transport: "cctp-helper", execution: "automatic", helperDeployment: deployment, recovery: config,
       disabled: !deployment?.enabled || document.features.bridgeIn === false,
       source: { kind: "spl", network: environment === "mainnet" ? "solana-mainnet" : "solana-devnet", symbol: "USDC", decimals: 6,
         name: "Circle USDC", logo: "/asset-logos/usdc.svg", mint: deployment?.source.mint ?? (environment === "mainnet" ? "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v" : "4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU") }, destination,

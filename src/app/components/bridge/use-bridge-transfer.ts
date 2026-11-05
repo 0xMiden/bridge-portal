@@ -50,7 +50,7 @@ export function useBridgeTransfer(draft: { route: BridgeRoute; amount: string },
     quoteLoading: quote.providers.loading && !quote.live,
     isSubmitting, submitPhase: isSubmitting ? state.phase : "", evmNetworkLabel: route.source.kind === "spl" ? "Phantom (Solana)" : wallets.evm.network.name,
   });
-  const cta = route.execution === "manual" && route.disabled
+  const cta = route.transport && route.disabled
     ? { ...action, label: "Route unavailable", disabled: true }
     : action.action === "review" ? {
     ...action,
@@ -99,7 +99,7 @@ export function useBridgeTransfer(draft: { route: BridgeRoute; amount: string },
       return;
     }
     const reviewed = state.review;
-    if (reviewed.route.execution === "manual") attempt.current ??= crypto.randomUUID();
+    if (reviewed.route.transport) attempt.current ??= crypto.randomUUID();
     setState({ status: "editing", error: "" });
     wallets.setError("");
     const midenAsset = wallets.miden.balance.balance;

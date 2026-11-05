@@ -1,7 +1,7 @@
 import "server-only";
 import { z } from "zod";
-import { encodeFunctionData } from "viem";
-import { assertHelperConfig, solanaSignature } from "../../../config/cctp-helper";
+import { encodeFunctionData, keccak256 } from "viem";
+import { assertHelperConfig, bytes32, solanaSignature } from "../../../config/cctp-helper";
 import { helperServer, type HelperServer } from "../../../config/cctp-helper.server";
 import { currentBridgeConfig } from "../../../config/bridge-config";
 import { assertEmbeddedRecipient, assertManualAmounts, requiredManualFee } from "./helper-hook";
@@ -9,7 +9,10 @@ import { HELPER_MAX, MANUAL_PENDING, manualBundleSchema, manualQuoteRequestSchem
 import { assertManualDestination, helperAbi, readManualSourcePolicy, readStandardFee } from "./helper-preflight.server";
 import { readFinalizedManualSource } from "../../solana/source-transaction";
 import { boundedText } from "../../solana/rpc";
-import { validateHelperAttestation } from "./helper-attestation.server";
+import { validateHelperAttestation, validateHelperMessage } from "./helper-attestation.server";
+import { bridgeConfigSchema } from "../../../config/wallet-config/schema";
+import { arcCheckpointSchema, arcScanSchema } from "./helper-completion-types";
+import { completionClient, observeHelperCompletion } from "./helper-completion.server";
 
 export async function quoteManualHelper(value: unknown) {
   const input = manualQuoteRequestSchema.parse(value);
@@ -23,7 +26,10 @@ export async function quoteManualHelper(value: unknown) {
     readManualSourcePolicy(deployment, server, input.sourceAccount, amount), readStandardFee(server),
   ]);
   const cap = requiredManualFee(amount, minimumFee, minFee);
-  const quote = { ...input, execution: "manual" as const, maxCctpFee: cap.toString(), minimumNet: (amount - cap).toString(), checkedAt: new Date().toISOString() };
+  const head = await completionClient(server).getBlock({ blockTag: "finalized" });
+  if (!head.hash || head.number === null || head.number < BigInt(deployment.helper.deploymentBlock)) throw new Error("Arc finalized anchor unavailable.");
+  const quote = { ...input, execution: "automatic" as const, maxCctpFee: cap.toString(), minimumNet: (amount - cap).toString(),
+    checkedAt: new Date().toISOString(), arcAnchor: { block: head.number.toString(), hash: head.hash } };
   assertManualAmounts(quote);
   return quote;
 }
@@ -33,14 +39,17 @@ const irisSchema = z.object({ sourceTxHash: solanaSignature, messages: z.array(z
   eventNonce: z.string().optional(), cctpVersion: z.number().optional(),
 })).max(50) });
 
-export async function validateManualHelperAttestation(source: ManualSourceEvidence, value: unknown, deployment: ReturnType<typeof helperServer>["deployment"], server: HelperServer) {
+export async function validateManualHelperAttestation(source: ManualSourceEvidence, value: unknown, deployment: ReturnType<typeof helperServer>["deployment"], server: HelperServer, simulate = true) {
   const row = completedIrisAttestation(source, value);
   if (!row) return null;
   const message = manualBundleSchema.shape.message.parse(row.message), attestation = manualBundleSchema.shape.attestation.parse(row.attestation);
-  const validated = await validateHelperAttestation(source, message, attestation, deployment, server, row);
+  const validated = simulate ? await validateHelperAttestation(source, message, attestation, deployment, server, row)
+    : validateHelperMessage(source, message, row);
   const actual = validated.actual, net = validated.net;
   return manualBundleSchema.parse({ schemaVersion: 1, execution: "manual", deployment, source, cctpNonce: actual.nonce,
-    message, attestation, maxCctpFee: source.maxCctpFee, feeExecuted: actual.feeExecuted.toString(), netAmount: net.toString(),
+    message, attestation, messageHash: keccak256(message), attestationHash: keccak256(attestation),
+    ...(simulate ? { simulation: { status: "passed", checkedAt: new Date().toISOString() } } : {}),
+    maxCctpFee: source.maxCctpFee, feeExecuted: actual.feeExecuted.toString(), netAmount: net.toString(),
     checkedAt: new Date().toISOString(), simulationCaller: server.simulationCaller,
     call: { to: deployment.helper.address, value: "0", function: "receiveAndDeposit(bytes,bytes)",
       data: encodeFunctionData({ abi: helperAbi, functionName: "receiveAndDeposit", args: [message, attestation] }) },
@@ -58,7 +67,13 @@ function completedIrisAttestation(source: ManualSourceEvidence, value: unknown) 
 }
 
 
-export async function readManualHelperTransfer(id: string, signature: string): Promise<ManualObservation> {
+export const helperObservationRequestSchema = z.object({ schemaVersion: z.literal(2), deploymentId: z.string().max(80), sourceTransaction: solanaSignature,
+  recovery: bridgeConfigSchema.optional(), anchor: arcCheckpointSchema.optional(), scan: arcScanSchema.optional(), arcHash: bytes32.optional(),
+  exportCall: z.boolean().optional(), recoverSource: z.boolean().optional(),
+}).strict();
+type ObservationOptions = Omit<z.infer<typeof helperObservationRequestSchema>, "schemaVersion" | "deploymentId" | "sourceTransaction">;
+
+export async function readManualHelperTransfer(id: string, signature: string, options: ObservationOptions = {}): Promise<ManualObservation> {
   solanaSignature.parse(signature);
   let registry: ReturnType<typeof helperServer>;
   try { registry = helperServer(id); } catch { return { state: "needs_attention", reason: "historical_deployment_unavailable" }; }
@@ -68,12 +83,26 @@ export async function readManualHelperTransfer(id: string, signature: string): P
   catch { return { state: "needs_attention", reason: "history_unavailable" }; }
   if (observation.state === "pending") return { state: "pending", reason: "source_unconfirmed" };
   if (observation.state === "source_failed") return observation;
-  const response = await fetch(`${server.irisApi}/v2/messages/5?transactionHash=${encodeURIComponent(signature)}`, { cache: "no-store", signal: AbortSignal.timeout(10_000) });
-  if (response.status === 404) return { state: "pending", reason: "attestation_pending" };
+  if (options.recoverSource) return { schemaVersion: 2, state: "source_verified", source: observation.source };
+  return readAttestedHelper(observation.source, deployment, server, options);
+}
+
+async function readAttestedHelper(source: ManualSourceEvidence, deployment: ReturnType<typeof helperServer>["deployment"], server: HelperServer, options: ObservationOptions): Promise<ManualObservation> {
+  const response = await fetch(`${server.irisApi}/v2/messages/5?transactionHash=${encodeURIComponent(source.sourceTransaction)}`, { cache: "no-store", redirect: "error", signal: AbortSignal.timeout(10_000) });
+  if (response.status === 404) return { state: "pending", reason: "attestation_pending", source };
   if (!response.ok) throw new Error("Circle unavailable.");
   try {
-    const bundle = await validateManualHelperAttestation(observation.source, JSON.parse(await boundedText(response, 1_000_000)), deployment, server);
-    return bundle ? { state: "ready", bundle } : { state: "pending", reason: "attestation_pending" };
+    const bundle = await validateManualHelperAttestation(source, JSON.parse(await boundedText(response, 1_000_000)), deployment, server, false);
+    if (!bundle) return { state: "pending", reason: "attestation_pending", source };
+    const completion = await observeHelperCompletion(completionClient(server), deployment, { message: bundle.message,
+      recipient: bundle.source.midenRecipient, netAmount: bundle.netAmount,
+      recovery: options.recovery ?? currentBridgeConfig(deployment.environment), anchor: options.anchor, scan: options.scan, arcHash: options.arcHash });
+    if (options.exportCall && !completion.arc) {
+      // A downloadable spending instruction always needs current admission and live simulation.
+      await validateHelperAttestation(bundle.source, bundle.message, bundle.attestation, deployment, server, {});
+      return { state: "ready", bundle: { ...bundle, simulation: { status: "passed", checkedAt: new Date().toISOString() } } };
+    }
+    return { schemaVersion: 2, state: "tracking", bundle, completion };
   } catch { return { state: "needs_attention", reason: "attestation_invalid" }; }
 }
 
