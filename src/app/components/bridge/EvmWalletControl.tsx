@@ -78,9 +78,9 @@ export function EvmWalletControl({ wallet, onConnect, onError }: {
           <WalletMenuItem><button type="button" role="menuitem" onClick={copyAddress}>
             <Copy size={15} aria-hidden="true" /><span>{copied ? "Copied" : "Copy address"}</span>
           </button></WalletMenuItem>
-          <WalletMenuItem><a role="menuitem" href={`${network.blockExplorers.default.url}/address/${address}`} target="_blank" rel="noreferrer">
+          {network.blockExplorers && <WalletMenuItem><a role="menuitem" href={`${network.blockExplorers.default.url}/address/${address}`} target="_blank" rel="noreferrer">
             <ExternalLink size={15} aria-hidden="true" /><span>View on {network.blockExplorers.default.name}</span>
-          </a></WalletMenuItem>
+          </a></WalletMenuItem>}
           <span className="wallet-menu-separator bg-border h-px m-1" />
           <WalletMenuItem danger><button type="button" role="menuitem" onClick={() => void runMenuAction(() => disconnect().catch(() => {}))}>
             <LogOut size={15} aria-hidden="true" /><span>Forget in app</span>

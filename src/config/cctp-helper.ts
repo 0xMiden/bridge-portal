@@ -44,7 +44,7 @@ export const helperDeployments = z.array(helperDeploymentSchema).parse(entries);
 if (new Set(helperDeployments.map(entry => entry.deploymentId)).size !== helperDeployments.length)
   throw new Error("Duplicate helper deployment identity.");
 
-export function assertHelperConfig(deployment: HelperDeployment, recovery: BridgeConfig) {
+export function assertHelperConfig(deployment: Pick<HelperIdentity, "environment" | "miden">, recovery: BridgeConfig) {
   if (deployment.environment !== recovery.environment || deployment.miden.faucetId !== recovery.derived.usdcxFaucetId)
     throw new Error("The manual deployment does not match this Bread network and faucet.");
 }

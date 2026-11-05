@@ -55,6 +55,7 @@ export type SubmissionContext = {
   /** Retain a receipt only after the provider acknowledges the source submission. */
   record: (patch: Partial<Activity>) => Activity;
   update: (patch: Partial<Activity>) => void;
+  saveEvmHelperDurably?: (patch: Partial<Activity>) => Activity;
   saveHelperDurably?: (patch: Partial<Activity>) => Activity;
   existingHelper?: import("../providers/xreserve/helper-types").HelperActivity;
 };

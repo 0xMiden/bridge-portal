@@ -1,3 +1,6 @@
+import { evmHelperActivitySchema } from "../../bridge/providers/xreserve/helper-evm-types";
+import { evmHelperIntent, evmHelperCallData } from "../../bridge/providers/xreserve/helper-evm-call";
+import { configKey } from "../../config/bridge-config";
 import { receiptRouteSchema } from "../../bridge/core/receipt-route";
 import { bridgeProviders } from "../../bridge/providers/registry";
 import { normalizeActivityState, type ActivityPersistence } from "../../bridge/activity";
@@ -96,6 +99,18 @@ function normalizeActivities(parsed: unknown): Activity[] {
     const route = receiptRouteSchema.safeParse(activity.routeSnapshot);
     if (!route.success) return [];
     const routeSnapshot = route.data;
+    if (routeSnapshot.transport === "cctp-helper-evm") {
+      const helper = evmHelperActivitySchema.safeParse(activity.cctpEvmHelper);
+      if (!helper.success || !routeSnapshot.evmHelperDeployment) return [];
+      const row = helper.data, auth = row.authorization;
+      try {
+        if (configKey(auth.deployment) !== configKey(routeSnapshot.evmHelperDeployment) ||
+          auth.sourceAccount !== activity.evmAddress?.toLowerCase() || auth.grossAmount !== parseArcAmount(activity.amount).toString()) return [];
+        if (!activity.midenAccount || auth.midenRecipient !== arcRecipient(activity.midenAccount) || row.intent !== evmHelperIntent(auth) || row.callData !== evmHelperCallData(auth)) return [];
+        if (row.hash !== activity.sourceTxHash) return [];
+      } catch { return []; }
+      activity = { ...activity, cctpEvmHelper: row };
+    } else if (activity.cctpEvmHelper) return [];
     if (routeSnapshot.transport === "cctp-helper") {
       const helper = helperActivitySchema.safeParse(activity.cctpHelper);
       if (!helper.success || !routeSnapshot.helperDeployment) return [];
@@ -132,7 +147,7 @@ export function loadManualSubmissionActivities(): Activity[] {
   for (const value of parsed) {
     if (!value || typeof value !== "object") continue;
     const row = value as Record<string, unknown>, route = row.routeSnapshot;
-    if (!("cctpHelper" in row) && !(route && typeof route === "object" && "transport" in route && route.transport === "cctp-helper")) continue;
+    if (!("cctpHelper" in row) && !("cctpEvmHelper" in row) && !(route && typeof route === "object" && "transport" in route && ["cctp-helper", "cctp-helper-evm"].includes(String(route.transport)))) continue;
     const normalized = normalizeActivities([value]);
     if (normalized.length !== 1 || ids.has(normalized[0].id))
       throw new Error("Saved manual source history is invalid. Recover it before starting another burn.");
@@ -145,7 +160,7 @@ export function saveActivities(activities: Activity[]) {
   // Ordinary activity writes must not erase a malformed manual row that the
   // display reader omitted. Refuse that write and retain the original evidence.
   const durable = loadManualSubmissionActivities();
-  const retained = durable.filter(activity => activity.cctpHelper && !activities.some(next => next.id === activity.id));
+  const retained = durable.filter(activity => (activity.cctpHelper || activity.cctpEvmHelper) && !activities.some(next => next.id === activity.id));
   window.localStorage.setItem(activityStorageKey, JSON.stringify([...activities, ...retained]));
 }
 

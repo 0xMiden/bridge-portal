@@ -24,3 +24,9 @@ export async function withManualSourceLock<T>(operation: () => Promise<T>): Prom
     return operation();
   });
 }
+
+/** Recovery responses can race; serialize their durable merge with source submission. */
+export async function withHelperJournalUpdate<T>(operation: () => T | Promise<T>): Promise<T> {
+  if (typeof navigator === "undefined" || !navigator.locks?.request) throw new Error("Safe source recovery requires Web Locks.");
+  return navigator.locks.request(lockName, { mode: "exclusive" }, operation);
+}

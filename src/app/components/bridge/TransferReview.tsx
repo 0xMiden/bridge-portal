@@ -49,26 +49,26 @@ export function TransferReview({ review, quote, walletsChanged, onCancel, onConf
           </div>
           <DetailsList items={[
             (route.source.symbol !== route.destination.symbol || Number(amount) !== Number(received)) && {
-              label: route.transport === "cctp-helper" ? "At least" : fees.estimated ? "Estimated received" : "You receive", value: `${received} ${route.destination.symbol}`,
+              label: route.execution === "manual" ? "At least" : fees.estimated ? "Estimated received" : "You receive", value: `${received} ${route.destination.symbol}`,
             },
             (estimate.minReceived !== "Not quoted" && Number(estimate.minReceived) !== Number(received)) && {
               label: "Minimum received", value: `${estimate.minReceived} ${route.destination.symbol}`,
             },
-            { label: "Provider", value: route.transport === "cctp-helper" ? "Circle · manual Arc execution" : bridgeProviders[route.provider].label },
+            { label: "Provider", value: route.execution === "manual" ? "Circle · manual Arc execution" : bridgeProviders[route.provider].label },
             fees.showEta && { label: "Estimated time", value: estimate.eta },
             { label: "Network fee", value: quote.networkFee },
             review.quote?.kind === "cctp-helper" && { label: "Solana transaction fee", value: `${formatUnits(BigInt(review.quote.sourceFeeLamports), 9)} SOL` },
             review.quote?.kind === "cctp-helper" && { label: "Circle event-account rent", value: `${formatUnits(BigInt(review.quote.eventRentLamports), 9)} SOL (not reclaimed in v1)` },
-            review.quote?.kind === "cctp-helper" && { label: "Arc execution", value: "Separate manual transaction and Arc gas required" },
+            (review.quote?.kind === "cctp-helper" || review.quote?.kind === "cctp-helper-evm") && { label: "Arc execution", value: "Separate manual transaction and Arc gas required" },
             { label: fees.label, value: quote.fee },
             total !== undefined && { label: `Total ${route.source.symbol}`, value: `${total} ${route.source.symbol}` },
           ]} />
-          {route.provider === "xreserve" && route.transport !== "cctp-helper" ? warning : null}
+          {route.provider === "xreserve" && route.execution !== "manual" ? warning : null}
           {walletsChanged ? <FormAlert role="alert">Your connected wallet changed. Close this review and review the transfer again.</FormAlert> : null}
           {quote.capError ? <FormAlert role="alert">{quote.capError}</FormAlert> : null}
         </div>
         <div className="preflight-actions shrink-0 mobile:border-t mobile:border-border mobile:pt-3 mobile:pb-[max(12px,env(safe-area-inset-bottom))]">
-          {route.transport === "cctp-helper" ? <div className="mb-3">{warning}</div> : null}
+          {route.execution === "manual" ? <div className="mb-3">{warning}</div> : null}
           <Button type="button" variant="primary" className="primary-button preflight-confirm" ref={confirmRef}
             disabled={walletsChanged || quote.capBlocked} onClick={onConfirm}>
             Confirm in wallet<ArrowRight size={18} aria-hidden="true" />

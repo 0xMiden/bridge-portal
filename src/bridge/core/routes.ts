@@ -1,3 +1,5 @@
+import { evmHelperRoutes } from "../providers/xreserve/helper-evm-routes";
+import type { EvmHelperDeployment } from "../../config/cctp-evm-helper";
 import { sameAsset, type BridgeAsset } from "./assets";
 import type { BridgeActivity, BridgeProvider, FlowMode } from "./models";
 import { currentBridgeConfig, type BridgeConfig } from "../../config/bridge-config";
@@ -14,9 +16,10 @@ export type BridgeRoute = {
   /** Keep paused directions addressable for existing activity receipts. */
   disabled?: boolean;
   recovery: BridgeConfig;
-  transport?: "cctp-helper";
+  transport?: "cctp-helper" | "cctp-helper-evm";
   execution?: "manual";
   helperDeployment?: HelperDeployment;
+  evmHelperDeployment?: EvmHelperDeployment;
 };
 
 function routesForConfig(config: BridgeConfig): readonly BridgeRoute[] {
@@ -50,7 +53,7 @@ function routesForConfig(config: BridgeConfig): readonly BridgeRoute[] {
         name: "Circle USDC", logo: "/asset-logos/usdc.svg", mint: deployment?.source.mint ?? (environment === "mainnet" ? "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v" : "4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU") }, destination,
     } satisfies BridgeRoute;
   });
-  return [...legacy, ...manual];
+  return [...legacy, ...manual, ...evmHelperRoutes(config, destination)];
 }
 
 // Release configuration is fixed for the page lifetime; derive routes once.

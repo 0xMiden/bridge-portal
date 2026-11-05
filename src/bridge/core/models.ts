@@ -80,6 +80,7 @@ export type BridgeActivity = {
   evmAddress?: string;
   solanaAddress?: string;
   cctpHelper?: HelperActivity;
+  cctpEvmHelper?: import("../providers/xreserve/helper-evm-types").EvmHelperActivity;
   midenAccount?: string;
   /** Source-relative ordering hint (higher = newer) for merged remote history. */
   sortKey?: number;

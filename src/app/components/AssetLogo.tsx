@@ -10,7 +10,7 @@ const networkLogos = {
   "base-sepolia": "/asset-logos/base.svg",
   "arbitrum-sepolia": "/asset-logos/arbitrum.svg",
   "miden-testnet": "/asset-logos/miden.svg",
-} satisfies Record<BridgeNetwork, string>;
+} satisfies Partial<Record<BridgeNetwork, string>>;
 
 const networkLogoStyles = {
   default: "size-6",
@@ -24,7 +24,7 @@ export function NetworkLogo({ network, variant = "default" }: {
   variant?: keyof typeof networkLogoStyles;
 }) {
   return <Image className={`network-logo shrink-0 object-contain ${networkLogoStyles[variant]}`}
-    src={networkLogos[network]} alt="" width={24} height={24} unoptimized />;
+    src={(networkLogos as Partial<Record<BridgeNetwork, string>>)[network] ?? "/asset-logos/network.svg"} alt="" width={24} height={24} unoptimized />;
 }
 
 export function TokenLogo({ asset, compact = false }: { asset: BridgeAsset; compact?: boolean }) {

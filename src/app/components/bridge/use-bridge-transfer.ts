@@ -50,7 +50,7 @@ export function useBridgeTransfer(draft: { route: BridgeRoute; amount: string },
     quoteLoading: quote.providers.loading && !quote.live,
     isSubmitting, submitPhase: isSubmitting ? state.phase : "", evmNetworkLabel: route.source.kind === "spl" ? "Phantom (Solana)" : wallets.evm.network.name,
   });
-  const cta = route.transport === "cctp-helper" && route.disabled
+  const cta = route.execution === "manual" && route.disabled
     ? { ...action, label: "Route unavailable", disabled: true }
     : action.action === "review" ? {
     ...action,
@@ -99,7 +99,7 @@ export function useBridgeTransfer(draft: { route: BridgeRoute; amount: string },
       return;
     }
     const reviewed = state.review;
-    if (reviewed.route.transport === "cctp-helper") attempt.current ??= crypto.randomUUID();
+    if (reviewed.route.execution === "manual") attempt.current ??= crypto.randomUUID();
     setState({ status: "editing", error: "" });
     wallets.setError("");
     const midenAsset = wallets.miden.balance.balance;
@@ -116,7 +116,7 @@ export function useBridgeTransfer(draft: { route: BridgeRoute; amount: string },
         assertCurrentWallets: () => {
           const current = liveWallets.current;
           if (!current.miden.connected || current.accounts.midenAccount !== reviewed.accounts.midenAccount ||
-              !sameSourceIdentity(current.accounts.sourceIdentity, reviewed.accounts.sourceIdentity) || current.solana.selection?.provider !== reviewed.solanaProvider?.provider)
+              !sameSourceIdentity(current.accounts.sourceIdentity, reviewed.accounts.sourceIdentity) || current.accounts.evmAddress.toLowerCase() !== reviewed.accounts.evmAddress.toLowerCase() || (reviewed.route.source.kind === "spl" && current.solana.selection?.provider !== reviewed.solanaProvider?.provider))
             throw new Error("Your connected account or recipient changed. Review again.");
         },
       }, {

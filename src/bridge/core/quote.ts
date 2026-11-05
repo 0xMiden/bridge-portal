@@ -41,6 +41,7 @@ export type QuoteResult = {
       sourceFeeLamports: string;
       eventRentLamports: string;
     }
+  | { kind: "cctp-helper-evm"; authorization: import("../providers/xreserve/helper-evm-types").EvmManualAuthorization }
   | {
       kind: "withdrawal";
       authorization: WithdrawalQuote;

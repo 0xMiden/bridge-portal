@@ -1,3 +1,6 @@
+import { EvmHelperJournal } from "../../bridge/providers/xreserve/helper-evm-journal";
+import { evmHelperIntent } from "../../bridge/providers/xreserve/helper-evm-call";
+import { evmHelperActivitySchema } from "../../bridge/providers/xreserve/helper-evm-types";
 import { configKey } from "../../config/bridge-config";
 import { assertMidenAccountNetwork } from "../../wallets/miden/network";
 import { validateTransferAmount } from "../../bridge/core/rules";
@@ -35,6 +38,25 @@ export async function submitBridgeTransfer(
   effects: SubmissionEffects,
 ): Promise<void> {
   const route = findBridgeRoute(input.routeId);
+  if (route?.transport === "cctp-helper-evm") {
+    let release: (() => void) | undefined;
+    try {
+      const auth = input.quote?.kind === "cctp-helper-evm" ? input.quote.authorization : undefined;
+      if (!auth || !input.helperAttemptId) throw new Error("Review the source EVM transfer again.");
+      const intent = evmHelperIntent(auth);
+      release = reserveManualSubmission(input.helperAttemptId, intent);
+      await withManualSourceLock(() => {
+        new EvmHelperJournal().assertNew(input.helperAttemptId!, intent);
+        const saved = loadManualSubmissionActivities().find(activity => activity.cctpEvmHelper &&
+          (activity.cctpEvmHelper.attemptId === input.helperAttemptId ||
+            activity.cctpEvmHelper.intent === intent && activity.cctpEvmHelper.stage !== "source_failed"));
+        if (saved) { effects.navigate(`/activity/${saved.id}`); throw new Error("Recover the saved EVM source receipt. Do not burn again."); }
+        return submitBridgeTransferLocked(input, effects);
+      });
+    } catch (error) { effects.onError(errorMessage(error)); }
+    finally { release?.(); }
+    return;
+  }
   if (route?.transport !== "cctp-helper" || !route.helperDeployment) return submitBridgeTransferLocked(input, effects);
   let release: (() => void) | undefined;
   try {
@@ -142,6 +164,17 @@ async function submitBridgeTransferLocked(input: TransferSubmission, effects: Su
       existingHelper: recorded?.cctpHelper,
       phase: effects.onPhaseChange,
       update,
+      saveEvmHelperDurably: route.transport === "cctp-helper-evm" ? (patch) => {
+        evmHelperActivitySchema.parse(patch.cctpEvmHelper);
+        receiptRouteSchema.parse(route);
+        if (!effects.activities.get || !effects.activities.getSnapshot || !effects.activities.sync) throw new Error("Durable EVM receipt storage unavailable.");
+        if (recorded) recorded = effects.activities.patch(recorded.id, patch) ?? recorded;
+        else recorded = effects.activities.record(createActivity(route, input.amount, { ...patch, id: `act-${input.helperAttemptId}` }));
+        const receipt = effects.activities.get(recorded.id);
+        if (!receipt || receipt.unsavedChanges) throw new Error("EVM receipt could not be saved. Recover the source journal; do not invoke the wallet again.");
+        effects.navigate(`/activity/${recorded.id}`);
+        return receipt.activity;
+      } : undefined,
       saveHelperDurably: manual ? (patch) => {
         helperActivitySchema.parse(patch.cctpHelper);
         receiptRouteSchema.parse(route);

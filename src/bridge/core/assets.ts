@@ -1,6 +1,6 @@
 import { tokenRegistry } from "../../config/token-registry";
 
-export type EvmNetwork = "sepolia" | "arc-testnet" | "base-sepolia" | "arbitrum-sepolia" | "ethereum" | "arc" | "base" | "arbitrum" | "polygon";
+export type EvmNetwork = import("../../config/evm-network-names").EvmNetworkName;
 export type MidenNetwork = "miden-testnet" | "miden-mainnet";
 export type SolanaNetwork = "solana-devnet" | "solana-mainnet";
 export type BridgeNetwork = EvmNetwork | MidenNetwork | SolanaNetwork;

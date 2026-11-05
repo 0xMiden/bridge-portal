@@ -26,7 +26,8 @@ export function applyActivityPatch(activity: Activity, patch: Partial<Activity>)
   const incoming = activityState(next);
   // Manual readiness is still pending; a new validation failure must revoke export
   // eligibility without discarding established source evidence or changing old routes.
-  const manualAttention = activity.cctpHelper && next.cctpHelper?.stage === "needs_attention";
+  const manualAttention = activity.cctpHelper && next.cctpHelper?.stage === "needs_attention" ||
+    activity.cctpEvmHelper && next.cctpEvmHelper?.stage === "needs_attention";
   const stale = !manualAttention && incoming.status !== "failed" && incoming.status !== "complete" && incoming.order < previous.order;
   if (settled || stale) {
     // Preserve the current phase while accepting late identifiers and other metadata.

@@ -1,7 +1,9 @@
+import { evmNetworks } from "../evm-networks.ts";
+import { evmNetworkNames } from "../evm-network-names.ts";
 import { z } from "zod";
 import type { bridgeConfigSchema } from "./schema";
 
-const evmNetwork = z.enum(["sepolia", "arc-testnet", "base-sepolia", "arbitrum-sepolia", "ethereum", "arc", "base", "arbitrum", "polygon"]);
+const evmNetwork = z.enum(evmNetworkNames);
 export const tokenLogoSchema = z.string().regex(/^\/asset-logos\/[a-z0-9-]+\.(svg|png)$/);
 const metadata = { symbol: z.string().min(1).max(11), name: z.string().min(1).max(100).optional(), logo: tokenLogoSchema };
 const evmMetadata = { ...metadata, network: evmNetwork, decimals: z.int().min(0).max(255) };
@@ -30,7 +32,7 @@ export const tokenConnectionsSchema = z.object({
   const invalid = (message: string) => ctx.addIssue({ code: "custom", message });
   for (const environment of ["testnet", "mainnet"] as const) {
     for (const { evm, miden, routes, provider } of registry[environment]) {
-      if (miden.network !== `miden-${environment}` || (environment === "testnet") !== /sepolia|testnet/.test(evm.network))
+      if (miden.network !== `miden-${environment}` || (environment === "testnet") !== (evmNetworks[evm.network].testnet === true))
         invalid("Token connection network mismatch");
       if (!routes.receive && !routes.send) invalid("Token connection has no routes");
       if (provider === "agglayer" && evm.kind === "erc20" && routes.send)

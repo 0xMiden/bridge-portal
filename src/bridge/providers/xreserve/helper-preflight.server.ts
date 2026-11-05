@@ -6,6 +6,7 @@ import { PublicKey } from "@solana/web3.js";
 import { createPublicClient, keccak256, pad, parseAbi } from "viem";
 import { z } from "zod";
 import { type HelperIdentity } from "../../../config/cctp-helper";
+import type { EvmHelperIdentity, HelperDestination } from "../../../config/cctp-evm-helper";
 import type { HelperServer } from "../../../config/cctp-helper.server";
 import { circleProgram, helperSolanaAccounts, readSolanaBalances } from "./helper-solana";
 import { assertSolanaGenesis, boundedText, createSolanaConnection } from "../../solana/rpc";
@@ -22,10 +23,10 @@ export const preflightAbi = parseAbi([
   "function localMinter() view returns (address)", "function remoteTokenMessengers(uint32) view returns (bytes32)",
   "function getLocalToken(uint32,bytes32) view returns (address)", "function receiveMessage(bytes,bytes) returns (bool)",
 ]);
-export const arcHelperClient = (server: HelperServer) => createPublicClient({ transport: arcReadTransport(server.arcRpc) });
+export const arcHelperClient = (server: Pick<HelperServer, "arcRpc">) => createPublicClient({ transport: arcReadTransport(server.arcRpc) });
 const keyHex = (value: string) => `0x${new PublicKey(value).toBuffer().toString("hex")}` as const;
 
-export async function assertManualDestination(deployment: HelperIdentity, server: HelperServer, recipient: `0x${string}`, amounts: DestinationAmounts) {
+export async function assertManualDestination(deployment: HelperIdentity | EvmHelperIdentity, server: Pick<HelperServer, "arcRpc">, recipient: `0x${string}`, amounts: DestinationAmounts) {
   const client = arcHelperClient(server), { arc, helper, miden } = deployment;
   const identity = await client.getChainId();
   if (identity !== arc.chainId || await client.getBlockNumber() < BigInt(helper.deploymentBlock)) throw new Error("Destination chain mismatch.");
@@ -38,6 +39,7 @@ export async function assertManualDestination(deployment: HelperIdentity, server
   await assertHelperImmutables(client, deployment);
   const { messageTransmitter: { address: transmitter }, tokenMessenger: { address: messenger }, usdc: { address: usdc }, xReserve: { address: reserve } } = arc;
   const domain = miden.domain, faucet = arcRecipient(miden.faucetId);
+  const source = helperSourceEndpoints(deployment);
   const checks = await Promise.all([
     ...[arc.messageTransmitter.address, arc.tokenMinter.address, arc.usdc.address, arc.xReserve.address].map(address =>
       client.readContract({ address, abi: preflightAbi, functionName: "paused" }).then(value => value === false)),
@@ -52,15 +54,15 @@ export async function assertManualDestination(deployment: HelperIdentity, server
     client.readContract({ address: messenger, abi: preflightAbi, functionName: "messageBodyVersion" }).then(value => value === 1),
     client.readContract({ address: messenger, abi: preflightAbi, functionName: "localMessageTransmitter" }).then(value => value.toLowerCase() === arc.messageTransmitter.address),
     client.readContract({ address: messenger, abi: preflightAbi, functionName: "localMinter" }).then(value => value.toLowerCase() === arc.tokenMinter.address),
-    client.readContract({ address: messenger, abi: preflightAbi, functionName: "remoteTokenMessengers", args: [5] }).then(value => value === keyHex(deployment.source.tokenMessengerProgram)),
-    client.readContract({ address: arc.tokenMinter.address, abi: preflightAbi, functionName: "getLocalToken", args: [5, keyHex(deployment.source.mint)] }).then(value => value.toLowerCase() === arc.usdc.address),
+    client.readContract({ address: messenger, abi: preflightAbi, functionName: "remoteTokenMessengers", args: [source.domain] }).then(value => value === source.messenger),
+    client.readContract({ address: arc.tokenMinter.address, abi: preflightAbi, functionName: "getLocalToken", args: [source.domain, source.token] }).then(value => value.toLowerCase() === arc.usdc.address),
   ]);
   if (checks.some(value => !value)) throw new Error("Destination route is unavailable.");
   await assertManualDestinationPolicy(deployment, client, amounts);
   return client;
 }
 
-async function assertHelperImmutables(client: ReturnType<typeof arcHelperClient>, deployment: HelperIdentity) {
+async function assertHelperImmutables(client: ReturnType<typeof arcHelperClient>, deployment: HelperDestination) {
   const { arc, helper, miden } = deployment;
   const [transmitter, messenger, usdc, reserve, domain, faucet] = await Promise.all([
     client.readContract({ address: helper.address, abi: helperAbi, functionName: "messageTransmitter" }),
@@ -111,4 +113,11 @@ export async function readStandardFee(server: HelperServer) {
   const standard = rows.filter(row => row.finalityThreshold === 2000);
   if (standard.length !== 1) throw new Error("Circle Standard fee unavailable.");
   return standard[0].minimumFee;
+}
+
+/** Destination mappings are checked against the source family's actual wire identity. */
+export function helperSourceEndpoints(deployment: HelperIdentity | EvmHelperIdentity) {
+  const source = deployment.source;
+  if ("runtime" in source) return { domain: source.domain, messenger: pad(source.tokenMessenger.address), token: pad(source.usdc.address) };
+  return { domain: 5, messenger: keyHex(source.tokenMessengerProgram), token: keyHex(source.mint) };
 }

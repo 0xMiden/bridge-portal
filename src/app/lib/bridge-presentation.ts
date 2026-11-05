@@ -55,14 +55,8 @@ export const explorerUrls = {
 };
 
 export const networkLabels: Record<BridgeNetwork, string> = {
-  "solana-mainnet": "Solana", "solana-devnet": "Solana Devnet",
-  polygon: "Polygon",
-  ethereum: "Ethereum", arc: "Arc", base: "Base", arbitrum: "Arbitrum", "miden-mainnet": "Miden",
-  sepolia: "Sepolia",
-  "arc-testnet": "Arc Testnet",
-  "base-sepolia": "Base Sepolia",
-  "arbitrum-sepolia": "Arbitrum Sepolia",
-  "miden-testnet": "Miden",
+  ...Object.fromEntries(Object.entries(evmNetworks).map(([key, chain]) => [key, chain.name])) as Record<keyof typeof evmNetworks, string>,
+  "solana-mainnet": "Solana", "solana-devnet": "Solana Devnet", "miden-mainnet": "Miden", "miden-testnet": "Miden", sepolia: "Sepolia",
 };
 
 export const tokenNames: Record<string, string> = { USDC: "USD Coin", USDCx: "USDC-backed token", ETH: "Ether" };
@@ -207,7 +201,8 @@ export function sourceExplorer(activity: BridgeActivity): ExplorerLink {
   if (activity.mode === "receive") {
     const tx = fullHash(directionFor(activity).activityDetails(activity).sourceHash);
     const source = activityRoute(activity)?.source;
-    const explorer = source && source.kind !== "miden" && source.kind !== "spl" ? evmNetworks[source.network].blockExplorers.default : evmNetworks.sepolia.blockExplorers.default;
+    const explorer = source && source.kind !== "miden" && source.kind !== "spl" ? evmNetworks[source.network].blockExplorers?.default : evmNetworks.sepolia.blockExplorers.default;
+    if (!explorer) return { label: "Source explorer unavailable", available: false };
     return {
       label: `View on ${explorer.name}`,
       href: tx ? `${explorer.url}/tx/${tx}` : undefined,
@@ -245,7 +240,8 @@ export function destinationExplorer(activity: BridgeActivity): ExplorerLink {
   // fulfils and the tx hash is captured — never a broken/list URL.
   const sepoliaTx = fullHash(directionFor(activity).activityDetails(activity).destinationHash);
   const destination = activityRoute(activity)?.destination;
-  const explorer = destination && destination.kind !== "miden" && destination.kind !== "spl" ? evmNetworks[destination.network].blockExplorers.default : evmNetworks.sepolia.blockExplorers.default;
+  const explorer = destination && destination.kind !== "miden" && destination.kind !== "spl" ? evmNetworks[destination.network].blockExplorers?.default : evmNetworks.sepolia.blockExplorers.default;
+  if (!explorer) return { label: "Destination explorer unavailable", available: false };
   return {
     label: `View on ${explorer.name}`,
     href: sepoliaTx ? `${explorer.url}/tx/${sepoliaTx}` : undefined,
@@ -325,6 +321,7 @@ export function buildDiagnostics(
       xreserveMidenBlock: activity.xreserveMidenBlock,
     }),
     lastMonitorError: extra.monitorError || undefined,
+    manualEvm: activity.cctpEvmHelper,
     manual: activity.cctpHelper ? { execution: "manual", deploymentId: activity.cctpHelper.authorization.deploymentId,
       authorization: activity.cctpHelper.authorization, attemptId: activity.cctpHelper.attemptId, stage: activity.cctpHelper.stage,
       signature: activity.cctpHelper.signature, eventAccount: activity.cctpHelper.eventAccount,

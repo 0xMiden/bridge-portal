@@ -11,6 +11,7 @@ import { observeXreserveDeposit } from "./status";
 export const flows: ProviderFlows = {
   receive: {
     async quote(input, signal) {
+      if (input.route.transport === "cctp-helper-evm") return (await import("./helper-evm")).quoteEvmManualTransfer(input, signal);
       if (input.route.transport === "cctp-helper") return (await import("./helper-manual")).quoteManualTransfer(input, signal);
       if (["arc-testnet", "arc"].includes(input.route.source.network)) {
         const { quoteArcDeposit } = await import("./deposit-quote");
@@ -20,6 +21,7 @@ export const flows: ProviderFlows = {
       return quoteTransfer(input, signal);
     },
     async submit(context) {
+      if (context.route.transport === "cctp-helper-evm") return (await import("./helper-evm")).submitEvmManualHelper(context);
       if (context.route.transport === "cctp-helper") return (await import("./helper-manual")).submitManualHelper(context);
       const { input, route, phase, record, update } = context;
       const { provider, address } = input.evmWallet;
@@ -77,11 +79,11 @@ export const flows: ProviderFlows = {
       }
     },
     monitor: {
-      canPoll: (activity) => activity.cctpHelper ? !!activity.cctpHelper.signature && activity.cctpHelper.stage !== "source_failed" :
+      canPoll: (activity) => activity.cctpEvmHelper ? !!activity.cctpEvmHelper.hash && activity.cctpEvmHelper.stage !== "source_failed" : activity.cctpHelper ? !!activity.cctpHelper.signature && activity.cctpHelper.stage !== "source_failed" :
         activity.status !== "complete" &&
         activity.status !== "failed" &&
         Boolean(activity.sourceTxHash),
-      observe: (activity, signal) => activity.cctpHelper
+      observe: (activity, signal) => activity.cctpEvmHelper ? import("./helper-evm-recovery").then(module => module.observeEvmManualHelper(activity, signal)) : activity.cctpHelper
         ? import("./helper-manual").then(module => module.observeManualHelper(activity, signal))
         : observeXreserveDeposit(activity, signal),
     },

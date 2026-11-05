@@ -6,7 +6,7 @@ import { SEPOLIA_NETWORK } from "../../config/sepolia";
 // Keep private RPC configuration on the server, out of browser transports.
 export function evmRpcUrls(network: EvmNetwork): string[] {
   // Provider order is explicit; read runtime secrets when a request arrives.
-  const urlsByNetwork: Record<EvmNetwork, (string | undefined)[]> = {
+  const urlsByNetwork: Partial<Record<EvmNetwork, (string | undefined)[]>> = {
     ethereum: [
       process.env.ETHEREUM_RPC_URL,
       // Independent public providers; viem's Merkle default rate-limits reads.
@@ -52,7 +52,7 @@ export function evmRpcUrls(network: EvmNetwork): string[] {
       ...evmNetworks["arbitrum-sepolia"].rpcUrls.default.http,
     ],
   };
-  const urls = urlsByNetwork[network]
+  const urls = (urlsByNetwork[network] ?? [...evmNetworks[network].rpcUrls.default.http])
     .map((url) => url?.trim())
     .filter((url): url is string => Boolean(url));
 

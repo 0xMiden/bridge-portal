@@ -1,6 +1,7 @@
 import "server-only";
 import { parseAbi, zeroAddress, type createPublicClient } from "viem";
-import { address, type HelperIdentity } from "../../../config/cctp-helper";
+import { address } from "../../../config/cctp-helper";
+import type { HelperDestination } from "../../../config/cctp-evm-helper";
 
 export type DestinationAmounts = { grossAmount: bigint; netAmount: bigint; phase: "source-admission" | "attested" };
 type PolicyClient = Pick<ReturnType<typeof createPublicClient>, "readContract">;
@@ -22,7 +23,7 @@ async function requirePolicy(checks: Promise<boolean>[]) {
 }
 
 /** Runtime identity alone cannot establish that a later source burn remains viable. */
-export async function assertManualDestinationPolicy(deployment: HelperIdentity, client: PolicyClient, amounts: DestinationAmounts) {
+export async function assertManualDestinationPolicy(deployment: HelperDestination, client: PolicyClient, amounts: DestinationAmounts) {
   if (amounts.grossAmount <= 0n || amounts.netAmount <= 0n || amounts.netAmount > amounts.grossAmount)
     throw new Error("Invalid destination admission amounts.");
   // A finalized zero-fee message never mints a fee. Unrelated current fee policy
@@ -37,13 +38,13 @@ export async function assertManualDestinationPolicy(deployment: HelperIdentity, 
     throw new Error("The Circle fee recipient cannot be the helper for a new source burn.");
 }
 
-async function readFeeRecipient({ arc }: HelperIdentity, client: PolicyClient) {
+async function readFeeRecipient({ arc }: HelperDestination, client: PolicyClient) {
   const checked = address.safeParse((await client.readContract({ address: arc.tokenMessenger.address, abi, functionName: "feeRecipient" })).toLowerCase());
   if (!checked.success) throw new Error("The Circle fee recipient is unavailable.");
   return checked.data;
 }
 
-async function assertReserveBindings({ arc, miden }: HelperIdentity, client: PolicyClient, phase: DestinationAmounts["phase"]) {
+async function assertReserveBindings({ arc, miden }: HelperDestination, client: PolicyClient, phase: DestinationAmounts["phase"]) {
   const reserve = arc.xReserve.address;
   await requirePolicy([
     client.readContract({ address: reserve, abi, functionName: "domain" }).then(value => value === 26),
@@ -60,7 +61,7 @@ async function assertReserveBindings({ arc, miden }: HelperIdentity, client: Pol
   ]);
 }
 
-async function assertGatewayPolicy({ arc, miden }: HelperIdentity, client: PolicyClient, amounts: DestinationAmounts) {
+async function assertGatewayPolicy({ arc, miden }: HelperDestination, client: PolicyClient, amounts: DestinationAmounts) {
   const gateway = arc.gatewayWallet.address;
   await requirePolicy([
     ...(amounts.phase === "source-admission" ? [gateway, arc.gatewayMinter.address] : [gateway]).map(target => client.readContract({ address: target, abi, functionName: "paused" }).then(value => !value)),
@@ -72,7 +73,7 @@ async function assertGatewayPolicy({ arc, miden }: HelperIdentity, client: Polic
   ]);
 }
 
-async function assertMintPolicy({ arc }: HelperIdentity, client: PolicyClient, amounts: DestinationAmounts) {
+async function assertMintPolicy({ arc }: HelperDestination, client: PolicyClient, amounts: DestinationAmounts) {
   await requirePolicy([
     client.readContract({ address: arc.tokenMinter.address, abi, functionName: "localTokenMessenger" })
       .then(value => value.toLowerCase() === arc.tokenMessenger.address),
@@ -86,7 +87,7 @@ async function assertMintPolicy({ arc }: HelperIdentity, client: PolicyClient, a
   ]);
 }
 
-async function assertPrincipalPolicy({ arc, helper, miden }: HelperIdentity, client: PolicyClient, feeRecipient?: `0x${string}`) {
+async function assertPrincipalPolicy({ arc, helper, miden }: HelperDestination, client: PolicyClient, feeRecipient?: `0x${string}`) {
   const principals = [arc.tokenMinter.address, arc.gatewayWallet.address, helper.address, arc.xReserve.address, miden.remoteDomainDepositor, ...(feeRecipient ? [feeRecipient] : [])];
   await requirePolicy(principals.map(principal =>
     client.readContract({ address: arc.usdc.address, abi, functionName: "isBlacklisted", args: [principal] }).then(value => !value)));

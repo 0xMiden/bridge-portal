@@ -13,6 +13,7 @@ import { formatAgo } from "../lib/relative-time";
 import { useActivityTracking } from "../lib/use-activity-tracking";
 import { useBridgeEnvironment, useSelectBridgeEnvironment } from "./NetworkProvider";
 import { ActivityJourney } from "./ActivityJourney";
+import { EvmManualHelperActions } from "./EvmManualHelperActions";
 import { ManualHelperActions } from "./ManualHelperActions";
 
 type Tracking = ReturnType<typeof useActivityTracking>;
@@ -42,6 +43,7 @@ export function ActivityDetail({ id }: { id: string }) {
       ) : (
         <EmptyState>
           <h1>Activity not found</h1>
+          <Link className="underline" href="/recovery">Recover saved EVM source attempts</Link>
           <p>This transfer isn&apos;t in local activity history on this browser.</p>
           <ButtonLink className="primary-button mt-2.5" href="/">Back to bridge</ButtonLink>
         </EmptyState>
@@ -71,6 +73,7 @@ function LoadedActivity({ activity, monitorError, lastCheckedAt, refresh, receip
         <ActivityProgress progress={model.progress} lastCheckedAt={lastCheckedAt} refresh={refresh} receiptSaved={receiptSaved} claimGuidance={needsClaim ? model.guidance : null} />
         {model.guidance && !needsClaim && <ActivityGuidance guidance={model.guidance} />}
       </ActivityJourney>
+      {activity.cctpEvmHelper && <EvmManualHelperActions activity={activity} />}
       {activity.cctpHelper && <ManualHelperActions activity={activity} refresh={refresh} />}
       {monitorError && model.progress.kind === "tracked" && (
         <FormAlert compact>{monitorError}</FormAlert>

@@ -1,0 +1,62 @@
+import { mainnet, sepolia, avalanche, avalancheFuji, optimism, optimismSepolia, arbitrum, arbitrumSepolia, base, baseSepolia, polygon, polygonAmoy, unichain, unichainSepolia, linea, lineaSepolia, codex, codexTestnet, sonic, worldchain, worldchainSepolia, monad, monadTestnet, sei, seiTestnet, xdc, xdcTestnet, hyperEvm, hyperliquidEvmTestnet, ink, inkSepolia, plumeMainnet, plumeSepolia, arc, arcTestnet, injective, injectiveTestnet, morph, cronos, cronosTestnet, plasma, plasmaTestnet, xLayer, xLayerTestnet } from "viem/chains";
+import { defineChain } from "viem";
+// Current official network identities supersede stale pinned Sonic testnet definitions.
+const currentSonicTestnet = defineChain({"id":14601,"name":"Sonic Testnet","nativeCurrency":{"name":"Sonic","symbol":"S","decimals":18},"rpcUrls":{"default":{"http":["https://rpc.testnet.soniclabs.com"]}},"blockExplorers":{"default":{"name":"SonicScan","url":"https://testnet.sonicscan.org"}},"testnet":true});
+const currentEdge = defineChain({"id":3343,"name":"EDGE","nativeCurrency":{"name":"Ether","symbol":"ETH","decimals":18},"rpcUrls":{"default":{"http":["https://edge-mainnet.g.alchemy.com/public"]}},"blockExplorers":{"default":{"name":"EDGE Explorer","url":"https://pro.edgex.exchange/en-US/explorer"}}});
+const currentEdgeTestnet = defineChain({"id":33431,"name":"EDGE Testnet","nativeCurrency":{"name":"Ether","symbol":"ETH","decimals":18},"rpcUrls":{"default":{"http":["https://edge-testnet.g.alchemy.com/public"]}},"blockExplorers":{"default":{"name":"EDGE Testnet Explorer","url":"https://edge-testnet.explorer.alchemy.com"}},"testnet":true});
+const currentPharos = defineChain({"id":1672,"name":"Pharos Pacific","nativeCurrency":{"name":"PROS","symbol":"PROS","decimals":18},"rpcUrls":{"default":{"http":["https://rpc.pharos.xyz"]}},"blockExplorers":{"default":{"name":"PharosScan","url":"https://www.pharosscan.xyz"}}});
+const currentPharosTestnet = defineChain({"id":688689,"name":"Pharos Atlantic","nativeCurrency":{"name":"PHRS","symbol":"PHRS","decimals":18},"rpcUrls":{"default":{"http":["https://atlantic.dplabs-internal.com"]}},"blockExplorers":{"default":{"name":"PharosScan","url":"https://atlantic.pharosscan.xyz"}},"testnet":true});
+const currentMorphHoodi = defineChain({ id: 2910, name: "Morph Hoodi", nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
+  rpcUrls: { default: { http: ["https://rpc-hoodi.morph.network"] } }, blockExplorers: { default: { name: "Morph Hoodi Explorer", url: "https://explorer-hoodi.morph.network" } }, testnet: true });
+export const cctpEvmChains = {
+  "ethereum": mainnet,
+  "sepolia": sepolia,
+  "avalanche": avalanche,
+  "avalanche-fuji": avalancheFuji,
+  "optimism": optimism,
+  "op-sepolia": optimismSepolia,
+  "arbitrum": arbitrum,
+  "arbitrum-sepolia": arbitrumSepolia,
+  "base": base,
+  "base-sepolia": baseSepolia,
+  "polygon": polygon,
+  "polygon-amoy": polygonAmoy,
+  "unichain": unichain,
+  "unichain-sepolia": unichainSepolia,
+  "linea": linea,
+  "linea-sepolia": lineaSepolia,
+  "codex": codex,
+  "codex-testnet": codexTestnet,
+  "sonic": sonic,
+  "sonic-testnet": currentSonicTestnet,
+  "world-chain": worldchain,
+  "world-chain-sepolia": worldchainSepolia,
+  "monad": monad,
+  "monad-testnet": monadTestnet,
+  "sei": sei,
+  "sei-testnet": seiTestnet,
+  "xdc": xdc,
+  "xdc-apothem": xdcTestnet,
+  "hyperevm": hyperEvm,
+  "hyperevm-testnet": hyperliquidEvmTestnet,
+  "ink": ink,
+  "ink-sepolia": inkSepolia,
+  "plume": plumeMainnet,
+  "plume-testnet": plumeSepolia,
+  "arc": arc,
+  "arc-testnet": arcTestnet,
+  "edge": currentEdge,
+  "edge-testnet": currentEdgeTestnet,
+  "injective": injective,
+  "injective-testnet": injectiveTestnet,
+  "morph": morph,
+  "morph-hoodi": currentMorphHoodi,
+  "pharos": currentPharos,
+  "pharos-atlantic": currentPharosTestnet,
+  "cronos": cronos,
+  "cronos-testnet": cronosTestnet,
+  "plasma": plasma,
+  "plasma-testnet": plasmaTestnet,
+  "x-layer": xLayer,
+  "x-layer-testnet": xLayerTestnet,
+} as const;

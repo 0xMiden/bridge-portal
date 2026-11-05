@@ -43,7 +43,8 @@ export function useBridgeWallets(route: BridgeRoute) {
       return readSolanaBalances(connection, deployment, solana.address);
     } });
   const sourceIdentity: SourceIdentity | undefined = route.source.kind === "spl" ?
-    { runtime: "solana", network: route.source.network, address: solana.address } : undefined;
+    { runtime: "solana", network: route.source.network, address: solana.address } : route.transport === "cctp-helper-evm" && route.source.kind === "erc20" ?
+    { runtime: "evm", network: route.source.network, address: evmAddress } : undefined;
   const midenBalance = useMidenBalance(midenAccount, midenToken);
   const evmBalance = useEvmBalance(evmAddress, evmToken);
   const evmBalanceLabel = evmBalance.balance

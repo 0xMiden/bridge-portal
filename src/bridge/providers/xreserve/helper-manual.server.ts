@@ -6,10 +6,10 @@ import { helperServer, type HelperServer } from "../../../config/cctp-helper.ser
 import { currentBridgeConfig } from "../../../config/bridge-config";
 import { assertEmbeddedRecipient, assertManualAmounts, requiredManualFee } from "./helper-hook";
 import { HELPER_MAX, MANUAL_PENDING, manualBundleSchema, manualQuoteRequestSchema, type ManualObservation, type ManualSourceEvidence } from "./helper-types";
-import { assertManualDestination, helperAbi, preflightAbi, readManualSourcePolicy, readStandardFee } from "./helper-preflight.server";
+import { assertManualDestination, helperAbi, readManualSourcePolicy, readStandardFee } from "./helper-preflight.server";
 import { readFinalizedManualSource } from "../../solana/source-transaction";
 import { boundedText } from "../../solana/rpc";
-import { decodeCctpMessage, matchAttestedMessage } from "./cctp-message";
+import { validateHelperAttestation } from "./helper-attestation.server";
 
 export async function quoteManualHelper(value: unknown) {
   const input = manualQuoteRequestSchema.parse(value);
@@ -37,20 +37,8 @@ export async function validateManualHelperAttestation(source: ManualSourceEviden
   const row = completedIrisAttestation(source, value);
   if (!row) return null;
   const message = manualBundleSchema.shape.message.parse(row.message), attestation = manualBundleSchema.shape.attestation.parse(row.attestation);
-  const actual = decodeCctpMessage(message), original = decodeCctpMessage(source.message);
-  assertStandardAttestationTerms(original, actual);
-  if (row.eventNonce !== undefined && row.eventNonce.toLowerCase() !== actual.nonce) throw new Error("Circle nonce mismatch.");
-  if (row.cctpVersion !== undefined && row.cctpVersion !== 2) throw new Error("Circle version mismatch.");
-  const net = actual.transfer.amount - actual.feeExecuted;
-  if (net <= 0n || net > HELPER_MAX) throw new Error("Invalid attested amount.");
-  const client = await assertManualDestination(deployment, server, source.midenRecipient, { grossAmount: actual.transfer.amount, netAmount: net, phase: "attested" });
-  // Read-only authentication: Circle observes the helper as destinationCaller.
-  const received = await client.simulateContract({ address: deployment.arc.messageTransmitter.address, abi: preflightAbi,
-    functionName: "receiveMessage", args: [message, attestation], account: deployment.helper.address });
-  if (received.result !== true) throw new Error("Circle attestation validation failed.");
-  // Independent full atomic call simulation uses a documented nonprivileged caller, no signer or funds.
-  await client.simulateContract({ address: deployment.helper.address, abi: helperAbi, functionName: "receiveAndDeposit",
-    args: [message, attestation], account: server.simulationCaller });
+  const validated = await validateHelperAttestation(source, message, attestation, deployment, server, row);
+  const actual = validated.actual, net = validated.net;
   return manualBundleSchema.parse({ schemaVersion: 1, execution: "manual", deployment, source, cctpNonce: actual.nonce,
     message, attestation, maxCctpFee: source.maxCctpFee, feeExecuted: actual.feeExecuted.toString(), netAmount: net.toString(),
     checkedAt: new Date().toISOString(), simulationCaller: server.simulationCaller,
@@ -69,13 +57,6 @@ function completedIrisAttestation(source: ManualSourceEvidence, value: unknown) 
   return complete[0];
 }
 
-function assertStandardAttestationTerms(original: ReturnType<typeof decodeCctpMessage>, actual: ReturnType<typeof decodeCctpMessage>) {
-  if (!matchAttestedMessage(original, actual)) throw new Error("Invalid Standard attestation terms.");
-  if (actual.transfer.version !== 1 || actual.transfer.burnVersion !== 1) throw new Error("Invalid Standard attestation terms.");
-  if (actual.finalityThresholdExecuted < 2000 || actual.expirationBlock !== 0n || actual.feeExecuted > actual.transfer.maxFee)
-    throw new Error("Invalid Standard attestation terms.");
-  if (BigInt(actual.nonce) === 0n) throw new Error("Invalid Standard attestation terms.");
-}
 
 export async function readManualHelperTransfer(id: string, signature: string): Promise<ManualObservation> {
   solanaSignature.parse(signature);
