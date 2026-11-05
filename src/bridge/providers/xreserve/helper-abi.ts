@@ -1,4 +1,5 @@
 import { parseAbi } from "viem";
+// Compiler ABI in ./abi is pinned to miden-usdcx 1670643e; parity is tested below.
 export const helperAbi = parseAbi([
   "function messageTransmitter() view returns (address)", "function tokenMessenger() view returns (address)",
   "function usdc() view returns (address)", "function xReserve() view returns (address)",
