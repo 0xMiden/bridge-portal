@@ -5,6 +5,7 @@ const providerLogos = {
   agglayer: "/provider-logos/agglayer.png",
   epoch: "/provider-logos/epoch.png",
   xreserve: "/provider-logos/circle.svg",
+  near: "/asset-logos/near.svg",
 } satisfies Record<BridgeProvider, string>;
 
 export function ProviderLogo({ provider }: { provider: BridgeProvider }) {

@@ -79,9 +79,10 @@ function ProviderRouteOption({ route, quote, selected, selectable, groupId, onSe
           <span className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
             <strong className={`${selected || !quote ? "selected-provider " : ""}text-sm leading-5 font-semibold`}>{provider.label}</strong>
             <span className={`inline-flex items-center gap-1.5 whitespace-nowrap text-xs leading-5 tabular-nums ${secondary}`}>
-              <Clock3 size={13} aria-hidden="true" /><span className="sr-only">Estimated time: </span>{policy.showEta ? policy.eta : "Varies"}
+              <Clock3 size={13} aria-hidden="true" /><span className="sr-only">Estimated time: </span>{quote?.estimatedSeconds !== undefined ? `~${quote.estimatedSeconds}s` : policy.showEta ? policy.eta : "Varies"}
             </span>
           </span>
+          {quote?.minimumReceived ? <span className={`text-xs ${secondary}`}>Minimum {quote.minimumReceived} {route.destination.symbol}</span> : null}
           <span className="flex min-w-0 items-center justify-between gap-3">
             <span className="flex min-w-0 flex-wrap items-baseline gap-x-1.5">
               {quote ? <span className="sr-only">You receive</span> : null}

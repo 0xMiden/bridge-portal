@@ -142,6 +142,7 @@ export function statusLabel(status: ActivityStatus, activity?: Activity) {
     claim_available: "Claim funds",
     claim_submitted: "Claim submitted",
     failed: "Needs recovery",
+    refunded: "Refunded",
     complete: "Complete",
   };
   return labels[status];
@@ -150,6 +151,7 @@ export function statusLabel(status: ActivityStatus, activity?: Activity) {
 export function statusTone(status: ActivityStatus, activity?: Activity) {
   if (activity && directionFor(activity).tracking === "manual" && status !== "complete" && status !== "failed") return "";
   if (status === "complete") return "success";
+  if (status === "refunded") return "warning";
   if (status === "failed") return "danger";
   if (status === "claim_available") return "warning";
   return "active";
@@ -316,6 +318,7 @@ export function buildDiagnostics(
       xreserveFee: activity.xreserveFee,
       xreserveForwarding: activity.xreserveForwarding,
       xreserveMidenBlock: activity.xreserveMidenBlock,
+      near: activity.near,
     }),
     lastMonitorError: extra.monitorError || undefined,
   };

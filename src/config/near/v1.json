@@ -1,0 +1,287 @@
+{
+  "version": 1,
+  "environment": "mainnet",
+  "evidenceDate": "2026-11-06",
+  "funding": {
+    "noteType": "public",
+    "script": "p2id",
+    "discovery": "recipient-tag",
+    "memo": "none"
+  },
+  "routes": [
+    {
+      "id": "mainnet:near-miden-wbtc-to-ethereum-wbtc",
+      "source": {
+        "network": "miden-mainnet",
+        "kind": "miden",
+        "symbol": "wBTC",
+        "logo": "/asset-logos/wbtc.svg",
+        "name": "Wrapped BTC",
+        "decimals": 8,
+        "faucetId": "0x3084d3c389ececd15fda9770d18c8a",
+        "assetId": "nep141:miden-0x3084d3c389ececd15fda9770d18c8a.omft.near"
+      },
+      "destination": {
+        "network": "ethereum",
+        "kind": "erc20",
+        "symbol": "wBTC",
+        "decimals": 8,
+        "address": "0x2260fac5e5542a773aa44fbcfedf7c193bc2c599",
+        "assetId": "nep141:eth-0x2260fac5e5542a773aa44fbcfedf7c193bc2c599.omft.near",
+        "logo": "/asset-logos/wbtc.svg"
+      }
+    },
+    {
+      "id": "mainnet:near-miden-usdt-to-ethereum-usdt",
+      "source": {
+        "network": "miden-mainnet",
+        "kind": "miden",
+        "symbol": "USDT",
+        "logo": "/asset-logos/usdt.svg",
+        "name": "Tether USD",
+        "decimals": 6,
+        "faucetId": "0x5cb79d29507d3ad17bb6dc60279e89",
+        "assetId": "nep141:miden-0x5cb79d29507d3ad17bb6dc60279e89.omft.near"
+      },
+      "destination": {
+        "network": "ethereum",
+        "kind": "erc20",
+        "symbol": "USDT",
+        "decimals": 6,
+        "address": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+        "assetId": "nep141:eth-0xdac17f958d2ee523a2206206994597c13d831ec7.omft.near",
+        "logo": "/asset-logos/usdt.svg"
+      }
+    },
+    {
+      "id": "mainnet:near-miden-eth-to-ethereum-eth",
+      "source": {
+        "network": "miden-mainnet",
+        "kind": "miden",
+        "symbol": "ETH",
+        "logo": "/asset-logos/ethereum.svg",
+        "faucetId": "0x419f8f4bff72959132aa7cea15a4c1",
+        "decimals": 8,
+        "assetId": "nep141:miden-0x419f8f4bff72959132aa7cea15a4c1.omft.near"
+      },
+      "destination": {
+        "network": "ethereum",
+        "kind": "native",
+        "symbol": "ETH",
+        "decimals": 18,
+        "assetId": "nep141:eth.omft.near",
+        "logo": "/asset-logos/ethereum.svg"
+      }
+    },
+    {
+      "id": "mainnet:near-miden-usdcx-to-ethereum-usdc",
+      "source": {
+        "network": "miden-mainnet",
+        "kind": "miden",
+        "symbol": "USDCx",
+        "logo": "/asset-logos/usdc.svg",
+        "decimals": 6,
+        "faucetId": "0xe69e6ca6e39df1b10c1e5399399feb",
+        "assetId": "nep141:miden-0xe69e6ca6e39df1b10c1e5399399feb.omft.near"
+      },
+      "destination": {
+        "network": "ethereum",
+        "kind": "erc20",
+        "symbol": "USDC",
+        "decimals": 6,
+        "address": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+        "assetId": "nep141:eth-0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48.omft.near",
+        "logo": "/asset-logos/usdc.svg"
+      }
+    },
+    {
+      "id": "mainnet:near-miden-usdcx-to-base-usdc",
+      "source": {
+        "network": "miden-mainnet",
+        "kind": "miden",
+        "symbol": "USDCx",
+        "logo": "/asset-logos/usdc.svg",
+        "decimals": 6,
+        "faucetId": "0xe69e6ca6e39df1b10c1e5399399feb",
+        "assetId": "nep141:miden-0xe69e6ca6e39df1b10c1e5399399feb.omft.near"
+      },
+      "destination": {
+        "network": "base",
+        "kind": "erc20",
+        "symbol": "USDC",
+        "decimals": 6,
+        "address": "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913",
+        "assetId": "nep141:base-0x833589fcd6edb6e08f4c7c32d4f71b54bda02913.omft.near",
+        "logo": "/asset-logos/usdc.svg"
+      }
+    },
+    {
+      "id": "mainnet:near-miden-wbtc-to-base-cbbtc",
+      "source": {
+        "network": "miden-mainnet",
+        "kind": "miden",
+        "symbol": "wBTC",
+        "logo": "/asset-logos/wbtc.svg",
+        "name": "Wrapped BTC",
+        "decimals": 8,
+        "faucetId": "0x3084d3c389ececd15fda9770d18c8a",
+        "assetId": "nep141:miden-0x3084d3c389ececd15fda9770d18c8a.omft.near"
+      },
+      "destination": {
+        "network": "base",
+        "kind": "erc20",
+        "symbol": "cbBTC",
+        "decimals": 8,
+        "address": "0xcbb7c0000ab88b473b1f5afd9ef808440eed33bf",
+        "assetId": "nep141:base-0xcbb7c0000ab88b473b1f5afd9ef808440eed33bf.omft.near",
+        "logo": "/asset-logos/wbtc.svg"
+      }
+    },
+    {
+      "id": "mainnet:near-miden-eth-to-arbitrum-eth",
+      "source": {
+        "network": "miden-mainnet",
+        "kind": "miden",
+        "symbol": "ETH",
+        "logo": "/asset-logos/ethereum.svg",
+        "faucetId": "0x419f8f4bff72959132aa7cea15a4c1",
+        "decimals": 8,
+        "assetId": "nep141:miden-0x419f8f4bff72959132aa7cea15a4c1.omft.near"
+      },
+      "destination": {
+        "network": "arbitrum",
+        "kind": "native",
+        "symbol": "ETH",
+        "decimals": 18,
+        "assetId": "nep141:arb.omft.near",
+        "logo": "/asset-logos/ethereum.svg"
+      }
+    },
+    {
+      "id": "mainnet:near-miden-eth-to-base-eth",
+      "source": {
+        "network": "miden-mainnet",
+        "kind": "miden",
+        "symbol": "ETH",
+        "logo": "/asset-logos/ethereum.svg",
+        "faucetId": "0x419f8f4bff72959132aa7cea15a4c1",
+        "decimals": 8,
+        "assetId": "nep141:miden-0x419f8f4bff72959132aa7cea15a4c1.omft.near"
+      },
+      "destination": {
+        "network": "base",
+        "kind": "native",
+        "symbol": "ETH",
+        "decimals": 18,
+        "assetId": "nep141:base.omft.near",
+        "logo": "/asset-logos/ethereum.svg"
+      }
+    },
+    {
+      "id": "mainnet:near-miden-usdcx-to-arbitrum-usdc",
+      "source": {
+        "network": "miden-mainnet",
+        "kind": "miden",
+        "symbol": "USDCx",
+        "logo": "/asset-logos/usdc.svg",
+        "decimals": 6,
+        "faucetId": "0xe69e6ca6e39df1b10c1e5399399feb",
+        "assetId": "nep141:miden-0xe69e6ca6e39df1b10c1e5399399feb.omft.near"
+      },
+      "destination": {
+        "network": "arbitrum",
+        "kind": "erc20",
+        "symbol": "USDC",
+        "decimals": 6,
+        "address": "0xaf88d065e77c8cc2239327c5edb3a432268e5831",
+        "assetId": "nep141:arb-0xaf88d065e77c8cc2239327c5edb3a432268e5831.omft.near",
+        "logo": "/asset-logos/usdc.svg"
+      }
+    },
+    {
+      "id": "mainnet:near-miden-usdt-to-arbitrum-usdt0",
+      "source": {
+        "network": "miden-mainnet",
+        "kind": "miden",
+        "symbol": "USDT",
+        "logo": "/asset-logos/usdt.svg",
+        "name": "Tether USD",
+        "decimals": 6,
+        "faucetId": "0x5cb79d29507d3ad17bb6dc60279e89",
+        "assetId": "nep141:miden-0x5cb79d29507d3ad17bb6dc60279e89.omft.near"
+      },
+      "destination": {
+        "network": "arbitrum",
+        "kind": "erc20",
+        "symbol": "USDT0",
+        "decimals": 6,
+        "address": "0xfd086bc7cd5c481dcc9c85ebe478a1c0b69fcbb9",
+        "assetId": "nep141:arb-0xfd086bc7cd5c481dcc9c85ebe478a1c0b69fcbb9.omft.near",
+        "logo": "/asset-logos/usdt.svg"
+      }
+    },
+    {
+      "id": "mainnet:near-miden-usdt-to-polygon-usdt",
+      "source": {
+        "network": "miden-mainnet",
+        "kind": "miden",
+        "symbol": "USDT",
+        "logo": "/asset-logos/usdt.svg",
+        "name": "Tether USD",
+        "decimals": 6,
+        "faucetId": "0x5cb79d29507d3ad17bb6dc60279e89",
+        "assetId": "nep141:miden-0x5cb79d29507d3ad17bb6dc60279e89.omft.near"
+      },
+      "destination": {
+        "network": "polygon",
+        "kind": "erc20",
+        "symbol": "USDT",
+        "decimals": 6,
+        "address": "0xc2132d05d31c914a87c6611c10748aeb04b58e8f",
+        "assetId": "nep245:v2_1.omni.hot.tg:137_3hpYoaLtt8MP1Z2GH1U473DMRKgr",
+        "logo": "/asset-logos/usdt.svg"
+      }
+    },
+    {
+      "id": "mainnet:near-miden-usdcx-to-polygon-usdc",
+      "source": {
+        "network": "miden-mainnet",
+        "kind": "miden",
+        "symbol": "USDCx",
+        "logo": "/asset-logos/usdc.svg",
+        "decimals": 6,
+        "faucetId": "0xe69e6ca6e39df1b10c1e5399399feb",
+        "assetId": "nep141:miden-0xe69e6ca6e39df1b10c1e5399399feb.omft.near"
+      },
+      "destination": {
+        "network": "polygon",
+        "kind": "erc20",
+        "symbol": "USDC",
+        "decimals": 6,
+        "address": "0x3c499c542cef5e3811e1192ce70d8cc03d5c3359",
+        "assetId": "nep245:v2_1.omni.hot.tg:137_qiStmoQJDQPTebaPjgx5VBxZv6L",
+        "logo": "/asset-logos/usdc.svg"
+      }
+    },
+    {
+      "id": "mainnet:near-miden-eth-to-robinhood-eth",
+      "source": {
+        "network": "miden-mainnet",
+        "kind": "miden",
+        "symbol": "ETH",
+        "logo": "/asset-logos/ethereum.svg",
+        "faucetId": "0x419f8f4bff72959132aa7cea15a4c1",
+        "decimals": 8,
+        "assetId": "nep141:miden-0x419f8f4bff72959132aa7cea15a4c1.omft.near"
+      },
+      "destination": {
+        "network": "robinhood",
+        "kind": "native",
+        "symbol": "ETH",
+        "decimals": 18,
+        "assetId": "nep141:hood.omft.near",
+        "logo": "/asset-logos/ethereum.svg"
+      }
+    }
+  ]
+}

@@ -26,7 +26,7 @@ export function useBridgeQuote(route: BridgeRoute, amount: string, wallets: Brid
   const live = review ? review.quote : providers.offers.find(offer => offer.route.id === route.id)?.quote;
   const gas = useSepoliaGasEstimate(estimate.fees.sepoliaGasUnits, wallets.evm.token?.network ?? "sepolia");
   const midenGas = useMidenGasEstimate(route.recovery,
-    validation.valid && route.mode === "send" && (route.provider === "xreserve" || route.provider === "epoch"));
+    validation.valid && route.mode === "send" && (route.provider === "xreserve" || route.provider === "epoch" || route.provider === "near"));
   const balanceCap = useBalanceCap(route, amount, wallets.accounts.midenAccount);
   const capError = balanceCap.enabled && validation.valid && !balanceCap.checking ? balanceCap.error : "";
   const capBlocked = balanceCap.enabled && (balanceCap.checking || Boolean(balanceCap.error));

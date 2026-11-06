@@ -25,6 +25,7 @@ export type MidenWalletSnapshot = {
   consumableNoteCount: number | null;
   requestSend?: MidenFiWalletContextState["requestSend"];
   requestTransaction?: MidenFiWalletContextState["requestTransaction"];
+  requestAssets?: MidenFiWalletContextState["requestAssets"];
   waitForTransaction?: MidenFiWalletContextState["waitForTransaction"];
   requestConsumableNotes?: MidenFiWalletContextState["requestConsumableNotes"];
 };
@@ -129,6 +130,7 @@ export class MidenWalletSession {
       } : {}),
       requestSend: usable && wallet.requestSend ? (...args) => { guard(); return wallet.requestSend!(...args); } : undefined,
       requestTransaction: usable && wallet.requestTransaction ? (...args) => { guard(); return wallet.requestTransaction!(...args); } : undefined,
+      requestAssets: usable && wallet.requestAssets ? (...args) => { guard(); return wallet.requestAssets!(...args); } : undefined,
       requestConsumableNotes: usable && wallet.requestConsumableNotes ? (...args) => { guard(); return wallet.requestConsumableNotes!(...args); } : undefined,
       // A submitted transaction can still be tracked after its account disconnects.
       waitForTransaction: usable ? wallet.waitForTransaction : undefined,

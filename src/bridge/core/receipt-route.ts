@@ -12,7 +12,7 @@ const asset = z.discriminatedUnion("kind", [
 ]);
 /** Receipts are self-contained. Route names and current token lists may change. */
 export const receiptRouteSchema = z.object({
-  id: z.string().min(1).max(200), provider: z.enum(["epoch", "agglayer", "xreserve"]), mode: z.enum(["send", "receive"]),
+  id: z.string().min(1).max(200), provider: z.enum(["epoch", "agglayer", "xreserve", "near"]), mode: z.enum(["send", "receive"]),
   source: asset, destination: asset, recovery: bridgeConfigSchema, disabled: z.boolean().optional(),
 }).refine(route => {
   const miden = route.mode === "receive" ? route.destination : route.source;
@@ -20,6 +20,13 @@ export const receiptRouteSchema = z.object({
   if (miden.kind !== "miden" || evm.kind === "miden" || miden.network !== `miden-${route.recovery.environment}`) return false;
   const bridge = route.recovery.document.supportedEvmChains[evm.network]?.bridges;
   const derived = route.recovery.derived;
+  if (route.provider === "near") {
+    const pair = route.recovery.near?.routes.find(pair => pair.id === route.id);
+    if (route.mode !== "send" || !pair) return false;
+    return miden.faucetId === pair.source.faucetId && miden.decimals === pair.source.decimals &&
+      evm.network === pair.destination.network && evm.kind === pair.destination.kind && evm.decimals === pair.destination.decimals &&
+      (evm.kind === "native" || (pair.destination.kind === "erc20" && evm.address.toLowerCase() === pair.destination.address.toLowerCase()));
+  }
   if (route.provider === "epoch") {
     if (!bridge?.epoch) return false;
     if (route.recovery.environment === "testnet") return evm.kind === "erc20";

@@ -3,6 +3,7 @@ import type { BridgeActivity, BridgeProvider, FlowMode } from "./models";
 import { currentBridgeConfig, type BridgeConfig } from "../../config/bridge-config";
 import type { BridgeEnvironment } from "../../config/environment";
 import { tokenRegistry } from "../../config/token-registry";
+import { nearRoutesEnabled } from "../../config/near/config";
 
 export type BridgeRoute = {
   id: string;
@@ -17,7 +18,7 @@ export type BridgeRoute = {
 
 function routesForConfig(config: BridgeConfig): readonly BridgeRoute[] {
   const { environment, document } = config;
-  return tokenRegistry[environment].flatMap(connection => {
+  const existing = tokenRegistry[environment].flatMap(connection => {
     const { provider, evm, miden } = connection;
     const bridge = document.supportedEvmChains[evm.network]?.bridges[provider === "xreserve" ? "usdcx" : provider];
     return (["receive", "send"] as const).flatMap(mode => {
@@ -34,6 +35,11 @@ function routesForConfig(config: BridgeConfig): readonly BridgeRoute[] {
       }];
     });
   });
+  return [...existing, ...(config.near?.routes ?? []).map(pair => ({
+    id: pair.id, provider: "near" as const, mode: "send" as const,
+    source: pair.source, destination: pair.destination, recovery: config,
+    disabled: !nearRoutesEnabled || document.features.bridgeOut === false,
+  }))];
 }
 
 // Release configuration is fixed for the page lifetime; derive routes once.

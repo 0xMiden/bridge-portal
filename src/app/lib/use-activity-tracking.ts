@@ -50,6 +50,7 @@ export function useActivityTracking(id: string) {
           delay =
             current.status === "complete" ||
             current.status === "failed" ||
+            current.status === "refunded" ||
             directionFor(current).tracking === "manual"
               ? 30_000
               : 3_000;

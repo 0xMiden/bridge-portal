@@ -100,6 +100,16 @@ export async function submitBridgeTransfer(
       route,
       phase: effects.onPhaseChange,
       update,
+      findActivity: id => { effects.activities.sync?.(); return effects.activities.get?.(id)?.activity; },
+      persist: patch => {
+        if (!effects.activities.get) throw new Error("Receipt storage is unavailable. Do not submit this transfer.");
+        if (!recorded) recorded = effects.activities.record(createActivity(route, input.amount, patch));
+        else update(patch);
+        const receipt = effects.activities.get(recorded.id);
+        if (!receipt || receipt.unsavedChanges) throw new Error("Save this receipt before opening the wallet. Storage is unavailable.");
+        effects.navigate(`/activity/${recorded.id}`);
+        return recorded;
+      },
       record: (patch) => {
         if (recorded) {
           update(patch);

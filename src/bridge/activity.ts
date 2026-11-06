@@ -2,6 +2,7 @@ import type { Activity, BridgeActivity } from "./core/models";
 import { directionFor } from "./providers/registry";
 import { activityStartedAt, stampLegTimes } from "./core/rules";
 import { shortAddress } from "../wallets/identity";
+import { mergeNearOperation } from "./providers/near/operation";
 
 /** One interpretation for storage, polling, history and receipts. */
 export function activityState(activity: BridgeActivity) {
@@ -19,10 +20,11 @@ export function normalizeActivityState<T extends BridgeActivity>(activity: T): T
 
 /** Merge observations without allowing stale polls to regress a terminal transfer. */
 export function applyActivityPatch(activity: Activity, patch: Partial<Activity>): Activity {
+  if (activity.near && patch.near) patch = { ...patch, near: mergeNearOperation(activity.near, patch.near) };
   const previous = activityState(activity);
   const observed = Object.fromEntries(Object.entries(patch).filter(([, value]) => value !== undefined));
   let next = normalizeActivityState({ ...activity, ...observed, updatedAt: Date.now() });
-  const settled = previous.status === "complete" || previous.status === "failed";
+  const settled = previous.status === "complete" || previous.status === "failed" || previous.status === "refunded";
   const incoming = activityState(next);
   const stale = incoming.status !== "failed" && incoming.status !== "complete" && incoming.order < previous.order;
   if (settled || stale) {

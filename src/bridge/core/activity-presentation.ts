@@ -2,7 +2,7 @@ import type { ActivityStatus } from "./activity-status";
 import type { BridgeActivity } from "./models";
 
 export type ActivityStep = {
-  status: Exclude<ActivityStatus, "failed">;
+  status: Exclude<ActivityStatus, "failed" | "refunded">;
   label: string;
   detail: string;
 };
@@ -77,7 +77,7 @@ export function trackedProgress(
   const failedIndex = steps.findIndex((step) => step.status === failedStatus);
   const milestones: Milestone[] = steps.map((step, index) => {
     if (activity.status === "complete") return { ...step, state: "done" };
-    const isFailed = activity.status === "failed";
+    const isFailed = activity.status === "failed" || activity.status === "refunded";
     const activeIndex = isFailed ? failedIndex : currentIndex;
     if (index < activeIndex) return { ...step, state: "done" };
     if (index > activeIndex) return { ...step, state: "upcoming" };
@@ -98,7 +98,7 @@ export function trackedProgress(
     kind: "tracked",
     milestones,
     complete: activity.status === "complete",
-    live: activity.status !== "complete" && activity.status !== "failed",
+    live: activity.status !== "complete" && activity.status !== "failed" && activity.status !== "refunded",
     canRefresh: false,
   };
 }

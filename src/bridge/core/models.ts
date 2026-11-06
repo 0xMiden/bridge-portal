@@ -3,7 +3,7 @@ import type { ActivityStatus } from "./activity-status";
 import type { BridgeRoute } from "./routes";
 import type { BridgeEnvironment } from "../../config/environment";
 
-export type BridgeProvider = "agglayer" | "epoch" | "xreserve";
+export type BridgeProvider = "agglayer" | "epoch" | "xreserve" | "near";
 export const flowModes = ["receive", "send"] as const;
 export type FlowMode = (typeof flowModes)[number];
 
@@ -35,6 +35,8 @@ export type BridgeActivity = {
   midenWalletRequestId?: string;
   /** Expected source output note, distinct from the wallet request and tx hash. */
   midenNoteId?: string;
+  /** Signed executable terms and submission state survive reloads. */
+  near?: import("../providers/near/schema").NearOperation;
   /** Actual wallet transaction identity, retained across fee replacements and reloads. */
   sourceTransaction?: SourceTransaction;
   sourceOriginalTxHash?: string;

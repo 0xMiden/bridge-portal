@@ -6,4 +6,5 @@ export type ActivityStatus =
   | "claim_available"
   | "claim_submitted"
   | "failed"
+  | "refunded"
   | "complete";
