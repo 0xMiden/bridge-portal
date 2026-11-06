@@ -19,6 +19,11 @@ Architecture decisions are recorded under [docs/decisions/](docs/decisions/) —
 e.g. [why we ship single-thread WASM without cross-origin isolation
 (no COOP/COEP)](docs/decisions/wasm-threading-coop-coep.md).
 
+The default-off NEAR Intents rollout adds 13 outbound Miden → EVM routes. See
+[the NEAR integration and release checks](docs/near-intents.md) for its server-only
+credential, independent visibility/execution switches, recovery behavior and
+the outstanding live authorization/funded-validation dependency.
+
 ## Prerequisites
 
 For local testnet transfers you need:
