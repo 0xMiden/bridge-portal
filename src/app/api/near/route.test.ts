@@ -107,6 +107,17 @@ it("sanitizes authorization errors and preserves the service correlation ID", as
   expect(await response.json()).toEqual({ correlationId: "near-reference-123", error: "NEAR could not authorize this quote. Contact support with the reference." });
 });
 
+it.each([
+  [400, "No liquidity available", 422, "NEAR has no liquidity for this route right now. Try another provider or retry later."],
+  [400, "Unrecognized upstream details containing private credentials", 502, "NEAR has no available quote for this transfer. Try another amount or provider."],
+  [500, "No liquidity available", 502, "NEAR is unavailable. Retry from this receipt; do not send another deposit."],
+] as const)("distinguishes unavailable liquidity from other upstream failures (%i, %s)", async (statusCode, message, expectedStatus, error) => {
+  fetcher.mockResolvedValueOnce(Response.json({ message, correlationId: "near-liquidity-reference" }, { status: statusCode }));
+  const response = await preview(request(nearTestInput));
+  expect(response.status).toBe(expectedStatus);
+  expect(await response.json()).toEqual({ error, correlationId: "near-liquidity-reference" });
+});
+
 it.each(["PENDING_DEPOSIT", "SUCCESS"] as const)("tracks %s when status omits quote metadata and returns null amounts or refund reasons", async state => {
   const input = state === "PENDING_DEPOSIT" ? nearReceiveInput : nearTestInput;
   const original = signedNearQuote(input, false, {}, 10_000);

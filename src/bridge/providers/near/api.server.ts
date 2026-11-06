@@ -48,6 +48,9 @@ async function upstream(path: "/quote" | "/status" | "/deposit/submit", input: o
   const payload = await boundedJson(response);
   const id = nearCorrelationId.safeParse((payload as { correlationId?: unknown })?.correlationId);
   if (!response.ok) {
+    if (path === "/quote" && response.status === 400 && (payload as { message?: unknown })?.message === "No liquidity available") {
+      throw new NearApiError("NEAR has no liquidity for this route right now. Try another provider or retry later.", 422, id.success ? id.data : undefined);
+    }
     const message = response.status === 401 || response.status === 403
       ? "NEAR could not authorize this quote. Contact support with the reference."
       : response.status === 400 ? "NEAR has no available quote for this transfer. Try another amount or provider."

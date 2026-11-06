@@ -138,6 +138,19 @@ These measurements are samples, not latency or price guarantees. Four USDCx
 withdrawal pairs returned HTTP 400 during the outbound recheck; Base and Ethereum
 returned "No liquidity available" with both zero and 10,000 ms waits.
 
+The [USDCx investigation](near-usdcx-liquidity-2026-11-06.json) reproduced the
+reported 6 USDCx withdrawal to Ethereum directly against 1Click. Amounts of
+1, 5, 6, 10, 100 and 1,000 USDCx all returned HTTP 400 with
+`No liquidity available`; a 10-second relay wait and `X-API-Key` authentication
+returned the same result. Base and Polygon withdrawals also failed at 6 USDCx.
+The pinned asset IDs, contracts and decimals matched the live token catalog.
+Ethereum USDC → Miden USDCx and Miden ETH → Ethereum ETH returned valid signed
+quotes with the same account pair. This isolates the observed failure to
+USDCx outbound availability; the API does not identify which solver or balance
+is responsible. The portal now reports this exact quote rejection as HTTP 422
+with a specific liquidity message and the service correlation ID. Other upstream
+failures retain sanitized error handling.
+
 Previously signed quotes retain their original wait value for signature
 verification and status restoration. A changed relay-wait policy does not
 invalidate an open review or saved receipt; all transfer terms still have to

@@ -1,0 +1,199 @@
+{
+  "checkedAt": "2026-11-06T17:48:51.834Z",
+  "kind": "dry-quotes-only",
+  "reportedCorrelationId": "cb6d0026-da8a-4c15-b124-1c90f9eb3f84",
+  "endpoint": "https://1click.chaindefuser.com/v0/quote",
+  "requestPolicy": {
+    "dry": true,
+    "swapType": "EXACT_INPUT",
+    "depositType": "ORIGIN_CHAIN",
+    "recipientType": "DESTINATION_CHAIN",
+    "refundType": "ORIGIN_CHAIN",
+    "confidentiality": "basic",
+    "slippageTolerance": 100
+  },
+  "assetChecks": [
+    {
+      "assetId": "nep141:miden-0xe69e6ca6e39df1b10c1e5399399feb.omft.near",
+      "pinnedDecimals": 6,
+      "catalog": {
+        "blockchain": "miden",
+        "symbol": "USDCX",
+        "decimals": 6,
+        "contractAddress": "0xe69e6ca6e39df1b10c1e5399399feb"
+      }
+    },
+    {
+      "assetId": "nep141:eth-0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48.omft.near",
+      "pinnedDecimals": 6,
+      "catalog": {
+        "blockchain": "eth",
+        "symbol": "USDC",
+        "decimals": 6,
+        "contractAddress": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48"
+      }
+    }
+  ],
+  "results": [
+    {
+      "name": "USDCx to Ethereum 1",
+      "routeId": "mainnet:near-miden-usdcx-to-ethereum-usdc",
+      "amount": "1",
+      "waitMs": 0,
+      "httpStatus": 400,
+      "elapsedMs": 3172,
+      "correlationId": "57e10b75-5b0e-445a-be23-2979b51fa5ce",
+      "message": "No liquidity available",
+      "amountIn": "1000000",
+      "originAsset": "nep141:miden-0xe69e6ca6e39df1b10c1e5399399feb.omft.near",
+      "destinationAsset": "nep141:eth-0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48.omft.near"
+    },
+    {
+      "name": "USDCx to Ethereum 5",
+      "routeId": "mainnet:near-miden-usdcx-to-ethereum-usdc",
+      "amount": "5",
+      "waitMs": 0,
+      "httpStatus": 400,
+      "elapsedMs": 3176,
+      "correlationId": "6fc147f3-5692-4294-9570-d19647b34bdb",
+      "message": "No liquidity available",
+      "amountIn": "5000000",
+      "originAsset": "nep141:miden-0xe69e6ca6e39df1b10c1e5399399feb.omft.near",
+      "destinationAsset": "nep141:eth-0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48.omft.near"
+    },
+    {
+      "name": "USDCx to Ethereum 6",
+      "routeId": "mainnet:near-miden-usdcx-to-ethereum-usdc",
+      "amount": "6",
+      "waitMs": 0,
+      "httpStatus": 400,
+      "elapsedMs": 3176,
+      "correlationId": "b9004a7f-ea43-4222-b9d2-283fcb4b2755",
+      "message": "No liquidity available",
+      "amountIn": "6000000",
+      "originAsset": "nep141:miden-0xe69e6ca6e39df1b10c1e5399399feb.omft.near",
+      "destinationAsset": "nep141:eth-0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48.omft.near"
+    },
+    {
+      "name": "USDCx to Ethereum 100",
+      "routeId": "mainnet:near-miden-usdcx-to-ethereum-usdc",
+      "amount": "100",
+      "waitMs": 0,
+      "httpStatus": 400,
+      "elapsedMs": 3111,
+      "correlationId": "3701778a-fb97-4e0d-a324-734d94c8526e",
+      "message": "No liquidity available",
+      "amountIn": "100000000",
+      "originAsset": "nep141:miden-0xe69e6ca6e39df1b10c1e5399399feb.omft.near",
+      "destinationAsset": "nep141:eth-0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48.omft.near"
+    },
+    {
+      "name": "USDCx to Ethereum 10",
+      "routeId": "mainnet:near-miden-usdcx-to-ethereum-usdc",
+      "amount": "10",
+      "waitMs": 0,
+      "httpStatus": 400,
+      "elapsedMs": 3147,
+      "correlationId": "0f319c89-c7a3-42e8-9a75-6feed19667ac",
+      "message": "No liquidity available",
+      "amountIn": "10000000",
+      "originAsset": "nep141:miden-0xe69e6ca6e39df1b10c1e5399399feb.omft.near",
+      "destinationAsset": "nep141:eth-0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48.omft.near"
+    },
+    {
+      "name": "USDCx to Ethereum 1000",
+      "routeId": "mainnet:near-miden-usdcx-to-ethereum-usdc",
+      "amount": "1000",
+      "waitMs": 0,
+      "httpStatus": 400,
+      "elapsedMs": 3151,
+      "correlationId": "3e1ab95f-50b3-454b-b785-c49366ae7165",
+      "message": "No liquidity available",
+      "amountIn": "1000000000",
+      "originAsset": "nep141:miden-0xe69e6ca6e39df1b10c1e5399399feb.omft.near",
+      "destinationAsset": "nep141:eth-0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48.omft.near"
+    },
+    {
+      "name": "USDCx to Base 6",
+      "routeId": "mainnet:near-miden-usdcx-to-base-usdc",
+      "amount": "6",
+      "waitMs": 0,
+      "httpStatus": 400,
+      "elapsedMs": 3140,
+      "correlationId": "4704295f-0fc0-4f4e-873a-90b7d1958d42",
+      "message": "No liquidity available",
+      "amountIn": "6000000",
+      "originAsset": "nep141:miden-0xe69e6ca6e39df1b10c1e5399399feb.omft.near",
+      "destinationAsset": "nep141:base-0x833589fcd6edb6e08f4c7c32d4f71b54bda02913.omft.near"
+    },
+    {
+      "name": "USDCx to Polygon 6",
+      "routeId": "mainnet:near-miden-usdcx-to-polygon-usdc",
+      "amount": "6",
+      "waitMs": 0,
+      "httpStatus": 400,
+      "elapsedMs": 3543,
+      "correlationId": "949a9873-f3cc-45ed-b290-6cd284d98a9f",
+      "message": "No liquidity available",
+      "amountIn": "6000000",
+      "originAsset": "nep141:miden-0xe69e6ca6e39df1b10c1e5399399feb.omft.near",
+      "destinationAsset": "nep245:v2_1.omni.hot.tg:137_qiStmoQJDQPTebaPjgx5VBxZv6L"
+    },
+    {
+      "name": "Ethereum USDC to Miden USDCx 6",
+      "routeId": "mainnet:near-ethereum-usdc-to-miden-usdcx",
+      "amount": "6",
+      "waitMs": 0,
+      "httpStatus": 201,
+      "elapsedMs": 421,
+      "correlationId": "1f213c05-e623-4302-a701-ad41173e1251",
+      "signatureValid": true,
+      "amountOut": "5.97679",
+      "minAmountOut": "5917022",
+      "amountIn": "6000000",
+      "originAsset": "nep141:eth-0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48.omft.near",
+      "destinationAsset": "nep141:miden-0xe69e6ca6e39df1b10c1e5399399feb.omft.near"
+    },
+    {
+      "name": "Miden ETH to Ethereum ETH 0.002",
+      "routeId": "mainnet:near-miden-eth-to-ethereum-eth",
+      "amount": "0.002",
+      "waitMs": 0,
+      "httpStatus": 201,
+      "elapsedMs": 387,
+      "correlationId": "151085cf-f424-45b3-922f-79dfe6d251c9",
+      "signatureValid": true,
+      "amountOut": "0.001959990508755621",
+      "minAmountOut": "1940390603668064",
+      "amountIn": "200000",
+      "originAsset": "nep141:miden-0x419f8f4bff72959132aa7cea15a4c1.omft.near",
+      "destinationAsset": "nep141:eth.omft.near"
+    },
+    {
+      "name": "USDCx to Ethereum 6 with 10s wait",
+      "routeId": "mainnet:near-miden-usdcx-to-ethereum-usdc",
+      "amount": "6",
+      "waitMs": 10000,
+      "httpStatus": 400,
+      "elapsedMs": 10114,
+      "correlationId": "0cb77ce9-2703-4d7b-a7da-aba6fdd74ad5",
+      "message": "No liquidity available",
+      "amountIn": "6000000",
+      "originAsset": "nep141:miden-0xe69e6ca6e39df1b10c1e5399399feb.omft.near",
+      "destinationAsset": "nep141:eth-0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48.omft.near"
+    },
+    {
+      "name": "USDCx to Ethereum 6 with X-API-Key",
+      "routeId": "mainnet:near-miden-usdcx-to-ethereum-usdc",
+      "amount": "6",
+      "waitMs": 0,
+      "httpStatus": 400,
+      "elapsedMs": 3293,
+      "correlationId": "0097f74d-91d0-46b4-a9ea-231796c700c7",
+      "message": "No liquidity available",
+      "amountIn": "6000000",
+      "originAsset": "nep141:miden-0xe69e6ca6e39df1b10c1e5399399feb.omft.near",
+      "destinationAsset": "nep141:eth-0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48.omft.near"
+    }
+  ]
+}
