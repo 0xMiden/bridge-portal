@@ -104,7 +104,8 @@ never automatically funds it again. Check the source wallet/support if a request
 was rejected or interrupted before a transaction hash was returned.
 
 `POST /api/near/deposit/submit` optionally accelerates deposit detection. Its
-failure only schedules a notification retry. `POST /api/near/status` checks the
+failure schedules a silent notification retry while the receipt shows normal
+transfer progress. `POST /api/near/status` checks the
 original signed quote and address/memo identity even after expiry. Receipts keep
 their route/config snapshot, complete signed quote and source/destination hashes.
 All upstream requests have fixed URLs, reject redirects, use bounded timeouts and
@@ -158,7 +159,8 @@ The response sent to the browser contains the verifiable quote and normalizes
 unavailable output/refund reason to absence. Returned transfer terms are never
 overwritten. Tracking reads status before retrying optional notifications, and
 stops sending hints once NEAR has detected the deposit. A failed hint cannot
-leave a retry warning on a delivered or refunded transfer.
+show a warning while status tracking is healthy. Status and source confirmation
+errors still surface when progress cannot be verified.
 
 ## Live validation and remaining release checks
 

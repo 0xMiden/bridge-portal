@@ -12,7 +12,6 @@ export const nearMonitor: ActivityMonitor = {
     const operation = activity.near;
     const body = { routeId: activity.routeId, quote: operation.quote };
     let notification = operation.notification;
-    let warning: string | undefined;
     try {
       const status = nearStatusResponseSchema.parse(await nearPost("status", body, signal));
       verifyNearQuote(status.quoteResponse, nearTrackingInput(body.routeId, body.quote), false, false);
@@ -20,17 +19,17 @@ export const nearMonitor: ActivityMonitor = {
       const source = activity.mode === "receive" && status.status === "PENDING_DEPOSIT"
         ? await observeNearEvmSource(activity, signal) : { patch: {} };
       if (source.patch.failureLeg === "source") return source;
-      // Detection is authoritative; an optional hint must not delay settlement
-      // or leave a retry warning on an already delivered/refunded receipt.
+      // Detection is authoritative. Retry the optional notification silently
+      // until NEAR detects the deposit.
       if (status.status === "PENDING_DEPOSIT" && activity.sourceTxHash && notification === "pending") {
         try { await nearPost("deposit/submit", { ...body, txHash: source.patch.sourceTxHash ?? activity.sourceTxHash }, signal); notification = "sent"; }
-        catch { signal.throwIfAborted(); warning = "Deposit notification is delayed. Status tracking will retry; do not send another deposit."; }
+        catch { signal.throwIfAborted(); }
       }
       const pair = nearRouteAssets(body.routeId);
       // A refund can add origin-chain hashes; retain them without mislabelling a refund as the deposit.
       const sourceTxHash = source.patch.sourceTxHash ?? activity.sourceTxHash ?? (status.status !== "REFUNDED" && status.swapDetails.originChainTxHashes.length === 1
         ? status.swapDetails.originChainTxHashes[0].hash : undefined);
-      return { warning: warning ?? source.warning, patch: {
+      return { warning: source.warning, patch: {
         ...source.patch,
         sourceTxHash,
         destinationTxHash: status.status === "SUCCESS" ? status.swapDetails.destinationChainTxHashes[0]?.hash : undefined,

@@ -67,7 +67,7 @@ function setup() {
   return { input, effects, quote, requestTransaction, waitForTransaction, requestAssets, evmRequest };
 }
 
-it("persists before signing a public P2ID, records actual source evidence, and resumes without a second deposit", async () => {
+it("persists a public P2ID and silently retries optional notifications without a second deposit", async () => {
   const test = setup();
   // Optional notification failure must leave the successful wallet submission intact.
   fetcher.mockImplementation(async path => String(path).endsWith("prepare") ? Response.json(test.quote) : Response.json({ error: "Temporary outage" }, { status: 503 }));
@@ -77,6 +77,23 @@ it("persists before signing a public P2ID, records actual source evidence, and r
   expect(saved).toMatchObject({ sourceTxHash: nearTxHash, destination: nearTestInput.evmAddress, midenWalletRequestId: "near-wallet-request", near: { submission: "confirmed", notification: "pending", networkFee: "0.003 USDCx" } });
   test.effects.activities = new ActivityStore(activityPersistence); test.effects.activities.sync();
   await submitBridgeTransfer(test.input, test.effects);
+  expect(test.requestTransaction).toHaveBeenCalledTimes(1);
+
+  fetcher.mockImplementation(async path => String(path).endsWith("status")
+    ? Response.json(nearStatus(test.quote)) : Response.json({ error: "Temporary outage" }, { status: 503 }));
+  const observed = await nearMonitor.observe(saved, new AbortController().signal);
+  expect(observed.warning).toBeUndefined();
+  test.effects.activities.patch(saved.id, observed.patch);
+  const pending = loadStoredActivities()[0];
+  expect(pending).toMatchObject({ status: "source_finality", sourceTxHash: nearTxHash, near: { notification: "pending" } });
+  expect(nearMonitor.canPoll(pending)).toBe(true);
+
+  fetcher.mockImplementation(async path => String(path).endsWith("status")
+    ? Response.json(nearStatus(test.quote)) : Response.json({}));
+  const retried = await nearMonitor.observe(pending, new AbortController().signal);
+  expect(retried.warning).toBeUndefined();
+  test.effects.activities.patch(saved.id, retried.patch);
+  expect(loadStoredActivities()[0].near?.notification).toBe("sent");
   expect(test.requestTransaction).toHaveBeenCalledTimes(1);
 });
 
