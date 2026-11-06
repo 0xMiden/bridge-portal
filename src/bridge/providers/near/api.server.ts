@@ -43,7 +43,7 @@ async function upstream(path: "/quote" | "/status" | "/deposit/submit", input: o
   const response = await fetch(`${API}${path}${query}`, {
     method: path === "/status" ? "GET" : "POST", headers: requestHeaders,
     body: path === "/status" ? undefined : JSON.stringify(input),
-    cache: "no-store", redirect: "error", signal: AbortSignal.any([signal, AbortSignal.timeout(15_000)]),
+    cache: "no-store", redirect: "error", signal: AbortSignal.any([signal, AbortSignal.timeout(path === "/quote" ? 30_000 : 15_000)]),
   });
   const payload = await boundedJson(response);
   const id = nearCorrelationId.safeParse((payload as { correlationId?: unknown })?.correlationId);
@@ -60,7 +60,7 @@ async function upstream(path: "/quote" | "/status" | "/deposit/submit", input: o
 async function quote(body: unknown, dry: boolean, signal: AbortSignal) {
   const input = dry ? nearInputSchema.parse(body) : nearPrepareInputSchema.parse(body);
   const request = nearRequest(input, dry, new Date(Date.now() + 10 * 60_000).toISOString());
-  if (!dry && (process.env.NEAR_TRANSFERS_ENABLED !== "true" || currentBridgeConfig("mainnet").document.features.bridgeOut === false)) {
+  if (!dry && (process.env.NEAR_TRANSFERS_ENABLED !== "true" || currentBridgeConfig("mainnet").document.features[input.mode === "send" ? "bridgeOut" : "bridgeIn"] === false)) {
     throw new NearApiError("New NEAR transfers are paused. Existing receipts continue tracking.", 503);
   }
   if ("quote" in input && input.quote) {

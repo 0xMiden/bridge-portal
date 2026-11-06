@@ -43,7 +43,7 @@ async function checkRecipient(context: SubmissionContext) {
 /** Once a wallet attempt is durably claimed, only tracking may resume it. */
 export async function submitNearTransfer(context: SubmissionContext) {
   const { input, route } = context;
-  if (route.provider !== "near" || route.mode !== "send") throw new Error("NEAR only supports Send from Miden.");
+  if (route.provider !== "near") throw new Error("Invalid NEAR transfer route.");
   if (input.quote?.kind !== "near") throw new Error("Review an executable NEAR quote before sending.");
   const binding = nearInput({ route, ...input });
   const quote = verifyNearQuote(input.quote.authorization, binding, false);
@@ -57,6 +57,10 @@ export async function submitNearTransfer(context: SubmissionContext) {
     if (existing?.near?.submission && existing.near.submission !== "prepared") {
       context.record(existing);
       return;
+    }
+    if (route.mode === "receive") {
+      const { submitNearEvmDeposit } = await import("./evm-deposit");
+      return submitNearEvmDeposit(context, quote, id);
     }
     const units = BigInt(nearSourceUnits(input.amount, nearPair(route.id).source.decimals));
     context.phase("Checking Miden balance and fee…");

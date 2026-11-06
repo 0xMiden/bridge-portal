@@ -21,8 +21,8 @@ export const receiptRouteSchema = z.object({
   const bridge = route.recovery.document.supportedEvmChains[evm.network]?.bridges;
   const derived = route.recovery.derived;
   if (route.provider === "near") {
-    const pair = route.recovery.near?.routes.find(pair => pair.id === route.id);
-    if (route.mode !== "send" || !pair) return false;
+    const pair = route.recovery.near?.routes.find(pair => (route.mode === "send" ? pair.id : pair.receiveId) === route.id);
+    if (!pair) return false;
     return miden.faucetId === pair.source.faucetId && miden.decimals === pair.source.decimals &&
       evm.network === pair.destination.network && evm.kind === pair.destination.kind && evm.decimals === pair.destination.decimals &&
       (evm.kind === "native" || (pair.destination.kind === "erc20" && evm.address.toLowerCase() === pair.destination.address.toLowerCase()));

@@ -11,6 +11,7 @@
   "routes": [
     {
       "id": "mainnet:near-miden-wbtc-to-ethereum-wbtc",
+      "receiveId": "mainnet:near-ethereum-wbtc-to-miden-wbtc",
       "source": {
         "network": "miden-mainnet",
         "kind": "miden",
@@ -33,6 +34,7 @@
     },
     {
       "id": "mainnet:near-miden-usdt-to-ethereum-usdt",
+      "receiveId": "mainnet:near-ethereum-usdt-to-miden-usdt",
       "source": {
         "network": "miden-mainnet",
         "kind": "miden",
@@ -55,6 +57,7 @@
     },
     {
       "id": "mainnet:near-miden-eth-to-ethereum-eth",
+      "receiveId": "mainnet:near-ethereum-eth-to-miden-eth",
       "source": {
         "network": "miden-mainnet",
         "kind": "miden",
@@ -75,6 +78,7 @@
     },
     {
       "id": "mainnet:near-miden-usdcx-to-ethereum-usdc",
+      "receiveId": "mainnet:near-ethereum-usdc-to-miden-usdcx",
       "source": {
         "network": "miden-mainnet",
         "kind": "miden",
@@ -96,6 +100,7 @@
     },
     {
       "id": "mainnet:near-miden-usdcx-to-base-usdc",
+      "receiveId": "mainnet:near-base-usdc-to-miden-usdcx",
       "source": {
         "network": "miden-mainnet",
         "kind": "miden",
@@ -117,6 +122,7 @@
     },
     {
       "id": "mainnet:near-miden-wbtc-to-base-cbbtc",
+      "receiveId": "mainnet:near-base-cbbtc-to-miden-wbtc",
       "source": {
         "network": "miden-mainnet",
         "kind": "miden",
@@ -139,6 +145,7 @@
     },
     {
       "id": "mainnet:near-miden-eth-to-arbitrum-eth",
+      "receiveId": "mainnet:near-arbitrum-eth-to-miden-eth",
       "source": {
         "network": "miden-mainnet",
         "kind": "miden",
@@ -159,6 +166,7 @@
     },
     {
       "id": "mainnet:near-miden-eth-to-base-eth",
+      "receiveId": "mainnet:near-base-eth-to-miden-eth",
       "source": {
         "network": "miden-mainnet",
         "kind": "miden",
@@ -179,6 +187,7 @@
     },
     {
       "id": "mainnet:near-miden-usdcx-to-arbitrum-usdc",
+      "receiveId": "mainnet:near-arbitrum-usdc-to-miden-usdcx",
       "source": {
         "network": "miden-mainnet",
         "kind": "miden",
@@ -200,6 +209,7 @@
     },
     {
       "id": "mainnet:near-miden-usdt-to-arbitrum-usdt0",
+      "receiveId": "mainnet:near-arbitrum-usdt0-to-miden-usdt",
       "source": {
         "network": "miden-mainnet",
         "kind": "miden",
@@ -222,6 +232,7 @@
     },
     {
       "id": "mainnet:near-miden-usdt-to-polygon-usdt",
+      "receiveId": "mainnet:near-polygon-usdt-to-miden-usdt",
       "source": {
         "network": "miden-mainnet",
         "kind": "miden",
@@ -244,6 +255,7 @@
     },
     {
       "id": "mainnet:near-miden-usdcx-to-polygon-usdc",
+      "receiveId": "mainnet:near-polygon-usdc-to-miden-usdcx",
       "source": {
         "network": "miden-mainnet",
         "kind": "miden",
@@ -265,6 +277,7 @@
     },
     {
       "id": "mainnet:near-miden-eth-to-robinhood-eth",
+      "receiveId": "mainnet:near-robinhood-eth-to-miden-eth",
       "source": {
         "network": "miden-mainnet",
         "kind": "miden",

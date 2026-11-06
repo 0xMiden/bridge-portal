@@ -2,9 +2,10 @@ import type { QuoteRequest, TransferQuote } from "../../core/quote";
 import { nearInput, nearQuoteResult, verifyNearQuote } from "./quote";
 
 export async function nearPost(path: "quote" | "prepare" | "status" | "deposit/submit", body: unknown, signal?: AbortSignal): Promise<unknown> {
+  const timeout = AbortSignal.timeout(path === "quote" || path === "prepare" ? 40_000 : 20_000);
   const response = await fetch(`/api/near/${path}`, {
     method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body), cache: "no-store",
-    signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(20_000)]) : AbortSignal.timeout(20_000),
+    signal: signal ? AbortSignal.any([signal, timeout]) : timeout,
   });
   const payload = await response.json();
   if (!response.ok) throw new Error(`${payload.error ?? "NEAR is unavailable. Please retry."}${payload.correlationId ? ` Reference: ${payload.correlationId}` : ""}`);

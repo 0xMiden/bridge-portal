@@ -220,13 +220,18 @@ export const nearConfigSchema = z.object({
   funding: z.object({ noteType: z.literal("public"), script: z.literal("p2id"), discovery: z.literal("recipient-tag"), memo: z.literal("none") }),
   routes: z.array(z.object({
     id: z.string().regex(/^mainnet:near-miden-[a-z0-9]+-to-[a-z]+-[a-z0-9]+$/),
+    receiveId: z.string().regex(/^mainnet:near-[a-z]+-[a-z0-9]+-to-miden-[a-z0-9]+$/).optional(),
     source: z.object({ ...nearMetadata, network: z.literal("miden-mainnet"), kind: z.literal("miden"), faucetId: account }),
     destination: z.discriminatedUnion("kind", [
       z.object({ ...nearMetadata, network: z.enum(["ethereum", "base", "arbitrum", "polygon", "robinhood"]), kind: z.literal("native") }),
       z.object({ ...nearMetadata, network: z.enum(["ethereum", "base", "arbitrum", "polygon", "robinhood"]), kind: z.literal("erc20"), address }),
     ]),
-  })).length(13),
-}).refine(config => new Set(config.routes.map(route => route.id)).size === config.routes.length, "Duplicate NEAR route");
+  }).refine(route => !route.receiveId || route.receiveId === `mainnet:near-${route.destination.network}-${route.destination.symbol.toLowerCase()}-to-miden-${route.source.symbol.toLowerCase()}`,
+    "NEAR deposit route identity mismatch")).length(13),
+}).refine(config => {
+  const ids = config.routes.flatMap(route => route.receiveId ? [route.id, route.receiveId] : [route.id]);
+  return new Set(ids).size === ids.length;
+}, "Duplicate NEAR route");
 
 const bridgeConfig = z.object({
   schemaVersion: z.literal(1),

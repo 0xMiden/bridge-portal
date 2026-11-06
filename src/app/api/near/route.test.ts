@@ -3,7 +3,7 @@ import { POST as preview } from "./quote/route";
 import { POST as prepare } from "./prepare/route";
 import { POST as status } from "./status/route";
 import { POST as deposit } from "./deposit/submit/route";
-import { nearTestInput, signedNearQuote, nearStatus, nearTxHash, nearDestinationHash } from "../../../../test/near-quotes";
+import { nearTestInput, nearReceiveInput, signedNearQuote, nearStatus, nearTxHash, nearDestinationHash } from "../../../../test/near-quotes";
 import { verifyQuoteSignature } from "@defuse-protocol/one-click-sdk-typescript";
 
 vi.mock("@defuse-protocol/one-click-sdk-typescript", async importOriginal => {
@@ -58,21 +58,42 @@ it.each([
   expect(JSON.parse(fetcher.mock.calls[0][1]!.body as string).amount).toBe(expected);
 });
 
-it("prepares one executable quote then revalidates the same deposit; pause still permits tracking and notification", async () => {
+it.each([
+  ["mainnet:near-ethereum-eth-to-miden-eth", "0.003000000000000001", "3000000000000001", "nep141:eth.omft.near", "nep141:miden-0x419f8f4bff72959132aa7cea15a4c1.omft.near"],
+  ["mainnet:near-base-cbbtc-to-miden-wbtc", "0.0001", "10000", "nep141:base-0xcbb7c0000ab88b473b1f5afd9ef808440eed33bf.omft.near", "nep141:miden-0x3084d3c389ececd15fda9770d18c8a.omft.near"],
+  ["mainnet:near-arbitrum-usdt0-to-miden-usdt", "5", "5000000", "nep141:arb-0xfd086bc7cd5c481dcc9c85ebe478a1c0b69fcbb9.omft.near", "nep141:miden-0x5cb79d29507d3ad17bb6dc60279e89.omft.near"],
+])("quotes %s with EVM source precision, Miden delivery and EVM refunds", async (routeId, amount, units, originAsset, destinationAsset) => {
   vi.useFakeTimers();
-  const prepared = signedNearQuote();
+  const input = { ...nearReceiveInput, routeId, amount };
+  fetcher.mockResolvedValueOnce(Response.json(signedNearQuote(input, true)));
+  expect((await preview(request(input))).status).toBe(200);
+  expect(JSON.parse(fetcher.mock.calls[0][1]!.body as string)).toMatchObject({
+    amount: units, originAsset, destinationAsset, refundTo: input.evmAddress, recipient: input.midenAccount,
+    depositType: "ORIGIN_CHAIN", recipientType: "DESTINATION_CHAIN", refundType: "ORIGIN_CHAIN", confidentiality: "basic",
+  });
+});
+
+it("rejects a signed Miden deposit address for an EVM-funded quote", async () => {
+  vi.useFakeTimers();
+  fetcher.mockResolvedValueOnce(Response.json(signedNearQuote(nearReceiveInput, false, { depositAddress: nearReceiveInput.midenAccount })));
+  expect((await prepare(request(nearReceiveInput))).status).toBe(502);
+});
+
+it.each([nearTestInput, nearReceiveInput])("prepares once for $mode; pause still permits tracking and notification", async input => {
+  vi.useFakeTimers();
+  const prepared = signedNearQuote(input);
   fetcher.mockResolvedValueOnce(Response.json(prepared));
-  expect((await prepare(request(nearTestInput))).status).toBe(200);
+  expect((await prepare(request(input))).status).toBe(200);
   expect(JSON.parse(fetcher.mock.calls[0][1]!.body as string).dry).toBe(false);
-  expect((await prepare(request({ ...nearTestInput, quote: prepared }))).status).toBe(200);
+  expect((await prepare(request({ ...input, quote: prepared }))).status).toBe(200);
   expect(fetcher).toHaveBeenCalledTimes(1);
   vi.stubEnv("NEAR_TRANSFERS_ENABLED", "false");
-  expect((await prepare(request({ ...nearTestInput, quote: prepared }))).status).toBe(503);
+  expect((await prepare(request({ ...input, quote: prepared }))).status).toBe(503);
   vi.advanceTimersByTime(700_000);
   fetcher.mockResolvedValueOnce(Response.json(nearStatus(prepared)));
-  expect((await status(request({ routeId: nearTestInput.routeId, quote: prepared }))).status).toBe(200);
+  expect((await status(request({ routeId: input.routeId, quote: prepared }))).status).toBe(200);
   fetcher.mockResolvedValueOnce(Response.json(nearStatus(prepared, "KNOWN_DEPOSIT_TX")));
-  expect((await deposit(request({ routeId: nearTestInput.routeId, quote: prepared, txHash: nearTxHash }))).status).toBe(200);
+  expect((await deposit(request({ routeId: input.routeId, quote: prepared, txHash: nearTxHash }))).status).toBe(200);
   vi.useRealTimers();
 });
 
@@ -83,24 +104,26 @@ it("sanitizes authorization errors and preserves the service correlation ID", as
   expect(await response.json()).toEqual({ correlationId: "near-reference-123", error: "NEAR could not authorize this quote. Contact support with the reference." });
 });
 
-it("tracks delivery when the status API omits quote metadata and returns a null refund reason", async () => {
-  const original = signedNearQuote();
-  const payload = { ...nearStatus(structuredClone(original), "SUCCESS"), swapDetails: {
+it.each(["PENDING_DEPOSIT", "SUCCESS"] as const)("tracks %s when status omits quote metadata and returns null amounts or refund reasons", async state => {
+  const input = state === "PENDING_DEPOSIT" ? nearReceiveInput : nearTestInput;
+  const original = signedNearQuote(input);
+  const payload = { ...nearStatus(structuredClone(original), state), swapDetails: {
     originChainTxHashes: [{ hash: nearTxHash }], destinationChainTxHashes: [{ hash: nearDestinationHash }],
-    amountOut: "4980000", refundedAmount: "0", refundReason: null,
+    amountOut: state === "PENDING_DEPOSIT" ? null : "4980000", refundedAmount: "0", refundReason: null,
   } };
   // The live status endpoint omits these original quote fields. Its signature
   // still covers the original quoteWaitingTimeMs, so verifying it as-is fails.
   Reflect.deleteProperty(payload.quoteResponse, "correlationId");
   Reflect.deleteProperty(payload.quoteResponse.quoteRequest, "quoteWaitingTimeMs");
   fetcher.mockResolvedValueOnce(Response.json(payload));
-  const response = await status(request({ routeId: nearTestInput.routeId, quote: original }));
+  const response = await status(request({ routeId: input.routeId, quote: original }));
   expect(response.status).toBe(200);
   const body = await response.json();
-  expect(body).toMatchObject({ status: "SUCCESS", quoteResponse: {
+  expect(body).toMatchObject({ status: state, quoteResponse: {
     correlationId: original.correlationId, signature: original.signature,
     quoteRequest: { quoteWaitingTimeMs: 10_000 },
-  }, swapDetails: { amountOut: "4980000", originChainTxHashes: [{ hash: nearTxHash }], destinationChainTxHashes: [{ hash: nearDestinationHash }] } });
+  }, swapDetails: { originChainTxHashes: [{ hash: nearTxHash }], destinationChainTxHashes: [{ hash: nearDestinationHash }] } });
+  expect(body.swapDetails.amountOut).toBe(state === "PENDING_DEPOSIT" ? undefined : "4980000");
   expect(body.swapDetails.refundReason).toBeUndefined();
   expect(verifyQuoteSignature(body.quoteResponse)).toBe(true);
 });

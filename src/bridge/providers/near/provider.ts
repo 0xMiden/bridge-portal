@@ -1,4 +1,5 @@
 import type { Provider, ProviderDirection } from "../../core/provider";
+import { evmNetworks } from "../../../config/evm-networks";
 
 const guidance = { tone: "active", icon: "alert", title: "Keep this receipt",
   body: "Check this transfer in Bread and retry its status here. Do not send another deposit for this quote." } as const;
@@ -42,7 +43,34 @@ const send: ProviderDirection = {
   }),
 };
 
+const receive: ProviderDirection = {
+  ...send,
+  steps: [
+    { status: "signature", label: "Sign EVM deposit", detail: "Confirm the deposit in your source wallet." },
+    { status: "source_finality", label: "Deposit confirmation", detail: "Waiting for the EVM deposit to be detected." },
+    { status: "message_observed", label: "Delivery to Miden", detail: "NEAR Intents is delivering {asset} to your Miden account." },
+    { status: "complete", label: "Delivered on Miden", detail: "Check Bread for your {asset}." },
+  ],
+  phases: {
+    ...send.phases,
+    signature: { ...send.phases.signature, guidance: { ...guidance, body: "Confirm the deposit in your EVM wallet. Keep this receipt to track delivery to Miden." } },
+    PENDING_DEPOSIT: { ...send.phases.PENDING_DEPOSIT, headline: "Waiting for the EVM deposit", guidance: {
+      ...guidance, body: "Check the deposit in your EVM wallet and retry its status here. Do not send another deposit for this quote.",
+    } },
+    KNOWN_DEPOSIT_TX: { ...send.phases.KNOWN_DEPOSIT_TX, headline: "EVM deposit detected" },
+    SUCCESS: { ...send.phases.SUCCESS, headline: "Delivered on Miden" },
+    REFUNDED: { ...send.phases.REFUNDED, headline: "Funds refunded to your EVM wallet", guidance: {
+      tone: "success", icon: "wallet", title: "Refunded to your EVM wallet",
+      body: "The swap was refunded to your original EVM address. No Miden delivery was completed. Check your source wallet; provider fees may apply.",
+    } },
+    FAILED: { ...send.phases.FAILED, guidance: { ...guidance, body: "Check the deposit in your EVM wallet and share this receipt with support. Do not send another deposit for this quote." } },
+  },
+  fees: route => ({ ...send.fees(route), networkFee: route?.source.kind !== "miden" && route?.source
+    ? `${evmNetworks[route.source.network].name} gas` : "Source network gas",
+    sepoliaGasUnits: route?.source.kind === "native" ? 21_000 : 65_000 }),
+};
+
 export const near: Provider = {
-  label: "NEAR Intents", badge: "Intent", unavailableReason: "NEAR Intents currently supports Send from Miden only.",
-  directions: { send, receive: send }, load: () => import("./flows"),
+  label: "NEAR Intents", badge: "Intent", unavailableReason: "NEAR Intents does not support this token pair.",
+  directions: { send, receive }, load: () => import("./flows"),
 };

@@ -11,7 +11,7 @@ import type { NearInput, NearQuoteResponse } from "./schema";
 export function buildNearDeposit(response: NearQuoteResponse, input: NearInput, recovery: BridgeConfig) {
   const quote = verifyNearQuote(response, input, false);
   const address = validateNearDeposit(quote);
-  if (recovery.environment !== "mainnet" || recovery.near?.funding.script !== "p2id") throw new Error("Unsupported NEAR funding configuration.");
+  if (input.mode !== "send" || recovery.environment !== "mainnet" || recovery.near?.funding.script !== "p2id") throw new Error("Unsupported NEAR funding configuration.");
   const sender = parseMidenAccountId(input.midenAccount);
   const recipient = parseMidenAccountId(address);
   const faucet = parseMidenAccountId(nearPair(input.routeId).source.faucetId);

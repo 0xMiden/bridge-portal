@@ -35,11 +35,13 @@ function routesForConfig(config: BridgeConfig): readonly BridgeRoute[] {
       }];
     });
   });
-  return [...existing, ...(config.near?.routes ?? []).map(pair => ({
-    id: pair.id, provider: "near" as const, mode: "send" as const,
-    source: pair.source, destination: pair.destination, recovery: config,
-    disabled: !nearRoutesEnabled || document.features.bridgeOut === false,
-  }))];
+  return [...existing, ...(config.near?.routes ?? []).flatMap<BridgeRoute>(pair => [
+    { id: pair.id, provider: "near", mode: "send", source: pair.source, destination: pair.destination, recovery: config,
+      disabled: !nearRoutesEnabled || document.features.bridgeOut === false },
+    ...(pair.receiveId ? [{ id: pair.receiveId, provider: "near" as const, mode: "receive" as const,
+      source: pair.destination, destination: pair.source, recovery: config,
+      disabled: !nearRoutesEnabled || document.features.bridgeIn === false }] : []),
+  ])];
 }
 
 // Release configuration is fixed for the page lifetime; derive routes once.

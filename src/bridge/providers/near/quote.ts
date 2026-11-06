@@ -2,12 +2,21 @@ import { verifyQuoteSignature, type QuoteResponse } from "@defuse-protocol/one-c
 import { formatUnits } from "viem";
 import { nearConfig } from "../../../config/near/config";
 import type { QuoteRequest, QuoteResult } from "../../core/quote";
-import { nearInputSchema, nearQuoteSchema, type NearInput, type NearQuoteResponse } from "./schema";
+import { nearInputSchema, nearQuoteSchema, nearMidenAddress, nearEvmAddress, type NearInput, type NearQuoteResponse } from "./schema";
+
+const MIDEN_MAX_AMOUNT = (1n << 63n) - (1n << 31n);
 
 export function nearPair(routeId: string) {
-  const pair = nearConfig.routes.find(pair => pair.id === routeId);
-  if (!pair) throw new Error("Unsupported NEAR route. Only approved Miden to EVM routes are available.");
+  const pair = nearConfig.routes.find(pair => pair.id === routeId || pair.receiveId === routeId);
+  if (!pair) throw new Error("Unsupported NEAR route. Choose an approved Miden/EVM pair.");
   return pair;
+}
+
+export function nearRouteAssets(routeId: string) {
+  const pair = nearPair(routeId);
+  return pair.id === routeId
+    ? { mode: "send" as const, source: pair.source, destination: pair.destination }
+    : { mode: "receive" as const, source: pair.destination, destination: pair.source };
 }
 
 /** parseUnits rounds extra precision; transfers must reject it instead. */
@@ -17,17 +26,21 @@ export function nearSourceUnits(amount: string, decimals: number): string {
   }
   const [whole, fraction = ""] = amount.split(".");
   const units = BigInt(whole + fraction.padEnd(decimals, "0"));
-  if (units <= 0n || units > (1n << 63n) - (1n << 31n)) throw new Error("Amount is outside Miden's transfer limits.");
+  if (units <= 0n || units > (1n << 256n) - 1n) throw new Error("Amount is outside the transfer limits.");
   return units.toString();
 }
 
 export function nearRequest(input: NearInput, dry: boolean, deadline: string) {
-  const pair = nearPair(input.routeId);
+  const pair = nearRouteAssets(input.routeId);
+  if (input.mode !== pair.mode) throw new Error("NEAR route direction mismatch.");
+  const amount = nearSourceUnits(input.amount, pair.source.decimals);
+  if (pair.mode === "send" && BigInt(amount) > MIDEN_MAX_AMOUNT) throw new Error("Amount is outside Miden's transfer limits.");
   return {
     dry, swapType: "EXACT_INPUT" as const, slippageTolerance: 100 as const,
     originAsset: pair.source.assetId, destinationAsset: pair.destination.assetId,
     depositType: "ORIGIN_CHAIN" as const, recipientType: "DESTINATION_CHAIN" as const, refundType: "ORIGIN_CHAIN" as const,
-    amount: nearSourceUnits(input.amount, pair.source.decimals), recipient: input.evmAddress, refundTo: input.midenAccount,
+    amount, recipient: pair.mode === "send" ? input.evmAddress : input.midenAccount,
+    refundTo: pair.mode === "send" ? input.midenAccount : input.evmAddress,
     confidentiality: "basic" as const, quoteWaitingTimeMs: 10_000, deadline,
   };
 }
@@ -53,7 +66,9 @@ export function verifyNearQuote(value: unknown, input: NearInput, dry: boolean, 
       BigInt(quote.minAmountOut) <= 0n || BigInt(quote.amountOut) < BigInt(quote.minAmountOut)) {
     throw new Error("NEAR returned invalid transfer amounts.");
   }
-  if (!dry && !quote.depositAddress) throw new Error("NEAR did not return a Miden deposit address.");
+  if (input.mode === "receive" && BigInt(quote.amountOut) > MIDEN_MAX_AMOUNT) throw new Error("Output exceeds Miden's transfer limit.");
+  if (!dry && !quote.depositAddress) throw new Error("NEAR did not return a deposit address.");
+  if (quote.depositAddress) (input.mode === "send" ? nearMidenAddress : nearEvmAddress).parse(quote.depositAddress);
   if (requireLive && (nearQuoteExpiry(response) <= Date.now() || Date.parse(response.timestamp) > Date.now() + 30_000)) {
     throw new Error("NEAR quote expired. Review a fresh quote before sending.");
   }
@@ -66,7 +81,7 @@ export function nearInput(input: QuoteRequest): NearInput {
 }
 
 export function nearQuoteResult(response: NearQuoteResponse, routeId: string): QuoteResult {
-  const decimals = nearPair(routeId).destination.decimals;
+  const decimals = nearRouteAssets(routeId).destination.decimals;
   return { kind: "near", received: formatUnits(BigInt(response.quote.amountOut), decimals),
     minimumReceived: formatUnits(BigInt(response.quote.minAmountOut), decimals), estimatedSeconds: response.quote.timeEstimate,
     validity: { kind: "time", expiresAt: nearQuoteExpiry(response) }, authorization: response };
@@ -74,6 +89,8 @@ export function nearQuoteResult(response: NearQuoteResponse, routeId: string): Q
 
 /** Signed request values recover the original binding after a reload or route pause. */
 export function nearTrackingInput(routeId: string, quote: NearQuoteResponse): NearInput {
-  return nearInputSchema.parse({ routeId, mode: "send", amount: formatUnits(BigInt(quote.quoteRequest.amount), nearPair(routeId).source.decimals),
-    midenAccount: quote.quoteRequest.refundTo, evmAddress: quote.quoteRequest.recipient });
+  const { mode, source } = nearRouteAssets(routeId);
+  return nearInputSchema.parse({ routeId, mode, amount: formatUnits(BigInt(quote.quoteRequest.amount), source.decimals),
+    midenAccount: mode === "send" ? quote.quoteRequest.refundTo : quote.quoteRequest.recipient,
+    evmAddress: mode === "send" ? quote.quoteRequest.recipient : quote.quoteRequest.refundTo });
 }
