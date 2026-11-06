@@ -83,12 +83,12 @@ function ProviderRouteOption({ route, quote, selected, selectable, groupId, onSe
               <Clock3 size={13} aria-hidden="true" /><span className="sr-only">Estimated time: </span>{quote?.estimatedSeconds !== undefined ? `~${quote.estimatedSeconds}s` : policy.showEta ? policy.eta : "Varies"}
             </span>
           </span>
-          {quote?.minimumReceived ? <span className={`text-xs ${secondary}`}>Minimum <TokenAmount amount={quote.minimumReceived} symbol={route.destination.symbol} roundDown /></span> : null}
           <span className="flex min-w-0 items-center justify-between gap-3">
             <span className="flex min-w-0 flex-wrap items-baseline gap-x-1.5">
               {quote ? <span className="sr-only">You receive</span> : null}
               <span className={`min-w-0 text-xl leading-6 font-semibold tabular-nums wrap-anywhere ${quote ? "" : "text-muted-foreground"}`}><TokenAmount amount={quote?.received ?? "—"} /></span>
               <span className={`text-sm leading-5 ${secondary}`}>{route.destination.symbol}</span>
+              {quote?.minimumReceived ? <span className={`ml-1 whitespace-nowrap text-xs leading-5 ${secondary}`}>Min <TokenAmount amount={quote.minimumReceived} roundDown /></span> : null}
             </span>
             <span className="flex size-5 shrink-0 items-center justify-center" aria-hidden="true">
               {selected || selectable ? <span className={`grid size-4 place-items-center rounded-full border

@@ -50,7 +50,8 @@ and the runtime pause switch; this does **not** allocate a second quote/address.
 Quote cards, destination amounts, reviews and receipts use compact display
 precision: up to four fractional digits, preserving four significant digits for
 amounts below one token. For example, `0.001959990508755621 ETH` displays as
-`0.00196 ETH`; the full amount remains available on hover. Minimum-received
+`0.00196 ETH`; the full amount remains available on hover. Provider cards show
+the minimum inline beside the expected output in smaller text. Minimum-received
 values round down. Source inputs, signed quotes, stored receipts, fiat valuation
 and wallet transactions retain their original exact values.
 
