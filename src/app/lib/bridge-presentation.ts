@@ -81,8 +81,8 @@ export function destinationAssetSymbol(activity: Activity): string {
 export function quoteForActivity(activity: Activity): Quote {
   const route = activityRoute(activity);
   const quote = quoteFromPolicy(directionFor(activity).fees(route), activity.amount, route?.destination.symbol ?? activity.asset);
-  const received = directionFor(activity).activityDetails(activity).received;
-  return received ? { ...quote, expectedReceived: received } : quote;
+  const details = directionFor(activity).activityDetails(activity);
+  return { ...quote, expectedReceived: details.received ?? quote.expectedReceived, networkFee: details.networkFee ?? quote.networkFee };
 }
 
 export function providerFee(fees: FeePolicy, amount: string, sourceSymbol: string, destinationSymbol: string) {

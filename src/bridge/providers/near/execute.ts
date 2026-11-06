@@ -1,4 +1,5 @@
 import { quoteHash, type QuoteResponse } from "@defuse-protocol/one-click-sdk-typescript";
+import { formatUnits } from "viem";
 import type { SubmissionContext } from "../../core/submission";
 import { normalizeMidenAccountHex } from "../../miden-address";
 import { getMidenVerificationBaseFee } from "../../miden-rpc";
@@ -12,6 +13,7 @@ export function validateNearDeposit(quote: NearQuoteResponse) {
   if (quote.quote.depositMemo || quote.quote.depositAttachment || quote.quote.attachment) {
     throw new Error("This NEAR deposit requires unsupported memo or attachment instructions. Do not fund it.");
   }
+  if (quote.quoteRequest.depositMode && quote.quoteRequest.depositMode !== "SIMPLE") throw new Error("Unsupported NEAR deposit mode.");
   return quote.quote.depositAddress;
 }
 
@@ -27,6 +29,14 @@ async function checkBalance(context: SubmissionContext, units: bigint) {
   const reserve = pair.source.faucetId === feeFaucet ? fee : 0n;
   if (balance(pair.source.faucetId) < units + reserve || balance(feeFaucet) < fee) {
     throw new Error("Not enough source tokens or USDCx for the Miden network fee.");
+  }
+  return `${formatUnits(fee, 6)} USDCx`;
+}
+
+async function checkRecipient(context: SubmissionContext) {
+  const accounts = await context.input.evmWallet.provider?.request({ method: "eth_accounts" });
+  if (!Array.isArray(accounts) || typeof accounts[0] !== "string" || accounts[0].toLowerCase() !== context.input.evmAddress.toLowerCase()) {
+    throw new Error("Your EVM wallet changed. Reconnect and review the transfer again.");
   }
 }
 
@@ -50,16 +60,17 @@ export async function submitNearTransfer(context: SubmissionContext) {
     }
     const units = BigInt(nearSourceUnits(input.amount, nearPair(route.id).source.decimals));
     context.phase("Checking Miden balance and fee…");
-    await checkBalance(context, units);
+    const networkFee = await checkBalance(context, units);
     // Recheck the server kill switch immediately before constructing a wallet request.
     await nearPost("prepare", { ...binding, quote });
     const { buildNearDeposit } = await import("./funding");
     const deposit = buildNearDeposit(quote, binding, route.recovery);
+    await checkRecipient(context);
     verifyNearQuote(quote, binding, false);
     if (!input.midenWallet.requestTransaction || !input.midenWallet.waitForTransaction) throw new Error("Reconnect Bread before transferring.");
-    const operation = { quote, submission: "prepared" as const, status: "PENDING_DEPOSIT" as const, notification: "pending" as const };
+    const operation = { quote, networkFee, submission: "prepared" as const, status: "PENDING_DEPOSIT" as const, notification: "pending" as const };
     context.persist!({ id, near: operation, midenNoteId: deposit.noteId, receivedAmount: input.quote!.received,
-      evmAddress: input.evmAddress, midenAccount: input.midenAccount });
+      evmAddress: input.evmAddress, destination: input.evmAddress, midenAccount: input.midenAccount, eta: `About ${quote.quote.timeEstimate} seconds` });
     // Persist the attempt BEFORE invoking the extension. A lost response must not retry it.
     context.persist!({ near: { ...operation, submission: "attempted" } });
     context.phase("Confirm the public deposit in Bread…");

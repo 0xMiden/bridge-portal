@@ -21,13 +21,17 @@ export const nearMonitor: ActivityMonitor = {
       verifyNearQuote(status.quoteResponse, nearTrackingInput(body.routeId, body.quote), false, false);
       if (status.quoteResponse.signature !== body.quote.signature) throw new Error("Quote reference mismatch.");
       const pair = nearPair(body.routeId);
-      const sourceTxHash = activity.sourceTxHash ?? status.swapDetails.originChainTxHashes[0]?.hash;
+      // A refund can add origin-chain hashes; retain them without mislabelling a refund as the deposit.
+      const sourceTxHash = activity.sourceTxHash ?? (status.status !== "REFUNDED" && status.swapDetails.originChainTxHashes.length === 1
+        ? status.swapDetails.originChainTxHashes[0].hash : undefined);
       return { warning, patch: {
         sourceTxHash,
         destinationTxHash: status.status === "SUCCESS" ? status.swapDetails.destinationChainTxHashes[0]?.hash : undefined,
         receivedAmount: status.status === "SUCCESS" && status.swapDetails.amountOut
           ? formatUnits(BigInt(status.swapDetails.amountOut), pair.destination.decimals) : undefined,
         near: { ...operation, notification, status: status.status,
+          originTxHashes: status.swapDetails.originChainTxHashes.map(tx => tx.hash),
+          destinationTxHashes: status.swapDetails.destinationChainTxHashes.map(tx => tx.hash),
           submission: sourceTxHash ? "confirmed" : operation.submission,
           refundedAmount: status.swapDetails.refundedAmount
             ? formatUnits(BigInt(status.swapDetails.refundedAmount), pair.source.decimals) : undefined,

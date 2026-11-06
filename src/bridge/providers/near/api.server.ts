@@ -83,12 +83,15 @@ async function track(body: unknown, notify: boolean, signal: AbortSignal) {
   const payload = notify
     ? await upstream("/deposit/submit", { depositAddress, ...("txHash" in input ? { txHash: input.txHash } : {}), ...(depositMemo ? { memo: depositMemo } : {}) }, signal)
     : await upstream("/status", { depositAddress, ...(depositMemo ? { depositMemo } : {}) }, signal);
-  const response = nearStatusResponseSchema.parse(payload);
-  const returned = verifyNearQuote(response.quoteResponse, bound, false, false);
-  if (returned.signature !== original.signature || returned.quote.depositAddress !== depositAddress || returned.quote.depositMemo !== depositMemo) {
-    throw new NearApiError("NEAR status does not match this receipt. Keep the receipt and retry.", 502, response.correlationId);
+  try {
+    const response = nearStatusResponseSchema.parse(payload);
+    const returned = verifyNearQuote(response.quoteResponse, bound, false, false);
+    if (returned.signature !== original.signature || returned.quote.depositAddress !== depositAddress || returned.quote.depositMemo !== depositMemo) throw new Error("Mismatched status");
+    return response;
+  } catch {
+    const id = nearCorrelationId.safeParse((payload as { correlationId?: unknown })?.correlationId);
+    throw new NearApiError("NEAR status does not match this receipt. Keep the receipt and retry.", 502, id.success ? id.data : undefined);
   }
-  return response;
 }
 
 /** Narrow same-origin endpoints. Unsupported fields/directions never reach 1Click. */

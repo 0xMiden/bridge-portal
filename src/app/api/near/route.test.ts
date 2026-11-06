@@ -38,10 +38,23 @@ it("pins exact input, source decimals and chain direction while keeping the API 
 it.each([
   { mode: "receive" }, { routeId: "mainnet:near-miden-usdcx-to-arc-usdc" }, { amount: "5.0000001" },
   { amount: "1e6" }, { amount: "0" }, { midenAccount: "mtst1wrongnetwork" }, { evmAddress: "0x0" },
+  { midenAccount: `${nearTestInput.midenAccount.split("_")[0]}_qqqqqq` },
   { originAsset: "arbitrary" }, { upstream: "https://attacker.example" },
 ])("rejects invalid portal requests before upstream I/O: %j", async patch => {
   expect((await preview(request({ ...nearTestInput, ...patch }))).status).toBe(400);
   expect(fetcher).not.toHaveBeenCalled();
+});
+
+it.each([
+  ["mainnet:near-miden-eth-to-base-eth", "0.00000001", "1"],
+  ["mainnet:near-miden-wbtc-to-base-cbbtc", "0.00000001", "1"],
+  ["mainnet:near-miden-usdt-to-arbitrum-usdt0", "0.000001", "1"],
+])("uses source precision for %s and imposes no $5 minimum", async (routeId, amount, expected) => {
+  vi.useFakeTimers();
+  const input = { ...nearTestInput, routeId, amount };
+  fetcher.mockResolvedValueOnce(Response.json(signedNearQuote(input, true)));
+  expect((await preview(request(input))).status).toBe(200);
+  expect(JSON.parse(fetcher.mock.calls[0][1]!.body as string).amount).toBe(expected);
 });
 
 it("prepares one executable quote then revalidates the same deposit; pause still permits tracking and notification", async () => {

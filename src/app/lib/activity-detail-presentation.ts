@@ -26,6 +26,7 @@ export function activityDetailFor(activity: Activity) {
     receipt: {
       activity: receiptActivity,
       receivedAmount: quote.expectedReceived,
+      refund: details.refund,
       networkFee: quote.networkFee,
       sepoliaGasUnits: quote.fees.sepoliaGasUnits,
       fee:

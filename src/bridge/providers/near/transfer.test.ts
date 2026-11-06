@@ -53,17 +53,18 @@ function setup() {
     return { txHash: nearTxHash, outputNotes: [output] };
   });
   const requestAssets = vi.fn().mockResolvedValue([{ faucetId: route.recovery.derived.usdcxFaucetId, amount: "10000000" }]);
+  const evmRequest = vi.fn().mockResolvedValue([nearTestInput.evmAddress]);
   const input: TransferSubmission = {
     ...nearTestInput, routeId: route.id, environment: "mainnet", insufficientBalance: false, evmBalance: "", midenAsset: null,
     quote: { ...nearQuoteResult(quote, route.id), request: { ...nearTestInput, recovery: route.recovery } },
-    evmWallet: { connected: true, address: nearTestInput.evmAddress },
+    evmWallet: { connected: true, address: nearTestInput.evmAddress, provider: { request: evmRequest } },
     midenWallet: { connected: true, address: nearTestInput.midenAccount, requestAssets, requestTransaction, waitForTransaction },
   };
   const effects = { openEvmWallet: vi.fn(), onError: vi.fn(), onSubmittingChange: vi.fn(), onPhaseChange: vi.fn(),
     activities: new ActivityStore(activityPersistence), navigate: vi.fn() };
   effects.activities.sync();
   fetcher.mockImplementation(async path => String(path).endsWith("prepare") ? Response.json(quote) : Response.json(nearStatus(quote)));
-  return { input, effects, quote, requestTransaction, waitForTransaction, requestAssets };
+  return { input, effects, quote, requestTransaction, waitForTransaction, requestAssets, evmRequest };
 }
 
 it("persists before signing a public P2ID, records actual source evidence, and resumes without a second deposit", async () => {
@@ -73,7 +74,7 @@ it("persists before signing a public P2ID, records actual source evidence, and r
   await submitBridgeTransfer(test.input, test.effects);
   expect(test.effects.onError).not.toHaveBeenCalled();
   const saved = loadStoredActivities()[0];
-  expect(saved).toMatchObject({ sourceTxHash: nearTxHash, midenWalletRequestId: "near-wallet-request", near: { submission: "confirmed", notification: "pending" } });
+  expect(saved).toMatchObject({ sourceTxHash: nearTxHash, destination: nearTestInput.evmAddress, midenWalletRequestId: "near-wallet-request", near: { submission: "confirmed", notification: "pending", networkFee: "0.003 USDCx" } });
   test.effects.activities = new ActivityStore(activityPersistence); test.effects.activities.sync();
   await submitBridgeTransfer(test.input, test.effects);
   expect(test.requestTransaction).toHaveBeenCalledTimes(1);
@@ -95,11 +96,12 @@ it("retains wallet acceptance across reload and treats delayed status as pending
   expect(observed.warning).toMatch(/remains pending/);
 });
 
-it.each(["wrong-faucet", "fee-shortfall", "wallet-change", "memo", "storage-failure", "expired", "preview"])("stops %s before the wallet prompt", async failure => {
+it.each(["wrong-faucet", "fee-shortfall", "wallet-change", "evm-wallet-change", "memo", "storage-failure", "expired", "preview"])("stops %s before the wallet prompt", async failure => {
   const test = setup();
   if (failure === "wrong-faucet") test.requestAssets.mockResolvedValue([{ faucetId: "0x419f8f4bff72959132aa7cea15a4c1", amount: "10000000" }]);
   if (failure === "fee-shortfall") test.requestAssets.mockResolvedValue([{ faucetId: findBridgeRoute(nearTestInput.routeId)!.recovery.derived.usdcxFaucetId, amount: "5000000" }]);
   if (failure === "wallet-change") test.input.midenWallet.address = "mm1another";
+  if (failure === "evm-wallet-change") test.evmRequest.mockResolvedValue(["0x2222222222222222222222222222222222222222"]);
   if (failure === "memo") test.input.quote = { ...test.input.quote!, ...nearQuoteResult(signedNearQuote(nearTestInput, false, { depositMemo: "required-memo" }), nearTestInput.routeId) };
   if (failure === "storage-failure") vi.spyOn(window.localStorage, "setItem").mockImplementation(() => { throw new Error("Quota"); });
   if (failure === "expired") test.input.quote!.validity = { kind: "time", expiresAt: Date.now() - 1 };
@@ -122,5 +124,24 @@ it("renders a refund separately from EVM delivery and ignores stale pending poll
   const refunded = test.effects.activities.get(saved.id)!.activity;
   expect(refunded).toMatchObject({ status: "refunded", near: { submission: "confirmed", refundedAmount: "4.99", status: "REFUNDED" } });
   expect(nearMonitor.canPoll(refunded)).toBe(false);
-  expect(activityDetailFor(refunded)).toMatchObject({ receipt: { receivedAmount: "0", receivedLabel: "EVM delivery" }, guidance: { title: "Refunded to Miden" } });
+  expect(activityDetailFor(refunded)).toMatchObject({ receipt: { receivedAmount: "0", receivedLabel: "EVM delivery", refund: "4.99 USDCx" }, guidance: { title: "Refunded to Miden" } });
+});
+
+it.each([
+  ["INCOMPLETE_DEPOSIT", "source_finality", true], ["PROCESSING", "message_observed", true],
+  ["SUCCESS", "complete", false], ["FAILED", "failed", false],
+] as const)("tracks %s without confusing it with delivery", async (status, expected, canPoll) => {
+  const test = setup();
+  await submitBridgeTransfer(test.input, test.effects);
+  expect(test.effects.onError).not.toHaveBeenCalled();
+  const activity = loadStoredActivities()[0];
+  fetcher.mockResolvedValueOnce(Response.json({ ...nearStatus(test.quote, status), swapDetails: {
+    originChainTxHashes: [{ hash: nearTxHash }], destinationChainTxHashes: status === "SUCCESS" ? [{ hash: `0x${"cd".repeat(32)}` }] : [], amountOut: "4970000",
+  } }));
+  const observation = await nearMonitor.observe(activity, new AbortController().signal);
+  test.effects.activities.patch(activity.id, observation.patch);
+  const result = test.effects.activities.get(activity.id)!.activity;
+  expect(result.status).toBe(expected);
+  expect(nearMonitor.canPoll(result)).toBe(canPoll);
+  expect(result.destinationTxHash).toBe(status === "SUCCESS" ? `0x${"cd".repeat(32)}` : undefined);
 });

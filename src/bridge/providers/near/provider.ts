@@ -31,6 +31,8 @@ const send: ProviderDirection = {
   activityDetails: activity => ({
     sourceHash: activity.sourceTxHash, destinationHash: activity.near?.status === "SUCCESS" ? activity.destinationTxHash : undefined,
     destinationKind: "tx", received: activity.near?.status === "REFUNDED" ? "0" : activity.receivedAmount,
+    networkFee: activity.near?.networkFee,
+    refund: activity.near?.status === "REFUNDED" && activity.near.refundedAmount ? `${activity.near.refundedAmount} ${activity.asset}` : undefined,
     reference: activity.near ? { label: "NEAR quote reference", value: activity.near.quote.correlationId } : undefined,
   }),
   fees: () => ({

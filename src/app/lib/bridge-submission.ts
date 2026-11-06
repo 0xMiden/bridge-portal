@@ -123,7 +123,7 @@ export async function submitBridgeTransfer(
   } catch (error) {
     // An RPC/solver outage after broadcast is not proof that the transfer failed.
     effects.onError(
-      recorded
+      recorded?.near?.submission === "prepared" ? `Transfer was not sent. Keep its prepared receipt. ${errorMessage(error)}` : recorded
         ? `Transfer submitted. Keep its receipt; do not submit again. ${errorMessage(error)}`
         : errorMessage(error),
     );

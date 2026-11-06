@@ -3,7 +3,8 @@ import { normalizeMidenAccountHex } from "../../miden-address";
 
 export const nearCorrelationId = z.string().regex(/^[a-zA-Z0-9_-]{1,100}$/);
 export const nearAmount = z.string().regex(/^(0|[1-9]\d{0,77})$/);
-export const nearMidenAddress = z.string().max(256).regex(/^mm1[02-9ac-hj-np-z]+(?:_[02-9ac-hj-np-z]+)?$/).refine(value => {
+// Only the basic-wallet interface is supported; arbitrary suffixes are not validated by account-ID decoding.
+export const nearMidenAddress = z.string().max(256).regex(/^mm1[02-9ac-hj-np-z]+(?:_qr7qqq9wr6w)?$/).refine(value => {
   try { normalizeMidenAccountHex(value); return true; } catch { return false; }
 }, "Invalid Miden mainnet address");
 
@@ -54,6 +55,9 @@ export const nearOperationSchema = z.object({
   submission: z.enum(["prepared", "attempted", "accepted", "confirmed"]),
   status: nearStatusSchema,
   notification: z.enum(["pending", "sent"]),
+  networkFee: z.string().max(100).optional(),
+  originTxHashes: z.array(z.string().regex(/^0x[\da-f]{64}$/i)).max(32).optional(),
+  destinationTxHashes: z.array(z.string().regex(/^0x[\da-f]{64}$/i)).max(32).optional(),
   refundedAmount: z.string().max(100).optional(),
   refundReason: z.string().max(256).optional(),
 });
