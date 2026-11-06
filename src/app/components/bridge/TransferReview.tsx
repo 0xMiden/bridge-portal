@@ -11,6 +11,7 @@ import { shortAddress } from "../../../wallets/identity";
 import { networkLabels } from "../../lib/bridge-presentation";
 import { NetworkLogo } from "../AssetLogo";
 import { FiatAmount } from "../FiatAmount";
+import { TokenAmount } from "../TokenAmount";
 import type { BridgeQuote } from "./use-bridge-quote";
 import type { ReviewedTransfer } from "./use-bridge-transfer";
 import { Dialog } from "../ui/Dialog";
@@ -57,10 +58,10 @@ export function TransferReview({ review, quote, walletsChanged, onCancel, onConf
           </div>
           <DetailsList items={[
             (route.source.symbol !== route.destination.symbol || Number(amount) !== Number(received)) && {
-              label: fees.estimated ? "Estimated received" : "You receive", value: `${received} ${route.destination.symbol}`,
+              label: fees.estimated ? "Estimated received" : "You receive", value: <TokenAmount amount={received} symbol={route.destination.symbol} />,
             },
             (minimumReceived !== "Not quoted" && Number(minimumReceived) !== Number(received)) && {
-              label: "Minimum received", value: `${minimumReceived} ${route.destination.symbol}`,
+              label: "Minimum received", value: <TokenAmount amount={minimumReceived} symbol={route.destination.symbol} roundDown />,
             },
             { label: "Provider", value: bridgeProviders[route.provider].label },
             fees.showEta && { label: "Estimated time", value: review.quote?.estimatedSeconds !== undefined ? `About ${review.quote.estimatedSeconds} seconds` : estimate.eta },

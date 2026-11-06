@@ -47,6 +47,13 @@ and refund account. Changing a wallet or amount, or reaching expiry, requires a
 new review. Confirmation calls `/prepare` with the signed quote to revalidate it
 and the runtime pause switch; this does **not** allocate a second quote/address.
 
+Quote cards, destination amounts, reviews and receipts use compact display
+precision: up to four fractional digits, preserving four significant digits for
+amounts below one token. For example, `0.001959990508755621 ETH` displays as
+`0.00196 ETH`; the full amount remains available on hover. Minimum-received
+values round down. Source inputs, signed quotes, stored receipts, fiat valuation
+and wallet transactions retain their original exact values.
+
 ### Miden-funded withdrawals
 
 Send uses the Miden SDK's standard **public P2ID** note and recipient discovery
@@ -234,7 +241,7 @@ Validation on November 6, 2026:
 | Check | Result |
 | --- | --- |
 | Configuration, TypeScript and lint | Passed |
-| Vitest | 919 passed, including 66 NEAR cases |
+| Vitest | 929 passed, including 66 NEAR cases and 10 amount-formatting cases |
 | Browser review/cancellation regressions | 4 passed |
 | Browser receipt/tracking regressions | 10 passed |
 | Cloudflare production build | Passed; dependency/toolchain warnings remain |

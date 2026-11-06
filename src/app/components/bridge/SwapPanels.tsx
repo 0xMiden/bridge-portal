@@ -11,6 +11,7 @@ import { animateWithMotionPreference, standardEase } from "../../lib/motion";
 import { ChainSelect } from "../ChainSelect";
 import { FiatAmount } from "../FiatAmount";
 import { TokenSelect } from "../TokenSelect";
+import { TokenAmount } from "../TokenAmount";
 import { EvmWalletControl } from "./EvmWalletControl";
 import type { BridgeDraft, DraftAction } from "./use-bridge-draft";
 import type { BridgeTransfer } from "./use-bridge-transfer";
@@ -112,7 +113,7 @@ function TransferPanel({ side, draft, wallets, quote, onChange }: {
             onChange={event => onChange({ type: "amount", amount: event.target.value })} />
         </label>
       ) : (
-        <div className="readonly-amount col-start-1 row-start-2 min-w-0 max-[380px]:row-start-3" aria-label="Expected received"><strong className={amountClasses}>{quote.received}</strong></div>
+        <div className="readonly-amount col-start-1 row-start-2 min-w-0 max-[380px]:row-start-3" aria-label="Expected received"><strong className={amountClasses}><TokenAmount amount={quote.received} /></strong></div>
       )}
       <div className="col-start-2 row-start-2 min-w-0 justify-self-end max-[380px]:row-start-3">
         <TokenSelect route={route} side={side} onSelectRoute={selectRoute} />

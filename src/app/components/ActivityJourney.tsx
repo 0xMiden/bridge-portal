@@ -13,6 +13,7 @@ import type { ActivityDetailModel } from "../lib/activity-detail-presentation";
 import { destinationAssetSymbol, modes, networkLabels } from "../lib/bridge-presentation";
 import { useSepoliaGasEstimate } from "../lib/sepolia-gas";
 import { FiatAmount } from "./FiatAmount";
+import { TokenAmount } from "./TokenAmount";
 import { NetworkLogo } from "./AssetLogo";
 
 type Receipt = ActivityDetailModel["receipt"];
@@ -97,7 +98,7 @@ export function ActivityJourney({ receipt, needsClaim, children }: {
     <DetailsList layout="receipt" aria-label="Fees and details" items={[
       { label: "Provider", value: bridgeProviders[activity.provider].label },
       receipt.tracked && activity.status !== "refunded" && { label: receipt.pending ? "Estimated total time" : "Delivery time", value: receipt.pending ? activity.eta : duration },
-      differentOutput && { label: receipt.receivedLabel, value: `${receipt.receivedAmount} ${destinationAsset}` },
+      differentOutput && { label: receipt.receivedLabel, value: <TokenAmount amount={receipt.receivedAmount} symbol={destinationAsset} /> },
       receipt.refund ? { label: "Refunded to Miden", value: receipt.refund } : undefined,
       { label: "Network fee · estimated", value: networkFee },
       { label: receipt.fee?.label ?? "Provider fee", value: receipt.fee?.value ?? "Unavailable" },
