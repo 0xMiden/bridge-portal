@@ -1,10 +1,15 @@
-import { nearInputSchema, nearPrepareInputSchema, nearTrackingInputSchema, nearDepositInputSchema, nearStatusResponseSchema, nearCorrelationId } from "./schema";
+import { nearInputSchema, nearPrepareInputSchema, nearTrackingInputSchema, nearDepositInputSchema, nearStatusResponseSchema, nearQuoteSchema, nearCorrelationId } from "./schema";
 import { nearRequest, verifyNearQuote, nearTrackingInput } from "./quote";
 import { currentBridgeConfig } from "../../../config/bridge-config";
 
 const API = "https://1click.chaindefuser.com/v0";
 const headers = { "Cache-Control": "no-store" };
 const MAX_BODY_BYTES = 32_768;
+// The status API's quote echo omits tracing metadata present in /quote.
+// Keep the complete signed-quote contract for preparation, receipts and clients.
+const upstreamStatusSchema = nearStatusResponseSchema.extend({
+  quoteResponse: nearQuoteSchema.extend({ correlationId: nearCorrelationId.optional() }),
+});
 
 class NearApiError extends Error {
   constructor(message: string, readonly status: number, readonly correlationId?: string) { super(message); }
@@ -84,10 +89,20 @@ async function track(body: unknown, notify: boolean, signal: AbortSignal) {
     ? await upstream("/deposit/submit", { depositAddress, ...("txHash" in input ? { txHash: input.txHash } : {}), ...(depositMemo ? { memo: depositMemo } : {}) }, signal)
     : await upstream("/status", { depositAddress, ...(depositMemo ? { depositMemo } : {}) }, signal);
   try {
-    const response = nearStatusResponseSchema.parse(payload);
-    const returned = verifyNearQuote(response.quoteResponse, bound, false, false);
+    const response = upstreamStatusSchema.parse(payload);
+    // /status also drops quoteWaitingTimeMs even though the original signature
+    // covers it. Restore only these omitted fields from the verified receipt,
+    // then verify the returned quote in full; never overwrite returned terms.
+    const returned = verifyNearQuote({
+      ...response.quoteResponse,
+      correlationId: response.quoteResponse.correlationId ?? original.correlationId,
+      quoteRequest: {
+        ...response.quoteResponse.quoteRequest,
+        quoteWaitingTimeMs: response.quoteResponse.quoteRequest.quoteWaitingTimeMs ?? original.quoteRequest.quoteWaitingTimeMs,
+      },
+    }, bound, false, false);
     if (returned.signature !== original.signature || returned.quote.depositAddress !== depositAddress || returned.quote.depositMemo !== depositMemo) throw new Error("Mismatched status");
-    return response;
+    return { ...response, quoteResponse: returned };
   } catch {
     const id = nearCorrelationId.safeParse((payload as { correlationId?: unknown })?.correlationId);
     throw new NearApiError("NEAR status does not match this receipt. Keep the receipt and retry.", 502, id.success ? id.data : undefined);

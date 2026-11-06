@@ -46,7 +46,8 @@ export const nearStatusResponseSchema = z.object({
   updatedAt: z.iso.datetime(),
   swapDetails: z.object({
     originChainTxHashes: z.array(tx).max(32), destinationChainTxHashes: z.array(tx).max(32),
-    amountOut: nearAmount.optional(), refundedAmount: nearAmount.optional(), refundReason: z.string().max(256).optional(),
+    amountOut: nearAmount.optional(), refundedAmount: nearAmount.optional(),
+    refundReason: z.string().max(256).nullish().transform(value => value ?? undefined),
   }),
 });
 

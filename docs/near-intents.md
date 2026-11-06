@@ -71,6 +71,13 @@ they never appear as EVM delivery. Outages leave progress pending with retry
 guidance. Late polls cannot erase accepted funding evidence or undo terminal
 outcomes. No UI action tops up incomplete deposits automatically.
 
+The live status API omits the nested quote's `correlationId` and
+`quoteWaitingTimeMs`, and returns `refundReason: null` when there is no refund.
+The server restores only the omitted metadata from the already verified receipt
+and verifies the returned quote's full signature and deposit identity again.
+The response sent to the browser contains the verifiable quote and normalizes a
+null refund reason to absence. Returned transfer terms are never overwritten.
+
 ## Validation and remaining release dependency
 
 The supplied November 6 evidence had 13 successful dry `basic` quotes. The fresh
@@ -80,11 +87,14 @@ unauthenticated recheck is recorded in
 “User authentication is required for confidential intent quotes.” No
 `NEAR_API_KEY` was configured in the development environment.
 
-Confirm with NEAR whether the partner credential permits this direct `basic`
-flow. If a user session is mandatory, this is an authentication/product dependency:
-the team's RDA/ANY_INPUT/confidential-account instructions describe a different
-flow, which is not implemented here. Do not silently change to `public` swaps or
-introduce embedded accounts to work around the error.
+A partner credential was subsequently configured locally. A user-initiated
+Miden ETH → Ethereum ETH transfer completed successfully with this direct `basic`
+flow: NEAR returned SUCCESS and the Ethereum transaction receipt confirmed
+execution. The original portal receipt now shows delivery and both transaction
+hashes after fixing the status response differences described above. No additional
+deposit was sent during diagnosis. The remaining routes, refund recovery and
+pause behavior still need the funded release checks below. The team's
+RDA/ANY_INPUT/confidential-account flow is separate and is not implemented here.
 
 Repeat the live validation with the approved server credential:
 
@@ -97,10 +107,9 @@ The script checks live catalog identities and verifies quote signatures for the
 
 Before enabling production:
 
-1. Resolve authorization and obtain a verified executable `basic` quote. Confirm
-   its Miden address, P2ID discovery and absence of unsupported memo/attachment
-   requirements with G-20. A public note's construction alone does not prove
-   that G-20 detects and consumes it.
+1. Repeat authenticated quote validation across all pinned routes. The completed
+   ETH → Ethereum transfer confirms authorization and public P2ID discovery for
+   that route; confirm the remaining assets' deposit requirements with G-20.
 2. On staging, perform controlled funded transfers covering every source and
    destination network. One covering set is ETH → Robinhood, wBTC → Base,
    USDT → Arbitrum, USDCx → Polygon and USDCx → Ethereum. Record quote references,
@@ -114,7 +123,8 @@ Before enabling production:
 Automated tests use the official verifier on a captured live dry quote, an
 ephemeral test service signing key for prepared/status responses, the actual
 browser Miden WASM, extension responses, and durable browser-storage boundaries.
-They do not prove live settlement. No funded transfer was attempted in this work.
+They do not prove live settlement. The subsequent user-initiated transfer above
+provides live settlement evidence for ETH → Ethereum only.
 
 Validation on November 6, 2026:
 
@@ -127,7 +137,7 @@ Validation on November 6, 2026:
 | Cloudflare production build | Passed; dependency/toolchain warnings remain |
 | Production-server request checks | Reverse quote rejected with 400; paused preparation rejected with 503; both uncached |
 | Live catalog and 13 dry quotes | All pinned identities matched the catalog; all quotes returned 401 without credentials |
-| Funded execution | Not attempted; release gate remains closed |
+| Funded execution | Subsequent user-initiated ETH → Ethereum transfer confirmed; remaining release checks are outstanding |
 
 References: [1Click signatures](https://docs.near-intents.org/integration/distribution-channels/1click-api/verify-quote-signature),
 [SDK](https://docs.near-intents.org/integration/distribution-channels/1click-api/sdk),

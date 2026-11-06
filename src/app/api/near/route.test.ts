@@ -3,7 +3,8 @@ import { POST as preview } from "./quote/route";
 import { POST as prepare } from "./prepare/route";
 import { POST as status } from "./status/route";
 import { POST as deposit } from "./deposit/submit/route";
-import { nearTestInput, signedNearQuote, nearStatus, nearTxHash } from "../../../../test/near-quotes";
+import { nearTestInput, signedNearQuote, nearStatus, nearTxHash, nearDestinationHash } from "../../../../test/near-quotes";
+import { verifyQuoteSignature } from "@defuse-protocol/one-click-sdk-typescript";
 
 vi.mock("@defuse-protocol/one-click-sdk-typescript", async importOriginal => {
   const actual = await importOriginal<typeof import("@defuse-protocol/one-click-sdk-typescript")>();
@@ -80,6 +81,42 @@ it("sanitizes authorization errors and preserves the service correlation ID", as
   const response = await prepare(request(nearTestInput));
   expect(response.status).toBe(502);
   expect(await response.json()).toEqual({ correlationId: "near-reference-123", error: "NEAR could not authorize this quote. Contact support with the reference." });
+});
+
+it("tracks delivery when the status API omits quote metadata and returns a null refund reason", async () => {
+  const original = signedNearQuote();
+  const payload = { ...nearStatus(structuredClone(original), "SUCCESS"), swapDetails: {
+    originChainTxHashes: [{ hash: nearTxHash }], destinationChainTxHashes: [{ hash: nearDestinationHash }],
+    amountOut: "4980000", refundedAmount: "0", refundReason: null,
+  } };
+  // The live status endpoint omits these original quote fields. Its signature
+  // still covers the original quoteWaitingTimeMs, so verifying it as-is fails.
+  Reflect.deleteProperty(payload.quoteResponse, "correlationId");
+  Reflect.deleteProperty(payload.quoteResponse.quoteRequest, "quoteWaitingTimeMs");
+  fetcher.mockResolvedValueOnce(Response.json(payload));
+  const response = await status(request({ routeId: nearTestInput.routeId, quote: original }));
+  expect(response.status).toBe(200);
+  const body = await response.json();
+  expect(body).toMatchObject({ status: "SUCCESS", quoteResponse: {
+    correlationId: original.correlationId, signature: original.signature,
+    quoteRequest: { quoteWaitingTimeMs: 10_000 },
+  }, swapDetails: { amountOut: "4980000", originChainTxHashes: [{ hash: nearTxHash }], destinationChainTxHashes: [{ hash: nearDestinationHash }] } });
+  expect(body.swapDetails.refundReason).toBeUndefined();
+  expect(verifyQuoteSignature(body.quoteResponse)).toBe(true);
+});
+
+it.each(["recipient", "amountOut", "depositAddress", "quoteWaitingTimeMs", "signature"])("rejects changed %s while restoring omitted status metadata", async field => {
+  const original = signedNearQuote();
+  const payload = nearStatus(structuredClone(original), "SUCCESS");
+  Reflect.deleteProperty(payload.quoteResponse, "correlationId");
+  Reflect.deleteProperty(payload.quoteResponse.quoteRequest, "quoteWaitingTimeMs");
+  if (field === "recipient") payload.quoteResponse.quoteRequest.recipient = "0x2222222222222222222222222222222222222222";
+  if (field === "amountOut") payload.quoteResponse.quote.amountOut = "9999999";
+  if (field === "depositAddress") payload.quoteResponse.quote.depositAddress = nearTestInput.midenAccount;
+  if (field === "quoteWaitingTimeMs") payload.quoteResponse.quoteRequest.quoteWaitingTimeMs = 5_000;
+  if (field === "signature") payload.quoteResponse.signature = "ed25519:invalid";
+  fetcher.mockResolvedValueOnce(Response.json(payload));
+  expect((await status(request({ routeId: nearTestInput.routeId, quote: original }))).status).toBe(502);
 });
 
 it("never relays a mismatched status or invalid signature as delivery", async () => {
