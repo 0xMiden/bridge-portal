@@ -25,7 +25,7 @@ export async function observeXreserveDeposit(activity: BridgeActivity, signal?: 
   const route = activityRoute(activity);
   const recovery = route?.recovery;
   const ARC = arcConfig(recovery);
-  const network = route?.source.kind !== "miden" ? route?.source.network : undefined;
+  const network = route?.source.kind !== "miden" && route?.source.kind !== "spl" ? route?.source.network : undefined;
   const cctp = network && isCctpNetwork(network);
   if (!network) throw new Error("Unknown deposit origin.");
   const fetchStatus = async (hash: string) => {

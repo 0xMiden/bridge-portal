@@ -2,6 +2,7 @@ import Image from "next/image";
 import type { BridgeAsset, BridgeNetwork } from "../../bridge/core/assets";
 
 const networkLogos = {
+  "solana-mainnet": "/asset-logos/solana.svg", "solana-devnet": "/asset-logos/solana.svg",
   polygon: "/asset-logos/polygon.svg",
   robinhood: "/asset-logos/robinhood.ico",
   ethereum: "/asset-logos/ethereum.svg", arc: "/asset-logos/arc.png", base: "/asset-logos/base.svg", arbitrum: "/asset-logos/arbitrum.svg", "miden-mainnet": "/asset-logos/miden.svg",
@@ -10,7 +11,7 @@ const networkLogos = {
   "base-sepolia": "/asset-logos/base.svg",
   "arbitrum-sepolia": "/asset-logos/arbitrum.svg",
   "miden-testnet": "/asset-logos/miden.svg",
-} satisfies Record<BridgeNetwork, string>;
+} satisfies Partial<Record<BridgeNetwork, string>>;
 
 const networkLogoStyles = {
   default: "size-6",
@@ -24,7 +25,7 @@ export function NetworkLogo({ network, variant = "default" }: {
   variant?: keyof typeof networkLogoStyles;
 }) {
   return <Image className={`network-logo shrink-0 object-contain ${networkLogoStyles[variant]}`}
-    src={networkLogos[network]} alt="" width={24} height={24} unoptimized />;
+    src={(networkLogos as Partial<Record<BridgeNetwork, string>>)[network] ?? "/asset-logos/network.svg"} alt="" width={24} height={24} unoptimized />;
 }
 
 export function TokenLogo({ asset, compact = false }: { asset: BridgeAsset; compact?: boolean }) {

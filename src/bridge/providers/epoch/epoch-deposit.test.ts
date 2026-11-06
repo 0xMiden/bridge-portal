@@ -53,7 +53,7 @@ afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 
 function setup(mode: "sequential" | "batch" | "rejected", health: unknown = epochWalletPaidHealth(COMPACT), selected = route) {
   const source = selected.source;
-  if (source.kind === "miden") throw new Error("Expected an EVM deposit");
+  if ((source.kind === "miden" || source.kind === "spl")) throw new Error("Expected an EVM deposit");
   const chain = evmNetworks[source.network];
   const chainHex = `0x${chain.id.toString(16)}`;
   let claimHash: Hex;

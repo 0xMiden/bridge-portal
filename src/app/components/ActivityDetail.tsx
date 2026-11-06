@@ -13,6 +13,8 @@ import { formatAgo } from "../lib/relative-time";
 import { useActivityTracking } from "../lib/use-activity-tracking";
 import { useBridgeEnvironment, useSelectBridgeEnvironment } from "./NetworkProvider";
 import { ActivityJourney } from "./ActivityJourney";
+import { EvmManualHelperActions } from "./EvmManualHelperActions";
+import { ManualHelperActions } from "./ManualHelperActions";
 
 type Tracking = ReturnType<typeof useActivityTracking>;
 type LoadedActivityProps = Pick<Tracking, "monitorError" | "lastCheckedAt" | "refresh" | "receiptSaved"> & {
@@ -41,6 +43,7 @@ export function ActivityDetail({ id }: { id: string }) {
       ) : (
         <EmptyState>
           <h1>Activity not found</h1>
+          <Link className="underline" href="/recovery">Recover a source transfer</Link>
           <p>This transfer isn&apos;t in local activity history on this browser.</p>
           <ButtonLink className="primary-button mt-2.5" href="/">Back to bridge</ButtonLink>
         </EmptyState>
@@ -61,15 +64,17 @@ function LoadedActivity({ activity, monitorError, lastCheckedAt, refresh, receip
         <ActivityNotice role="alert">
           <p>This receipt could not be saved in your browser. Download it before refreshing or closing this tab. Do not submit the transfer again.</p>
           <ButtonAnchor variant="secondary" className="secondary-button" download={`miden-bridge-${activity.id}.json`}
-            href={`data:application/json;charset=utf-8,${encodeURIComponent(JSON.stringify(activity, null, 2))}`}>
+            href={`data:application/json;charset=utf-8,${encodeURIComponent(JSON.stringify(activity.cctpHelper ? buildDiagnostics(activity) : activity, null, 2))}`}>
             Download receipt
           </ButtonAnchor>
         </ActivityNotice>
       )}
       <ActivityJourney receipt={model.receipt} needsClaim={needsClaim}>
-        <ActivityProgress progress={model.progress} lastCheckedAt={lastCheckedAt} refresh={refresh} receiptSaved={receiptSaved} claimGuidance={needsClaim ? model.guidance : null} />
+        <ActivityProgress progress={model.progress} headline={activity.cctpHelper ? model.headline : undefined} lastCheckedAt={lastCheckedAt} refresh={refresh} receiptSaved={receiptSaved} claimGuidance={needsClaim ? model.guidance : null} />
         {model.guidance && !needsClaim && <ActivityGuidance guidance={model.guidance} />}
       </ActivityJourney>
+      {activity.cctpEvmHelper && <EvmManualHelperActions activity={activity} />}
+      {activity.cctpHelper && <ManualHelperActions activity={activity} refresh={refresh} />}
       {monitorError && model.progress.kind === "tracked" && (
         <FormAlert compact>{monitorError}</FormAlert>
       )}
@@ -80,8 +85,9 @@ function LoadedActivity({ activity, monitorError, lastCheckedAt, refresh, receip
   );
 }
 
-function ActivityProgress({ progress, lastCheckedAt, refresh, claimGuidance, receiptSaved }: {
+function ActivityProgress({ progress, headline, lastCheckedAt, refresh, claimGuidance, receiptSaved }: {
   claimGuidance: ActivityDetailModel["guidance"];
+  headline?: string;
   progress: ActivityDetailModel["progress"];
   lastCheckedAt: number;
   refresh: () => void;
@@ -102,6 +108,7 @@ function ActivityProgress({ progress, lastCheckedAt, refresh, claimGuidance, rec
   return (
     <>
       <div className="grid gap-5 border-t border-border pt-6">
+        {headline && <p className="font-medium">{headline}</p>}
         <p className="sr-only">Bridge steps</p>
         <ol className="grid">
           {progress.milestones.map((milestone, index) => (

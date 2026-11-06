@@ -2,6 +2,7 @@ import type { Activity, BridgeActivity } from "./core/models";
 import { directionFor } from "./providers/registry";
 import { activityStartedAt, stampLegTimes } from "./core/rules";
 import { shortAddress } from "../wallets/identity";
+import { mergeHelperProgress } from "./providers/xreserve/helper-progress";
 
 /** One interpretation for storage, polling, history and receipts. */
 export function activityState(activity: BridgeActivity) {
@@ -19,12 +20,22 @@ export function normalizeActivityState<T extends BridgeActivity>(activity: T): T
 
 /** Merge observations without allowing stale polls to regress a terminal transfer. */
 export function applyActivityPatch(activity: Activity, patch: Partial<Activity>): Activity {
+  if (activity.cctpHelper && patch.cctpHelper) {
+    const merged = mergeHelperProgress(activity.cctpHelper, patch.cctpHelper);
+    // Receipt fields from a conflicting observation belong to its rejected proof.
+    if (!merged.accepted) return activity;
+    patch = { ...patch, cctpHelper: merged.helper };
+  }
   const previous = activityState(activity);
   const observed = Object.fromEntries(Object.entries(patch).filter(([, value]) => value !== undefined));
   let next = normalizeActivityState({ ...activity, ...observed, updatedAt: Date.now() });
   const settled = previous.status === "complete" || previous.status === "failed";
   const incoming = activityState(next);
-  const stale = incoming.status !== "failed" && incoming.status !== "complete" && incoming.order < previous.order;
+  // Manual readiness is still pending; a new validation failure must revoke export
+  // eligibility without discarding established source evidence or changing old routes.
+  const manualAttention = activity.cctpHelper && next.cctpHelper?.stage === "needs_attention" ||
+    activity.cctpEvmHelper && next.cctpEvmHelper?.stage === "needs_attention";
+  const stale = !manualAttention && incoming.status !== "failed" && incoming.status !== "complete" && incoming.order < previous.order;
   if (settled || stale) {
     // Preserve the current phase while accepting late identifiers and other metadata.
     const phase = Object.fromEntries(directionFor(activity).phaseFields.map((key) => [key, activity[key]]));

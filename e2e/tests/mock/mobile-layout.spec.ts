@@ -33,6 +33,58 @@ test.describe("mobile bridge layout", () => {
     await page.setViewportSize({ width: 390, height: 844 });
   });
 
+  for (const width of [320, 360, 390]) {
+    test(`${width}px keeps the full quoted amount clear of the token picker`, async ({ bridge, page }, info) => {
+      await page.setViewportSize({ width, height: 844 });
+      const source = page.locator('.swap-box[data-side="source"]');
+      const destination = page.locator('.swap-box[data-side="destination"]');
+      await expect(source.locator(".swap-box-head")).toContainText("Arc Testnet");
+      await expect(destination.locator(".token-select-symbol")).toHaveText("USDCx");
+      // The ordinary fixture uses the real direct Arc quote: no fee, no fabricated payout.
+      await bridge.fillAmount("0.99999");
+      await bridge.expectRoute("xreserve");
+      await expect(bridge.selectedProvider()).toHaveText("Circle");
+      await expect(destination.locator(".readonly-amount strong")).toHaveText("0.99999");
+      const input = source.getByRole("textbox", { name: "Amount", exact: true });
+      await expect(input).toBeEditable();
+      await expect(input).toHaveValue("0.99999");
+      await input.press("End");
+
+      const geometry = await page.evaluate(() => {
+        const rect = (element: Element | Range) => {
+          const { top, right, bottom, left } = element.getBoundingClientRect();
+          return { top, right, bottom, left };
+        };
+        const sourcePanel = document.querySelector('.swap-box[data-side="source"]')!;
+        const destinationPanel = document.querySelector('.swap-box[data-side="destination"]')!;
+        const amount = document.createRange();
+        amount.selectNodeContents(destinationPanel.querySelector(".readonly-amount strong")!);
+        const sourceInput = sourcePanel.querySelector("input")!;
+        return {
+          source: { panel: rect(sourcePanel), amount: rect(sourceInput), token: rect(sourcePanel.querySelector(".token-select-trigger")!) },
+          destination: { panel: rect(destinationPanel), amount: rect(amount), token: rect(destinationPanel.querySelector(".token-select-trigger")!) },
+          inputScrollLeft: sourceInput.scrollLeft, inputScrollWidth: sourceInput.scrollWidth, inputClientWidth: sourceInput.clientWidth,
+          scrollWidth: document.documentElement.scrollWidth, viewportWidth: window.innerWidth,
+        };
+      });
+      await info.attach("amount-geometry", { body: JSON.stringify(geometry, null, 2), contentType: "application/json" });
+      await page.screenshot({ path: info.outputPath(`amount-${width}.png`), fullPage: true, animations: "disabled" });
+      // Text can paint outside its grid column even when the document has no overflow.
+      expect(intersects(geometry.destination.amount, geometry.destination.token)).toBe(false);
+      for (const { panel, amount, token } of [geometry.source, geometry.destination]) {
+        expect(intersects(amount, token)).toBe(false);
+        expect(amount.left).toBeGreaterThanOrEqual(panel.left);
+        expect(amount.right).toBeLessThanOrEqual(panel.right);
+        expect(amount.top).toBeGreaterThanOrEqual(panel.top);
+        expect(amount.bottom).toBeLessThanOrEqual(panel.bottom);
+        expect(token.bottom - token.top).toBeGreaterThanOrEqual(MIN_TAP_TARGET);
+      }
+      expect(geometry.inputScrollLeft).toBeLessThanOrEqual(1);
+      expect(geometry.inputScrollWidth).toBeLessThanOrEqual(geometry.inputClientWidth + 1);
+      expect(geometry.scrollWidth).toBeLessThanOrEqual(geometry.viewportWidth);
+    });
+  }
+
   test("wallet controls stay inside each transfer panel without collisions", async ({ bridge, page }) => {
     await bridge.waitForReady();
     for (const mode of ["Receive", "Send"] as const) {

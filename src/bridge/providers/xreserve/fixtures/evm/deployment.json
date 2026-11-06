@@ -1,0 +1,90 @@
+[
+  {
+    "schemaVersion": 1,
+    "deploymentId": "evm-sepolia-test",
+    "environment": "testnet",
+    "enabled": true,
+    "helper": {
+      "address": "0x1111111111111111111111111111111111111111",
+      "runtimeHash": "0x5e3ce470a8506d55e59815db7232a08774174ae0c7fdb2fbc81a49e4e242b0d6",
+      "deploymentBlock": "1",
+      "abiVersion": 1
+    },
+    "arc": {
+      "chainId": 5042002,
+      "messageTransmitter": {
+        "address": "0x2222222222222222222222222222222222222222",
+        "runtimeHash": "0x5e3ce470a8506d55e59815db7232a08774174ae0c7fdb2fbc81a49e4e242b0d6"
+      },
+      "tokenMessenger": {
+        "address": "0x3333333333333333333333333333333333333333",
+        "runtimeHash": "0x5e3ce470a8506d55e59815db7232a08774174ae0c7fdb2fbc81a49e4e242b0d6"
+      },
+      "tokenMinter": {
+        "address": "0x4444444444444444444444444444444444444444",
+        "runtimeHash": "0x5e3ce470a8506d55e59815db7232a08774174ae0c7fdb2fbc81a49e4e242b0d6"
+      },
+      "usdc": {
+        "address": "0x5555555555555555555555555555555555555555",
+        "runtimeHash": "0x5e3ce470a8506d55e59815db7232a08774174ae0c7fdb2fbc81a49e4e242b0d6"
+      },
+      "xReserve": {
+        "address": "0x6666666666666666666666666666666666666666",
+        "runtimeHash": "0x5e3ce470a8506d55e59815db7232a08774174ae0c7fdb2fbc81a49e4e242b0d6"
+      },
+      "gatewayWallet": {
+        "address": "0x9999999999999999999999999999999999999999",
+        "runtimeHash": "0x5e3ce470a8506d55e59815db7232a08774174ae0c7fdb2fbc81a49e4e242b0d6"
+      },
+      "gatewayMinter": {
+        "address": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "runtimeHash": "0x5e3ce470a8506d55e59815db7232a08774174ae0c7fdb2fbc81a49e4e242b0d6"
+      }
+    },
+    "miden": {
+      "domain": 10007,
+      "faucetId": "0x4cbdcaffe75f0a317482224dae6436",
+      "recipientCodec": "miden-0.17.1-v1",
+      "remoteDomainDepositor": "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+    },
+    "source": {
+      "runtime": "evm",
+      "network": "sepolia",
+      "chainId": 11155111,
+      "domain": 0,
+      "usdc": {
+        "address": "0x1c7d4b196cb0c7b01d743fbc6116a902379c7238",
+        "runtimeHash": "0x5e3ce470a8506d55e59815db7232a08774174ae0c7fdb2fbc81a49e4e242b0d6"
+      },
+      "tokenMessenger": {
+        "address": "0x8fe6b999dc680ccfdd5bf7eb0974218be2542daa",
+        "runtimeHash": "0x5e3ce470a8506d55e59815db7232a08774174ae0c7fdb2fbc81a49e4e242b0d6",
+        "implementation": {
+          "address": "0x2222222222222222222222222222222222222222",
+          "runtimeHash": "0x5e3ce470a8506d55e59815db7232a08774174ae0c7fdb2fbc81a49e4e242b0d6"
+        }
+      },
+      "messageTransmitter": {
+        "address": "0xe737e5cebeeba77efe34d4aa090756590b1ce275",
+        "runtimeHash": "0x5e3ce470a8506d55e59815db7232a08774174ae0c7fdb2fbc81a49e4e242b0d6"
+      },
+      "tokenMinter": {
+        "address": "0xb43db544e2c27092c107639ad201b3defabcf192",
+        "runtimeHash": "0x5e3ce470a8506d55e59815db7232a08774174ae0c7fdb2fbc81a49e4e242b0d6"
+      },
+      "startBlock": "1",
+      "finality": "finalized",
+      "feePolicy": "legacy-zero-standard"
+    },
+    "qualification": {
+      "evidenceHash": "0x5e3ce470a8506d55e59815db7232a08774174ae0c7fdb2fbc81a49e4e242b0d6",
+      "helperAsDepositor": true,
+      "zeroRemoteFee": true,
+      "arcRuntime": true,
+      "sourceRuntime": true,
+      "sourceFeePolicy": true,
+      "finalizedRpc": true,
+      "walletSend": true
+    }
+  }
+]

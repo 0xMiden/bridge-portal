@@ -22,17 +22,17 @@ export function activityDetailFor(activity: Activity) {
   const label = delivered ? "Delivered" : untracked ? presentation.headline : statusLabel(presentation.status);
   const quote = quoteForActivity(receiptActivity);
   const details = directionFor(activity).activityDetails(activity);
+  const fee = details.fee === undefined ? { label: quote.fees.label, value: quote.bridgeFee }
+    : providerFee(quote.fees, details.fee, activity.asset, quote.asset);
   return {
+    headline: presentation.headline,
     receipt: {
       activity: receiptActivity,
       receivedAmount: quote.expectedReceived,
       networkFee: quote.networkFee,
       sepoliaGasUnits: quote.fees.sepoliaGasUnits,
-      fee:
-        details.fee === undefined
-          ? { label: quote.fees.label, value: quote.bridgeFee }
-          : providerFee(quote.fees, details.fee, activity.asset, quote.asset),
-      receivedLabel: complete
+      fee: activity.cctpHelper?.bundle ? { ...fee, label: "CCTP fee paid" } : fee,
+      receivedLabel: activity.cctpHelper?.bundle ? complete ? "Delivered" : "Expected" : activity.cctpHelper || activity.cctpEvmHelper ? "At least" : complete
         ? "Received"
         : quote.fees.estimated
           ? "Estimated received"

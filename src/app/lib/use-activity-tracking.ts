@@ -7,6 +7,7 @@ import { useActivitySnapshot, useActivityStore } from "../components/ActivityPro
 import { DEMO_ACTIVITIES } from "./activity-demo";
 import { useBridgeEnvironment } from "../components/NetworkProvider";
 import { errorMessage } from "./wallet-errors";
+import { withHelperJournalUpdate } from "../../bridge/providers/xreserve/helper-submission-lock";
 
 /** Polling owns observation timing; the shared store owns receipt state. */
 export function useActivityTracking(id: string) {
@@ -40,7 +41,12 @@ export function useActivityTracking(id: string) {
         if (controller.signal.aborted) return;
         if (observation) {
           // Patch the newest receipt, never the snapshot captured before the request.
-          store.patch(id, observation.patch);
+          if (current.cctpHelper) await withHelperJournalUpdate(() => {
+            if (controller.signal.aborted) return;
+            store.sync();
+            store.patch(id, observation.patch);
+          });
+          else store.patch(id, observation.patch);
           setView({
             id,
             monitorError: observation.warning ?? "",

@@ -1,30 +1,16 @@
 import { WagmiAdapter } from "@reown/appkit-adapter-wagmi";
-import { sepolia, baseSepolia, arbitrumSepolia, mainnet, base, arbitrum, polygon, robinhood } from "@reown/appkit/networks";
 import type { AppKitNetwork } from "@reown/appkit/networks";
-import { arcTestnet, arcMainnet } from "../../config/arc";
+import { evmNetworks } from "../../config/evm-networks";
 import { evmReadTransport } from "../../bridge/evm/transport";
 import { SITE_DESCRIPTION, SITE_NAME } from "../../config/site";
 
 export const projectId = process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID!;
 
-export const networks: [AppKitNetwork, ...AppKitNetwork[]] = [sepolia, arcTestnet, baseSepolia, arbitrumSepolia, mainnet, arcMainnet, base, arbitrum, polygon, robinhood];
-
-export const wagmiAdapter = new WagmiAdapter({
-  networks,
-  projectId,
-  ssr: true,
-  transports: {
-    [robinhood.id]: evmReadTransport("robinhood"),
-    [polygon.id]: evmReadTransport("polygon"),
-    [mainnet.id]: evmReadTransport("ethereum"),
-    [arcMainnet.id]: evmReadTransport("arc"),
-    [base.id]: evmReadTransport("base"),
-    [arbitrum.id]: evmReadTransport("arbitrum"),
-    [sepolia.id]: evmReadTransport("sepolia"),
-    [arcTestnet.id]: evmReadTransport("arc-testnet"),
-    [baseSepolia.id]: evmReadTransport("base-sepolia"),
-    [arbitrumSepolia.id]: evmReadTransport("arbitrum-sepolia"),
-  },
+const preferred = ["arc-testnet", "base-sepolia", "arbitrum-sepolia", "ethereum", "arc", "base", "arbitrum", "polygon"] as const;
+const additions = Object.entries(evmNetworks).filter(([name]) => !preferred.some(existing => existing === name)).map(([, chain]) => chain);
+export const networks: [AppKitNetwork, ...AppKitNetwork[]] = [evmNetworks.sepolia, ...preferred.map(name => evmNetworks[name]), ...additions.filter(chain => chain.id !== evmNetworks.sepolia.id)];
+export const wagmiAdapter = new WagmiAdapter({ networks, projectId, ssr: true,
+  transports: Object.fromEntries(Object.entries(evmNetworks).map(([name, chain]) => [chain.id, evmReadTransport(name as keyof typeof evmNetworks)])),
 });
 
 // Use the real page origin in the browser (where createAppKit consumes this),

@@ -1,6 +1,6 @@
 import type { BridgeConfig } from "../../../config/bridge-config";
 import { z } from "zod";
-import { createPublicClient, parseEventLogs, type Hex, type PublicClient, type TransactionReceipt } from "viem";
+import { createPublicClient, keccak256, parseEventLogs, type Hex, type PublicClient, type TransactionReceipt } from "viem";
 import { evmServerTransport } from "../../evm/rpc.server";
 import { findTransactionReceipt } from "../../evm/transaction-receipt";
 import { hexDataSchema } from "../../evm/evm-schema";
@@ -16,11 +16,12 @@ const attestationsSchema = z.object({
     remoteDomain: domainSchema,
     attestation: hexDataSchema.refine(value => value.length > 2).nullish(),
     payload: hexDataSchema.nullish(),
-  })),
+    messageHash: hexDataSchema.nullish(),
+  })).max(64),
 });
 type Attestation = z.infer<typeof attestationsSchema>["attestations"][number];
 type Deposit = Omit<ArcDepositIntent, "nonce">;
-type AttestationResult = { intent?: ArcDepositIntent; warning?: string };
+type AttestationResult = { intent?: ArcDepositIntent; warning?: string; candidates?: { payload: Hex; messageHash: Hex; nonce: Hex }[] };
 
 export class UnsupportedArcDepositError extends Error {
   name = "UnsupportedArcDepositError";
@@ -35,7 +36,7 @@ function decodeDepositAccount(value: string): string {
 }
 
 /** The xReserve event is the authority for recovery and attestation matching. */
-function readDeposit(receipt: TransactionReceipt, recovery?: BridgeConfig) {
+export function readDeposit(receipt: TransactionReceipt, recovery?: BridgeConfig) {
   const arc = arcConfig(recovery);
   const events = parseEventLogs({
     abi: xReserveAbi,
@@ -64,11 +65,13 @@ function readDeposit(receipt: TransactionReceipt, recovery?: BridgeConfig) {
   };
 }
 
-function readMatchingIntent(attestation: Attestation, deposit: Deposit, recovery?: BridgeConfig): ArcDepositIntent {
+function readMatchingIntent(attestation: Attestation, deposit: Deposit, recovery?: BridgeConfig): ArcDepositIntent & { payload: Hex; messageHash: Hex } {
   let intent: ArcDepositIntent;
+  const payload = attestation.payload;
+  if (!payload) throw new CircleApiError("invalid_response", "Circle returned no deposit payload.");
   try {
-    if (!attestation.payload) throw new Error("Missing deposit payload.");
-    intent = parseArcDepositIntent(attestation.payload, recovery);
+    if (attestation.messageHash && keccak256(payload) !== attestation.messageHash.toLowerCase()) throw new Error("Deposit payload hash mismatch.");
+    intent = parseArcDepositIntent(payload, recovery);
   } catch (cause) {
     throw new CircleApiError("invalid_response", "Circle returned an unsupported deposit payload.", { cause });
   }
@@ -78,25 +81,30 @@ function readMatchingIntent(attestation: Attestation, deposit: Deposit, recovery
   if (intent.faucet !== deposit.faucet || intent.sender !== deposit.sender) {
     throw new CircleApiError("binding_mismatch", "Circle returned a different deposit faucet or sender.");
   }
-  return intent;
+  return { ...intent, payload: payload.toLowerCase() as Hex, messageHash: keccak256(payload) };
 }
 
-function findDepositAttestation(attestations: Attestation[], deposit: Deposit, recovery?: BridgeConfig): AttestationResult {
+export function findDepositAttestation(attestations: Attestation[], deposit: Deposit, recovery?: BridgeConfig): AttestationResult {
   const arc = arcConfig(recovery);
   let unreadable = false;
+  const matches = new Map<string, ReturnType<typeof readMatchingIntent>>();
   for (const attestation of attestations) {
     if (attestation.remoteDomain !== arc.midenDomain || !attestation.attestation) continue;
     try {
-      return { intent: readMatchingIntent(attestation, deposit, recovery) };
+      const intent = readMatchingIntent(attestation, deposit, recovery);
+      matches.set(intent.payload, intent);
     } catch (error) {
       reportCircleFailure("status", error);
       unreadable = true;
     }
   }
+  if (matches.size > 1) return { warning: "Circle returned multiple matching deposit nonces. Attribution needs review.",
+    candidates: [...matches.values()].map(intent => ({ payload: intent.payload, messageHash: intent.messageHash, nonce: intent.nonce as Hex })) };
+  if (matches.size === 1) return { intent: [...matches.values()][0] };
   return unreadable ? { warning: "Circle returned details that do not match this deposit. Tracking will retry." } : {};
 }
 
-async function getArcDepositAttestation(hash: Hex, deposit: Deposit, recovery?: BridgeConfig): Promise<AttestationResult> {
+export async function getArcDepositAttestation(hash: Hex, deposit: Deposit, recovery?: BridgeConfig): Promise<AttestationResult> {
   const arc = arcConfig(recovery);
   try {
     const body = await getCircleJson(`${arc.attestationApi}/v1/attestations?txHash=${hash}`);

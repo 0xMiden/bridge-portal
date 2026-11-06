@@ -1,20 +1,12 @@
-import { arbitrum, base, polygon, robinhood, mainnet, arbitrumSepolia, baseSepolia, sepolia } from "viem/chains";
-import { arcMainnet, arcTestnet } from "./arc";
+import { robinhood } from "viem/chains";
+import { cctpEvmChains } from "./cctp-evm-chains.ts";
+import { arcMainnet, arcTestnet } from "./arc.ts";
 import type { EvmNetwork } from "../bridge/core/assets";
 import type { Chain } from "viem";
 
-export const evmNetworks = {
-  ethereum: mainnet,
-  arc: arcMainnet,
-  base,
-  arbitrum,
-  polygon,
-  robinhood,
-  sepolia,
-  "arc-testnet": arcTestnet,
-  "base-sepolia": baseSepolia,
-  "arbitrum-sepolia": arbitrumSepolia,
-} as const satisfies Record<EvmNetwork, Chain>;
+type EvmChain = Chain & { blockExplorers: { default: { name: string; url: string } } };
+type EvmNetworkChains = { [Network in EvmNetwork]: Network extends "hyperevm-testnet" ? Chain : EvmChain };
+export const evmNetworks: EvmNetworkChains = { ...cctpEvmChains, robinhood, arc: arcMainnet, "arc-testnet": arcTestnet };
 
 export function isEvmNetwork(value: string): value is EvmNetwork {
   return Object.hasOwn(evmNetworks, value);

@@ -7,6 +7,8 @@ export type ArcDepositIntent = {
   faucet: string;
   sender: string;
   nonce: string;
+  payload?: string;
+  messageHash?: string;
 };
 
 export function decodeArcRecipient(value: string): string {

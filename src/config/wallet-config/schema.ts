@@ -1,7 +1,10 @@
+import { evmNetworks } from "../evm-networks.ts";
+import sources from "../cctp-evm-sources.json" with { type: "json" };
+import type { EvmNetworkName } from "../evm-network-names.ts";
 import { z } from "zod";
 
 const environmentSchema = z.enum(["testnet", "mainnet"]);
-const networks = {
+const preferredNetworks = {
   sepolia: { environment: "testnet", chainId: 11155111, circleDomain: 0, agglayer: true, epoch: true },
   "arc-testnet": { environment: "testnet", chainId: 5042002, circleDomain: 26, agglayer: false, epoch: false },
   "base-sepolia": { environment: "testnet", chainId: 84532, circleDomain: 6, agglayer: false, epoch: false },
@@ -19,7 +22,15 @@ const networks = {
   agglayer: boolean;
   epoch: boolean;
 }>;
-type Network = keyof typeof networks;
+type Network = EvmNetworkName;
+type NetworkPolicy = { environment: "testnet" | "mainnet"; chainId: number; circleDomain: number | null; agglayer: boolean; epoch: boolean };
+const domains = new Map(sources.map(source => [source.network, source.domain]));
+const networks = Object.fromEntries(Object.entries(evmNetworks).map(([name, chain]) => [name,
+  name in preferredNetworks ? preferredNetworks[name as keyof typeof preferredNetworks] : {
+    environment: chain.testnet ? "testnet" : "mainnet", chainId: chain.id,
+    circleDomain: domains.get(name as Network) ?? null, agglayer: false, epoch: false,
+  },
+])) as Record<Network, NetworkPolicy>;
 const networkSchema = z.enum(Object.keys(networks) as Network[]);
 const circleExecutorChains = { testnet: "arc-testnet", mainnet: "arc" } as const satisfies Record<
   z.infer<typeof environmentSchema>, Network

@@ -1,5 +1,6 @@
 import { ZodError } from "zod";
 import { CircleApiError } from "./circle-response";
+import { boundedText } from "../../solana/rpc";
 
 function isTimeout(cause: unknown): boolean {
   return cause instanceof Error && ["TimeoutError", "AbortError"].includes(cause.name);
@@ -28,7 +29,7 @@ async function readCircleJson(response: Response): Promise<unknown> {
     throw new CircleApiError("upstream_http", "Circle is unavailable. Please retry.", { status: response.status });
   }
   try {
-    return await response.json();
+    return JSON.parse(await boundedText(response, 1_000_000)) as unknown;
   } catch (cause) {
     if (cause instanceof SyntaxError) {
       throw new CircleApiError("invalid_response", "Circle returned invalid JSON. Please retry.", { cause });
