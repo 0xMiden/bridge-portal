@@ -101,9 +101,39 @@ original signed quote and address/memo identity even after expiry. Receipts keep
 their route/config snapshot, complete signed quote and source/destination hashes.
 All upstream requests have fixed URLs, reject redirects, use bounded timeouts and
 bodies, and bypass caching. Errors contain a safe correlation ID, never a raw
-upstream error or credential. Quote requests allow 30 seconds upstream and 40
-seconds in the browser: Polygon reverse quotes took about 20.5 seconds in live
-validation. Status and notification timeouts remain 15/20 seconds.
+upstream error or credential. Quote request timeouts remain 30 seconds upstream
+and 40 seconds in the browser; these are upper limits, not intentional delays.
+Status and notification timeouts remain 15/20 seconds.
+
+### Quote latency
+
+New preview and executable quotes set `quoteWaitingTimeMs: 0` to request the
+first available solver quote. The initial integration explicitly requested
+10,000 ms, which dominated response time. The form's typing debounce is 400 ms;
+compatible providers are queried and displayed independently. Opening review
+still requests a separate executable quote, whose latency can differ from the
+preview.
+
+Paired dry requests on November 6, 2026 returned the same output and minimum
+output for each sampled route at waits of 0, 1,000, 3,000 and 10,000 ms:
+
+| Deposit sample | 10,000 ms wait | 0 ms wait |
+| --- | --- | --- |
+| Ethereum ETH → Miden ETH | 10.186 s | 0.533 s |
+| Polygon USDC → Miden USDCx | 20.355 s | 0.939 s |
+
+All 13 deposit routes subsequently returned valid signed dry quotes in
+0.403–0.982 seconds with zero configured wait. Local previews took 0.491–0.922
+seconds across Ethereum deposits, Polygon deposits and Ethereum withdrawals.
+These measurements are samples, not latency or price guarantees. Four USDCx
+withdrawal pairs returned HTTP 400 during the outbound recheck; Base and Ethereum
+returned "No liquidity available" with both zero and 10,000 ms waits.
+
+Previously signed quotes retain their original wait value for signature
+verification and status restoration. A changed relay-wait policy does not
+invalidate an open review or saved receipt; all transfer terms still have to
+match. Both completed live receipts continued returning 200/SUCCESS after this
+change. The 919-test suite, TypeScript and lint passed again.
 
 Tracking handles PENDING_DEPOSIT, KNOWN_DEPOSIT_TX, INCOMPLETE_DEPOSIT, PROCESSING,
 SUCCESS, REFUNDED and FAILED. Refunds have their own terminal state and amount;

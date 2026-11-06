@@ -18,7 +18,7 @@ const tokensResponse = await fetch(`${api}/tokens`, { signal: AbortSignal.timeou
 if (!tokensResponse.ok) throw new Error(`Catalog unavailable (${tokensResponse.status})`);
 const tokens = await tokensResponse.json();
 const chains = { ethereum: "eth", base: "base", arbitrum: "arb", polygon: "pol", robinhood: "hood" };
-const report = { checkedAt: new Date().toISOString(), kind: "dry-quotes-only", direction: values.direction, version: config.version, routes: [] };
+const report = { checkedAt: new Date().toISOString(), kind: "dry-quotes-only", direction: values.direction, quoteWaitingTimeMs: 0, version: config.version, routes: [] };
 for (const route of config.routes) {
   const routeId = receive ? route.receiveId : route.id;
   if (!routeId) continue;
@@ -36,7 +36,7 @@ for (const route of config.routes) {
   const amount = (5n * 10n ** BigInt(source.decimals + fraction.length) / priceUnits).toString();
   const request = { dry: true, swapType: "EXACT_INPUT", slippageTolerance: 100, originAsset: source.assetId, destinationAsset: destination.assetId,
     depositType: "ORIGIN_CHAIN", recipientType: "DESTINATION_CHAIN", refundType: "ORIGIN_CHAIN", confidentiality: "basic",
-    amount, recipient: values.recipient, refundTo: values.refund, quoteWaitingTimeMs: 10_000, deadline: new Date(Date.now() + 600_000).toISOString() };
+    amount, recipient: values.recipient, refundTo: values.refund, quoteWaitingTimeMs: 0, deadline: new Date(Date.now() + 600_000).toISOString() };
   const started = Date.now();
   try {
     const response = await fetch(`${api}/quote`, { method: "POST", headers, body: JSON.stringify(request), signal: AbortSignal.timeout(30_000), redirect: "error", cache: "no-store" });

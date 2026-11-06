@@ -41,7 +41,7 @@ export function nearRequest(input: NearInput, dry: boolean, deadline: string) {
     depositType: "ORIGIN_CHAIN" as const, recipientType: "DESTINATION_CHAIN" as const, refundType: "ORIGIN_CHAIN" as const,
     amount, recipient: pair.mode === "send" ? input.evmAddress : input.midenAccount,
     refundTo: pair.mode === "send" ? input.midenAccount : input.evmAddress,
-    confidentiality: "basic" as const, quoteWaitingTimeMs: 10_000, deadline,
+    confidentiality: "basic" as const, quoteWaitingTimeMs: 0, deadline,
   };
 }
 
@@ -59,6 +59,9 @@ export function verifyNearQuote(value: unknown, input: NearInput, dry: boolean, 
   if (!verifyQuoteSignature(response as unknown as QuoteResponse)) throw new Error("Invalid NEAR quote signature.");
   const expected = nearRequest(nearInputSchema.parse(input), dry, response.quoteRequest.deadline);
   for (const [key, value] of Object.entries(expected)) {
+    // Relay wait controls latency, not transfer terms. Its original value is
+    // signature-verified above; saved quotes may predate the current policy.
+    if (key === "quoteWaitingTimeMs") continue;
     if (response.quoteRequest[key] !== value) throw new Error("NEAR quote does not match this transfer. Review again.");
   }
   const quote = response.quote;

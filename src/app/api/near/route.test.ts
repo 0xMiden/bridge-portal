@@ -21,7 +21,7 @@ it("pins exact input, source decimals and chain direction while keeping the API 
   fetcher.mockImplementation(async (_url, init) => {
     const body = JSON.parse(init!.body as string);
     expect(body).toMatchObject({ dry: true, amount: "5000000", depositType: "ORIGIN_CHAIN", recipientType: "DESTINATION_CHAIN",
-      refundTo: nearTestInput.midenAccount, confidentiality: "basic", swapType: "EXACT_INPUT" });
+      refundTo: nearTestInput.midenAccount, confidentiality: "basic", swapType: "EXACT_INPUT", quoteWaitingTimeMs: 0 });
     const response = signedNearQuote(nearTestInput, true);
     // The request deadline must match exactly, including millisecond precision.
     vi.setSystemTime(new Date(Date.parse(body.deadline) - 600_000));
@@ -86,6 +86,9 @@ it.each([nearTestInput, nearReceiveInput])("prepares once for $mode; pause still
   expect((await prepare(request(input))).status).toBe(200);
   expect(JSON.parse(fetcher.mock.calls[0][1]!.body as string).dry).toBe(false);
   expect((await prepare(request({ ...input, quote: prepared }))).status).toBe(200);
+  // An already-open review keeps its original signed wait policy after an update.
+  const legacy = signedNearQuote(input, false, {}, 10_000);
+  expect((await prepare(request({ ...input, quote: legacy }))).status).toBe(200);
   expect(fetcher).toHaveBeenCalledTimes(1);
   vi.stubEnv("NEAR_TRANSFERS_ENABLED", "false");
   expect((await prepare(request({ ...input, quote: prepared }))).status).toBe(503);
@@ -106,7 +109,7 @@ it("sanitizes authorization errors and preserves the service correlation ID", as
 
 it.each(["PENDING_DEPOSIT", "SUCCESS"] as const)("tracks %s when status omits quote metadata and returns null amounts or refund reasons", async state => {
   const input = state === "PENDING_DEPOSIT" ? nearReceiveInput : nearTestInput;
-  const original = signedNearQuote(input);
+  const original = signedNearQuote(input, false, {}, 10_000);
   const payload = { ...nearStatus(structuredClone(original), state), swapDetails: {
     originChainTxHashes: [{ hash: nearTxHash }], destinationChainTxHashes: [{ hash: nearDestinationHash }],
     amountOut: state === "PENDING_DEPOSIT" ? null : "4980000", refundedAmount: "0", refundReason: null,

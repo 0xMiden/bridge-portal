@@ -21,12 +21,12 @@ export const nearTestInput: NearInput = {
   evmAddress: "0x1111111111111111111111111111111111111111",
 };
 export const nearReceiveInput: NearInput = { ...nearTestInput, routeId: "mainnet:near-base-usdc-to-miden-usdcx", mode: "receive" };
-export function signedNearQuote(input = nearTestInput, dry = false, patch: Partial<NearQuoteResponse["quote"]> = {}): NearQuoteResponse {
+export function signedNearQuote(input = nearTestInput, dry = false, patch: Partial<NearQuoteResponse["quote"]> = {}, waitMs?: number): NearQuoteResponse {
   const { source } = nearRouteAssets(input.routeId);
   const request = nearRequest(input, dry, new Date(Date.now() + 600_000).toISOString());
   const response: NearQuoteResponse = {
     correlationId: "synthetic-near-quote", timestamp: new Date().toISOString(), signature: "",
-    quoteRequest: request,
+    quoteRequest: { ...request, quoteWaitingTimeMs: waitMs ?? request.quoteWaitingTimeMs },
     quote: { amountIn: request.amount, amountInFormatted: formatUnits(BigInt(request.amount), source.decimals), amountInUsd: "5",
       minAmountIn: request.amount, amountOut: "4980000", amountOutFormatted: "4.98", amountOutUsd: "4.98", minAmountOut: "4930200",
       timeEstimate: 24, ...(dry ? {} : { depositAddress: input.mode === "send"
