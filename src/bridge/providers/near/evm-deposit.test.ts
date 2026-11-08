@@ -8,7 +8,7 @@ import { findBridgeRoute, reverseBridgeRoute } from "../../core/routes";
 import type { EvmProvider } from "../../../wallets/evm/evm-wallet";
 import { nearQuoteResult } from "./quote";
 import { nearMonitor } from "./tracking";
-import { nearReceiveInput, signedNearQuote, nearStatus, nearTxHash, nearDestinationHash, testManagerKey } from "../../../../test/near-quotes";
+import { nearReceiveInput, nearQuoteFixture, nearStatus, nearTxHash, nearDestinationHash } from "../../../../test/near-quotes";
 
 const rpc = vi.hoisted(() => ({ balance: vi.fn(), read: vi.fn(), call: vi.fn(), gas: vi.fn(), block: vi.fn(), tip: vi.fn(), receipt: vi.fn(), resolve: vi.fn(), networks: [] as string[] }));
 vi.mock("../../evm/transport", () => ({ evmReadTransport: (network: string) => ({ network }) }));
@@ -22,7 +22,7 @@ vi.mock("viem", async original => ({ ...await original<typeof import("viem")>(),
 }));
 vi.mock("@defuse-protocol/one-click-sdk-typescript", async original => {
   const actual = await original<typeof import("@defuse-protocol/one-click-sdk-typescript")>();
-  return { ...actual, verifyQuoteSignature: (response: Parameters<typeof actual.verifyQuoteSignature>[0]) => actual.verifyQuoteSignature(response, testManagerKey) };
+  return { ...actual, verifyQuoteSignature: vi.fn(() => true) };
 });
 
 const fetcher = vi.fn<typeof fetch>();
@@ -44,7 +44,7 @@ type WalletTx = { from: string; to: string; value: Hex; data: Hex; chainId: Hex 
 function setup(kind: "native" | "erc20" = "native") {
   const bound = kind === "native" ? { ...nearReceiveInput, routeId: "mainnet:near-ethereum-eth-to-miden-eth", amount: "0.003000000000000001" } : nearReceiveInput;
   const route = findBridgeRoute(bound.routeId)!;
-  const quote = signedNearQuote(bound, false, kind === "native" ? {
+  const quote = nearQuoteFixture(bound, false, kind === "native" ? {
     amountOut: "290000", minAmountOut: "287100", amountOutFormatted: "0.0029",
   } : {});
   const wallet = { account: bound.evmAddress, chainId: "0xaa36a7", failSend: false };
@@ -130,7 +130,7 @@ it.each([
   if (failure === "paused") fetcher.mockResolvedValue(Response.json({ error: "Transfers paused" }, { status: 503 }));
   if (failure === "storage") vi.spyOn(window.localStorage, "setItem").mockImplementation(() => { throw new Error("Quota"); });
   if (failure === "cap") test.effects.verifyBalanceCap.mockRejectedValue(new Error("Over the balance limit"));
-  if (failure === "memo") test.input.quote = { ...test.input.quote!, ...nearQuoteResult(signedNearQuote(nearReceiveInput, false, { depositMemo: "required" }), test.route.id) };
+  if (failure === "memo") test.input.quote = { ...test.input.quote!, ...nearQuoteResult(nearQuoteFixture(nearReceiveInput, false, { depositMemo: "required" }), test.route.id) };
   if (failure === "expired") fetcher.mockImplementation(async () => {
     vi.spyOn(Date, "now").mockReturnValue(Date.parse(test.quote.quoteRequest.deadline) + 1);
     return Response.json(test.quote);

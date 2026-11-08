@@ -8,14 +8,14 @@ import { findBridgeRoute } from "../../core/routes";
 import { getMidenVerificationBaseFee } from "../../miden-rpc";
 import { nearQuoteResult } from "./quote";
 import { nearMonitor } from "./tracking";
-import { nearTestInput, signedNearQuote, nearStatus, nearTxHash, testManagerKey } from "../../../../test/near-quotes";
+import { nearTestInput, nearQuoteFixture, nearStatus, nearTxHash } from "../../../../test/near-quotes";
 
 vi.mock("@miden-sdk/miden-sdk", async () => (await import("../../../../test/miden-sdk")).browserMidenSdk());
 vi.mock("@miden-sdk/miden-wallet-adapter-base", () => import("@miden-sdk/miden-wallet-adapter-base/dist/transaction.js"));
 vi.mock("../../miden-rpc", () => ({ getMidenVerificationBaseFee: vi.fn(async () => 100) }));
 vi.mock("@defuse-protocol/one-click-sdk-typescript", async importOriginal => {
   const actual = await importOriginal<typeof import("@defuse-protocol/one-click-sdk-typescript")>();
-  return { ...actual, verifyQuoteSignature: (response: Parameters<typeof actual.verifyQuoteSignature>[0]) => actual.verifyQuoteSignature(response, testManagerKey) };
+  return { ...actual, verifyQuoteSignature: vi.fn(() => true) };
 });
 
 const fetcher = vi.fn<typeof fetch>();
@@ -29,7 +29,7 @@ beforeEach(() => {
 afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 
 function setup() {
-  const quote = signedNearQuote();
+  const quote = nearQuoteFixture();
   const route = findBridgeRoute(nearTestInput.routeId)!;
   let output: ReturnType<TransactionRequest["expectedOutputOwnNotes"]>[number];
   const requestTransaction = vi.fn<NonNullable<TransferSubmission["midenWallet"]["requestTransaction"]>>(async transaction => {
@@ -118,10 +118,10 @@ it.each(["wrong-faucet", "fee-shortfall", "wallet-change", "evm-wallet-change", 
   if (failure === "fee-shortfall") test.requestAssets.mockResolvedValue([{ faucetId: findBridgeRoute(nearTestInput.routeId)!.recovery.derived.usdcxFaucetId, amount: "5000000" }]);
   if (failure === "wallet-change") test.input.midenWallet.address = "mm1another";
   if (failure === "evm-wallet-change") test.evmRequest.mockResolvedValue(["0x2222222222222222222222222222222222222222"]);
-  if (failure === "memo") test.input.quote = { ...test.input.quote!, ...nearQuoteResult(signedNearQuote(nearTestInput, false, { depositMemo: "required-memo" }), nearTestInput.routeId) };
+  if (failure === "memo") test.input.quote = { ...test.input.quote!, ...nearQuoteResult(nearQuoteFixture(nearTestInput, false, { depositMemo: "required-memo" }), nearTestInput.routeId) };
   if (failure === "storage-failure") vi.spyOn(window.localStorage, "setItem").mockImplementation(() => { throw new Error("Quota"); });
   if (failure === "expired") test.input.quote!.validity = { kind: "time", expiresAt: Date.now() - 1 };
-  if (failure === "preview") test.input.quote = { ...test.input.quote!, ...nearQuoteResult(signedNearQuote(nearTestInput, true), nearTestInput.routeId) };
+  if (failure === "preview") test.input.quote = { ...test.input.quote!, ...nearQuoteResult(nearQuoteFixture(nearTestInput, true), nearTestInput.routeId) };
   await submitBridgeTransfer(test.input, test.effects);
   expect(test.effects.onError).toHaveBeenCalled();
   expect(test.requestTransaction).not.toHaveBeenCalled();

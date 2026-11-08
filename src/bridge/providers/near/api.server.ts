@@ -1,5 +1,4 @@
 import { ApiError, OneClickService, OpenAPI, type CancelablePromise } from "@defuse-protocol/one-click-sdk-typescript";
-import axios from "axios";
 import { nearInputSchema, nearPrepareInputSchema, nearTrackingInputSchema, nearDepositInputSchema, nearStatusResponseSchema, nearQuoteSchema, nearCorrelationId } from "./schema";
 import { nearRequest, verifyNearQuote, nearTrackingInput } from "./quote";
 import { currentBridgeConfig } from "../../../config/bridge-config";
@@ -10,15 +9,6 @@ const MAX_BODY_BYTES = 32_768;
 OpenAPI.BASE = API;
 // Server only. Resolve the credential for each request without putting it in quotes or receipts.
 OpenAPI.TOKEN = async () => process.env.NEAR_API_KEY ?? "";
-// The SDK uses shared Axios without per-call transport options. Scope these
-// limits to 1Click and use native fetch in both Node and Cloudflare Workers.
-axios.interceptors.request.use(config => {
-  config.adapter = "fetch";
-  config.maxContentLength = MAX_BODY_BYTES;
-  config.maxBodyLength = MAX_BODY_BYTES;
-  config.fetchOptions = { ...config.fetchOptions, cache: "no-store", redirect: "error" };
-  return config;
-}, undefined, { runWhen: config => config.url?.startsWith(`${API}/v0/`) ?? false });
 
 // The status API's quote echo omits tracing metadata present in /quote.
 // Keep the complete signed-quote contract for preparation, receipts and clients.

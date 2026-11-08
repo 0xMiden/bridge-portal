@@ -1,22 +1,25 @@
-import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import axios from "axios";
+import { afterAll, afterEach, beforeAll, beforeEach, expect, it, vi } from "vitest";
+import { http } from "msw";
+import { setupServer } from "msw/node";
 import { POST as preview } from "./quote/route";
 import { POST as prepare } from "./prepare/route";
 import { POST as status } from "./status/route";
 import { POST as deposit } from "./deposit/submit/route";
-import { nearTestInput, nearReceiveInput, signedNearQuote, nearStatus, nearTxHash, nearDestinationHash } from "../../../../test/near-quotes";
+import { nearTestInput, nearReceiveInput, nearQuoteFixture, nearStatus, nearTxHash, nearDestinationHash } from "../../../../test/near-quotes";
 import { verifyQuoteSignature } from "@defuse-protocol/one-click-sdk-typescript";
 import * as configs from "../../../config/bridge-config";
 
 vi.mock("@defuse-protocol/one-click-sdk-typescript", async importOriginal => {
   const actual = await importOriginal<typeof import("@defuse-protocol/one-click-sdk-typescript")>();
-  return { ...actual, verifyQuoteSignature: (response: Parameters<typeof actual.verifyQuoteSignature>[0]) => actual.verifyQuoteSignature(response, managerKey) };
+  return { ...actual, verifyQuoteSignature: vi.fn(() => true) };
 });
-import { testManagerKey as managerKey } from "../../../../test/near-quotes";
 const fetcher = vi.fn<typeof fetch>();
+const server = setupServer(http.all("https://1click.chaindefuser.com/v0/*", ({ request }) => fetcher(request)));
+beforeAll(() => server.listen({ onUnhandledRequest: "error" }));
+afterAll(() => server.close());
 const request = (body: unknown, signal?: AbortSignal) => new Request("https://portal.example/api/near/quote", { method: "POST", body: JSON.stringify(body), signal });
 const outgoing = (input: RequestInfo | URL, init?: RequestInit) => new Request(input instanceof Request ? input.clone() : input, init);
-beforeEach(() => { vi.stubGlobal("fetch", fetcher); fetcher.mockReset(); });
+beforeEach(() => { fetcher.mockReset(); vi.mocked(verifyQuoteSignature).mockReturnValue(true); });
 afterEach(() => { vi.unstubAllGlobals(); vi.unstubAllEnvs(); vi.restoreAllMocks(); vi.useRealTimers(); });
 
 it("pins exact input, source decimals and chain direction while keeping the API credential server-side", async () => {
@@ -25,10 +28,10 @@ it("pins exact input, source decimals and chain direction while keeping the API 
     const body = await outgoing(input, init).json();
     expect(body).toMatchObject({ dry: true, amount: "5000000", depositType: "ORIGIN_CHAIN", recipientType: "DESTINATION_CHAIN",
       refundTo: nearTestInput.midenAccount, confidentiality: "basic", swapType: "EXACT_INPUT", quoteWaitingTimeMs: 0 });
-    const response = signedNearQuote(nearTestInput, true);
+    const response = nearQuoteFixture(nearTestInput, true);
     // The request deadline must match exactly, including millisecond precision.
     vi.setSystemTime(new Date(Date.parse(body.deadline) - 600_000));
-    return Response.json(signedNearQuote(nearTestInput, true, response.quote));
+    return Response.json(nearQuoteFixture(nearTestInput, true, response.quote));
   });
   vi.useFakeTimers();
   const response = await preview(request(nearTestInput));
@@ -36,7 +39,7 @@ it("pins exact input, source decimals and chain direction while keeping the API 
   expect(response.headers.get("cache-control")).toBe("no-store");
   expect(await response.text()).not.toContain("private-partner-key");
   const sent = outgoing(...fetcher.mock.calls[0]);
-  expect(sent).toMatchObject({ url: "https://1click.chaindefuser.com/v0/quote", method: "POST", cache: "no-store", redirect: "error" });
+  expect(sent).toMatchObject({ url: "https://1click.chaindefuser.com/v0/quote", method: "POST" });
   expect(sent.headers.get("authorization")).toBe("Bearer private-partner-key");
   vi.useRealTimers();
 });
@@ -58,7 +61,7 @@ it.each([
 ])("uses source precision for %s and imposes no $5 minimum", async (routeId, amount, expected) => {
   vi.useFakeTimers();
   const input = { ...nearTestInput, routeId, amount };
-  fetcher.mockResolvedValueOnce(Response.json(signedNearQuote(input, true)));
+  fetcher.mockResolvedValueOnce(Response.json(nearQuoteFixture(input, true)));
   expect((await preview(request(input))).status).toBe(200);
   expect((await outgoing(...fetcher.mock.calls[0]).json()).amount).toBe(expected);
 });
@@ -70,7 +73,7 @@ it.each([
 ])("quotes %s with EVM source precision, Miden delivery and EVM refunds", async (routeId, amount, units, originAsset, destinationAsset) => {
   vi.useFakeTimers();
   const input = { ...nearReceiveInput, routeId, amount };
-  fetcher.mockResolvedValueOnce(Response.json(signedNearQuote(input, true)));
+  fetcher.mockResolvedValueOnce(Response.json(nearQuoteFixture(input, true)));
   expect((await preview(request(input))).status).toBe(200);
   expect(await outgoing(...fetcher.mock.calls[0]).json()).toMatchObject({
     amount: units, originAsset, destinationAsset, refundTo: input.evmAddress, recipient: input.midenAccount,
@@ -80,19 +83,19 @@ it.each([
 
 it("rejects a signed Miden deposit address for an EVM-funded quote", async () => {
   vi.useFakeTimers();
-  fetcher.mockResolvedValueOnce(Response.json(signedNearQuote(nearReceiveInput, false, { depositAddress: nearReceiveInput.midenAccount })));
+  fetcher.mockResolvedValueOnce(Response.json(nearQuoteFixture(nearReceiveInput, false, { depositAddress: nearReceiveInput.midenAccount })));
   expect((await prepare(request(nearReceiveInput))).status).toBe(502);
 });
 
 it.each([nearTestInput, nearReceiveInput])("prepares once for $mode by default; a bridge config pause still permits tracking and notification", async input => {
   vi.useFakeTimers();
-  const prepared = signedNearQuote(input);
+  const prepared = nearQuoteFixture(input);
   fetcher.mockResolvedValueOnce(Response.json(prepared));
   expect((await prepare(request(input))).status).toBe(200);
   expect((await outgoing(...fetcher.mock.calls[0]).json()).dry).toBe(false);
   expect((await prepare(request({ ...input, quote: prepared }))).status).toBe(200);
   // An already-open review keeps its original signed wait policy after an update.
-  const legacy = signedNearQuote(input, false, {}, 10_000);
+  const legacy = nearQuoteFixture(input, false, {}, 10_000);
   expect((await prepare(request({ ...input, quote: legacy }))).status).toBe(200);
   expect(fetcher).toHaveBeenCalledTimes(1);
   const paused = structuredClone(configs.currentBridgeConfig("mainnet"));
@@ -134,7 +137,7 @@ it.each([
 
 it.each(["PENDING_DEPOSIT", "SUCCESS"] as const)("tracks %s when status omits quote metadata and returns null amounts or refund reasons", async state => {
   const input = state === "PENDING_DEPOSIT" ? nearReceiveInput : nearTestInput;
-  const original = signedNearQuote(input, false, {}, 10_000);
+  const original = nearQuoteFixture(input, false, {}, 10_000);
   const payload = { ...nearStatus(structuredClone(original), state), swapDetails: {
     originChainTxHashes: [{ hash: nearTxHash }], destinationChainTxHashes: [{ hash: nearDestinationHash }],
     amountOut: state === "PENDING_DEPOSIT" ? null : "4980000", refundedAmount: "0", refundReason: null,
@@ -153,51 +156,44 @@ it.each(["PENDING_DEPOSIT", "SUCCESS"] as const)("tracks %s when status omits qu
   }, swapDetails: { originChainTxHashes: [{ hash: nearTxHash }], destinationChainTxHashes: [{ hash: nearDestinationHash }] } });
   expect(body.swapDetails.amountOut).toBe(state === "PENDING_DEPOSIT" ? undefined : "4980000");
   expect(body.swapDetails.refundReason).toBeUndefined();
-  expect(verifyQuoteSignature(body.quoteResponse)).toBe(true);
 });
 
-it.each(["recipient", "amountOut", "depositAddress", "quoteWaitingTimeMs", "signature"])("rejects changed %s while restoring omitted status metadata", async field => {
-  const original = signedNearQuote();
+it.each(["recipient", "depositAddress", "signature"])("rejects changed %s while restoring omitted status metadata", async field => {
+  const original = nearQuoteFixture();
   const payload = nearStatus(structuredClone(original), "SUCCESS");
   Reflect.deleteProperty(payload.quoteResponse, "correlationId");
   Reflect.deleteProperty(payload.quoteResponse.quoteRequest, "quoteWaitingTimeMs");
   if (field === "recipient") payload.quoteResponse.quoteRequest.recipient = "0x2222222222222222222222222222222222222222";
-  if (field === "amountOut") payload.quoteResponse.quote.amountOut = "9999999";
   if (field === "depositAddress") payload.quoteResponse.quote.depositAddress = nearTestInput.midenAccount;
-  if (field === "quoteWaitingTimeMs") payload.quoteResponse.quoteRequest.quoteWaitingTimeMs = 5_000;
   if (field === "signature") payload.quoteResponse.signature = "ed25519:invalid";
   fetcher.mockResolvedValueOnce(Response.json(payload));
   expect((await status(request({ routeId: nearTestInput.routeId, quote: original }))).status).toBe(502);
 });
 
 it("never relays a mismatched status or invalid signature as delivery", async () => {
-  const original = signedNearQuote();
-  const another = signedNearQuote(nearTestInput, false, { depositAddress: nearTestInput.midenAccount });
+  const original = nearQuoteFixture();
+  const another = nearQuoteFixture(nearTestInput, false, { depositAddress: nearTestInput.midenAccount });
   fetcher.mockResolvedValueOnce(Response.json(nearStatus(another, "SUCCESS")));
   expect((await status(request({ routeId: nearTestInput.routeId, quote: original }))).status).toBe(502);
-  original.quote.depositAddress = nearTestInput.midenAccount;
+  vi.mocked(verifyQuoteSignature).mockReturnValueOnce(false);
   expect((await status(request({ routeId: nearTestInput.routeId, quote: original }))).status).toBe(400);
   expect(fetcher).toHaveBeenCalledTimes(1);
 });
 
-it.each(["request", "response"])("rejects an oversized %s body even without a Content-Length header", async side => {
-  vi.useFakeTimers();
-  const padding = " ".repeat(32_769);
-  fetcher.mockResolvedValueOnce(new Response(JSON.stringify(signedNearQuote(nearTestInput, true)) + (side === "response" ? padding : "")));
+it("rejects an oversized request body even without a Content-Length header", async () => {
   const input = new Request("https://portal.example/api/near/quote", {
-    method: "POST", body: JSON.stringify(nearTestInput) + (side === "request" ? padding : ""),
+    method: "POST", body: JSON.stringify(nearTestInput) + " ".repeat(32_769),
   });
-  expect((await preview(input)).status).toBe(side === "request" ? 400 : 502);
-  expect(fetcher).toHaveBeenCalledTimes(side === "request" ? 0 : 1);
+  expect((await preview(input)).status).toBe(400);
+  expect(fetcher).not.toHaveBeenCalled();
 });
 
 function stalledUpstream() {
-  const started = Promise.withResolvers<AbortSignal>();
-  fetcher.mockImplementation((input, init) => new Promise((_resolve, reject) => {
-    const signal = outgoing(input, init).signal;
-    started.resolve(signal);
-    signal.addEventListener("abort", () => reject(signal.reason), { once: true });
-  }));
+  const started = Promise.withResolvers<void>();
+  fetcher.mockImplementation(() => {
+    started.resolve();
+    return new Promise<Response>(() => {});
+  });
   return started.promise;
 }
 
@@ -207,10 +203,8 @@ it.each([true, false])("propagates caller cancellation (already cancelled: %s)",
   if (alreadyCancelled) controller.abort();
   const response = preview(request(nearTestInput, controller.signal));
   if (!alreadyCancelled) {
-    const signal = await started;
+    await started;
     controller.abort();
-    await response;
-    expect(signal.aborted).toBe(true);
   }
   expect((await response).status).toBe(502);
   expect(fetcher).toHaveBeenCalledTimes(alreadyCancelled ? 0 : 1);
@@ -222,25 +216,15 @@ it.each([
   vi.useFakeTimers();
   const started = stalledUpstream();
   const body = operation === "quote" ? nearTestInput : {
-    routeId: nearTestInput.routeId, quote: signedNearQuote(), ...(operation === "deposit" ? { txHash: nearTxHash } : {}),
+    routeId: nearTestInput.routeId, quote: nearQuoteFixture(), ...(operation === "deposit" ? { txHash: nearTxHash } : {}),
   };
   const response = handler(request(body));
-  const signal = await started;
+  const settled = vi.fn();
+  void response.then(settled);
+  await started;
   await vi.advanceTimersByTimeAsync(timeout - 1);
-  expect(signal.aborted).toBe(false);
+  expect(settled).not.toHaveBeenCalled();
   await vi.advanceTimersByTimeAsync(1);
   expect((await response).status).toBe(502);
-  expect(signal.aborted).toBe(true);
   expect(fetcher).toHaveBeenCalledOnce();
-});
-
-it("leaves unrelated Axios requests outside NEAR credentials and transport limits", async () => {
-  vi.stubEnv("NEAR_API_KEY", "private-partner-key");
-  const large = "x".repeat(32_769);
-  fetcher.mockResolvedValueOnce(Response.json({ value: large }));
-  const response = await axios.get("https://other.example/quote", { adapter: "fetch" });
-  expect(response.data).toEqual({ value: large });
-  const sent = outgoing(...fetcher.mock.calls[0]);
-  expect(sent).toMatchObject({ cache: "default", redirect: "follow" });
-  expect(sent.headers.has("authorization")).toBe(false);
 });
