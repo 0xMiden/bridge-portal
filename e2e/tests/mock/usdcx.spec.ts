@@ -265,7 +265,7 @@ test("a saved deposit resumes tracking after reload without claiming delivery du
   await page.goto("/activity/act-usdcx");
   const receipt = page.getByRole("article", { name: "Transfer receipt" });
   await expect(receipt).toContainText("Arc Testnet tx");
-  await expect(receipt).toContainText("1.000001 USDCx");
+  await expect(receipt.getByTitle("1.000001 USDCx", { exact: true })).toHaveText("1 USDCx");
   await expect(receipt.getByRole("link", { name: /Arc explorer/i })).toHaveAttribute("href", `https://explorer.testnet.arc.io/tx/${hash}`);
   await expect(receipt.getByText("Miden note", { exact: true }).locator("..")).toContainText("Pending");
   const stored = () => page.evaluate(() => JSON.parse(localStorage.getItem("miden.bridge.ui.activities.v2")!)[0]);
