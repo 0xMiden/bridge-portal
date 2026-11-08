@@ -26,13 +26,14 @@ export function activityDetailFor(activity: Activity) {
     receipt: {
       activity: receiptActivity,
       receivedAmount: quote.expectedReceived,
+      refund: details.refund,
       networkFee: quote.networkFee,
       sepoliaGasUnits: quote.fees.sepoliaGasUnits,
       fee:
         details.fee === undefined
           ? { label: quote.fees.label, value: quote.bridgeFee }
           : providerFee(quote.fees, details.fee, activity.asset, quote.asset),
-      receivedLabel: complete
+      receivedLabel: presentation.status === "refunded" ? (activity.mode === "send" ? "EVM delivery" : "Miden delivery") : complete
         ? "Received"
         : quote.fees.estimated
           ? "Estimated received"

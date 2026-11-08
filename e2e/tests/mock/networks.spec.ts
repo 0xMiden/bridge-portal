@@ -61,7 +61,8 @@ test("mainnet tokens select matching Miden assets and explain unsupported precis
   await expect(page.getByRole("textbox", { name: "Amount", exact: true })).toHaveAttribute("aria-invalid", "true");
   await bridge.fillAmount("0.12345678");
   await expect(page.locator(".swap-card").getByRole("alert")).toHaveCount(0);
-  await expect(page.getByLabel("Expected received", { exact: true })).toContainText("0.12345678");
+  await expect(page.getByLabel("Expected received", { exact: true })
+    .getByTitle("0.12345678", { exact: true })).toHaveText("0.1235");
   await page.setViewportSize({ width: 390, height: 844 });
   await page.locator(".swap-box[data-side='source']").getByRole("button", { name: /change token/ }).click();
   await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);

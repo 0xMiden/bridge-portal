@@ -26,6 +26,7 @@
     "check:config": "node --experimental-strip-types scripts/check-wallet-config.mjs"
   },
   "dependencies": {
+    "@defuse-protocol/one-click-sdk-typescript": "0.1.26",
     "@epoch-protocol/epoch-intents-sdk": "2.2.0",
     "@miden-sdk/miden-sdk": "0.17.6",
     "@miden-sdk/miden-wallet-adapter-base": "0.17.6",

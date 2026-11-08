@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { isQuoteReviewable, type TransferQuote } from "../../../bridge/core/quote";
 import type { BridgeRoute } from "../../../bridge/core/routes";
@@ -21,6 +21,7 @@ export interface ReviewedTransfer {
 
 type TransferState =
   | { status: "editing"; error: string }
+  | { status: "preparing"; review: ReviewedTransfer; error: string }
   | { status: "reviewing"; review: ReviewedTransfer; error: string }
   | { status: "submitting"; review: ReviewedTransfer; phase: string; error: string };
 
@@ -30,10 +31,11 @@ export function useBridgeTransfer(draft: { route: BridgeRoute; amount: string },
   const activities = useActivityStore();
   const lockNetworkSelection = useLockNetworkSelection();
   const [state, setState] = useState<TransferState>({ status: "editing", error: "" });
+  const preparing = useRef<AbortController | null>(null);
   const review = state.status === "editing" ? undefined : state.review;
   const { route, amount } = draft;
   const quote = useBridgeQuote(route, amount, wallets, review);
-  const isSubmitting = state.status === "submitting";
+  const isSubmitting = state.status === "submitting" || state.status === "preparing";
   const { evmAddress, midenAccount } = wallets.accounts;
   const walletsChanged = Boolean(review && (review.accounts.midenAccount !== midenAccount ||
     review.accounts.evmAddress.toLowerCase() !== evmAddress.toLowerCase()));
@@ -43,7 +45,7 @@ export function useBridgeTransfer(draft: { route: BridgeRoute; amount: string },
     destinationConnected: Boolean(route.mode === "receive" ? midenAccount : evmAddress),
     insufficientBalance: quote.insufficientBalance,
     quoteLoading: quote.providers.loading && !quote.live,
-    isSubmitting, submitPhase: isSubmitting ? state.phase : "", evmNetworkLabel: wallets.evm.network.name,
+    isSubmitting, submitPhase: state.status === "submitting" ? state.phase : state.status === "preparing" ? "Preparing quote…" : "", evmNetworkLabel: wallets.evm.network.name,
   });
   const cta = action.action === "review" ? {
     ...action,
@@ -56,12 +58,14 @@ export function useBridgeTransfer(draft: { route: BridgeRoute; amount: string },
     if (Number(amount) > 0) preloadBridgeSubmission(route.provider);
   }, [amount, route.provider]);
 
+  useEffect(() => () => { preparing.current?.abort(); }, [route.id, amount, midenAccount, evmAddress]);
+
   function setError(error: string) {
     setState(current => ({ ...current, error }));
   }
 
-  function openReview() {
-    if (state.status !== "editing") return;
+  async function openReview() {
+    if (state.status !== "editing" || preparing.current) return;
     try { validateTransferAmount(route, amount); }
     catch (error) { setError(errorMessage(error)); return; }
     if (quote.capBlocked) {
@@ -71,6 +75,21 @@ export function useBridgeTransfer(draft: { route: BridgeRoute; amount: string },
     if (!isQuoteReviewable(quote.live)) {
       setError("Refresh the quote before reviewing.");
       void quote.providers.refetch();
+      return;
+    }
+    if (route.provider === "near") {
+      const controller = new AbortController();
+      preparing.current = controller;
+      const accounts = { ...wallets.accounts };
+      setState({ status: "preparing", review: { route, amount, accounts }, error: "" });
+      try {
+        const { prepareNearTransfer } = await import("../../../bridge/providers/near/client");
+        const prepared = await prepareNearTransfer({ route, amount, ...accounts }, controller.signal);
+        controller.signal.throwIfAborted();
+        setState({ status: "reviewing", review: { route, amount, accounts, quote: prepared }, error: "" });
+      } catch (error) {
+        setState({ status: "editing", error: controller.signal.aborted ? "Transfer details changed. Review again." : errorMessage(error) });
+      } finally { preparing.current = null; }
       return;
     }
     setState({
@@ -85,10 +104,10 @@ export function useBridgeTransfer(draft: { route: BridgeRoute; amount: string },
 
   async function confirmReview() {
     if (state.status !== "reviewing") return;
-    if (walletsChanged || quote.capBlocked) {
+    if (walletsChanged || quote.capBlocked || state.review.route.id !== route.id || state.review.amount !== amount || !isQuoteReviewable(state.review.quote)) {
       setState({ status: "editing", error: walletsChanged
         ? "Your connected wallet changed. Review the transfer again."
-        : quote.balanceCap.checking ? "" : quote.balanceCap.error });
+        : quote.capBlocked ? (quote.balanceCap.checking ? "" : quote.balanceCap.error) : "Transfer details changed or the quote expired. Review again." });
       return;
     }
     const reviewed = state.review;

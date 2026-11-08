@@ -17,7 +17,7 @@ export type BridgeRoute = {
 
 function routesForConfig(config: BridgeConfig): readonly BridgeRoute[] {
   const { environment, document } = config;
-  return tokenRegistry[environment].flatMap(connection => {
+  const existing = tokenRegistry[environment].flatMap(connection => {
     const { provider, evm, miden } = connection;
     const bridge = document.supportedEvmChains[evm.network]?.bridges[provider === "xreserve" ? "usdcx" : provider];
     return (["receive", "send"] as const).flatMap(mode => {
@@ -34,6 +34,13 @@ function routesForConfig(config: BridgeConfig): readonly BridgeRoute[] {
       }];
     });
   });
+  return [...existing, ...(config.near?.routes ?? []).flatMap<BridgeRoute>(pair => [
+    { id: pair.id, provider: "near", mode: "send", source: pair.source, destination: pair.destination, recovery: config,
+      disabled: document.features.bridgeOut === false },
+    ...(pair.receiveId ? [{ id: pair.receiveId, provider: "near" as const, mode: "receive" as const,
+      source: pair.destination, destination: pair.source, recovery: config,
+      disabled: document.features.bridgeIn === false }] : []),
+  ])];
 }
 
 // Release configuration is fixed for the page lifetime; derive routes once.

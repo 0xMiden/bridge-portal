@@ -5,9 +5,9 @@ cross-chain Receive/Send surface.
 
 The app serves both networks at `/`. The network selector remembers the choice
 for the current tab and resets the transfer form and Miden wallet session. New
-tabs default to mainnet. Mainnet supports Agglayer, Circle USDCx, and Epoch routes;
-testnet also retains these providers. `/activity/:id` receipts automatically use their saved
-network, including existing testnet transfers.
+tabs default to mainnet. Mainnet supports Agglayer, Circle USDCx, Epoch and NEAR
+Intents; testnet supports Agglayer, Circle USDCx and Epoch. `/activity/:id` receipts
+automatically use their saved network, including existing testnet transfers.
 
 ## Product model
 
@@ -18,6 +18,9 @@ integration notes live in
 Architecture decisions are recorded under [docs/decisions/](docs/decisions/) —
 e.g. [why we ship single-thread WASM without cross-origin isolation
 (no COOP/COEP)](docs/decisions/wasm-threading-coop-coep.md).
+
+NEAR Intents supports 13 Miden ↔ EVM pairs (26 routes). Availability follows the
+existing `bridgeIn` and `bridgeOut` configuration.
 
 ## Prerequisites
 
@@ -62,6 +65,7 @@ automatically and require no wallet credentials. In brief:
 | Var | Scope | Purpose |
 | --- | --- | --- |
 | `BRIDGE_API_BASE` | server | Proxy target for `/api/bridge/*`. |
+| `NEAR_API_KEY` | server | NEAR 1Click partner credential; never expose it to the client. |
 | `ETHEREUM_RPC_URL` | server | Ethereum mainnet RPC. |
 | `ARC_MAINNET_RPC_URL` | server | Arc mainnet RPC. |
 | `BASE_RPC_URL` | server | Base mainnet RPC. |

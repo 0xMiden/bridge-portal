@@ -24,6 +24,7 @@ export interface TransferSubmission {
     address: string;
     requestTransaction?: MessageSignerWalletAdapter["requestTransaction"];
     waitForTransaction?: MessageSignerWalletAdapter["waitForTransaction"];
+    requestAssets?: MessageSignerWalletAdapter["requestAssets"];
   };
   midenAsset: ResolvedMidenAsset | null;
   /** Resolved directional accounts shared by quoting and submission. */
@@ -38,7 +39,7 @@ export interface SubmissionEffects {
   onError: (message: string) => void;
   onSubmittingChange: (submitting: boolean) => void;
   onPhaseChange: (phase: string) => void;
-  activities: Pick<ActivityStore, "record" | "patch">;
+  activities: Pick<ActivityStore, "record" | "patch"> & Partial<Pick<ActivityStore, "get" | "sync">>;
   navigate: (path: string) => void;
 }
 
@@ -48,5 +49,8 @@ export type SubmissionContext = {
   phase: (message: string) => void;
   /** Retain a receipt only after the provider acknowledges the source submission. */
   record: (patch: Partial<Activity>) => Activity;
+  /** Require durable storage before asking a wallet to fund a NEAR quote. */
+  persist?: (patch: Partial<Activity>) => Activity;
+  findActivity?: (id: string) => Activity | undefined;
   update: (patch: Partial<Activity>) => void;
 };

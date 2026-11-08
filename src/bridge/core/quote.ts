@@ -18,9 +18,15 @@ export type QuoteValidity =
 /** Decimal amounts. Fees are added in the source token or deducted from the destination payout. */
 export type QuoteResult = {
   received: string;
+  minimumReceived?: string;
+  estimatedSeconds?: number;
   fee?: string;
   validity: QuoteValidity;
 } & (
+  | {
+      kind: "near";
+      authorization: import("../providers/near/schema").NearQuoteResponse;
+    }
   | {
       kind: "epoch";
     }

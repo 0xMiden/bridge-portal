@@ -81,8 +81,8 @@ export function destinationAssetSymbol(activity: Activity): string {
 export function quoteForActivity(activity: Activity): Quote {
   const route = activityRoute(activity);
   const quote = quoteFromPolicy(directionFor(activity).fees(route), activity.amount, route?.destination.symbol ?? activity.asset);
-  const received = directionFor(activity).activityDetails(activity).received;
-  return received ? { ...quote, expectedReceived: received } : quote;
+  const details = directionFor(activity).activityDetails(activity);
+  return { ...quote, expectedReceived: details.received ?? quote.expectedReceived, networkFee: details.networkFee ?? quote.networkFee };
 }
 
 export function providerFee(fees: FeePolicy, amount: string, sourceSymbol: string, destinationSymbol: string) {
@@ -142,6 +142,7 @@ export function statusLabel(status: ActivityStatus, activity?: Activity) {
     claim_available: "Claim funds",
     claim_submitted: "Claim submitted",
     failed: "Needs recovery",
+    refunded: "Refunded",
     complete: "Complete",
   };
   return labels[status];
@@ -150,6 +151,7 @@ export function statusLabel(status: ActivityStatus, activity?: Activity) {
 export function statusTone(status: ActivityStatus, activity?: Activity) {
   if (activity && directionFor(activity).tracking === "manual" && status !== "complete" && status !== "failed") return "";
   if (status === "complete") return "success";
+  if (status === "refunded") return "warning";
   if (status === "failed") return "danger";
   if (status === "claim_available") return "warning";
   return "active";
@@ -316,6 +318,7 @@ export function buildDiagnostics(
       xreserveFee: activity.xreserveFee,
       xreserveForwarding: activity.xreserveForwarding,
       xreserveMidenBlock: activity.xreserveMidenBlock,
+      near: activity.near,
     }),
     lastMonitorError: extra.monitorError || undefined,
   };

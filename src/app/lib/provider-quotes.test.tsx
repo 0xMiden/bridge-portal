@@ -23,6 +23,7 @@ const cleanups: (() => void)[] = [];
 beforeEach(() => {
   vi.useFakeTimers();
   client = new QueryClient({ defaultOptions: { queries: { gcTime: Infinity } } });
+  adapter("near", vi.fn(async () => null));
   // Match browser Request resolution for same-origin RPC URLs in Node.
   vi.stubGlobal("Request", class extends Request {
     constructor(input: RequestInfo | URL, init?: RequestInit) {
@@ -95,11 +96,14 @@ it("queries every compatible provider independently and only offers successful p
   adapter("xreserve", circleQuote);
   const epochQuote = vi.fn(async () => payout("99.123456"));
   adapter("epoch", epochQuote);
+  const nearQuote = vi.fn<ProviderFlows["receive"]["quote"]>().mockResolvedValue(null);
+  adapter("near", nearQuote);
   const unrelated = adapter("agglayer", vi.fn(async () => null));
   const state = observe();
   await vi.advanceTimersByTimeAsync(400);
   expect(circleQuote).toHaveBeenCalledOnce();
   expect(epochQuote).toHaveBeenCalledOnce();
+  expect(nearQuote).toHaveBeenCalledOnce();
   expect(unrelated).not.toHaveBeenCalled();
   expect(state.offers().map(offer => offer.route.provider)).toEqual(["epoch"]);
   const firstQuotedRoute = state.offers()[0].route;
@@ -114,14 +118,16 @@ it("queries every compatible provider independently and only offers successful p
   await vi.advanceTimersByTimeAsync(1);
   expect(state.offers()).toHaveLength(1);
   circleQuote.mockResolvedValue(payout("100"));
+  nearQuote.mockResolvedValue(payout("99.5"));
   const retry = state.refetch();
   await vi.advanceTimersByTimeAsync(400);
   await retry;
-  expect(state.offers()).toHaveLength(2);
+  expect(state.offers()).toHaveLength(3);
   const both = render(state.offers(), true, false, firstQuotedRoute);
   expect(both).toMatch(/class="selected-provider[^"]*">Epoch<\/strong>/);
   expect(both).toContain('aria-label="Circle"');
   expect(both).toContain('aria-label="Epoch"');
+  expect(both).toContain('aria-label="NEAR Intents"');
   expect(both).not.toContain("<details");
   expect(both).toMatch(/<input(?=[^>]*aria-label="Epoch")(?=[^>]*checked="")[^>]*>/);
   expect(both).not.toContain("Quote required");

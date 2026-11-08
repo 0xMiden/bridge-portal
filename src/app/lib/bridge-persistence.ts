@@ -7,6 +7,8 @@ import { isBridgeProvider } from "../../bridge/providers/registry";
 import { type Activity } from "./bridge-presentation";
 
 import type { BridgeEnvironment } from "../../config/environment";
+import { nearMidenAddress, nearOperationSchema } from "../../bridge/providers/near/schema";
+import { normalizeMidenAccountHex } from "../../bridge/miden-address";
 
 export const activityStorageKey = "miden.bridge.ui.activities.v2";
 
@@ -94,6 +96,16 @@ function normalizeActivities(parsed: unknown): Activity[] {
     const route = receiptRouteSchema.safeParse(activity.routeSnapshot);
     if (!route.success) return [];
     const routeSnapshot = route.data;
+    if (activity.provider === "near") {
+      const operation = nearOperationSchema.safeParse(activity.near);
+      if (!operation.success) return [];
+      activity = { ...activity, near: operation.data };
+      if (activity.mode === "receive") {
+        const recipient = nearMidenAddress.safeParse(operation.data.quote.quoteRequest.recipient);
+        if (!recipient.success) return [];
+        activity = { ...activity, midenAccount: recipient.data, midenAccountHex: normalizeMidenAccountHex(recipient.data) };
+      }
+    }
     if (routeSnapshot.provider !== activity.provider || routeSnapshot.mode !== activity.mode ||
         activity.asset !== routeSnapshot.source.symbol || typeof activity.updatedAt !== "number" ||
         [activity.id, activity.amount, activity.summary, activity.eta, activity.txHash].some(value => typeof value !== "string")) return [];

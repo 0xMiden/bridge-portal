@@ -51,6 +51,8 @@ export type ActivityDetails = {
   destinationKind: "tx" | "note";
   received?: string;
   fee?: string;
+  networkFee?: string;
+  refund?: string;
   reference?: { label: string; value: string };
   destinationBlock?: number;
 };
