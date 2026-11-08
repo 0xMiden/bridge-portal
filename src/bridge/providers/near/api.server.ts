@@ -63,7 +63,7 @@ async function upstream(path: "/quote" | "/status" | "/deposit/submit", input: o
 async function quote(body: unknown, dry: boolean, signal: AbortSignal) {
   const input = dry ? nearInputSchema.parse(body) : nearPrepareInputSchema.parse(body);
   const request = nearRequest(input, dry, new Date(Date.now() + 10 * 60_000).toISOString());
-  if (!dry && (process.env.NEAR_TRANSFERS_ENABLED !== "true" || currentBridgeConfig("mainnet").document.features[input.mode === "send" ? "bridgeOut" : "bridgeIn"] === false)) {
+  if (!dry && currentBridgeConfig("mainnet").document.features[input.mode === "send" ? "bridgeOut" : "bridgeIn"] === false) {
     throw new NearApiError("New NEAR transfers are paused. Existing receipts continue tracking.", 503);
   }
   if ("quote" in input && input.quote) {

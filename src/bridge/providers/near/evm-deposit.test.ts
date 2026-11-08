@@ -10,7 +10,6 @@ import { nearQuoteResult } from "./quote";
 import { nearMonitor } from "./tracking";
 import { nearReceiveInput, signedNearQuote, nearStatus, nearTxHash, nearDestinationHash, testManagerKey } from "../../../../test/near-quotes";
 
-vi.hoisted(() => { process.env.NEXT_PUBLIC_NEAR_ENABLED = "true"; });
 const rpc = vi.hoisted(() => ({ balance: vi.fn(), read: vi.fn(), call: vi.fn(), gas: vi.fn(), block: vi.fn(), tip: vi.fn(), receipt: vi.fn(), resolve: vi.fn(), networks: [] as string[] }));
 vi.mock("../../evm/transport", () => ({ evmReadTransport: (network: string) => ({ network }) }));
 vi.mock("../../evm/source-transaction", () => ({ recoverSourceTransaction: rpc.resolve }));

@@ -10,7 +10,6 @@ import { nearQuoteResult } from "./quote";
 import { nearMonitor } from "./tracking";
 import { nearTestInput, signedNearQuote, nearStatus, nearTxHash, testManagerKey } from "../../../../test/near-quotes";
 
-vi.hoisted(() => { process.env.NEXT_PUBLIC_NEAR_ENABLED = "true"; });
 vi.mock("@miden-sdk/miden-sdk", async () => (await import("../../../../test/miden-sdk")).browserMidenSdk());
 vi.mock("@miden-sdk/miden-wallet-adapter-base", () => import("@miden-sdk/miden-wallet-adapter-base/dist/transaction.js"));
 vi.mock("../../miden-rpc", () => ({ getMidenVerificationBaseFee: vi.fn(async () => 100) }));

@@ -5,6 +5,7 @@ import { POST as status } from "./status/route";
 import { POST as deposit } from "./deposit/submit/route";
 import { nearTestInput, nearReceiveInput, signedNearQuote, nearStatus, nearTxHash, nearDestinationHash } from "../../../../test/near-quotes";
 import { verifyQuoteSignature } from "@defuse-protocol/one-click-sdk-typescript";
+import * as configs from "../../../config/bridge-config";
 
 vi.mock("@defuse-protocol/one-click-sdk-typescript", async importOriginal => {
   const actual = await importOriginal<typeof import("@defuse-protocol/one-click-sdk-typescript")>();
@@ -13,8 +14,8 @@ vi.mock("@defuse-protocol/one-click-sdk-typescript", async importOriginal => {
 import { testManagerKey as managerKey } from "../../../../test/near-quotes";
 const fetcher = vi.fn<typeof fetch>();
 const request = (body: unknown) => new Request("https://portal.example/api/near/quote", { method: "POST", body: JSON.stringify(body) });
-beforeEach(() => { vi.stubGlobal("fetch", fetcher); fetcher.mockReset(); vi.stubEnv("NEAR_TRANSFERS_ENABLED", "true"); });
-afterEach(() => { vi.unstubAllGlobals(); vi.unstubAllEnvs(); vi.useRealTimers(); });
+beforeEach(() => { vi.stubGlobal("fetch", fetcher); fetcher.mockReset(); });
+afterEach(() => { vi.unstubAllGlobals(); vi.unstubAllEnvs(); vi.restoreAllMocks(); vi.useRealTimers(); });
 
 it("pins exact input, source decimals and chain direction while keeping the API credential server-side", async () => {
   vi.stubEnv("NEAR_API_KEY", "private-partner-key");
@@ -79,7 +80,7 @@ it("rejects a signed Miden deposit address for an EVM-funded quote", async () =>
   expect((await prepare(request(nearReceiveInput))).status).toBe(502);
 });
 
-it.each([nearTestInput, nearReceiveInput])("prepares once for $mode; pause still permits tracking and notification", async input => {
+it.each([nearTestInput, nearReceiveInput])("prepares once for $mode by default; a bridge config pause still permits tracking and notification", async input => {
   vi.useFakeTimers();
   const prepared = signedNearQuote(input);
   fetcher.mockResolvedValueOnce(Response.json(prepared));
@@ -90,7 +91,9 @@ it.each([nearTestInput, nearReceiveInput])("prepares once for $mode; pause still
   const legacy = signedNearQuote(input, false, {}, 10_000);
   expect((await prepare(request({ ...input, quote: legacy }))).status).toBe(200);
   expect(fetcher).toHaveBeenCalledTimes(1);
-  vi.stubEnv("NEAR_TRANSFERS_ENABLED", "false");
+  const paused = structuredClone(configs.currentBridgeConfig("mainnet"));
+  paused.document.features[input.mode === "send" ? "bridgeOut" : "bridgeIn"] = false;
+  vi.spyOn(configs, "currentBridgeConfig").mockReturnValue(paused);
   expect((await prepare(request({ ...input, quote: prepared }))).status).toBe(503);
   vi.advanceTimersByTime(700_000);
   fetcher.mockResolvedValueOnce(Response.json(nearStatus(prepared)));

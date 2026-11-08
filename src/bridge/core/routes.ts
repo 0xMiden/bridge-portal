@@ -3,7 +3,6 @@ import type { BridgeActivity, BridgeProvider, FlowMode } from "./models";
 import { currentBridgeConfig, type BridgeConfig } from "../../config/bridge-config";
 import type { BridgeEnvironment } from "../../config/environment";
 import { tokenRegistry } from "../../config/token-registry";
-import { nearRoutesEnabled } from "../../config/near/config";
 
 export type BridgeRoute = {
   id: string;
@@ -37,10 +36,10 @@ function routesForConfig(config: BridgeConfig): readonly BridgeRoute[] {
   });
   return [...existing, ...(config.near?.routes ?? []).flatMap<BridgeRoute>(pair => [
     { id: pair.id, provider: "near", mode: "send", source: pair.source, destination: pair.destination, recovery: config,
-      disabled: !nearRoutesEnabled || document.features.bridgeOut === false },
+      disabled: document.features.bridgeOut === false },
     ...(pair.receiveId ? [{ id: pair.receiveId, provider: "near" as const, mode: "receive" as const,
       source: pair.destination, destination: pair.source, recovery: config,
-      disabled: !nearRoutesEnabled || document.features.bridgeIn === false }] : []),
+      disabled: document.features.bridgeIn === false }] : []),
   ])];
 }
 

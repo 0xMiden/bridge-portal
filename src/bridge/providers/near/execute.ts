@@ -65,7 +65,7 @@ export async function submitNearTransfer(context: SubmissionContext) {
     const units = BigInt(nearSourceUnits(input.amount, nearPair(route.id).source.decimals));
     context.phase("Checking Miden balance and fee…");
     const networkFee = await checkBalance(context, units);
-    // Recheck the server kill switch immediately before constructing a wallet request.
+    // Recheck bridge availability immediately before constructing a wallet request.
     await nearPost("prepare", { ...binding, quote });
     const { buildNearDeposit } = await import("./funding");
     const deposit = buildNearDeposit(quote, binding, route.recovery);

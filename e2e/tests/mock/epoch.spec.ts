@@ -35,7 +35,7 @@ for (const mode of ["receive", "send"] as const) {
       tokenInAmount: mode === "send" ? "1000000" : "1000000000000000000",
     });
     await bridge.openPreflight();
-    await expect(bridge.preflight()).toContainText(mode === "receive" ? "0.991878" : "0.99");
+    await expect(bridge.preflight()).toContainText(mode === "receive" ? "0.9919" : "0.99");
     await bridge.cancelPreflight();
     expect(await bridge.readActivities()).toEqual([]);
   });
@@ -82,7 +82,7 @@ test("Epoch cannot reach review when the allocator has no estimate", async ({ br
 const mainnetPairs = [
   ...([["ethereum", 1], ["base", 8453], ["arbitrum", 42161], ["polygon", 137]] as const).map(([network, chainId]) => ({
     network, chainId, token: "USDC", suffix: "", amount: "1", faucet: "0xe69e6ca6e39df1b10c1e5399399feb",
-    receiveUnits: "1000000", sendUnits: "1000000", receiveOut: "991878", sendOut: "991878", received: "0.991878", native: false,
+    receiveUnits: "1000000", sendUnits: "1000000", receiveOut: "991878", sendOut: "991878", received: "0.9919", native: false,
   })),
   ...([["ethereum", 1], ["base", 8453], ["arbitrum", 42161], ["robinhood", 4663]] as const).map(([network, chainId]) => ({
     network, chainId, token: "ETH", suffix: ":eth", amount: "0.01", faucet: "0x419f8f4bff72959132aa7cea15a4c1",
