@@ -216,7 +216,7 @@ test("USDCx joins the shared form with Arc balances, exact amounts and deposit r
 
   await bridge.fillAmount("1.000001");
   await bridge.openPreflight();
-  await expect(bridge.preflight()).toContainText("1.000001 USDCx");
+  await expect(bridge.preflight().getByTitle("1.000001 USDCx", { exact: true })).toHaveText("1 USDCx");
   await expect(bridge.preflight()).toContainText("Arc Testnet");
   await expect(bridge.preflight()).not.toContainText("Sepolia");
   await bridge.cancelPreflight();
@@ -371,7 +371,7 @@ test("USDCx withdrawals restore the destination and show the net payout estimate
   await bridge.fillAmount("2.000001");
   await bridge.openPreflight();
   await expect(bridge.preflight()).toContainText("2.000001 USDCx");
-  await expect(bridge.preflight()).toContainText("1.983601 USDC");
+  await expect(bridge.preflight().getByTitle("1.983601 USDC", { exact: true })).toHaveText("1.9836 USDC");
   await expect(bridge.preflight()).toContainText("0.0164 USDC (estimated)");
   await expect(bridge.preflight().getByText("Minimum received", { exact: true })).toHaveCount(0);
   await expect(bridge.preflight().locator(".fiat-amount")).toHaveText("$2.00");
