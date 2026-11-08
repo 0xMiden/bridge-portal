@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import axios from "axios";
 import { POST as preview } from "./quote/route";
 import { POST as prepare } from "./prepare/route";
 import { POST as status } from "./status/route";
@@ -13,14 +14,15 @@ vi.mock("@defuse-protocol/one-click-sdk-typescript", async importOriginal => {
 });
 import { testManagerKey as managerKey } from "../../../../test/near-quotes";
 const fetcher = vi.fn<typeof fetch>();
-const request = (body: unknown) => new Request("https://portal.example/api/near/quote", { method: "POST", body: JSON.stringify(body) });
+const request = (body: unknown, signal?: AbortSignal) => new Request("https://portal.example/api/near/quote", { method: "POST", body: JSON.stringify(body), signal });
+const outgoing = (input: RequestInfo | URL, init?: RequestInit) => new Request(input instanceof Request ? input.clone() : input, init);
 beforeEach(() => { vi.stubGlobal("fetch", fetcher); fetcher.mockReset(); });
 afterEach(() => { vi.unstubAllGlobals(); vi.unstubAllEnvs(); vi.restoreAllMocks(); vi.useRealTimers(); });
 
 it("pins exact input, source decimals and chain direction while keeping the API credential server-side", async () => {
   vi.stubEnv("NEAR_API_KEY", "private-partner-key");
-  fetcher.mockImplementation(async (_url, init) => {
-    const body = JSON.parse(init!.body as string);
+  fetcher.mockImplementation(async (input, init) => {
+    const body = await outgoing(input, init).json();
     expect(body).toMatchObject({ dry: true, amount: "5000000", depositType: "ORIGIN_CHAIN", recipientType: "DESTINATION_CHAIN",
       refundTo: nearTestInput.midenAccount, confidentiality: "basic", swapType: "EXACT_INPUT", quoteWaitingTimeMs: 0 });
     const response = signedNearQuote(nearTestInput, true);
@@ -33,7 +35,9 @@ it("pins exact input, source decimals and chain direction while keeping the API 
   expect(response.status).toBe(200);
   expect(response.headers.get("cache-control")).toBe("no-store");
   expect(await response.text()).not.toContain("private-partner-key");
-  expect(fetcher.mock.calls[0]).toMatchObject(["https://1click.chaindefuser.com/v0/quote", { cache: "no-store", redirect: "error", headers: { Authorization: "Bearer private-partner-key" } }]);
+  const sent = outgoing(...fetcher.mock.calls[0]);
+  expect(sent).toMatchObject({ url: "https://1click.chaindefuser.com/v0/quote", method: "POST", cache: "no-store", redirect: "error" });
+  expect(sent.headers.get("authorization")).toBe("Bearer private-partner-key");
   vi.useRealTimers();
 });
 
@@ -56,7 +60,7 @@ it.each([
   const input = { ...nearTestInput, routeId, amount };
   fetcher.mockResolvedValueOnce(Response.json(signedNearQuote(input, true)));
   expect((await preview(request(input))).status).toBe(200);
-  expect(JSON.parse(fetcher.mock.calls[0][1]!.body as string).amount).toBe(expected);
+  expect((await outgoing(...fetcher.mock.calls[0]).json()).amount).toBe(expected);
 });
 
 it.each([
@@ -68,7 +72,7 @@ it.each([
   const input = { ...nearReceiveInput, routeId, amount };
   fetcher.mockResolvedValueOnce(Response.json(signedNearQuote(input, true)));
   expect((await preview(request(input))).status).toBe(200);
-  expect(JSON.parse(fetcher.mock.calls[0][1]!.body as string)).toMatchObject({
+  expect(await outgoing(...fetcher.mock.calls[0]).json()).toMatchObject({
     amount: units, originAsset, destinationAsset, refundTo: input.evmAddress, recipient: input.midenAccount,
     depositType: "ORIGIN_CHAIN", recipientType: "DESTINATION_CHAIN", refundType: "ORIGIN_CHAIN", confidentiality: "basic",
   });
@@ -85,7 +89,7 @@ it.each([nearTestInput, nearReceiveInput])("prepares once for $mode by default; 
   const prepared = signedNearQuote(input);
   fetcher.mockResolvedValueOnce(Response.json(prepared));
   expect((await prepare(request(input))).status).toBe(200);
-  expect(JSON.parse(fetcher.mock.calls[0][1]!.body as string).dry).toBe(false);
+  expect((await outgoing(...fetcher.mock.calls[0]).json()).dry).toBe(false);
   expect((await prepare(request({ ...input, quote: prepared }))).status).toBe(200);
   // An already-open review keeps its original signed wait policy after an update.
   const legacy = signedNearQuote(input, false, {}, 10_000);
@@ -98,8 +102,15 @@ it.each([nearTestInput, nearReceiveInput])("prepares once for $mode by default; 
   vi.advanceTimersByTime(700_000);
   fetcher.mockResolvedValueOnce(Response.json(nearStatus(prepared)));
   expect((await status(request({ routeId: input.routeId, quote: prepared }))).status).toBe(200);
+  const statusRequest = outgoing(...fetcher.mock.calls[1]);
+  expect(statusRequest.method).toBe("GET");
+  expect(new URL(statusRequest.url).pathname).toBe("/v0/status");
+  expect(new URL(statusRequest.url).searchParams.get("depositAddress")).toBe(prepared.quote.depositAddress);
   fetcher.mockResolvedValueOnce(Response.json(nearStatus(prepared, "KNOWN_DEPOSIT_TX")));
   expect((await deposit(request({ routeId: input.routeId, quote: prepared, txHash: nearTxHash }))).status).toBe(200);
+  const notification = outgoing(...fetcher.mock.calls[2]);
+  expect(notification).toMatchObject({ url: "https://1click.chaindefuser.com/v0/deposit/submit", method: "POST" });
+  expect(await notification.json()).toEqual({ depositAddress: prepared.quote.depositAddress, txHash: nearTxHash });
   vi.useRealTimers();
 });
 
@@ -167,4 +178,69 @@ it("never relays a mismatched status or invalid signature as delivery", async ()
   original.quote.depositAddress = nearTestInput.midenAccount;
   expect((await status(request({ routeId: nearTestInput.routeId, quote: original }))).status).toBe(400);
   expect(fetcher).toHaveBeenCalledTimes(1);
+});
+
+it.each(["request", "response"])("rejects an oversized %s body even without a Content-Length header", async side => {
+  vi.useFakeTimers();
+  const padding = " ".repeat(32_769);
+  fetcher.mockResolvedValueOnce(new Response(JSON.stringify(signedNearQuote(nearTestInput, true)) + (side === "response" ? padding : "")));
+  const input = new Request("https://portal.example/api/near/quote", {
+    method: "POST", body: JSON.stringify(nearTestInput) + (side === "request" ? padding : ""),
+  });
+  expect((await preview(input)).status).toBe(side === "request" ? 400 : 502);
+  expect(fetcher).toHaveBeenCalledTimes(side === "request" ? 0 : 1);
+});
+
+function stalledUpstream() {
+  const started = Promise.withResolvers<AbortSignal>();
+  fetcher.mockImplementation((input, init) => new Promise((_resolve, reject) => {
+    const signal = outgoing(input, init).signal;
+    started.resolve(signal);
+    signal.addEventListener("abort", () => reject(signal.reason), { once: true });
+  }));
+  return started.promise;
+}
+
+it.each([true, false])("propagates caller cancellation (already cancelled: %s)", async alreadyCancelled => {
+  const controller = new AbortController();
+  const started = stalledUpstream();
+  if (alreadyCancelled) controller.abort();
+  const response = preview(request(nearTestInput, controller.signal));
+  if (!alreadyCancelled) {
+    const signal = await started;
+    controller.abort();
+    await response;
+    expect(signal.aborted).toBe(true);
+  }
+  expect((await response).status).toBe(502);
+  expect(fetcher).toHaveBeenCalledTimes(alreadyCancelled ? 0 : 1);
+});
+
+it.each([
+  ["quote", preview, 30_000], ["status", status, 15_000], ["deposit", deposit, 15_000],
+] as const)("cancels stalled %s requests at the deadline without retrying", async (operation, handler, timeout) => {
+  vi.useFakeTimers();
+  const started = stalledUpstream();
+  const body = operation === "quote" ? nearTestInput : {
+    routeId: nearTestInput.routeId, quote: signedNearQuote(), ...(operation === "deposit" ? { txHash: nearTxHash } : {}),
+  };
+  const response = handler(request(body));
+  const signal = await started;
+  await vi.advanceTimersByTimeAsync(timeout - 1);
+  expect(signal.aborted).toBe(false);
+  await vi.advanceTimersByTimeAsync(1);
+  expect((await response).status).toBe(502);
+  expect(signal.aborted).toBe(true);
+  expect(fetcher).toHaveBeenCalledOnce();
+});
+
+it("leaves unrelated Axios requests outside NEAR credentials and transport limits", async () => {
+  vi.stubEnv("NEAR_API_KEY", "private-partner-key");
+  const large = "x".repeat(32_769);
+  fetcher.mockResolvedValueOnce(Response.json({ value: large }));
+  const response = await axios.get("https://other.example/quote", { adapter: "fetch" });
+  expect(response.data).toEqual({ value: large });
+  const sent = outgoing(...fetcher.mock.calls[0]);
+  expect(sent).toMatchObject({ cache: "default", redirect: "follow" });
+  expect(sent.headers.has("authorization")).toBe(false);
 });

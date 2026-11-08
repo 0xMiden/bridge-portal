@@ -1,4 +1,4 @@
-import { verifyQuoteSignature, type QuoteResponse } from "@defuse-protocol/one-click-sdk-typescript";
+import { QuoteRequest as OneClickQuoteRequest, verifyQuoteSignature, type QuoteResponse } from "@defuse-protocol/one-click-sdk-typescript";
 import { formatUnits } from "viem";
 import { nearConfig } from "../../../config/near/config";
 import type { QuoteRequest, QuoteResult } from "../../core/quote";
@@ -36,13 +36,15 @@ export function nearRequest(input: NearInput, dry: boolean, deadline: string) {
   const amount = nearSourceUnits(input.amount, pair.source.decimals);
   if (pair.mode === "send" && BigInt(amount) > MIDEN_MAX_AMOUNT) throw new Error("Amount is outside Miden's transfer limits.");
   return {
-    dry, swapType: "EXACT_INPUT" as const, slippageTolerance: 100 as const,
+    dry, swapType: OneClickQuoteRequest.swapType.EXACT_INPUT, slippageTolerance: 100 as const,
     originAsset: pair.source.assetId, destinationAsset: pair.destination.assetId,
-    depositType: "ORIGIN_CHAIN" as const, recipientType: "DESTINATION_CHAIN" as const, refundType: "ORIGIN_CHAIN" as const,
+    depositType: OneClickQuoteRequest.depositType.ORIGIN_CHAIN,
+    recipientType: OneClickQuoteRequest.recipientType.DESTINATION_CHAIN,
+    refundType: OneClickQuoteRequest.refundType.ORIGIN_CHAIN,
     amount, recipient: pair.mode === "send" ? input.evmAddress : input.midenAccount,
     refundTo: pair.mode === "send" ? input.midenAccount : input.evmAddress,
-    confidentiality: "basic" as const, quoteWaitingTimeMs: 0, deadline,
-  };
+    confidentiality: OneClickQuoteRequest.confidentiality.BASIC, quoteWaitingTimeMs: 0, deadline,
+  } satisfies OneClickQuoteRequest;
 }
 
 export function nearQuoteExpiry(response: NearQuoteResponse) {

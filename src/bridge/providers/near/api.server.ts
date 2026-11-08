@@ -1,10 +1,25 @@
+import { ApiError, OneClickService, OpenAPI, type CancelablePromise } from "@defuse-protocol/one-click-sdk-typescript";
+import axios from "axios";
 import { nearInputSchema, nearPrepareInputSchema, nearTrackingInputSchema, nearDepositInputSchema, nearStatusResponseSchema, nearQuoteSchema, nearCorrelationId } from "./schema";
 import { nearRequest, verifyNearQuote, nearTrackingInput } from "./quote";
 import { currentBridgeConfig } from "../../../config/bridge-config";
 
-const API = "https://1click.chaindefuser.com/v0";
+const API = "https://1click.chaindefuser.com";
 const headers = { "Cache-Control": "no-store" };
 const MAX_BODY_BYTES = 32_768;
+OpenAPI.BASE = API;
+// Server only. Resolve the credential for each request without putting it in quotes or receipts.
+OpenAPI.TOKEN = async () => process.env.NEAR_API_KEY ?? "";
+// The SDK uses shared Axios without per-call transport options. Scope these
+// limits to 1Click and use native fetch in both Node and Cloudflare Workers.
+axios.interceptors.request.use(config => {
+  config.adapter = "fetch";
+  config.maxContentLength = MAX_BODY_BYTES;
+  config.maxBodyLength = MAX_BODY_BYTES;
+  config.fetchOptions = { ...config.fetchOptions, cache: "no-store", redirect: "error" };
+  return config;
+}, undefined, { runWhen: config => config.url?.startsWith(`${API}/v0/`) ?? false });
+
 // The status API's quote echo omits tracing metadata present in /quote.
 // Keep the complete signed-quote contract for preparation, receipts and clients.
 const upstreamStatusSchema = nearStatusResponseSchema.extend({
@@ -15,7 +30,7 @@ class NearApiError extends Error {
   constructor(message: string, readonly status: number, readonly correlationId?: string) { super(message); }
 }
 
-async function boundedJson(message: Request | Response): Promise<unknown> {
+async function boundedJson(message: Request): Promise<unknown> {
   const reader = message.body?.getReader();
   if (!reader) throw new Error("Missing body");
   let size = 0;
@@ -35,29 +50,29 @@ async function boundedJson(message: Request | Response): Promise<unknown> {
   return JSON.parse(new TextDecoder().decode(bytes));
 }
 
-async function upstream(path: "/quote" | "/status" | "/deposit/submit", input: object, signal: AbortSignal) {
-  const requestHeaders: Record<string, string> = { "Content-Type": "application/json" };
-  // Never returned, logged, included in recovery data or accessed by client modules.
-  if (process.env.NEAR_API_KEY) requestHeaders.Authorization = `Bearer ${process.env.NEAR_API_KEY}`;
-  const query = path === "/status" ? `?${new URLSearchParams(input as Record<string, string>)}` : "";
-  const response = await fetch(`${API}${path}${query}`, {
-    method: path === "/status" ? "GET" : "POST", headers: requestHeaders,
-    body: path === "/status" ? undefined : JSON.stringify(input),
-    cache: "no-store", redirect: "error", signal: AbortSignal.any([signal, AbortSignal.timeout(path === "/quote" ? 30_000 : 15_000)]),
-  });
-  const payload = await boundedJson(response);
-  const id = nearCorrelationId.safeParse((payload as { correlationId?: unknown })?.correlationId);
-  if (!response.ok) {
-    if (path === "/quote" && response.status === 400 && (payload as { message?: unknown })?.message === "No liquidity available") {
+async function upstream<T>(operation: "quote" | "status" | "deposit", start: () => CancelablePromise<T>, signal: AbortSignal): Promise<T> {
+  signal.throwIfAborted();
+  const pending = start();
+  const cancel = () => pending.cancel();
+  signal.addEventListener("abort", cancel, { once: true });
+  const timeout = setTimeout(cancel, operation === "quote" ? 30_000 : 15_000);
+  try {
+    return await pending;
+  } catch (error) {
+    if (!(error instanceof ApiError)) throw error;
+    const id = nearCorrelationId.safeParse(error.body?.correlationId);
+    if (operation === "quote" && error.status === 400 && error.body?.message === "No liquidity available") {
       throw new NearApiError("NEAR has no liquidity for this route right now. Try another provider or retry later.", 422, id.success ? id.data : undefined);
     }
-    const message = response.status === 401 || response.status === 403
+    const message = error.status === 401 || error.status === 403
       ? "NEAR could not authorize this quote. Contact support with the reference."
-      : response.status === 400 ? "NEAR has no available quote for this transfer. Try another amount or provider."
+      : error.status === 400 ? "NEAR has no available quote for this transfer. Try another amount or provider."
       : "NEAR is unavailable. Retry from this receipt; do not send another deposit.";
     throw new NearApiError(message, 502, id.success ? id.data : undefined);
+  } finally {
+    clearTimeout(timeout);
+    signal.removeEventListener("abort", cancel);
   }
-  return payload;
 }
 
 async function quote(body: unknown, dry: boolean, signal: AbortSignal) {
@@ -70,7 +85,7 @@ async function quote(body: unknown, dry: boolean, signal: AbortSignal) {
     const { quote: prepared, ...binding } = input;
     return verifyNearQuote(prepared, binding, false);
   }
-  const payload = await upstream("/quote", request, signal);
+  const payload = await upstream("quote", () => OneClickService.getQuote(request), signal);
   try {
     const response = verifyNearQuote(payload, input, dry);
     if (response.quoteRequest.deadline !== request.deadline) throw new Error("Deadline mismatch");
@@ -82,15 +97,17 @@ async function quote(body: unknown, dry: boolean, signal: AbortSignal) {
 }
 
 async function track(body: unknown, notify: boolean, signal: AbortSignal) {
-  const input = notify ? nearDepositInputSchema.parse(body) : nearTrackingInputSchema.parse(body);
+  const depositInput = notify ? nearDepositInputSchema.parse(body) : undefined;
+  const input = depositInput ?? nearTrackingInputSchema.parse(body);
   const bound = nearTrackingInput(input.routeId, input.quote);
   // Historic quotes are allowed to expire; their signed identity remains mandatory.
   const original = verifyNearQuote(input.quote, bound, false, false);
   const depositAddress = original.quote.depositAddress!;
   const depositMemo = original.quote.depositMemo;
-  const payload = notify
-    ? await upstream("/deposit/submit", { depositAddress, ...("txHash" in input ? { txHash: input.txHash } : {}), ...(depositMemo ? { memo: depositMemo } : {}) }, signal)
-    : await upstream("/status", { depositAddress, ...(depositMemo ? { depositMemo } : {}) }, signal);
+  const payload = depositInput
+    ? await upstream("deposit", () => OneClickService.submitDepositTx({ depositAddress,
+      txHash: depositInput.txHash, ...(depositMemo ? { memo: depositMemo } : {}) }), signal)
+    : await upstream("status", () => OneClickService.getExecutionStatus(depositAddress, depositMemo), signal);
   try {
     const response = upstreamStatusSchema.parse(payload);
     // /status also drops quoteWaitingTimeMs even though the original signature

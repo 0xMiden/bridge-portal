@@ -1,4 +1,5 @@
 import { generateKeyPairSync, sign } from "node:crypto";
+import { base58 } from "@scure/base";
 import { quoteHash, type QuoteResponse } from "@defuse-protocol/one-click-sdk-typescript";
 import { formatUnits } from "viem";
 import { nearRequest, nearRouteAssets } from "../src/bridge/providers/near/quote";
@@ -6,15 +7,7 @@ import type { NearQuoteResponse, NearInput, NearStatus } from "../src/bridge/pro
 
 // Synthetic service key lives only in tests. Production always uses the SDK's pinned key.
 const keys = generateKeyPairSync("ed25519");
-function base58(bytes: Uint8Array): string {
-  const alphabet = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
-  let value = BigInt(`0x${Buffer.from(bytes).toString("hex")}`);
-  let encoded = "";
-  while (value > 0n) { encoded = alphabet[Number(value % 58n)] + encoded; value /= 58n; }
-  for (const byte of bytes) { if (byte !== 0) break; encoded = "1" + encoded; }
-  return encoded;
-}
-export const testManagerKey = `ed25519:${base58(keys.publicKey.export({ type: "spki", format: "der" }).subarray(-32))}`;
+export const testManagerKey = `ed25519:${base58.encode(keys.publicKey.export({ type: "spki", format: "der" }).subarray(-32))}`;
 export const nearTestInput: NearInput = {
   routeId: "mainnet:near-miden-usdcx-to-base-usdc", mode: "send", amount: "5",
   midenAccount: "mm1aqu8zjdwvcgkeug5a67kpwmnsyv2qgp7_qr7qqq9wr6w",
@@ -32,7 +25,7 @@ export function signedNearQuote(input = nearTestInput, dry = false, patch: Parti
       timeEstimate: 24, ...(dry ? {} : { depositAddress: input.mode === "send"
         ? "mm1apu8zjdwvcgkeug5a67kpwmnsynr09mq_qr7qqq9wr6w" : "0x3333333333333333333333333333333333333333", deadline: request.deadline }), ...patch },
   };
-  response.signature = `ed25519:${base58(sign(null, Buffer.from(quoteHash(response as unknown as QuoteResponse)), keys.privateKey))}`;
+  response.signature = `ed25519:${base58.encode(sign(null, Buffer.from(quoteHash(response as unknown as QuoteResponse)), keys.privateKey))}`;
   return response;
 }
 export const nearTxHash = `0x${"ab".repeat(32)}`;
