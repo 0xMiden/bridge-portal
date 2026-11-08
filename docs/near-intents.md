@@ -267,6 +267,11 @@ Validation on November 6, 2026:
 | Live catalog and 13 reverse dry quotes | All pinned identities matched; all 13 returned 201 with valid signatures |
 | Funded execution | User-initiated Miden → Ethereum and Ethereum → Miden ETH transfers confirmed; remaining release checks are outstanding |
 
+Validation refreshed on November 8, 2026: all 932 Vitest tests passed with
+coverage, along with configuration, TypeScript, lint, WASM-size and USDCx-note
+checks. The browser, Cloudflare build and live-transfer results above are from
+November 6.
+
 References: [1Click signatures](https://docs.near-intents.org/integration/distribution-channels/1click-api/verify-quote-signature),
 [SDK](https://docs.near-intents.org/integration/distribution-channels/1click-api/sdk),
 [status](https://docs.near-intents.org/api-reference/oneclick/check-swap-execution-status),
