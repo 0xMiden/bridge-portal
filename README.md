@@ -19,10 +19,8 @@ Architecture decisions are recorded under [docs/decisions/](docs/decisions/) —
 e.g. [why we ship single-thread WASM without cross-origin isolation
 (no COOP/COEP)](docs/decisions/wasm-threading-coop-coep.md).
 
-The default-off NEAR Intents rollout adds 13 Miden ↔ EVM pairs (26 routes). See
-[the NEAR integration and release checks](docs/near-intents.md) for its server-only
-credential, independent visibility/execution switches, recovery behavior and
-the remaining funded validation required before production enablement.
+NEAR Intents supports 13 Miden ↔ EVM pairs (26 routes), disabled by default.
+Configure the NEAR variables below to enable it after funded route validation.
 
 ## Prerequisites
 
@@ -67,6 +65,9 @@ automatically and require no wallet credentials. In brief:
 | Var | Scope | Purpose |
 | --- | --- | --- |
 | `BRIDGE_API_BASE` | server | Proxy target for `/api/bridge/*`. |
+| `NEAR_API_KEY` | server | NEAR 1Click partner credential; never expose it to the client. |
+| `NEAR_TRANSFERS_ENABLED` | server | Set to `true` to permit new NEAR transfers. Pausing preserves receipt tracking. |
+| `NEXT_PUBLIC_NEAR_ENABLED` | client | Set to `true` at build time to expose NEAR routes. |
 | `ETHEREUM_RPC_URL` | server | Ethereum mainnet RPC. |
 | `ARC_MAINNET_RPC_URL` | server | Arc mainnet RPC. |
 | `BASE_RPC_URL` | server | Base mainnet RPC. |
