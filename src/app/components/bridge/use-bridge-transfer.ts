@@ -11,6 +11,7 @@ import { useActivityStore } from "../ActivityProvider";
 import { useLockNetworkSelection } from "../NetworkProvider";
 import { useBridgeQuote } from "./use-bridge-quote";
 import type { BridgeWallets } from "./use-bridge-wallets";
+import { useFastWithdrawal } from "./use-fast-withdrawal";
 
 export interface ReviewedTransfer {
   route: BridgeRoute;
@@ -33,7 +34,8 @@ export function useBridgeTransfer(draft: { route: BridgeRoute; amount: string },
   const review = state.status === "editing" ? undefined : state.review;
   const { route, amount } = draft;
   const quote = useBridgeQuote(route, amount, wallets, review);
-  const isSubmitting = state.status === "submitting";
+  const withdrawal = useFastWithdrawal(route, wallets);
+  const isSubmitting = state.status === "submitting" || withdrawal.pending;
   const { evmAddress, midenAccount } = wallets.accounts;
   const walletsChanged = Boolean(review && (review.accounts.midenAccount !== midenAccount ||
     review.accounts.evmAddress.toLowerCase() !== evmAddress.toLowerCase()));
@@ -43,12 +45,12 @@ export function useBridgeTransfer(draft: { route: BridgeRoute; amount: string },
     destinationConnected: Boolean(route.mode === "receive" ? midenAccount : evmAddress),
     insufficientBalance: quote.insufficientBalance,
     quoteLoading: quote.providers.loading && !quote.live,
-    isSubmitting, submitPhase: isSubmitting ? state.phase : "", evmNetworkLabel: wallets.evm.network.name,
+    isSubmitting, submitPhase: state.status === "submitting" ? state.phase : "", evmNetworkLabel: wallets.evm.network.name,
   });
   const cta = action.action === "review" ? {
     ...action,
     label: quote.live ? "Review transfer" : "No quotes available",
-    disabled: !quote.live,
+    disabled: !quote.live || withdrawal.blocked,
     opensReview: Boolean(quote.live),
   } : action;
 
@@ -62,6 +64,7 @@ export function useBridgeTransfer(draft: { route: BridgeRoute; amount: string },
 
   function openReview() {
     if (state.status !== "editing") return;
+    if (withdrawal.blocked) return;
     try { validateTransferAmount(route, amount); }
     catch (error) { setError(errorMessage(error)); return; }
     if (quote.capBlocked) {
@@ -92,11 +95,12 @@ export function useBridgeTransfer(draft: { route: BridgeRoute; amount: string },
       return;
     }
     const reviewed = state.review;
-    setState({ status: "editing", error: "" });
+    setState({ status: "submitting", review: reviewed, phase: "Checking withdrawal status…", error: "" });
     wallets.setError("");
     const midenAsset = wallets.miden.balance.balance;
     const unlockNetworkSelection = lockNetworkSelection();
     try {
+      await withdrawal.verify();
       await submitBridgeTransfer({
         routeId: reviewed.route.id, environment, amount: reviewed.amount, quote: reviewed.quote,
         ...reviewed.accounts,
@@ -114,7 +118,10 @@ export function useBridgeTransfer(draft: { route: BridgeRoute; amount: string },
         onPhaseChange: phase => setState(current => current.status === "submitting" ? { ...current, phase } : current),
         activities, navigate: path => router.push(path),
       });
+    } catch (error) {
+      setError(errorMessage(error));
     } finally {
+      setState(current => current.status === "submitting" ? { status: "editing", error: current.error } : current);
       unlockNetworkSelection();
     }
   }
@@ -125,8 +132,14 @@ export function useBridgeTransfer(draft: { route: BridgeRoute; amount: string },
     catch (error) { setError(errorMessage(error)); }
   }
 
+  async function disableWithdrawal() {
+    if (!await withdrawal.disable()) return;
+    setState({ status: "editing", error: "" });
+    await quote.providers.refetch();
+  }
+
   return {
-    quote, cta, error: state.error, isSubmitting, walletsChanged,
+    quote, cta, error: state.error, isSubmitting, walletsChanged, withdrawal, disableWithdrawal,
     review: state.status === "reviewing" ? state.review : undefined,
     openReview, cancelReview, confirmReview, retryBalanceCap, clearError: () => setError(""),
   };
