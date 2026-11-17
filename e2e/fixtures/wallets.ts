@@ -5,7 +5,7 @@ export const EVM_ADDRESS = "0xE2E0000000000000000000000000000000000001";
 export const MIDEN_ADDRESS = "mtst1aqk5t00kapdcnq2yyf77dz6xcysswce0_qr7qqq9wr6w";
 const MAINNET_MIDEN_ADDRESS = "mm1aqu8zjdwvcgkeug5a67kpwmnsyv2qgp7";
 export const SOURCE_TX = `0x${"ab".repeat(32)}`;
-export type WalletRequest = { wallet: "evm" | "miden"; method: string; params: unknown[]; chainId?: string };
+export type WalletRequest = { wallet: "evm" | "miden" | "bitcoin"; method: string; params: unknown[]; chainId?: string };
 type Response = { result: unknown } | { error: { message: string; code?: number } };
 type Handler = (request: WalletRequest) => Response | Promise<Response>;
 const handlers = new WeakMap<Page, Handler>();
@@ -30,13 +30,13 @@ export async function walletRequests(page: Page) {
   return page.evaluate(() => window.testWallets.requests);
 }
 
-export async function installWallets(page: Page) {
+export async function installWallets(page: Page, options: { mainnetAssets?: { faucetId: string; amount: string }[] } = {}) {
   await page.exposeFunction("respondToWallet", (request: WalletRequest) => {
     const handler = handlers.get(page);
     if (!handler) throw new Error(`Unexpected ${request.wallet} wallet request: ${request.method}`);
     return handler(request);
   });
-  await page.addInitScript(({ evm, miden, mainnet }) => {
+  await page.addInitScript(({ evm, miden, mainnet, mainnetAssets }) => {
     const requests: WalletRequest[] = [];
     const call = async (wallet: WalletRequest["wallet"], method: string, params: unknown[]) => {
       const request = { wallet, method, params, ...(wallet === "evm" ? { chainId } : {}) };
@@ -55,7 +55,7 @@ export async function installWallets(page: Page) {
       disconnect: async () => { extension.address = undefined; },
       on: (event: string, callback: () => void) => { if (event === "accountChange") midenListeners.add(callback); },
       off: (event: string, callback: () => void) => { if (event === "accountChange") midenListeners.delete(callback); },
-      requestAssets: async () => ({ assets: extension.address !== miden ? [] : [
+      requestAssets: async () => ({ assets: extension.address === mainnet ? mainnetAssets : extension.address !== miden ? [] : [
         { faucetId: "0x7c6d1dc7fb7045913d524bbef017f5", amount: "10000000" },
         { faucetId: "0x5b043dcb48d5721106f7a1ceb2b804", amount: "1000000" },
       ] }),
@@ -102,5 +102,5 @@ export async function installWallets(page: Page) {
     } }));
     window.addEventListener("eip6963:requestProvider", announce);
     announce();
-  }, { evm: EVM_ADDRESS, miden: MIDEN_ADDRESS, mainnet: MAINNET_MIDEN_ADDRESS });
+  }, { evm: EVM_ADDRESS, miden: MIDEN_ADDRESS, mainnet: MAINNET_MIDEN_ADDRESS, mainnetAssets: options.mainnetAssets ?? [] });
 }
