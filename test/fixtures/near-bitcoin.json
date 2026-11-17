@@ -87,6 +87,52 @@
       "signature": "ed25519:9K6RUHojqxLV1j4NZ6vGKxv8APPtjKEejcGZoWFQgN3KUvxMiHjm7x2JkTbLZGrEpgAjDjKFMhDorGpRMwPkzmn",
       "timestamp": "2026-11-16T11:31:37.262Z",
       "correlationId": "dd48c5e3-b827-448c-a293-9e6f2d1d614a"
+    },
+    "legacy": {
+      "quote": {
+        "amountIn": "100000",
+        "amountInFormatted": "0.001",
+        "amountInUsd": "74.250000000000",
+        "minAmountIn": "100000",
+        "amountOut": "98248",
+        "amountOutFormatted": "0.00098248",
+        "amountOutUsd": "72.949140000000",
+        "minAmountOut": "97265",
+        "timeEstimate": 810,
+        "refundFee": "1900",
+        "withdrawFee": "1500",
+        "deadline": "2026-11-13T13:22:31.374Z",
+        "timeWhenInactive": "2026-11-13T13:22:31.374Z",
+        "depositAddress": "bc1qh7x9j3emjywhhkt9h8cg6jra809v454xrmlpdu"
+      },
+      "quoteRequest": {
+        "dry": false,
+        "depositMode": "SIMPLE",
+        "swapType": "EXACT_INPUT",
+        "slippageTolerance": 100,
+        "originAsset": "1cs_v1:btc:native:coin",
+        "depositType": "ORIGIN_CHAIN",
+        "destinationAsset": "nep141:miden-0x3084d3c389ececd15fda9770d18c8a.omft.near",
+        "amount": "100000",
+        "refundTo": "1BoatSLRHtKNngkdXEeobR76b53LETtpyT",
+        "refundType": "ORIGIN_CHAIN",
+        "recipient": "mm1aqu8zjdwvcgkeug5a67kpwmnsyv2qgp7",
+        "recipientType": "DESTINATION_CHAIN",
+        "deadline": "2026-11-10T13:22:31.374Z",
+        "confidentiality": "basic",
+        "quoteWaitingTimeMs": 0,
+        "insured": false,
+        "appFees": [
+          {
+            "recipient": "2238fd089f1c92b206c218cd16b8676cb98964e0d50f8ab729c6396a81e07805",
+            "fee": 20,
+            "limitOrderId": null
+          }
+        ]
+      },
+      "signature": "ed25519:3Q63wWB3GiaxwPp6sJYJK9uqfoLYsmGXvjZ5sg44S9fdXjdvSwhPmVMrDKztoC8vvKmuLAbA3Zxgq8VZAUUbrFvY",
+      "timestamp": "2026-11-10T12:22:31.433Z",
+      "correlationId": "dce7d0d0-4b9c-49a6-89c6-3eb95a8e11b1"
     }
   },
   "send": {
@@ -177,6 +223,52 @@
       "signature": "ed25519:5hq76zdWqd3Z3g34xH5F5MDBFdk4MzmSx2hspYQ57Bn7Xzr5DX2jMsQwTHYJVVWewfXvm4JpCZo147gnjVgmPNC1",
       "timestamp": "2026-11-16T11:31:34.332Z",
       "correlationId": "e61a8e27-aef8-4017-9745-f0afb0a4803d"
+    },
+    "legacy": {
+      "quote": {
+        "amountIn": "100000",
+        "amountInFormatted": "0.001",
+        "amountInUsd": "74.250000000000",
+        "minAmountIn": "100000",
+        "amountOut": "97848",
+        "amountOutFormatted": "0.00097848",
+        "amountOutUsd": "72.652140000000",
+        "minAmountOut": "96869",
+        "timeEstimate": 470,
+        "refundFee": "1500",
+        "withdrawFee": "1900",
+        "deadline": "2026-11-13T12:32:29.550Z",
+        "timeWhenInactive": "2026-11-13T12:32:29.550Z",
+        "depositAddress": "mm1aqelums5ts94qytjxvkretlmpspulgly_qr7qqq9wr6w"
+      },
+      "quoteRequest": {
+        "dry": false,
+        "depositMode": "SIMPLE",
+        "swapType": "EXACT_INPUT",
+        "slippageTolerance": 100,
+        "originAsset": "nep141:miden-0x3084d3c389ececd15fda9770d18c8a.omft.near",
+        "depositType": "ORIGIN_CHAIN",
+        "destinationAsset": "1cs_v1:btc:native:coin",
+        "amount": "100000",
+        "refundTo": "mm1aqu8zjdwvcgkeug5a67kpwmnsyv2qgp7",
+        "refundType": "ORIGIN_CHAIN",
+        "recipient": "1BoatSLRHtKNngkdXEeobR76b53LETtpyT",
+        "recipientType": "DESTINATION_CHAIN",
+        "deadline": "2026-11-10T12:32:29.550Z",
+        "confidentiality": "basic",
+        "quoteWaitingTimeMs": 0,
+        "insured": false,
+        "appFees": [
+          {
+            "recipient": "2238fd089f1c92b206c218cd16b8676cb98964e0d50f8ab729c6396a81e07805",
+            "fee": 20,
+            "limitOrderId": null
+          }
+        ]
+      },
+      "signature": "ed25519:56X25sHWEaCNcspd19EX7MBvn3XZY3szxErcj2tKSKedfkiqFSJPmc6feaDmZJLxcyVzpXYkfvpGLuambSm7jgq1",
+      "timestamp": "2026-11-10T12:22:29.625Z",
+      "correlationId": "191110dd-27a4-4046-97e6-cf669b373242"
     }
   }
 }

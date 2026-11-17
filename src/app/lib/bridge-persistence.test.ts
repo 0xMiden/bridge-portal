@@ -3,6 +3,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createActivity } from "./bridge-presentation";
 import { activityRoute, findBridgeRoute, routesForEnvironment } from "../../bridge/core/routes";
 import { currentBridgeConfig } from "../../config/bridge-config";
+import bitcoinQuotes from "../../../test/fixtures/near-bitcoin.json";
+import { nearQuoteSchema } from "../../bridge/providers/near/schema";
 import {
   activityPersistence, activityStorageKey, loadStoredActivities, loadStoredMode, loadStoredRoute, loadStoredRouteId,
   saveActivities, saveStoredMode, saveStoredRoute,
@@ -64,6 +66,27 @@ it("ignores old history and malformed receipts without guessing a deployment", (
   malformed.routeSnapshot!.recovery.document["bridge-providers"].agglayer.indexerUrl = "http://localhost/private";
   saveActivities([malformed, { ...activity, routeSnapshot: undefined }, { ...activity, mode: "receive" }, activity]);
   expect(loadStoredActivities()).toEqual([activity]);
+});
+
+it.each([
+  ["send", "mainnet:near-miden-wbtc-to-bitcoin-btc", bitcoinQuotes.send.legacy],
+  ["receive", "mainnet:near-bitcoin-btc-to-miden-wbtc", bitcoinQuotes.receive.legacy],
+] as const)("keeps the original signed Bitcoin %s receipt and legacy route snapshot after the ID migration", (mode, routeId, quote) => {
+  const historical = structuredClone(findBridgeRoute(routeId)!);
+  const pair = historical.recovery.near!.routes.find(pair => pair.id === routeId || pair.receiveId === routeId)!;
+  pair.source.assetId = mode === "send" ? quote.quoteRequest.originAsset : quote.quoteRequest.destinationAsset;
+  const receipt = createActivity(historical, "0.001", { id: `legacy-bitcoin-${mode}`, near: {
+    quote: nearQuoteSchema.parse(quote), submission: mode === "send" ? "confirmed" : "awaiting_deposit", status: "PENDING_DEPOSIT", notification: "pending",
+  } });
+  const legacy = JSON.stringify([receipt], (_key, value) =>
+    value?.network === "bitcoin" && value.kind === "native" ? { ...value, kind: "bitcoin" } : value);
+  storage.set(activityStorageKey, legacy);
+  store.sync();
+  store.patch(receipt.id, { near: { ...receipt.near!, status: "KNOWN_DEPOSIT_TX" } });
+  const [restored] = loadStoredActivities("mainnet");
+  expect(restored).toMatchObject({ id: receipt.id, near: { quote, status: "KNOWN_DEPOSIT_TX" } });
+  expect(activityRoute(restored)?.recovery).toEqual(historical.recovery);
+  expect(activityRoute(restored)?.recovery).not.toEqual(findBridgeRoute(routeId)!.recovery);
 });
 
 it.each([null, "", "null", "{}"])("returns no receipts for absent or non-array data: %s", raw => {

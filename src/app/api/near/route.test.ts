@@ -8,6 +8,8 @@ import { POST as deposit } from "./deposit/submit/route";
 import { nearTestInput, nearReceiveInput, bitcoinReceiveInput, nearQuoteFixture, nearStatus, nearTxHash, nearDestinationHash } from "../../../../test/near-quotes";
 import { verifyQuoteSignature } from "@defuse-protocol/one-click-sdk-typescript";
 import * as configs from "../../../config/bridge-config";
+import bitcoinQuotes from "../../../../test/fixtures/near-bitcoin.json";
+import { nearQuoteSchema } from "../../../bridge/providers/near/schema";
 
 vi.mock("@defuse-protocol/one-click-sdk-typescript", async importOriginal => {
   const actual = await importOriginal<typeof import("@defuse-protocol/one-click-sdk-typescript")>();
@@ -244,6 +246,33 @@ it.each(["receive", "send"] as const)("prepares Bitcoin %s with current asset ID
     recipient: mode === "receive" ? input.midenAccount : input.externalAddress,
     deadline: new Date(Date.now() + (mode === "receive" ? 3_600_000 : 600_000)).toISOString(),
   });
+});
+
+it.each([
+  ["mainnet:near-bitcoin-btc-to-miden-wbtc", bitcoinQuotes.receive.legacy, "ab".repeat(32)],
+  ["mainnet:near-miden-wbtc-to-bitcoin-btc", bitcoinQuotes.send.legacy, nearTxHash],
+] as const)("tracks and notifies an expired legacy Bitcoin receipt for %s with its original signed terms", async (routeId, quote, txHash) => {
+  const sdk = await vi.importActual<typeof import("@defuse-protocol/one-click-sdk-typescript")>("@defuse-protocol/one-click-sdk-typescript");
+  vi.mocked(verifyQuoteSignature).mockImplementation(sdk.verifyQuoteSignature);
+  vi.useFakeTimers(); vi.setSystemTime(Date.parse(quote.timestamp) + 7 * 86_400_000);
+  fetcher.mockImplementation(async () => Response.json({ ...nearStatus(nearQuoteSchema.parse(quote), "KNOWN_DEPOSIT_TX"),
+    swapDetails: { originChainTxHashes: [{ hash: txHash }], destinationChainTxHashes: [] } }));
+  const response = await status(request({ routeId, quote }));
+  expect(response.status).toBe(200);
+  expect((await response.json()).quoteResponse).toEqual(quote);
+  expect(new URL(outgoing(...fetcher.mock.calls[0]).url).searchParams.get("depositAddress")).toBe(quote.quote.depositAddress);
+  expect((await deposit(request({ routeId, quote, txHash }))).status).toBe(200);
+  expect(await outgoing(...fetcher.mock.calls[1]).json()).toEqual({ depositAddress: quote.quote.depositAddress, txHash });
+});
+
+it.each([
+  { destinationAsset: "nep141:miden-0x419f8f4bff72959132aa7cea15a4c1.omft.near" },
+  { originAsset: "nep141:btc.omft.near" },
+])("rejects unsupported legacy Bitcoin receipt aliases even after signature verification: %j", async patch => {
+  const quote = nearQuoteFixture(bitcoinReceiveInput);
+  Object.assign(quote.quoteRequest, patch);
+  expect((await status(request({ routeId: bitcoinReceiveInput.routeId, quote }))).status).toBe(400);
+  expect(fetcher).not.toHaveBeenCalled();
 });
 
 it.each([

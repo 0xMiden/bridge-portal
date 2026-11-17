@@ -77,6 +77,13 @@ export function verifyNearQuote(value: unknown, input: NearInput, dry: boolean, 
   // The SDK pins the official manager public key; never accept one from a caller.
   if (!verifyQuoteSignature(response as unknown as QuoteResponse)) throw new Error("Invalid NEAR quote signature.");
   const expected = nearRequest(nearInputSchema.parse(input), dry, response.quoteRequest.deadline);
+  const pair = nearPair(input.routeId);
+  // Old Bitcoin receipts used the original 1Click alias for the same Miden faucet.
+  const midenLeg = input.mode === "send" ? "originAsset" : "destinationAsset";
+  if (!requireLive && !dry && pair.destination.network === "bitcoin" &&
+      response.quoteRequest[midenLeg] === `nep141:miden-${pair.source.faucetId}.omft.near`) {
+    expected[midenLeg] = response.quoteRequest[midenLeg];
+  }
   for (const [key, value] of Object.entries(expected)) {
     // Relay wait controls latency, not transfer terms. Its original value is
     // signature-verified above; saved quotes may predate the current policy.

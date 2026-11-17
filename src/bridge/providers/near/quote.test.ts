@@ -50,3 +50,21 @@ it.each([
     expect(verifyNearQuote(fixture, input, false, false)).toEqual(verified);
   }
 });
+
+it.each([
+  ["receive", bitcoinQuotes.receive.legacy, "mainnet:near-bitcoin-btc-to-miden-wbtc"],
+  ["send", bitcoinQuotes.send.legacy, "mainnet:near-miden-wbtc-to-bitcoin-btc"],
+] as const)("recovers signed legacy Bitcoin %s terms without rewriting or reusing them for a new transfer", (mode, fixture, routeId) => {
+  vi.useFakeTimers(); vi.setSystemTime(new Date(fixture.timestamp));
+  const input = nearInputSchema.parse({ routeId, mode, amount: "0.001",
+    midenAccount: mode === "receive" ? fixture.quoteRequest.recipient : fixture.quoteRequest.refundTo,
+    externalAddress: mode === "send" ? fixture.quoteRequest.recipient : fixture.quoteRequest.refundTo });
+  // Even an unexpired old quote cannot be used to start a new transfer.
+  expect(() => verifyNearQuote(fixture, input, false)).toThrow(/match/);
+  vi.advanceTimersByTime(7 * 86_400_000);
+  const recovered = verifyNearQuote(fixture, input, false, false);
+  expect(recovered).toEqual(fixture);
+  const rewritten = structuredClone(fixture);
+  rewritten.quoteRequest[mode === "send" ? "originAsset" : "destinationAsset"] = "1cs_v1:miden:ft:0x3084d3c389ececd15fda9770d18c8a";
+  expect(() => verifyNearQuote(rewritten, input, false, false)).toThrow(/signature/);
+});
