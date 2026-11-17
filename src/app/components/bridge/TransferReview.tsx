@@ -53,7 +53,7 @@ export function TransferReview({ review, quote, walletsChanged, onCancel, onConf
           <div className="preflight-path gap-7 mb-3 grid">
             {(["source", "destination"] as const).map(side => (
               <ReviewAccount key={side} side={side} asset={route[side]}
-                account={route[side].kind === "miden" ? accounts.midenAccount : accounts.evmAddress} />
+                account={route[side].kind === "miden" ? accounts.midenAccount : accounts.externalAddress} />
             ))}
           </div>
           <DetailsList items={[

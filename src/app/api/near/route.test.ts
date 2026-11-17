@@ -34,7 +34,8 @@ it("pins exact input, source decimals and chain direction while keeping the API 
     return Response.json(nearQuoteFixture(nearTestInput, true, response.quote));
   });
   vi.useFakeTimers();
-  const response = await preview(request(nearTestInput));
+  const { externalAddress, ...legacyInput } = nearTestInput;
+  const response = await preview(request({ ...legacyInput, evmAddress: externalAddress }));
   expect(response.status).toBe(200);
   expect(response.headers.get("cache-control")).toBe("no-store");
   expect(await response.text()).not.toContain("private-partner-key");
@@ -46,7 +47,7 @@ it("pins exact input, source decimals and chain direction while keeping the API 
 
 it.each([
   { mode: "receive" }, { routeId: "mainnet:near-miden-usdcx-to-arc-usdc" }, { amount: "5.0000001" },
-  { amount: "1e6" }, { amount: "0" }, { midenAccount: "mtst1wrongnetwork" }, { evmAddress: "0x0" },
+  { amount: "1e6" }, { amount: "0" }, { midenAccount: "mtst1wrongnetwork" }, { externalAddress: "0x0" },
   { midenAccount: `${nearTestInput.midenAccount.split("_")[0]}_qqqqqq` },
   { originAsset: "arbitrary" }, { upstream: "https://attacker.example" },
 ])("rejects invalid portal requests before upstream I/O: %j", async patch => {
@@ -76,7 +77,7 @@ it.each([
   fetcher.mockResolvedValueOnce(Response.json(nearQuoteFixture(input, true)));
   expect((await preview(request(input))).status).toBe(200);
   expect(await outgoing(...fetcher.mock.calls[0]).json()).toMatchObject({
-    amount: units, originAsset, destinationAsset, refundTo: input.evmAddress, recipient: input.midenAccount,
+    amount: units, originAsset, destinationAsset, refundTo: input.externalAddress, recipient: input.midenAccount,
     depositType: "ORIGIN_CHAIN", recipientType: "DESTINATION_CHAIN", refundType: "ORIGIN_CHAIN", confidentiality: "basic",
   });
 });

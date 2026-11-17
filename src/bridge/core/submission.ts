@@ -1,3 +1,4 @@
+import type { TransferAccounts } from "./accounts";
 import type { TransferQuote } from "./quote";
 import type { MessageSignerWalletAdapter } from "@miden-sdk/miden-wallet-adapter-base";
 import type { ResolvedMidenAsset } from "../miden-balances";
@@ -6,7 +7,7 @@ import type { Activity } from "./models";
 import type { BridgeRoute } from "./routes";
 import type { ActivityStore } from "../activity";
 
-export interface TransferSubmission {
+export interface TransferSubmission extends TransferAccounts {
   environment?: import("../../config/environment").BridgeEnvironment;
   routeId: string;
   quote?: TransferQuote;
@@ -27,9 +28,6 @@ export interface TransferSubmission {
     requestAssets?: MessageSignerWalletAdapter["requestAssets"];
   };
   midenAsset: ResolvedMidenAsset | null;
-  /** Resolved directional accounts shared by quoting and submission. */
-  evmAddress: string;
-  midenAccount: string;
 }
 
 export interface SubmissionEffects {

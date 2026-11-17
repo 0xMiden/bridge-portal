@@ -40,7 +40,7 @@ export function useBridgeWallets(route: BridgeRoute) {
   }
 
   return {
-    accounts: { evmAddress, midenAccount },
+    accounts: { externalAddress: evmAddress, midenAccount },
     evm: {
       connected: Boolean(evmAddress), address: evmAddress, provider: walletProvider,
       network: evmNetworks[evmToken?.network ?? "sepolia"], info: walletInfo,

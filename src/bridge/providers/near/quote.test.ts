@@ -5,7 +5,7 @@ import { nearQuoteResult, nearRequest, verifyNearQuote } from "./quote";
 
 // Real service signature over a dry quote requested with test accounts.
 const input = nearInputSchema.parse({ routeId: "mainnet:near-miden-eth-to-ethereum-eth", mode: "send", amount: "0.002",
-  midenAccount: signedPreview.quoteRequest.refundTo, evmAddress: signedPreview.quoteRequest.recipient });
+  midenAccount: signedPreview.quoteRequest.refundTo, externalAddress: signedPreview.quoteRequest.recipient });
 afterEach(() => { vi.useRealTimers(); });
 
 it("verifies a real 1Click signature and derives output/minimum with integer token units", () => {
@@ -18,7 +18,7 @@ it("verifies a real 1Click signature and derives output/minimum with integer tok
 
 it("rejects tampered signed terms, mismatched accounts/routes and an expired preview", () => {
   vi.useFakeTimers(); vi.setSystemTime(new Date(signedPreview.timestamp));
-  for (const patch of [ { amount: "6" }, { evmAddress: "0x2222222222222222222222222222222222222222" },
+  for (const patch of [ { amount: "6" }, { externalAddress: "0x2222222222222222222222222222222222222222" },
     { routeId: "mainnet:near-miden-eth-to-base-eth" }, { midenAccount: "mm1apu8zjdwvcgkeug5a67kpwmnsynr09mq_qr7qqq9wr6w" } ]) {
     expect(() => verifyNearQuote(signedPreview, { ...input, ...patch }, true)).toThrow();
   }

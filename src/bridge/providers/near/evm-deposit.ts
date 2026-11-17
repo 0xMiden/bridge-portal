@@ -15,7 +15,7 @@ export async function submitNearEvmDeposit(context: SubmissionContext, quote: Ne
   const { route, input, phase } = context;
   const asset = route.source;
   if (route.mode !== "receive" || !isEvmAsset(asset) || !input.evmWallet.provider) throw new Error("Connect the source EVM wallet.");
-  const account = evmAddressSchema.parse(input.evmAddress);
+  const account = evmAddressSchema.parse(input.externalAddress);
   const depositAddress = evmAddressSchema.parse(quote.quote.depositAddress);
   const units = BigInt(quote.quote.amountIn);
   const chain = evmNetworks[asset.network];
@@ -46,7 +46,7 @@ export async function submitNearEvmDeposit(context: SubmissionContext, quote: Ne
   verifyNearQuote(quote, binding, false);
   const operation = { quote, networkFee: `${formatUnits(fee, chain.nativeCurrency.decimals)} ${chain.nativeCurrency.symbol}`,
     submission: "prepared" as const, status: "PENDING_DEPOSIT" as const, notification: "pending" as const };
-  context.persist!({ id, near: operation, receivedAmount: input.quote!.received, evmAddress: input.evmAddress,
+  context.persist!({ id, near: operation, receivedAmount: input.quote!.received, evmAddress: input.externalAddress,
     destination: input.midenAccount, midenAccount: input.midenAccount, midenAccountHex: normalizeMidenAccountHex(input.midenAccount),
     eta: `About ${quote.quote.timeEstimate} seconds` });
   context.persist!({ near: { ...operation, submission: "attempted" } });

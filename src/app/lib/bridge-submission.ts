@@ -1,3 +1,4 @@
+import { sameTransferAccounts } from "../../bridge/core/accounts";
 import { configKey } from "../../config/bridge-config";
 import { assertMidenAccountNetwork } from "../../wallets/miden/network";
 import { validateTransferAmount } from "../../bridge/core/rules";
@@ -67,7 +68,7 @@ export async function submitBridgeTransfer(
       return;
     }
     if (input.midenAccount !== input.midenWallet.address ||
-        input.evmAddress.toLowerCase() !== input.evmWallet.address.toLowerCase()) {
+        input.externalAddress.toLowerCase() !== input.evmWallet.address.toLowerCase()) {
       throw new Error("Your connected wallet changed. Review the transfer again.");
     }
     const { flows } = await bridgeProviders[route.provider].load();
@@ -79,8 +80,7 @@ export async function submitBridgeTransfer(
         quote.request.routeId !== route.id ||
         configKey(quote.request.recovery) !== configKey(route.recovery) ||
         quote.request.amount !== input.amount ||
-        quote.request.midenAccount !== input.midenAccount ||
-        quote.request.evmAddress.toLowerCase() !== input.evmAddress.toLowerCase()
+        !sameTransferAccounts(route, quote.request, input)
       ) {
         throw new Error("Refresh and review the quote before sending.");
       }

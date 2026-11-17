@@ -91,7 +91,7 @@ export const flows: ProviderFlows = {
       const wallet = input.midenWallet;
       if (!wallet.requestTransaction || !wallet.waitForTransaction || !wallet.address)
         throw new Error("Connect your Bread wallet to sign the withdrawal.");
-      const recipient = input.evmAddress;
+      const recipient = input.externalAddress;
       phase("Checking withdrawal and preparing burn note…");
       const reviewed = input.quote?.kind === "withdrawal" ? input.quote.authorization : undefined;
       if (

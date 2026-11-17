@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { isQuoteReviewable, type TransferQuote } from "../../../bridge/core/quote";
 import type { BridgeRoute } from "../../../bridge/core/routes";
+import { sameTransferAccounts } from "../../../bridge/core/accounts";
 import { validateTransferAmount } from "../../../bridge/core/rules";
 import type { BridgeEnvironment } from "../../../config/environment";
 import { deriveCtaState } from "../../lib/bridge-presentation";
@@ -36,13 +37,12 @@ export function useBridgeTransfer(draft: { route: BridgeRoute; amount: string },
   const { route, amount } = draft;
   const quote = useBridgeQuote(route, amount, wallets, review);
   const isSubmitting = state.status === "submitting" || state.status === "preparing";
-  const { evmAddress, midenAccount } = wallets.accounts;
-  const walletsChanged = Boolean(review && (review.accounts.midenAccount !== midenAccount ||
-    review.accounts.evmAddress.toLowerCase() !== evmAddress.toLowerCase()));
+  const { midenAccount, externalAddress } = wallets.accounts;
+  const walletsChanged = Boolean(review && !sameTransferAccounts(route, review.accounts, wallets.accounts));
   const action = deriveCtaState({
     mode: route.mode, amount, sourceTokenSymbol: route.source.symbol,
-    sourceConnected: Boolean(route.mode === "receive" ? evmAddress : midenAccount),
-    destinationConnected: Boolean(route.mode === "receive" ? midenAccount : evmAddress),
+    sourceConnected: Boolean(route.mode === "receive" ? externalAddress : midenAccount),
+    destinationConnected: Boolean(route.mode === "receive" ? midenAccount : externalAddress),
     insufficientBalance: quote.insufficientBalance,
     quoteLoading: quote.providers.loading && !quote.live,
     isSubmitting, submitPhase: state.status === "submitting" ? state.phase : state.status === "preparing" ? "Preparing quote…" : "", evmNetworkLabel: wallets.evm.network.name,
@@ -58,7 +58,7 @@ export function useBridgeTransfer(draft: { route: BridgeRoute; amount: string },
     if (Number(amount) > 0) preloadBridgeSubmission(route.provider);
   }, [amount, route.provider]);
 
-  useEffect(() => () => { preparing.current?.abort(); }, [route.id, amount, midenAccount, evmAddress]);
+  useEffect(() => () => { preparing.current?.abort(); }, [route.id, amount, midenAccount, externalAddress]);
 
   function setError(error: string) {
     setState(current => ({ ...current, error }));

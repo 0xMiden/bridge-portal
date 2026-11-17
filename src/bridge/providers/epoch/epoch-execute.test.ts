@@ -52,11 +52,11 @@ describe.each([
   async function setup() {
     const route = findBridgeRoute(routeId)!;
     const midenAccount = route.recovery.environment === "mainnet" ? "mm1recipient" : MIDEN;
-    const request = { route, amount: "1", midenAccount, evmAddress: SPONSOR };
+    const request = { route, amount: "1", midenAccount, externalAddress: SPONSOR };
     const getQuote = vi.spyOn(sdk, "getIntentQuote").mockResolvedValue(estimate(reviewed));
     const quote = await quoteTransfer(request, new AbortController().signal);
     const input: TransferSubmission = {
-      routeId, environment: route.recovery.environment, amount: "1", midenAccount, evmAddress: SPONSOR, quote: quote!,
+      routeId, environment: route.recovery.environment, amount: "1", midenAccount, externalAddress: SPONSOR, quote: quote!,
       insufficientBalance: false, evmBalance: "10 USDC", midenAsset: null,
       evmWallet: { connected: true, address: SPONSOR, provider: { request: vi.fn().mockResolvedValue(route.source.network === "polygon" ? "0x89" : "0xaa36a7") } },
       midenWallet: { connected: true, address: midenAccount, requestTransaction: vi.fn(), waitForTransaction: vi.fn() },

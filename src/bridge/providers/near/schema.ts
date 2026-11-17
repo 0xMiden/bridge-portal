@@ -14,7 +14,7 @@ export const nearInputSchema = z.strictObject({
   routeId: z.string().min(1).max(200), mode: z.enum(["send", "receive"]),
   amount: z.string().min(1).max(80),
   midenAccount: nearMidenAddress,
-  evmAddress: nearEvmAddress,
+  externalAddress: nearEvmAddress,
 });
 export type NearInput = z.infer<typeof nearInputSchema>;
 

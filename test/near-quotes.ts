@@ -5,7 +5,7 @@ import type { NearQuoteResponse, NearInput, NearStatus } from "../src/bridge/pro
 export const nearTestInput: NearInput = {
   routeId: "mainnet:near-miden-usdcx-to-base-usdc", mode: "send", amount: "5",
   midenAccount: "mm1aqu8zjdwvcgkeug5a67kpwmnsyv2qgp7_qr7qqq9wr6w",
-  evmAddress: "0x1111111111111111111111111111111111111111",
+  externalAddress: "0x1111111111111111111111111111111111111111",
 };
 export const nearReceiveInput: NearInput = { ...nearTestInput, routeId: "mainnet:near-base-usdc-to-miden-usdcx", mode: "receive" };
 // Flow tests stub signature verification. quote.test.ts verifies a real service-signed fixture.

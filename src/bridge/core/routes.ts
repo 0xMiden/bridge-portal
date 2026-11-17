@@ -15,6 +15,10 @@ export type BridgeRoute = {
   recovery: BridgeConfig;
 };
 
+export function externalAsset(route: Pick<BridgeRoute, "mode" | "source" | "destination">) {
+  return route.mode === "receive" ? route.source : route.destination;
+}
+
 function routesForConfig(config: BridgeConfig): readonly BridgeRoute[] {
   const { environment, document } = config;
   const existing = tokenRegistry[environment].flatMap(connection => {

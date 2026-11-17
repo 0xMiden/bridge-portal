@@ -17,7 +17,7 @@ export async function quoteTransfer(
         recovery: input.route.recovery,
         amount: input.amount,
         midenAccount: input.midenAccount,
-        evmAddress: input.evmAddress,
+        externalAddress: input.externalAddress,
       },
     }
   );

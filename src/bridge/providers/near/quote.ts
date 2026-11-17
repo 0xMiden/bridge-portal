@@ -41,8 +41,8 @@ export function nearRequest(input: NearInput, dry: boolean, deadline: string) {
     depositType: OneClickQuoteRequest.depositType.ORIGIN_CHAIN,
     recipientType: OneClickQuoteRequest.recipientType.DESTINATION_CHAIN,
     refundType: OneClickQuoteRequest.refundType.ORIGIN_CHAIN,
-    amount, recipient: pair.mode === "send" ? input.evmAddress : input.midenAccount,
-    refundTo: pair.mode === "send" ? input.midenAccount : input.evmAddress,
+    amount, recipient: pair.mode === "send" ? input.externalAddress : input.midenAccount,
+    refundTo: pair.mode === "send" ? input.midenAccount : input.externalAddress,
     confidentiality: OneClickQuoteRequest.confidentiality.BASIC, quoteWaitingTimeMs: 0, deadline,
   } satisfies OneClickQuoteRequest;
 }
@@ -82,7 +82,7 @@ export function verifyNearQuote(value: unknown, input: NearInput, dry: boolean, 
 
 export function nearInput(input: QuoteRequest): NearInput {
   return nearInputSchema.parse({ routeId: input.route.id, mode: input.route.mode, amount: input.amount,
-    midenAccount: input.midenAccount, evmAddress: input.evmAddress });
+    midenAccount: input.midenAccount, externalAddress: input.externalAddress });
 }
 
 export function nearQuoteResult(response: NearQuoteResponse, routeId: string): QuoteResult {
@@ -97,5 +97,5 @@ export function nearTrackingInput(routeId: string, quote: NearQuoteResponse): Ne
   const { mode, source } = nearRouteAssets(routeId);
   return nearInputSchema.parse({ routeId, mode, amount: formatUnits(BigInt(quote.quoteRequest.amount), source.decimals),
     midenAccount: mode === "send" ? quote.quoteRequest.refundTo : quote.quoteRequest.recipient,
-    evmAddress: mode === "send" ? quote.quoteRequest.recipient : quote.quoteRequest.refundTo });
+    externalAddress: mode === "send" ? quote.quoteRequest.recipient : quote.quoteRequest.refundTo });
 }

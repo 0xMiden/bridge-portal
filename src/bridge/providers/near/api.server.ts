@@ -1,5 +1,5 @@
 import { ApiError, OneClickService, OpenAPI, type CancelablePromise } from "@defuse-protocol/one-click-sdk-typescript";
-import { nearInputSchema, nearPrepareInputSchema, nearTrackingInputSchema, nearDepositInputSchema, nearStatusResponseSchema, nearQuoteSchema, nearCorrelationId } from "./schema";
+import { nearInputSchema, nearPrepareInputSchema, nearTrackingInputSchema, nearDepositInputSchema, nearStatusResponseSchema, nearQuoteSchema, nearCorrelationId, nearEvmAddress } from "./schema";
 import { nearRequest, verifyNearQuote, nearTrackingInput } from "./quote";
 import { currentBridgeConfig } from "../../../config/bridge-config";
 
@@ -86,6 +86,16 @@ async function quote(body: unknown, dry: boolean, signal: AbortSignal) {
   }
 }
 
+/** Accept requests from older open tabs. The strict input schema rejects multiple address fields. */
+function normalizeQuoteAccounts(body: unknown) {
+  if (!body || typeof body !== "object" || "externalAddress" in body) return body;
+  if ("evmAddress" in body) {
+    const { evmAddress, ...rest } = body;
+    return { ...rest, externalAddress: nearEvmAddress.parse(evmAddress) };
+  }
+  return body;
+}
+
 async function track(body: unknown, notify: boolean, signal: AbortSignal) {
   const depositInput = notify ? nearDepositInputSchema.parse(body) : undefined;
   const input = depositInput ?? nearTrackingInputSchema.parse(body);
@@ -123,10 +133,11 @@ async function track(body: unknown, notify: boolean, signal: AbortSignal) {
 export async function handleNearRequest(request: Request, operation: "quote" | "prepare" | "status" | "deposit") {
   const correlationId = crypto.randomUUID();
   try {
-    const body = await boundedJson(request).catch(() => { throw new NearApiError("Invalid NEAR request.", 400); });
+    let body = await boundedJson(request).catch(() => { throw new NearApiError("Invalid NEAR request.", 400); });
     // Validate before starting a network call, preserving 400 for caller errors.
     try {
       if (operation === "quote" || operation === "prepare") {
+        body = normalizeQuoteAccounts(body);
         const input = (operation === "prepare" ? nearPrepareInputSchema : nearInputSchema).parse(body);
         nearRequest(input, true, new Date().toISOString());
       } else {

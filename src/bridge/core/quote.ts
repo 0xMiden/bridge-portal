@@ -1,13 +1,12 @@
 import type { BridgeConfig } from "../../config/bridge-config";
 import type { BridgeRoute } from "./routes";
+import type { TransferAccounts } from "./accounts";
 import type { CctpQuote } from "../providers/xreserve/cctp-quote";
 import type { WithdrawalQuote } from "../providers/xreserve/withdrawal-quote";
 
-export type QuoteRequest = {
+export type QuoteRequest = TransferAccounts & {
   route: BridgeRoute;
   amount: string;
-  midenAccount: string;
-  evmAddress: string;
 };
 
 /** Review deadlines and provider authorizations have different validity rules. */

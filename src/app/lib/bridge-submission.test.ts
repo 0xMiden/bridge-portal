@@ -85,14 +85,14 @@ function setup(overrides: Partial<TransferSubmission> = {}) {
       waitForTransaction: vi.fn(),
     },
     midenAsset: { faucetId: "0x7c6d1dc7fb7045913d524bbef017f5", decimals: 8, amountRaw: 100_000_000n, symbol: "ETH" },
-    evmAddress: EVM_ADDRESS,
+    externalAddress: EVM_ADDRESS,
     midenAccount: MIDEN_ACCOUNT,
     ...overrides,
   };
   if (findBridgeRoute(input.routeId)?.provider === "epoch" && !("quote" in overrides)) {
     input.quote = {
       kind: "epoch", received: "0.12", validity: { kind: "time", expiresAt: Date.now() + 60_000 },
-      request: { recovery: findBridgeRoute(input.routeId)?.recovery, routeId: input.routeId, amount: input.amount, evmAddress: input.evmAddress, midenAccount: input.midenAccount },
+      request: { recovery: findBridgeRoute(input.routeId)?.recovery, routeId: input.routeId, amount: input.amount, externalAddress: input.externalAddress, midenAccount: input.midenAccount },
     };
   }
   const effects = {
@@ -123,7 +123,7 @@ function setupCctp() {
     routeId: route.id, amount: "1",
     quote: {
       kind: "cctp", received: "1", fee: "0.25", validity: { kind: "provider" }, authorization,
-      request: { recovery: route.recovery, routeId: route.id, amount: "1", evmAddress: EVM_ADDRESS, midenAccount: MIDEN_ACCOUNT },
+      request: { recovery: route.recovery, routeId: route.id, amount: "1", externalAddress: EVM_ADDRESS, midenAccount: MIDEN_ACCOUNT },
     },
   });
 }
@@ -193,8 +193,8 @@ describe("submission validation", () => {
   });
 
   it.each([
-    ...(["missing", "expired", "amount", "routeId", "recovery", "midenAccount", "evmAddress"] as const).map(change => ({ kind: "epoch", change })),
-    ...(["missing", "amount", "routeId", "recovery", "midenAccount", "evmAddress"] as const).map(change => ({ kind: "cctp", change })),
+    ...(["missing", "expired", "amount", "routeId", "recovery", "midenAccount", "externalAddress"] as const).map(change => ({ kind: "epoch", change })),
+    ...(["missing", "amount", "routeId", "recovery", "midenAccount", "externalAddress"] as const).map(change => ({ kind: "cctp", change })),
   ])(
     "requires another review when the $kind quote has changed $change", async ({ kind, change }) => {
       const { input, effects } = kind === "cctp" ? setupCctp() : setup();
@@ -217,7 +217,7 @@ describe("submission validation", () => {
     ["disconnected Miden source", { routeId: "epoch-test-usdc-to-sepolia", midenWallet: { connected: false, address: "" } }, /Connect your Bread wallet/],
     ["disconnected Miden destination with a stale address", { routeId: "agglayer-eth-to-miden", midenWallet: { connected: false, address: MIDEN_ACCOUNT } }, /Connect your Bread wallet/],
     ["Miden recipient differs from the connected wallet", { midenAccount: "0x4e6fb40fd2f6a55140df2c42dfb5b7" }, /wallet changed.*review/i],
-    ["EVM recipient differs from the connected wallet", { routeId: "epoch-test-usdc-to-sepolia", evmAddress: `0x${"22".repeat(20)}` }, /wallet changed.*review/i],
+    ["EVM recipient differs from the connected wallet", { routeId: "epoch-test-usdc-to-sepolia", externalAddress: `0x${"22".repeat(20)}` }, /wallet changed.*review/i],
   ] satisfies Array<[string, Partial<TransferSubmission>, RegExp]>)("rejects %s before signing or creating an activity", async (_name, overrides, message) => {
     const { input, effects, evmRequest } = setup(overrides);
     await submitBridgeTransfer(input, effects);
@@ -461,12 +461,12 @@ describe("USDCx withdrawal submission", () => {
   const reviewedQuote = () => ({
     kind: "withdrawal" as const, received: "1.9836", fee: "0.0164",
     validity: { kind: "time" as const, expiresAt: Date.now() + 60_000 }, authorization: estimate(),
-    request: { recovery: findBridgeRoute("xreserve-usdc-to-arc")!.recovery, routeId: "xreserve-usdc-to-arc", amount: "2", evmAddress: EVM_ADDRESS, midenAccount: MIDEN_ACCOUNT },
+    request: { recovery: findBridgeRoute("xreserve-usdc-to-arc")!.recovery, routeId: "xreserve-usdc-to-arc", amount: "2", externalAddress: EVM_ADDRESS, midenAccount: MIDEN_ACCOUNT },
   });
   beforeEach(() => vi.mocked(fetchWithdrawalQuote).mockResolvedValue(estimate()));
   it.each([false, true])("retains the burn note across wallet settlement (failure: %s)", async (fails) => {
     const { input, effects, evmRequest } = setup({
-      routeId: "xreserve-usdc-to-arc", amount: "2", evmAddress: EVM_ADDRESS, quote: reviewedQuote(),
+      routeId: "xreserve-usdc-to-arc", amount: "2", externalAddress: EVM_ADDRESS, quote: reviewedQuote(),
       evmWallet: { connected: true, address: EVM_ADDRESS },
     });
     // A failed deposit valuation must never keep users from withdrawing funds.

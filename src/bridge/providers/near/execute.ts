@@ -35,7 +35,7 @@ async function checkBalance(context: SubmissionContext, units: bigint) {
 
 async function checkRecipient(context: SubmissionContext) {
   const accounts = await context.input.evmWallet.provider?.request({ method: "eth_accounts" });
-  if (!Array.isArray(accounts) || typeof accounts[0] !== "string" || accounts[0].toLowerCase() !== context.input.evmAddress.toLowerCase()) {
+  if (!Array.isArray(accounts) || typeof accounts[0] !== "string" || accounts[0].toLowerCase() !== context.input.externalAddress.toLowerCase()) {
     throw new Error("Your EVM wallet changed. Reconnect and review the transfer again.");
   }
 }
@@ -74,7 +74,7 @@ export async function submitNearTransfer(context: SubmissionContext) {
     if (!input.midenWallet.requestTransaction || !input.midenWallet.waitForTransaction) throw new Error("Reconnect Bread before transferring.");
     const operation = { quote, networkFee, submission: "prepared" as const, status: "PENDING_DEPOSIT" as const, notification: "pending" as const };
     context.persist!({ id, near: operation, midenNoteId: deposit.noteId, receivedAmount: input.quote!.received,
-      evmAddress: input.evmAddress, destination: input.evmAddress, midenAccount: input.midenAccount, eta: `About ${quote.quote.timeEstimate} seconds` });
+      evmAddress: input.externalAddress, destination: input.externalAddress, midenAccount: input.midenAccount, eta: `About ${quote.quote.timeEstimate} seconds` });
     // Persist the attempt BEFORE invoking the extension. A lost response must not retry it.
     context.persist!({ near: { ...operation, submission: "attempted" } });
     context.phase("Confirm the public deposit in Bread…");

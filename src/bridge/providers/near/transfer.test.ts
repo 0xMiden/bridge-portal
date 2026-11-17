@@ -52,11 +52,11 @@ function setup() {
     return { txHash: nearTxHash, outputNotes: [output] };
   });
   const requestAssets = vi.fn().mockResolvedValue([{ faucetId: route.recovery.derived.usdcxFaucetId, amount: "10000000" }]);
-  const evmRequest = vi.fn().mockResolvedValue([nearTestInput.evmAddress]);
+  const evmRequest = vi.fn().mockResolvedValue([nearTestInput.externalAddress]);
   const input: TransferSubmission = {
     ...nearTestInput, routeId: route.id, environment: "mainnet", insufficientBalance: false, evmBalance: "", midenAsset: null,
     quote: { ...nearQuoteResult(quote, route.id), request: { ...nearTestInput, recovery: route.recovery } },
-    evmWallet: { connected: true, address: nearTestInput.evmAddress, provider: { request: evmRequest } },
+    evmWallet: { connected: true, address: nearTestInput.externalAddress, provider: { request: evmRequest } },
     midenWallet: { connected: true, address: nearTestInput.midenAccount, requestAssets, requestTransaction, waitForTransaction },
   };
   const effects = { openEvmWallet: vi.fn(), onError: vi.fn(), onSubmittingChange: vi.fn(), onPhaseChange: vi.fn(),
@@ -73,7 +73,7 @@ it("persists a public P2ID and silently retries optional notifications without a
   await submitBridgeTransfer(test.input, test.effects);
   expect(test.effects.onError).not.toHaveBeenCalled();
   const saved = loadStoredActivities()[0];
-  expect(saved).toMatchObject({ sourceTxHash: nearTxHash, destination: nearTestInput.evmAddress, midenWalletRequestId: "near-wallet-request", near: { submission: "confirmed", notification: "pending", networkFee: "0.003 USDCx" } });
+  expect(saved).toMatchObject({ sourceTxHash: nearTxHash, destination: nearTestInput.externalAddress, midenWalletRequestId: "near-wallet-request", near: { submission: "confirmed", notification: "pending", networkFee: "0.003 USDCx" } });
   test.effects.activities = new ActivityStore(activityPersistence); test.effects.activities.sync();
   await submitBridgeTransfer(test.input, test.effects);
   expect(test.requestTransaction).toHaveBeenCalledTimes(1);
