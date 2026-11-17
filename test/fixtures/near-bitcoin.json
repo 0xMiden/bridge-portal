@@ -270,5 +270,12 @@
       "timestamp": "2026-11-10T12:22:29.625Z",
       "correlationId": "191110dd-27a4-4046-97e6-cf669b373242"
     }
+  },
+  "midenBlockHeader": {
+    "source": "https://rpc.cedar.miden.io/miden.node.v1.NodeService/GetBlockHeaderByNumber",
+    "capturedAt": "2026-11-16",
+    "blockNumber": 940790,
+    "verificationBaseFee": 7,
+    "bodyBase64": "AAAAAYcKhAMIARVv6vpqGgUN9loOACIiCiDiDPoceRgw+CLnruzRI5mdN06x6pg68cCYFezORG5m/CoiCiBKjDDpZ4awR7iJ/c4hEbdbuSMdQGwp2KlYhf3g+3JNKDIiCiBAU7vnz8BZEygKbznRvzZmjYNFPgabmg/wAQX+P52tnzoiCiC7d+4yn/MobtriK8agKrAl02r6KzbLkXRIuYGVEr780UIiCiDK2Wcmthjia2hvJiHSdI+OzW43fx9jSYulUlX0qOCLh0oiCiBSD47mteAaIG0//NhxDX8jaNczXKKaygpSCxwz5+KmV1JxCiMKIQJWT4x7mC2jqrCP5U3rDa74DoCqKJj3pxIN8sNK/8tGYgojCiEDP0zkPNAAAFAjb6Qm+V4V256fKU8tZZJb1fKV8DeQzx8KIwohA39os2Qw7AmsGVJx5SnTTyS439KkJhHwIeLICroxLBEGEANaBQ0HAAAAYiIKIJRU7XA95wSBBSztFcfYShGcj3M7r/gz53BOUnNJxJ2xgAAAAA9ncnBjLXN0YXR1czowDQo="
   }
 }
