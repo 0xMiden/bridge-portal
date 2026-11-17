@@ -40,6 +40,7 @@ const nextConfig: NextConfig = {
       config.cache.buildDependencies = {
         ...config.cache.buildDependencies,
         epochSdkPatch: [ `${__dirname}/patches/@epoch-protocol+epoch-intents-sdk+2.2.0.patch` ],
+        bitcoinAdapterPatch: [ `${__dirname}/patches/@reown+appkit-adapter-bitcoin+1.8.20.patch` ],
       };
     }
     config.module = config.module ?? {};
