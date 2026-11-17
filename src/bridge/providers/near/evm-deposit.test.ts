@@ -165,7 +165,7 @@ it.each(["SUCCESS", "REFUNDED"] as const)("tracks %s with Miden output precision
     expect(activityDetailFor(saved).receipt.destinationLink).toMatchObject({ available: true, href: "https://explorer.cedar.miden.io/account/387149ae66116cf114eebd60bb7381" });
   } else {
     expect(saved.destinationTxHash).toBeUndefined();
-    expect(activityDetailFor(saved)).toMatchObject({ receipt: { receivedAmount: "0", receivedLabel: "Miden delivery", refund: "0.0029 ETH" }, guidance: { title: "Refunded to your EVM wallet" } });
+    expect(activityDetailFor(saved)).toMatchObject({ receipt: { receivedAmount: "0", receivedLabel: "Miden delivery", refund: "0.0029 ETH" }, guidance: { title: "Refunded to your source wallet" } });
   }
 });
 

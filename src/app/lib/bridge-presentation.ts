@@ -284,6 +284,7 @@ export function buildDiagnostics(
       midenAccountHex: activity.midenAccountHex,
       epochSponsor: activity.epochSponsor,
       evmAddress: activity.evmAddress,
+      refundTo: activity.near?.quote.quoteRequest.refundTo,
       midenAccount: activity.midenAccount,
     }),
     transactions: prune({

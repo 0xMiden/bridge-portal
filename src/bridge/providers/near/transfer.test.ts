@@ -8,7 +8,7 @@ import { findBridgeRoute } from "../../core/routes";
 import { getMidenVerificationBaseFee } from "../../miden-rpc";
 import { nearQuoteResult } from "./quote";
 import { nearMonitor } from "./tracking";
-import { nearTestInput, nearQuoteFixture, nearStatus, nearTxHash } from "../../../../test/near-quotes";
+import { nearTestInput, bitcoinAddress, nearQuoteFixture, nearStatus, nearTxHash } from "../../../../test/near-quotes";
 
 vi.mock("@miden-sdk/miden-sdk", async () => (await import("../../../../test/miden-sdk")).browserMidenSdk());
 vi.mock("@miden-sdk/miden-wallet-adapter-base", () => import("@miden-sdk/miden-wallet-adapter-base/dist/transaction.js"));
@@ -28,9 +28,13 @@ beforeEach(() => {
 });
 afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 
-function setup() {
-  const quote = nearQuoteFixture();
-  const route = findBridgeRoute(nearTestInput.routeId)!;
+function setup(bitcoin = false) {
+  const transferInput = bitcoin ? { ...nearTestInput, externalAddress: bitcoinAddress, amount: "0.001",
+    routeId: "mainnet:near-miden-wbtc-to-bitcoin-btc" } : nearTestInput;
+  const quote = nearQuoteFixture(transferInput);
+  const route = findBridgeRoute(transferInput.routeId)!;
+  const faucet = bitcoin ? "0x3084d3c389ececd15fda9770d18c8a" : route.recovery.derived.usdcxFaucetId;
+  const amount = bitcoin ? 100_000n : 5_000_000n;
   let output: ReturnType<TransactionRequest["expectedOutputOwnNotes"]>[number];
   const requestTransaction = vi.fn<NonNullable<TransferSubmission["midenWallet"]["requestTransaction"]>>(async transaction => {
     const saved = loadStoredActivities()[0];
@@ -42,7 +46,7 @@ function setup() {
     expect(saved.midenNoteId).toBe(output.id().toString());
     expect(output.metadata().noteType()).toBe(NoteType.Public);
     expect(output.metadata().tag().asU32()).toBe(Address.fromBech32(quote.quote.depositAddress!).toNoteTag().asU32());
-    expect(output.assets().fungibleAssets().map(asset => [asset.faucetId().toString(), asset.amount()])).toEqual([[route.recovery.derived.usdcxFaucetId, 5_000_000n]]);
+    expect(output.assets().fungibleAssets().map(asset => [asset.faucetId().toString(), asset.amount()])).toEqual([[faucet, amount]]);
     expect(output.recipient().storage().items().map(felt => felt.asInt())).toEqual([0x14eebd60bb738100n, 0x787149ae66116cf1n, 0n, 0n]);
     expect(transaction.payload.recipientAddress).toBe(quote.quote.depositAddress);
     return "near-wallet-request";
@@ -51,19 +55,23 @@ function setup() {
     expect(loadStoredActivities()[0].midenWalletRequestId).toBe("near-wallet-request");
     return { txHash: nearTxHash, outputNotes: [output] };
   });
-  const requestAssets = vi.fn().mockResolvedValue([{ faucetId: route.recovery.derived.usdcxFaucetId, amount: "10000000" }]);
+  const requestAssets = vi.fn().mockResolvedValue([{ faucetId: faucet, amount: "10000000" },
+    ...(bitcoin ? [{ faucetId: route.recovery.derived.usdcxFaucetId, amount: "10000" }] : [])]);
   const evmRequest = vi.fn().mockResolvedValue([nearTestInput.externalAddress]);
+  const assertBitcoinAccount = vi.fn().mockResolvedValue(undefined);
   const input: TransferSubmission = {
-    ...nearTestInput, routeId: route.id, environment: "mainnet", insufficientBalance: false, sourceBalance: "", midenAsset: null,
-    quote: { ...nearQuoteResult(quote, route.id), request: { ...nearTestInput, recovery: route.recovery } },
-    externalWallet: { family: "evm", connected: true, address: nearTestInput.externalAddress, provider: { request: evmRequest } },
+    ...transferInput, routeId: route.id, environment: "mainnet", insufficientBalance: false, sourceBalance: "", midenAsset: null,
+    quote: { ...nearQuoteResult(quote, route.id), request: { ...transferInput, recovery: route.recovery } },
+    externalWallet: bitcoin
+      ? { family: "bitcoin", connected: true, address: bitcoinAddress, assertAccount: assertBitcoinAccount, provider: { getAccountAddresses: vi.fn(), sendTransfer: vi.fn() } }
+      : { family: "evm", connected: true, address: transferInput.externalAddress, provider: { request: evmRequest } },
     midenWallet: { connected: true, address: nearTestInput.midenAccount, requestAssets, requestTransaction, waitForTransaction },
   };
   const effects = { openExternalWallet: vi.fn(), onError: vi.fn(), onSubmittingChange: vi.fn(), onPhaseChange: vi.fn(),
     activities: new ActivityStore(activityPersistence), navigate: vi.fn() };
   effects.activities.sync();
   fetcher.mockImplementation(async path => String(path).endsWith("prepare") ? Response.json(quote) : Response.json(nearStatus(quote)));
-  return { input, effects, quote, requestTransaction, waitForTransaction, requestAssets, evmRequest };
+  return { input, effects, quote, requestTransaction, waitForTransaction, requestAssets, evmRequest, assertBitcoinAccount };
 }
 
 it("persists a public P2ID and silently retries optional notifications without a second deposit", async () => {
@@ -140,7 +148,7 @@ it("renders a refund separately from EVM delivery and ignores stale pending poll
   const refunded = test.effects.activities.get(saved.id)!.activity;
   expect(refunded).toMatchObject({ status: "refunded", near: { submission: "confirmed", refundedAmount: "4.99", status: "REFUNDED" } });
   expect(nearMonitor.canPoll(refunded)).toBe(false);
-  expect(activityDetailFor(refunded)).toMatchObject({ receipt: { receivedAmount: "0", receivedLabel: "EVM delivery", refund: "4.99 USDCx" }, guidance: { title: "Refunded to Miden" } });
+  expect(activityDetailFor(refunded)).toMatchObject({ receipt: { receivedAmount: "0", receivedLabel: "Destination delivery", refund: "4.99 USDCx" }, guidance: { title: "Refunded to Miden" } });
 });
 
 it.each([
@@ -160,4 +168,43 @@ it.each([
   expect(result.status).toBe(expected);
   expect(nearMonitor.canPoll(result)).toBe(canPoll);
   expect(result.destinationTxHash).toBe(status === "SUCCESS" ? `0x${"cd".repeat(32)}` : undefined);
+});
+
+it("withdraws wBTC to a reviewed Bitcoin address using one public Miden note without an EVM wallet", async () => {
+  const test = setup(true);
+  await submitBridgeTransfer(test.input, test.effects);
+  expect(test.effects.onError).not.toHaveBeenCalled();
+  expect(test.evmRequest).not.toHaveBeenCalled();
+  expect(test.effects.openExternalWallet).not.toHaveBeenCalled();
+  const saved = loadStoredActivities()[0];
+  expect(saved).toMatchObject({ destination: bitcoinAddress, sourceTxHash: nearTxHash });
+  await submitBridgeTransfer(test.input, test.effects);
+  expect(test.requestTransaction).toHaveBeenCalledTimes(1);
+  const btcHash = "cd".repeat(32);
+  fetcher.mockResolvedValueOnce(Response.json({ ...nearStatus(test.quote, "SUCCESS"), swapDetails: {
+    originChainTxHashes: [{ hash: nearTxHash }], destinationChainTxHashes: [{ hash: btcHash }], amountOut: "97848",
+  } }));
+  const observed = await nearMonitor.observe(saved, new AbortController().signal);
+  test.effects.activities.patch(saved.id, observed.patch);
+  const receipt = activityDetailFor(loadStoredActivities()[0]).receipt;
+  expect(receipt.receivedAmount).toBe("0.00097848");
+  expect(receipt.destinationLink.href).toBe(`https://mempool.space/tx/${btcHash}`);
+});
+
+it("rejects a changed Bitcoin recipient before constructing a Miden deposit", async () => {
+  const test = setup(true);
+  test.input.externalAddress = "3J98t1WpEZ73CNmQviecrnyiWrnqRhWNLy";
+  test.input.externalWallet.address = test.input.externalAddress;
+  await submitBridgeTransfer(test.input, test.effects);
+  expect(test.effects.onError).toHaveBeenCalledWith("Refresh and review the quote before sending.");
+  expect(test.requestTransaction).not.toHaveBeenCalled();
+});
+
+it("rechecks the Bitcoin recipient after asynchronous preparation before asking Bread to fund", async () => {
+  const test = setup(true);
+  test.assertBitcoinAccount.mockRejectedValue(new Error("Bitcoin payment account changed"));
+  await submitBridgeTransfer(test.input, test.effects);
+  expect(test.effects.onError).toHaveBeenCalledWith("Bitcoin payment account changed");
+  expect(test.requestTransaction).not.toHaveBeenCalled();
+  expect(loadStoredActivities()).toHaveLength(0);
 });

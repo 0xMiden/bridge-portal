@@ -1,5 +1,8 @@
 import { QuoteRequest as OneClickQuoteRequest, verifyQuoteSignature, type QuoteResponse } from "@defuse-protocol/one-click-sdk-typescript";
 import { formatUnits } from "viem";
+import { bitcoinAddressSchema, bitcoinTxHashSchema } from "../../bitcoin/address";
+import { isEvmAsset, type BridgeAsset } from "../../core/assets";
+import { transactionHashSchema } from "../../evm/evm-schema";
 import { nearConfig } from "../../../config/near/config";
 import type { QuoteRequest, QuoteResult } from "../../core/quote";
 import { nearInputSchema, nearQuoteSchema, nearMidenAddress, nearEvmAddress, type NearInput, type NearQuoteResponse } from "./schema";
@@ -8,7 +11,7 @@ const MIDEN_MAX_AMOUNT = (1n << 63n) - (1n << 31n);
 
 export function nearPair(routeId: string) {
   const pair = nearConfig.routes.find(pair => pair.id === routeId || pair.receiveId === routeId);
-  if (!pair) throw new Error("Unsupported NEAR route. Choose an approved Miden/EVM pair.");
+  if (!pair) throw new Error("Unsupported NEAR route. Choose an approved Miden token pair.");
   return pair;
 }
 
@@ -33,6 +36,8 @@ export function nearSourceUnits(amount: string, decimals: number): string {
 export function nearRequest(input: NearInput, dry: boolean, deadline: string) {
   const pair = nearRouteAssets(input.routeId);
   if (input.mode !== pair.mode) throw new Error("NEAR route direction mismatch.");
+  const external = pair.mode === "send" ? pair.destination : pair.source;
+  const address = addressSchemaFor(external).parse(input.externalAddress);
   const amount = nearSourceUnits(input.amount, pair.source.decimals);
   if (pair.mode === "send" && BigInt(amount) > MIDEN_MAX_AMOUNT) throw new Error("Amount is outside Miden's transfer limits.");
   return {
@@ -41,8 +46,8 @@ export function nearRequest(input: NearInput, dry: boolean, deadline: string) {
     depositType: OneClickQuoteRequest.depositType.ORIGIN_CHAIN,
     recipientType: OneClickQuoteRequest.recipientType.DESTINATION_CHAIN,
     refundType: OneClickQuoteRequest.refundType.ORIGIN_CHAIN,
-    amount, recipient: pair.mode === "send" ? input.externalAddress : input.midenAccount,
-    refundTo: pair.mode === "send" ? input.midenAccount : input.externalAddress,
+    amount, recipient: pair.mode === "send" ? address : input.midenAccount,
+    refundTo: pair.mode === "send" ? input.midenAccount : address,
     confidentiality: OneClickQuoteRequest.confidentiality.BASIC, quoteWaitingTimeMs: 0, deadline,
   } satisfies OneClickQuoteRequest;
 }
@@ -50,9 +55,17 @@ export function nearRequest(input: NearInput, dry: boolean, deadline: string) {
 export function nearQuoteExpiry(response: NearQuoteResponse) {
   return Math.min(
     Date.parse(response.quoteRequest.deadline),
-    Date.parse(response.timestamp) + (response.quoteRequest.dry ? 60_000 : 10 * 60_000),
     response.quote.deadline ? Date.parse(response.quote.deadline) : Infinity,
+    response.quote.timeWhenInactive ? Date.parse(response.quote.timeWhenInactive) : Infinity,
+    Date.parse(response.timestamp) + (response.quoteRequest.dry ? 60_000 : 10 * 60_000),
   );
+}
+
+function addressSchemaFor(asset: BridgeAsset) {
+  if (isEvmAsset(asset)) return nearEvmAddress;
+  if (asset.network === "bitcoin") return bitcoinAddressSchema;
+  if (asset.kind === "miden") return nearMidenAddress;
+  throw new Error("Unsupported NEAR address network.");
 }
 
 export function verifyNearQuote(value: unknown, input: NearInput, dry: boolean, requireLive = true): NearQuoteResponse {
@@ -73,7 +86,10 @@ export function verifyNearQuote(value: unknown, input: NearInput, dry: boolean, 
   }
   if (input.mode === "receive" && BigInt(quote.amountOut) > MIDEN_MAX_AMOUNT) throw new Error("Output exceeds Miden's transfer limit.");
   if (!dry && !quote.depositAddress) throw new Error("NEAR did not return a deposit address.");
-  if (quote.depositAddress) (input.mode === "send" ? nearMidenAddress : nearEvmAddress).parse(quote.depositAddress);
+  if (quote.depositAddress) {
+    const source = nearRouteAssets(input.routeId).source;
+    addressSchemaFor(source).parse(quote.depositAddress);
+  }
   if (requireLive && (nearQuoteExpiry(response) <= Date.now() || Date.parse(response.timestamp) > Date.now() + 30_000)) {
     throw new Error("NEAR quote expired. Review a fresh quote before sending.");
   }
@@ -108,4 +124,11 @@ export function nearTrackingInput(routeId: string, quote: NearQuoteResponse): Ne
   return nearInputSchema.parse({ routeId, mode, amount: formatUnits(BigInt(quote.quoteRequest.amount), source.decimals),
     midenAccount: mode === "send" ? quote.quoteRequest.refundTo : quote.quoteRequest.recipient,
     externalAddress: mode === "send" ? quote.quoteRequest.recipient : quote.quoteRequest.refundTo });
+}
+
+export function validateNearTxHash(routeId: string, side: "source" | "destination", hash: string) {
+  const asset = nearRouteAssets(routeId)[side];
+  if (asset.network === "bitcoin") return bitcoinTxHashSchema.parse(hash);
+  if (isEvmAsset(asset) || asset.kind === "miden") return transactionHashSchema.parse(hash);
+  throw new Error("Unsupported NEAR transaction network.");
 }

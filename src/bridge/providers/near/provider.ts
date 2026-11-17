@@ -10,7 +10,7 @@ const send: ProviderDirection = {
     { status: "signature", label: "Sign Miden deposit", detail: "Approve a public deposit note in Bread." },
     { status: "source_finality", label: "Miden confirmation", detail: "Waiting for the deposit to be detected." },
     { status: "message_observed", label: "Swap processing", detail: "NEAR Intents is delivering {asset}." },
-    { status: "complete", label: "Funds delivered", detail: "{asset} delivered to your EVM address." },
+    { status: "complete", label: "Funds delivered", detail: "{asset} delivered to your destination address." },
   ],
   phases: {
     signature: { order: 0, status: "signature", headline: "Confirm in your wallet", guidance },
@@ -23,7 +23,7 @@ const send: ProviderDirection = {
     SUCCESS: { order: 4, status: "complete", headline: "Funds delivered" },
     REFUNDED: { order: 4, status: "refunded", headline: "Funds refunded to Miden", guidance: {
       tone: "success", icon: "wallet", title: "Refunded to Miden",
-      body: "The swap was refunded to your original Miden account. No EVM delivery was completed. Check Bread for the refund; provider fees may apply.",
+      body: "The swap was refunded to your original Miden account. No destination delivery was completed. Check Bread for the refund; provider fees may apply.",
     } },
     FAILED: { order: 4, status: "failed", headline: "Transfer needs recovery", guidance },
   },
@@ -47,24 +47,24 @@ const send: ProviderDirection = {
 const receive: ProviderDirection = {
   ...send,
   steps: [
-    { status: "signature", label: "Sign EVM deposit", detail: "Confirm the deposit in your source wallet." },
-    { status: "source_finality", label: "Deposit confirmation", detail: "Waiting for the EVM deposit to be detected." },
+    { status: "signature", label: "Sign deposit", detail: "Confirm the deposit in your source wallet." },
+    { status: "source_finality", label: "Deposit confirmation", detail: "Waiting for your source deposit to be detected." },
     { status: "message_observed", label: "Delivery to Miden", detail: "NEAR Intents is delivering {asset} to your Miden account." },
     { status: "complete", label: "Delivered on Miden", detail: "Check Bread for your {asset}." },
   ],
   phases: {
     ...send.phases,
-    signature: { ...send.phases.signature, guidance: { ...guidance, body: "Confirm the deposit in your EVM wallet. Keep this receipt to track delivery to Miden." } },
-    PENDING_DEPOSIT: { ...send.phases.PENDING_DEPOSIT, headline: "Waiting for the EVM deposit", guidance: {
-      ...guidance, body: "Check the deposit in your EVM wallet and retry its status here. Do not send another deposit for this quote.",
+    signature: { ...send.phases.signature, guidance: { ...guidance, body: "Confirm the deposit in your source wallet. Keep this receipt to track delivery to Miden." } },
+    PENDING_DEPOSIT: { ...send.phases.PENDING_DEPOSIT, headline: "Waiting for your deposit", guidance: {
+      ...guidance, body: "Check the deposit in your source wallet and retry its status here. Do not send another deposit for this quote.",
     } },
-    KNOWN_DEPOSIT_TX: { ...send.phases.KNOWN_DEPOSIT_TX, headline: "EVM deposit detected" },
+    KNOWN_DEPOSIT_TX: { ...send.phases.KNOWN_DEPOSIT_TX, headline: "Deposit detected" },
     SUCCESS: { ...send.phases.SUCCESS, headline: "Delivered on Miden" },
-    REFUNDED: { ...send.phases.REFUNDED, headline: "Funds refunded to your EVM wallet", guidance: {
-      tone: "success", icon: "wallet", title: "Refunded to your EVM wallet",
-      body: "The swap was refunded to your original EVM address. No Miden delivery was completed. Check your source wallet; provider fees may apply.",
+    REFUNDED: { ...send.phases.REFUNDED, headline: "Funds refunded to your source wallet", guidance: {
+      tone: "success", icon: "wallet", title: "Refunded to your source wallet",
+      body: "Check the refund address in your source wallet. Provider fees may apply.",
     } },
-    FAILED: { ...send.phases.FAILED, guidance: { ...guidance, body: "Check the deposit in your EVM wallet and share this receipt with support. Do not send another deposit for this quote." } },
+    FAILED: { ...send.phases.FAILED, guidance: { ...guidance, body: "Check the deposit in your source wallet and share this receipt with support. Do not send another deposit for this quote." } },
   },
   fees: route => {
     const fees = send.fees(route);

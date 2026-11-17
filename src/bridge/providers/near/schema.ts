@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { bitcoinAddressSchema } from "../../bitcoin/address";
 import { normalizeMidenAccountHex } from "../../miden-address";
 
 export const nearCorrelationId = z.string().regex(/^[a-zA-Z0-9_-]{1,100}$/);
@@ -8,13 +9,13 @@ export const nearEvmAddress = z.string().regex(/^0x[\da-f]{40}$/i).refine(value 
 export const nearMidenAddress = z.string().max(256).regex(/^mm1[02-9ac-hj-np-z]+(?:_qr7qqq9wr6w)?$/).refine(value => {
   try { normalizeMidenAccountHex(value); return true; } catch { return false; }
 }, "Invalid Miden mainnet address");
-const chainAddress = z.union([nearMidenAddress, nearEvmAddress]);
+const chainAddress = z.union([nearMidenAddress, nearEvmAddress, bitcoinAddressSchema]);
 
 export const nearInputSchema = z.strictObject({
   routeId: z.string().min(1).max(200), mode: z.enum(["send", "receive"]),
   amount: z.string().min(1).max(80),
   midenAccount: nearMidenAddress,
-  externalAddress: nearEvmAddress,
+  externalAddress: z.string().min(1).max(256),
 });
 export type NearInput = z.infer<typeof nearInputSchema>;
 
@@ -42,7 +43,8 @@ export const nearPrepareInputSchema = nearInputSchema.extend({ quote: nearQuoteS
 
 export const nearStatusSchema = z.enum(["PENDING_DEPOSIT", "KNOWN_DEPOSIT_TX", "INCOMPLETE_DEPOSIT", "PROCESSING", "SUCCESS", "REFUNDED", "FAILED"]);
 export type NearStatus = z.infer<typeof nearStatusSchema>;
-const tx = z.object({ hash: z.string().regex(/^0x[\da-f]{64}$/i) });
+const txHash = z.string().regex(/^(?:0x)?[\da-f]{64}$/i);
+const tx = z.object({ hash: txHash });
 export const nearStatusResponseSchema = z.object({
   correlationId: nearCorrelationId, status: nearStatusSchema, quoteResponse: nearQuoteSchema,
   updatedAt: z.iso.datetime(),
@@ -59,12 +61,12 @@ export const nearOperationSchema = z.object({
   status: nearStatusSchema,
   notification: z.enum(["pending", "sent"]),
   networkFee: z.string().max(100).optional(),
-  originTxHashes: z.array(z.string().regex(/^0x[\da-f]{64}$/i)).max(32).optional(),
-  destinationTxHashes: z.array(z.string().regex(/^0x[\da-f]{64}$/i)).max(32).optional(),
+  originTxHashes: z.array(txHash).max(32).optional(),
+  destinationTxHashes: z.array(txHash).max(32).optional(),
   refundedAmount: z.string().max(100).optional(),
   refundReason: z.string().max(256).optional(),
 });
 export type NearOperation = z.infer<typeof nearOperationSchema>;
 
 export const nearTrackingInputSchema = z.strictObject({ routeId: z.string().max(200), quote: nearQuoteSchema });
-export const nearDepositInputSchema = nearTrackingInputSchema.extend({ txHash: z.string().regex(/^0x[\da-f]{64}$/i) });
+export const nearDepositInputSchema = nearTrackingInputSchema.extend({ txHash });

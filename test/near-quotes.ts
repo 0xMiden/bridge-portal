@@ -8,6 +8,7 @@ export const nearTestInput: NearInput = {
   externalAddress: "0x1111111111111111111111111111111111111111",
 };
 export const nearReceiveInput: NearInput = { ...nearTestInput, routeId: "mainnet:near-base-usdc-to-miden-usdcx", mode: "receive" };
+export const bitcoinAddress = "1BoatSLRHtKNngkdXEeobR76b53LETtpyT";
 // Flow tests stub signature verification. quote.test.ts verifies a real service-signed fixture.
 export function nearQuoteFixture(input = nearTestInput, dry = false, patch: Partial<NearQuoteResponse["quote"]> = {}, waitMs?: number): NearQuoteResponse {
   const { source } = nearRouteAssets(input.routeId);

@@ -10,7 +10,7 @@ import { activityRoute } from "../../bridge/core/routes";
 import { bridgeProviders } from "../../bridge/providers/registry";
 import { shortAddress } from "../../wallets/identity";
 import type { ActivityDetailModel } from "../lib/activity-detail-presentation";
-import { destinationAssetSymbol, modes, networkLabels } from "../lib/bridge-presentation";
+import { destinationAssetSymbol, modes, networkLabels, sourceAccountLabel } from "../lib/bridge-presentation";
 import { useSepoliaGasEstimate } from "../lib/sepolia-gas";
 import { FiatAmount } from "./FiatAmount";
 import { TokenAmount } from "./TokenAmount";
@@ -72,7 +72,7 @@ export function ActivityJourney({ receipt, needsClaim, children }: {
   const from = route ? networkLabels[route.source.network] : modes[activity.mode].from;
   const to = route ? networkLabels[route.destination.network] : modes[activity.mode].to;
   const sourceAddress = activity.mode === "send" ? activity.midenAccount
-    : activity.sourceTransaction?.from ?? activity.evmAddress ?? activity.epochSponsor;
+    : activity.sourceTransaction?.from ?? activity.near?.quote.quoteRequest.refundTo ?? activity.evmAddress ?? activity.epochSponsor;
   const destinationAsset = destinationAssetSymbol(activity);
   const differentOutput = destinationAsset !== activity.asset || Number(receipt.receivedAmount) !== Number(activity.amount);
   const evmAsset = route?.source.kind === "miden" ? route.destination : route?.source;
@@ -90,7 +90,7 @@ export function ActivityJourney({ receipt, needsClaim, children }: {
       <StatusIndicator tone={status.tone}>{status.label}</StatusIndicator>
     </header>
     <div className="my-5 flex items-start gap-3">
-      <JourneyEndpoint network={route?.source.network} name={from} label="From" address={sourceAddress} />
+      <JourneyEndpoint network={route?.source.network} name={from} label={sourceAccountLabel(route?.source)} address={sourceAddress} />
       <span className="mt-4 h-px w-4 shrink-0 bg-border-strong" aria-hidden="true" />
       <JourneyEndpoint network={route?.destination.network} name={to} label="To" address={activity.destination} />
     </div>
@@ -99,7 +99,7 @@ export function ActivityJourney({ receipt, needsClaim, children }: {
       { label: "Provider", value: bridgeProviders[activity.provider].label },
       receipt.tracked && activity.status !== "refunded" && { label: receipt.pending ? "Estimated total time" : "Delivery time", value: receipt.pending ? activity.eta : duration },
       differentOutput && { label: receipt.receivedLabel, value: <TokenAmount amount={receipt.receivedAmount} symbol={destinationAsset} /> },
-      receipt.refund ? { label: "Refunded to Miden", value: receipt.refund } : undefined,
+      receipt.refund ? { label: `Refunded to ${from}`, value: receipt.refund } : undefined,
       { label: "Network fee · estimated", value: networkFee },
       { label: receipt.fee?.label ?? "Provider fee", value: receipt.fee?.value ?? "Unavailable" },
     ]}>

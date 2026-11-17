@@ -1,6 +1,7 @@
 import { ApiError, OneClickService, OpenAPI, type CancelablePromise } from "@defuse-protocol/one-click-sdk-typescript";
 import { nearInputSchema, nearPrepareInputSchema, nearTrackingInputSchema, nearDepositInputSchema, nearStatusResponseSchema, nearQuoteSchema, nearCorrelationId, nearEvmAddress } from "./schema";
-import { nearRequest, verifyNearQuote, nearTrackingInput } from "./quote";
+import { bitcoinAddressSchema } from "../../bitcoin/address";
+import { nearRequest, verifyNearQuote, nearTrackingInput, validateNearTxHash } from "./quote";
 import { currentBridgeConfig } from "../../../config/bridge-config";
 
 const API = "https://1click.chaindefuser.com";
@@ -93,6 +94,10 @@ function normalizeQuoteAccounts(body: unknown) {
     const { evmAddress, ...rest } = body;
     return { ...rest, externalAddress: nearEvmAddress.parse(evmAddress) };
   }
+  if ("bitcoinAddress" in body) {
+    const { bitcoinAddress, ...rest } = body;
+    return { ...rest, externalAddress: bitcoinAddressSchema.parse(bitcoinAddress) };
+  }
   return body;
 }
 
@@ -110,6 +115,8 @@ async function track(body: unknown, notify: boolean, signal: AbortSignal) {
     : await upstream("status", () => OneClickService.getExecutionStatus(depositAddress, depositMemo), signal);
   try {
     const response = upstreamStatusSchema.parse(payload);
+    for (const tx of response.swapDetails.originChainTxHashes) validateNearTxHash(input.routeId, "source", tx.hash);
+    for (const tx of response.swapDetails.destinationChainTxHashes) validateNearTxHash(input.routeId, "destination", tx.hash);
     // /status also drops quoteWaitingTimeMs even though the original signature
     // covers it. Restore only these omitted fields from the verified receipt,
     // then verify the returned quote in full; never overwrite returned terms.
@@ -143,6 +150,7 @@ export async function handleNearRequest(request: Request, operation: "quote" | "
       } else {
         const input = (operation === "deposit" ? nearDepositInputSchema : nearTrackingInputSchema).parse(body);
         verifyNearQuote(input.quote, nearTrackingInput(input.routeId, input.quote), false, false);
+        if ("txHash" in input && typeof input.txHash === "string") validateNearTxHash(input.routeId, "source", input.txHash);
       }
     } catch { throw new NearApiError("Invalid route, amount, accounts or signed NEAR quote.", 400); }
     const result = operation === "quote" || operation === "prepare"

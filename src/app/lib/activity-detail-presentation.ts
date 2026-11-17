@@ -19,7 +19,7 @@ export function activityDetailFor(activity: Activity) {
   const complete = presentation.status === "complete";
   const untracked = presentation.progress.kind === "manual";
   const delivered = complete && directionFor(activity).consumeNote;
-  const label = delivered ? "Delivered" : untracked ? presentation.headline : statusLabel(presentation.status);
+  const label = delivered ? "Delivered" : untracked ? presentation.headline : statusLabel(presentation.status, activity);
   const quote = quoteForActivity(receiptActivity);
   const details = directionFor(activity).activityDetails(activity);
   return {
@@ -33,7 +33,7 @@ export function activityDetailFor(activity: Activity) {
         details.fee === undefined
           ? { label: quote.fees.label, value: quote.bridgeFee }
           : providerFee(quote.fees, details.fee, activity.asset, quote.asset),
-      receivedLabel: presentation.status === "refunded" ? (activity.mode === "send" ? "EVM delivery" : "Miden delivery") : complete
+      receivedLabel: presentation.status === "refunded" ? (activity.mode === "send" ? "Destination delivery" : "Miden delivery") : complete
         ? "Received"
         : quote.fees.estimated
           ? "Estimated received"
