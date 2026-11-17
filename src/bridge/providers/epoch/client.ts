@@ -5,7 +5,7 @@ import { type EIP1193Provider, type WalletClient, createWalletClient, custom } f
 import type { EvmNetwork } from "../../core/assets";
 import { evmNetworks } from "../../../config/evm-networks";
 
-import { wagmiAdapter } from "../../../wallets/evm/appkit-config";
+import { wagmiAdapter } from "../../../wallets/appkit-config";
 import { evmReadTransport } from "../../evm/transport";
 import { MIDEN_DESTINATION_CHAIN_ID } from "./config";
 import { trackEpochDeposits, type EpochDepositTracking } from "./deposit-tracking";

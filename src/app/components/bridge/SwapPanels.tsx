@@ -12,7 +12,7 @@ import { ChainSelect } from "../ChainSelect";
 import { FiatAmount } from "../FiatAmount";
 import { TokenSelect } from "../TokenSelect";
 import { TokenAmount } from "../TokenAmount";
-import { EvmWalletControl } from "./EvmWalletControl";
+import { ExternalWalletControl } from "./ExternalWalletControl";
 import type { BridgeDraft, DraftAction } from "./use-bridge-draft";
 import type { BridgeTransfer } from "./use-bridge-transfer";
 import type { BridgeWallets } from "./use-bridge-wallets";
@@ -103,7 +103,7 @@ function TransferPanel({ side, draft, wallets, quote, onChange }: {
         <ChainSelect route={route} side={side} onSelectRoute={selectRoute} />
       </div>
       <div className="panel-wallet col-start-2 row-start-1 min-w-0 max-w-43 justify-self-end max-[380px]:col-span-2 max-[380px]:col-start-1 max-[380px]:row-start-2" data-wallet={isMiden ? "miden" : "evm"}>
-        {isMiden ? <MidenWalletButton /> : <EvmWalletControl wallet={wallets.evm} onConnect={wallets.openEvmWallet} onError={wallets.setError} />}
+        {isMiden ? <MidenWalletButton /> : <ExternalWalletControl wallet={wallets.evm} onConnect={wallets.openEvmWallet} onError={wallets.setError} />}
       </div>
       {isSource ? (
         <label className="col-start-1 row-start-2 min-w-0 max-[380px]:row-start-3">

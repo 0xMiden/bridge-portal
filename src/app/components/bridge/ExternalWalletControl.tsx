@@ -3,13 +3,13 @@ import { Copy, ExternalLink, LogOut, RefreshCcw } from "lucide-react";
 import { useAppKit, useDisconnect } from "@reown/appkit/react";
 import { useEffect, useRef, useState } from "react";
 import { ensureEvmNetwork } from "../../../wallets/evm/ensure-network";
-import { evmWalletIdentity, shortAddress } from "../../../wallets/identity";
+import { externalWalletIdentity, shortAddress } from "../../../wallets/identity";
 import { WalletBrandIcon } from "../../../wallets/WalletBrandIcon";
 import { WalletMenu, WalletMenuItem, WalletButton } from "../../../wallets/WalletMenu";
 import { errorMessage } from "../../lib/wallet-errors";
 import type { BridgeWallets } from "./use-bridge-wallets";
 
-export function EvmWalletControl({ wallet, onConnect, onError }: {
+export function ExternalWalletControl({ wallet, onConnect, onError }: {
   wallet: BridgeWallets["evm"];
   onConnect: () => Promise<void>;
   onError: (message: string) => void;
@@ -20,7 +20,7 @@ export function EvmWalletControl({ wallet, onConnect, onError }: {
   const [copied, setCopied] = useState(false);
   const copyTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const { connected, address, network, info } = wallet;
-  const identity = evmWalletIdentity({ connected, address, networkLabel: network.name });
+  const identity = externalWalletIdentity({ connected, address, networkLabel: network.name });
 
   useEffect(() => () => clearTimeout(copyTimer.current), []);
 

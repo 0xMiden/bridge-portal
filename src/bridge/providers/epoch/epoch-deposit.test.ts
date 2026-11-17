@@ -16,7 +16,7 @@ import type { EvmProvider } from "../../../wallets/evm/evm-wallet";
 // Keep the SDK, wallet client, execution, submission and persistence real. Only
 // the external wallet/RPC/HTTP, balance-cap valuation and unrelated Miden WASM boundaries are simulated.
 vi.mock("@wagmi/core", () => ({ getAccount: () => ({ address: SPONSOR, chainId: 42161 }), getWalletClient: vi.fn() }));
-vi.mock("../../../wallets/evm/appkit-config", () => ({ wagmiAdapter: { wagmiConfig: {} } }));
+vi.mock("../../../wallets/appkit-config", () => ({ wagmiAdapter: { wagmiConfig: {} } }));
 vi.mock("./miden-note", () => ({ createBridgeP2IDENoteCallback: vi.fn() }));
 vi.mock("@miden-sdk/miden-sdk", () => ({
   AccountId: {
