@@ -1,3 +1,4 @@
+import { assertRecipientAccount } from "../../../wallets/bridge-wallet";
 import { quoteHash, type QuoteResponse } from "@defuse-protocol/one-click-sdk-typescript";
 import { formatUnits } from "viem";
 import type { SubmissionContext } from "../../core/submission";
@@ -33,13 +34,6 @@ async function checkBalance(context: SubmissionContext, units: bigint) {
   return `${formatUnits(fee, 6)} USDCx`;
 }
 
-async function checkRecipient(context: SubmissionContext) {
-  const accounts = await context.input.evmWallet.provider?.request({ method: "eth_accounts" });
-  if (!Array.isArray(accounts) || typeof accounts[0] !== "string" || accounts[0].toLowerCase() !== context.input.externalAddress.toLowerCase()) {
-    throw new Error("Your EVM wallet changed. Reconnect and review the transfer again.");
-  }
-}
-
 /** Once a wallet attempt is durably claimed, only tracking may resume it. */
 export async function submitNearTransfer(context: SubmissionContext) {
   const { input, route } = context;
@@ -69,7 +63,7 @@ export async function submitNearTransfer(context: SubmissionContext) {
     await nearPost("prepare", { ...binding, quote });
     const { buildNearDeposit } = await import("./funding");
     const deposit = buildNearDeposit(quote, binding, route.recovery);
-    await checkRecipient(context);
+    await assertRecipientAccount(input);
     verifyNearQuote(quote, binding, false);
     if (!input.midenWallet.requestTransaction || !input.midenWallet.waitForTransaction) throw new Error("Reconnect Bread before transferring.");
     const operation = { quote, networkFee, submission: "prepared" as const, status: "PENDING_DEPOSIT" as const, notification: "pending" as const };

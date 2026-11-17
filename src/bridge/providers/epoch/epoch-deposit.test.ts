@@ -141,14 +141,14 @@ function setup(mode: "sequential" | "batch" | "rejected", health: unknown = epoc
     throw new Error(`Unexpected HTTP request ${url}`);
   }));
   const input: TransferSubmission = {
-    routeId: selected.id, environment: "mainnet", amount: "1", insufficientBalance: false, evmBalance: "10 USDC",
+    routeId: selected.id, environment: "mainnet", amount: "1", insufficientBalance: false, sourceBalance: "10 USDC",
     externalAddress: SPONSOR, midenAccount: MIDEN, midenAsset: null,
-    evmWallet: { connected: true, address: SPONSOR, provider: wallet as EvmProvider },
+    externalWallet: { family: "evm", connected: true, address: SPONSOR, provider: wallet as EvmProvider },
     midenWallet: { connected: true, address: MIDEN },
     quote: { kind: "epoch", received: formatUnits(918687n, selected.destination.decimals), validity: { kind: "time", expiresAt: Date.now() + 60000 },
       request: { routeId: selected.id, recovery: selected.recovery, amount: "1", externalAddress: SPONSOR, midenAccount: MIDEN } },
   };
-  const effects = { openEvmWallet: vi.fn(), verifyBalanceCap: vi.fn(async () => {}), onError: vi.fn(), onSubmittingChange: vi.fn(), onPhaseChange: vi.fn(), activities: new ActivityStore(activityPersistence), navigate: vi.fn() };
+  const effects = { openExternalWallet: vi.fn(), verifyBalanceCap: vi.fn(async () => {}), onError: vi.fn(), onSubmittingChange: vi.fn(), onPhaseChange: vi.fn(), activities: new ActivityStore(activityPersistence), navigate: vi.fn() };
   return { input, effects, allocation, sent, approvals, beforeConfirmation, allocationEvidence: () => ({ activities: beforeAllocation, claimHash }) };
 }
 

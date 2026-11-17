@@ -119,12 +119,12 @@ export function useBridgeTransfer(draft: { route: BridgeRoute; amount: string },
       await submitBridgeTransfer({
         routeId: reviewed.route.id, environment, amount: reviewed.amount, quote: reviewed.quote,
         ...reviewed.accounts,
-        insufficientBalance: quote.insufficientBalance, evmBalance: wallets.evm.balanceLabel,
-        evmWallet: wallets.evm,
+        insufficientBalance: quote.insufficientBalance, sourceBalance: wallets.evm.balanceLabel,
+        externalWallet: { ...wallets.evm, family: "evm" },
         midenWallet: wallets.miden,
         midenAsset: midenAsset && midenAsset.amountRaw > 0n ? midenAsset : null,
       }, {
-        openEvmWallet: wallets.openEvmWallet,
+        openExternalWallet: wallets.openEvmWallet,
         verifyBalanceCap: quote.balanceCap.verifyBalanceCap,
         onError: setError,
         onSubmittingChange: submitting => setState(current => submitting

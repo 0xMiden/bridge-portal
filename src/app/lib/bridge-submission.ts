@@ -1,4 +1,5 @@
 import { sameTransferAccounts } from "../../bridge/core/accounts";
+import { validateBridgeWallet } from "../../wallets/bridge-wallet";
 import { configKey } from "../../config/bridge-config";
 import { assertMidenAccountNetwork } from "../../wallets/miden/network";
 import { validateTransferAmount } from "../../bridge/core/rules";
@@ -44,7 +45,7 @@ export async function submitBridgeTransfer(
   }
   if (input.insufficientBalance) {
     effects.onError(
-      `Not enough ${route.source.symbol} — this wallet holds ${input.evmBalance}. Lower the amount.`,
+      `Not enough ${route.source.symbol} — this wallet holds ${input.sourceBalance}. Lower the amount.`,
     );
     return;
   }
@@ -60,15 +61,11 @@ export async function submitBridgeTransfer(
   };
   effects.onSubmittingChange(true);
   try {
-    if (
-      !input.evmWallet.connected || !input.evmWallet.address ||
-      (route.mode === "receive" && !input.evmWallet.provider)
-    ) {
-      await effects.openEvmWallet();
+    if (!validateBridgeWallet(route, input)) {
+      await effects.openExternalWallet();
       return;
     }
-    if (input.midenAccount !== input.midenWallet.address ||
-        input.externalAddress.toLowerCase() !== input.evmWallet.address.toLowerCase()) {
+    if (input.midenAccount !== input.midenWallet.address) {
       throw new Error("Your connected wallet changed. Review the transfer again.");
     }
     const { flows } = await bridgeProviders[route.provider].load();

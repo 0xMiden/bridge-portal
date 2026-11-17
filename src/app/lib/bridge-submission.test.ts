@@ -72,8 +72,9 @@ function setup(overrides: Partial<TransferSubmission> = {}) {
     routeId: "epoch-test-usdc-to-miden",
     amount: "0.123456",
     insufficientBalance: false,
-    evmBalance: "1 USDC",
-    evmWallet: {
+    sourceBalance: "1 USDC",
+    externalWallet: {
+      family: "evm",
       connected: true,
       address: EVM_ADDRESS,
       provider: { request: evmRequest as EvmProvider["request"] },
@@ -96,7 +97,7 @@ function setup(overrides: Partial<TransferSubmission> = {}) {
     };
   }
   const effects = {
-    openEvmWallet: vi.fn(async () => {}),
+    openExternalWallet: vi.fn(async () => {}),
     verifyBalanceCap: vi.fn(async () => {}),
     onError: vi.fn(),
     onSubmittingChange: vi.fn(),
@@ -232,10 +233,10 @@ describe("submission validation", () => {
   });
 
   it.each(["epoch-test-usdc-to-miden", "agglayer-eth-to-miden", "epoch-test-usdc-to-sepolia"])("requests the EVM connection for a disconnected source or destination on %s", async (routeId) => {
-    const { input, effects } = setup({ routeId, evmWallet: { connected: false, address: EVM_ADDRESS } });
+    const { input, effects } = setup({ routeId, externalWallet: { family: "evm", connected: false, address: EVM_ADDRESS } });
     await submitBridgeTransfer(input, effects);
 
-    expect(effects.openEvmWallet).toHaveBeenCalledOnce();
+    expect(effects.openExternalWallet).toHaveBeenCalledOnce();
     expect(effects.onSubmittingChange).toHaveBeenLastCalledWith(false);
     expect(runEpochTransfer).not.toHaveBeenCalled();
     expect(loadStoredActivities()).toMatchObject([history]);
@@ -467,7 +468,7 @@ describe("USDCx withdrawal submission", () => {
   it.each([false, true])("retains the burn note across wallet settlement (failure: %s)", async (fails) => {
     const { input, effects, evmRequest } = setup({
       routeId: "xreserve-usdc-to-arc", amount: "2", externalAddress: EVM_ADDRESS, quote: reviewedQuote(),
-      evmWallet: { connected: true, address: EVM_ADDRESS },
+      externalWallet: { family: "evm", connected: true, address: EVM_ADDRESS },
     });
     // A failed deposit valuation must never keep users from withdrawing funds.
     effects.verifyBalanceCap.mockRejectedValue(new Error("Balance limit exceeded"));
@@ -485,7 +486,7 @@ describe("USDCx withdrawal submission", () => {
     });
     expect(loadStoredActivities()[0].sourceTxHash).toBe(fails ? undefined : TX_HASH);
     expect(effects.navigate).toHaveBeenCalledOnce();
-    expect(effects.openEvmWallet).not.toHaveBeenCalled();
+    expect(effects.openExternalWallet).not.toHaveBeenCalled();
     expect(effects.verifyBalanceCap).not.toHaveBeenCalled();
     expect(evmRequest).not.toHaveBeenCalled();
     if (fails) expect(effects.onError).toHaveBeenCalledWith(expect.stringContaining("do not submit again"));

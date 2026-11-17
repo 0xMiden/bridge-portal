@@ -54,12 +54,12 @@ function setup() {
   const requestAssets = vi.fn().mockResolvedValue([{ faucetId: route.recovery.derived.usdcxFaucetId, amount: "10000000" }]);
   const evmRequest = vi.fn().mockResolvedValue([nearTestInput.externalAddress]);
   const input: TransferSubmission = {
-    ...nearTestInput, routeId: route.id, environment: "mainnet", insufficientBalance: false, evmBalance: "", midenAsset: null,
+    ...nearTestInput, routeId: route.id, environment: "mainnet", insufficientBalance: false, sourceBalance: "", midenAsset: null,
     quote: { ...nearQuoteResult(quote, route.id), request: { ...nearTestInput, recovery: route.recovery } },
-    evmWallet: { connected: true, address: nearTestInput.externalAddress, provider: { request: evmRequest } },
+    externalWallet: { family: "evm", connected: true, address: nearTestInput.externalAddress, provider: { request: evmRequest } },
     midenWallet: { connected: true, address: nearTestInput.midenAccount, requestAssets, requestTransaction, waitForTransaction },
   };
-  const effects = { openEvmWallet: vi.fn(), onError: vi.fn(), onSubmittingChange: vi.fn(), onPhaseChange: vi.fn(),
+  const effects = { openExternalWallet: vi.fn(), onError: vi.fn(), onSubmittingChange: vi.fn(), onPhaseChange: vi.fn(),
     activities: new ActivityStore(activityPersistence), navigate: vi.fn() };
   effects.activities.sync();
   fetcher.mockImplementation(async path => String(path).endsWith("prepare") ? Response.json(quote) : Response.json(nearStatus(quote)));

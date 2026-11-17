@@ -1,3 +1,4 @@
+import { requireEvmWallet } from "../../../wallets/bridge-wallet";
 import { decodeFunctionResult, encodeFunctionData, erc20Abi, formatUnits, toHex } from "viem";
 import { isEvmAsset } from "../../core/assets";
 import type { SubmissionContext } from "../../core/submission";
@@ -14,13 +15,14 @@ import type { NearQuoteResponse } from "./schema";
 export async function submitNearEvmDeposit(context: SubmissionContext, quote: NearQuoteResponse, id: string) {
   const { route, input, phase } = context;
   const asset = route.source;
-  if (route.mode !== "receive" || !isEvmAsset(asset) || !input.evmWallet.provider) throw new Error("Connect the source EVM wallet.");
+  if (route.mode !== "receive" || !isEvmAsset(asset)) throw new Error("Connect the source EVM wallet.");
+  const { provider } = requireEvmWallet(input.externalWallet);
   const account = evmAddressSchema.parse(input.externalAddress);
   const depositAddress = evmAddressSchema.parse(quote.quote.depositAddress);
   const units = BigInt(quote.quote.amountIn);
   const chain = evmNetworks[asset.network];
   phase(`Checking ${asset.symbol} balance and network fee…`);
-  const { client, assertWallet } = await prepareDepositWallet(asset.network, input.evmWallet.provider, account);
+  const { client, assertWallet } = await prepareDepositWallet(asset.network, provider, account);
   await assertWallet();
   const nativeBalance = await client.getBalance({ address: account });
   const transaction = asset.kind === "native"
@@ -52,7 +54,7 @@ export async function submitNearEvmDeposit(context: SubmissionContext, quote: Ne
   context.persist!({ near: { ...operation, submission: "attempted" } });
   phase("Confirm the deposit in your EVM wallet…");
   // One wallet call, with no automatic retry if the wallet response is lost.
-  const sourceTxHash = transactionHashSchema.parse(await input.evmWallet.provider.request({
+  const sourceTxHash = transactionHashSchema.parse(await provider.request({
     method: "eth_sendTransaction", params: [{ from: account, to: transaction.to, data: transaction.data,
       value: toHex(transaction.value), chainId: toHex(chain.id), gas: toHex(gas),
       ...(fees ? { maxFeePerGas: toHex(fees.maxFeePerGas), maxPriorityFeePerGas: toHex(fees.maxPriorityFeePerGas) } : { gasPrice: toHex(gasPrice) }),

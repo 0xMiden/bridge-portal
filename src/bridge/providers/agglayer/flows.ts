@@ -1,3 +1,4 @@
+import { requireEvmWallet } from "../../../wallets/bridge-wallet";
 import type { BridgeConfig } from "../../../config/bridge-config";
 import type { ProviderFlows } from "../../core/provider";
 import { parseUnits } from "viem";
@@ -33,8 +34,7 @@ export const flows: ProviderFlows = {
     quote: quoteAgglayer,
     async submit({ input, route, phase, record }) {
       const AGGLAYER_TESTNET = agglayerConfig(route.recovery);
-      const { provider, address } = input.evmWallet;
-      if (!provider || !address) throw new Error("Connect your Ethereum wallet.");
+      const { provider, address } = requireEvmWallet(input.externalWallet);
       const destination = input.midenAccount;
       if (!destination)
         throw new Error("Connect Bread or paste a Miden account ID before receiving.");

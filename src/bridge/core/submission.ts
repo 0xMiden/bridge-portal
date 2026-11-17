@@ -1,8 +1,8 @@
-import type { TransferAccounts } from "./accounts";
 import type { TransferQuote } from "./quote";
 import type { MessageSignerWalletAdapter } from "@miden-sdk/miden-wallet-adapter-base";
 import type { ResolvedMidenAsset } from "../miden-balances";
-import type { EvmProvider } from "../../wallets/evm/evm-wallet";
+import type { ExternalWallet } from "../../wallets/bridge-wallet";
+import type { TransferAccounts } from "./accounts";
 import type { Activity } from "./models";
 import type { BridgeRoute } from "./routes";
 import type { ActivityStore } from "../activity";
@@ -13,12 +13,8 @@ export interface TransferSubmission extends TransferAccounts {
   quote?: TransferQuote;
   amount: string;
   insufficientBalance: boolean;
-  evmBalance: string;
-  evmWallet: {
-    connected: boolean;
-    address: string;
-    provider?: EvmProvider;
-  };
+  sourceBalance: string;
+  externalWallet: ExternalWallet;
   midenWallet: {
     connected: boolean;
     /** Current connected account, also used for the transfer recipient. */
@@ -31,7 +27,7 @@ export interface TransferSubmission extends TransferAccounts {
 }
 
 export interface SubmissionEffects {
-  openEvmWallet: () => Promise<unknown>;
+  openExternalWallet: () => Promise<unknown>;
   /** Fresh account valuation before a bridge-in can reach a signing flow. */
   verifyBalanceCap?: (route: BridgeRoute, amount: string, account: string) => Promise<void>;
   onError: (message: string) => void;

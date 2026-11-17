@@ -1,3 +1,4 @@
+import { requireEvmWallet } from "../../../wallets/bridge-wallet";
 import { configKey } from "../../../config/bridge-config";
 import { isEvmAsset } from "../../core/assets";
 import type { ProviderFlows } from "../../core/provider";
@@ -22,8 +23,7 @@ export const flows: ProviderFlows = {
     async submit({ input, route, phase, record, update }) {
       const source = route.source;
       if (!isEvmAsset(source)) throw new Error("Unsupported Circle source.");
-      const { provider, address } = input.evmWallet;
-      if (!provider || !address) throw new Error("Connect your Ethereum wallet.");
+      const { provider, address } = requireEvmWallet(input.externalWallet);
       const recipient = input.midenAccount;
       if (!recipient)
         throw new Error("Connect your Bread wallet or paste a Miden account to receive into.");

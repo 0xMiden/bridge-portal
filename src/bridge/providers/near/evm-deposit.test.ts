@@ -62,12 +62,12 @@ function setup(kind: "native" | "erc20" = "native") {
     if (wallet.failSend) throw new Error("Wallet response interrupted");
     return nearTxHash;
   });
-  const input: TransferSubmission = { ...bound, environment: "mainnet", insufficientBalance: false, evmBalance: "10", midenAsset: null,
+  const input: TransferSubmission = { ...bound, environment: "mainnet", insufficientBalance: false, sourceBalance: "10", midenAsset: null,
     quote: { ...nearQuoteResult(quote, route.id), request: { ...bound, recovery: route.recovery } },
-    evmWallet: { connected: true, address: bound.externalAddress, provider },
+    externalWallet: { family: "evm", connected: true, address: bound.externalAddress, provider },
     midenWallet: { connected: true, address: bound.midenAccount, requestTransaction: vi.fn() },
   };
-  const effects = { openEvmWallet: vi.fn(), verifyBalanceCap: vi.fn(async () => {}), onError: vi.fn(), onSubmittingChange: vi.fn(), onPhaseChange: vi.fn(),
+  const effects = { openExternalWallet: vi.fn(), verifyBalanceCap: vi.fn(async () => {}), onError: vi.fn(), onSubmittingChange: vi.fn(), onPhaseChange: vi.fn(),
     activities: new ActivityStore(activityPersistence), navigate: vi.fn() };
   effects.activities.sync();
   fetcher.mockImplementation(async path => String(path).endsWith("prepare") ? Response.json(quote) : Response.json(nearStatus(quote)));
