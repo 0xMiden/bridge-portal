@@ -1,4 +1,5 @@
 import type { Provider, ProviderDirection } from "../../core/provider";
+import { isEvmAsset } from "../../core/assets";
 import { evmNetworks } from "../../../config/evm-networks";
 
 const guidance = { tone: "active", icon: "alert", title: "Keep this receipt",
@@ -65,9 +66,12 @@ const receive: ProviderDirection = {
     } },
     FAILED: { ...send.phases.FAILED, guidance: { ...guidance, body: "Check the deposit in your EVM wallet and share this receipt with support. Do not send another deposit for this quote." } },
   },
-  fees: route => ({ ...send.fees(route), networkFee: route?.source.kind !== "miden" && route?.source
-    ? `${evmNetworks[route.source.network].name} gas` : "Source network gas",
-    sepoliaGasUnits: route?.source.kind === "native" ? 21_000 : 65_000 }),
+  fees: route => {
+    const fees = send.fees(route);
+    if (isEvmAsset(route?.source)) return { ...fees, networkFee: `${evmNetworks[route.source.network].name} gas`,
+      sepoliaGasUnits: route.source.kind === "native" ? 21_000 : 65_000 };
+    return { ...fees, networkFee: "Paid in your source wallet" };
+  },
 };
 
 export const near: Provider = {

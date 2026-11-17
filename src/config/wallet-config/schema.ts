@@ -215,6 +215,11 @@ export const walletDocumentSchema = walletDocument.superRefine((doc, ctx) => {
 });
 
 const nearMetadata = { symbol: z.string().min(1).max(11), decimals, logo: z.string().regex(/^\/asset-logos\/[\w-]+\.svg$/), assetId: z.string().min(1).max(200) };
+// Older receipt snapshots used the network name as the asset kind.
+export const bitcoinAssetFields = {
+  network: z.literal("bitcoin"), kind: z.literal(["native", "bitcoin"]).transform(() => "native" as const),
+  symbol: z.literal("BTC"), decimals: z.literal(8),
+};
 export const nearConfigSchema = z.object({
   version: z.literal(1), environment: z.literal("mainnet"), evidenceDate: z.string().date(),
   funding: z.object({ noteType: z.literal("public"), script: z.literal("p2id"), discovery: z.literal("recipient-tag"), memo: z.literal("none") }),
@@ -222,12 +227,14 @@ export const nearConfigSchema = z.object({
     id: z.string().regex(/^mainnet:near-miden-[a-z0-9]+-to-[a-z]+-[a-z0-9]+$/),
     receiveId: z.string().regex(/^mainnet:near-[a-z]+-[a-z0-9]+-to-miden-[a-z0-9]+$/).optional(),
     source: z.object({ ...nearMetadata, network: z.literal("miden-mainnet"), kind: z.literal("miden"), faucetId: account }),
-    destination: z.discriminatedUnion("kind", [
+    destination: z.union([
+      z.object({ ...nearMetadata, ...bitcoinAssetFields, assetId: z.literal("1cs_v1:btc:native:coin") }),
       z.object({ ...nearMetadata, network: z.enum(["ethereum", "base", "arbitrum", "polygon", "robinhood"]), kind: z.literal("native") }),
       z.object({ ...nearMetadata, network: z.enum(["ethereum", "base", "arbitrum", "polygon", "robinhood"]), kind: z.literal("erc20"), address }),
     ]),
-  }).refine(route => !route.receiveId || route.receiveId === `mainnet:near-${route.destination.network}-${route.destination.symbol.toLowerCase()}-to-miden-${route.source.symbol.toLowerCase()}`,
-    "NEAR deposit route identity mismatch")).length(13),
+  }).refine(route => route.destination.network !== "bitcoin" || route.source.symbol === "wBTC", "Unsupported Bitcoin pair")
+    .refine(route => !route.receiveId || route.receiveId === `mainnet:near-${route.destination.network}-${route.destination.symbol.toLowerCase()}-to-miden-${route.source.symbol.toLowerCase()}`,
+    "NEAR deposit route identity mismatch")).min(1),
 }).refine(config => {
   const ids = config.routes.flatMap(route => route.receiveId ? [route.id, route.receiveId] : [route.id]);
   return new Set(ids).size === ids.length;
@@ -265,12 +272,15 @@ function nearSource(config: z.infer<typeof bridgeConfig>, symbol: string) {
 export function assertNearConfig(config: z.infer<typeof bridgeConfig>) {
   if (!config.near) return;
   if (config.environment !== "mainnet") throw new Error("NEAR is mainnet only");
-  for (const route of config.near.routes) {
+  config.near.routes.forEach(route => {
     const known = nearSource(config, route.source.symbol);
     if (known?.faucetId !== route.source.faucetId || known?.decimals !== route.source.decimals) throw new Error("NEAR source does not match the pinned Miden deployment");
-    if (!config.document.supportedEvmChains[route.destination.network]) throw new Error("Unsupported NEAR destination");
-    if (route.source.assetId !== `nep141:miden-${route.source.faucetId}.omft.near`) throw new Error("NEAR faucet/asset ID mismatch");
-  }
+    if (route.destination.network !== "bitcoin" && !config.document.supportedEvmChains[route.destination.network]) throw new Error("Unsupported NEAR destination");
+    const sourceId = route.destination.network === "bitcoin"
+      ? `1cs_v1:miden:ft:${route.source.faucetId}`
+      : `nep141:miden-${route.source.faucetId}.omft.near`;
+    if (route.source.assetId !== sourceId) throw new Error("NEAR faucet/asset ID mismatch");
+  });
 }
 
 export const bridgeConfigSchema = bridgeConfig.superRefine((config, ctx) => {

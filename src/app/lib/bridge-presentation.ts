@@ -1,3 +1,5 @@
+import { bitcoinTxHashSchema } from "../../bridge/bitcoin/address";
+import { transactionHashSchema } from "../../bridge/evm/evm-schema";
 import { midenNetworks } from "../../config/environment";
 import { evmNetworks } from "../../config/evm-networks";
 import type { BridgeAsset, BridgeNetwork } from "../../bridge/core/assets";
@@ -47,6 +49,8 @@ export const modes: Record<
   },
 };
 
+export const bitcoinExplorer = { name: "mempool.space", url: "https://mempool.space" };
+
 export const explorerUrls = {
   sepolia: SEPOLIA_NETWORK.explorerUrl,
   arc: arcTestnet.blockExplorers.default.url,
@@ -54,6 +58,7 @@ export const explorerUrls = {
 };
 
 export const networkLabels: Record<BridgeNetwork, string> = {
+  bitcoin: "Bitcoin",
   polygon: "Polygon",
   robinhood: "Robinhood",
   ethereum: "Ethereum", arc: "Arc", base: "Base", arbitrum: "Arbitrum", "miden-mainnet": "Miden",
@@ -180,14 +185,7 @@ export function createActivity(
 // stored abbreviated (shortAddress) for display and "0xpending" before a tx
 // exists — both produce broken explorer URLs, so they must never feed a link.
 function fullHash(hash?: string): string | undefined {
-  if (!hash) return undefined;
-  if (hash === "0xpending") return undefined;
-  if (hash.includes("…") || hash.includes("...")) return undefined;
-  // Only a real 32-byte tx hash (0x + 64 hex) makes a valid `/tx/` deep link.
-  // Anything else — a wallet-adapter request UUID, a note id — would render a
-  // broken explorer page, so it must never feed a link.
-  if (!/^0x[0-9a-fA-F]{64}$/.test(hash)) return undefined;
-  return hash;
+  return transactionHashSchema.safeParse(hash).data;
 }
 
 export interface ExplorerLink {
@@ -198,16 +196,16 @@ export interface ExplorerLink {
   available: boolean;
 }
 
+function externalExplorer(asset: BridgeAsset | undefined, hash: string | undefined): ExplorerLink {
+  const network = asset && asset.kind !== "miden" ? asset.network : "sepolia";
+  const explorer = network === "bitcoin" ? bitcoinExplorer : evmNetworks[network].blockExplorers.default;
+  const tx = network === "bitcoin" ? bitcoinTxHashSchema.safeParse(hash).data : fullHash(hash);
+  return { label: `View on ${explorer.name}`, href: tx ? `${explorer.url}/tx/${tx}` : undefined, available: Boolean(tx) };
+}
+
 export function sourceExplorer(activity: BridgeActivity): ExplorerLink {
   if (activity.mode === "receive") {
-    const tx = fullHash(directionFor(activity).activityDetails(activity).sourceHash);
-    const source = activityRoute(activity)?.source;
-    const explorer = source && source.kind !== "miden" ? evmNetworks[source.network].blockExplorers.default : evmNetworks.sepolia.blockExplorers.default;
-    return {
-      label: `View on ${explorer.name}`,
-      href: tx ? `${explorer.url}/tx/${tx}` : undefined,
-      available: !!tx,
-    };
+    return externalExplorer(activityRoute(activity)?.source, directionFor(activity).activityDetails(activity).sourceHash);
   }
   // Send source = the Miden note tx (Epoch's P2IDE collateral note / Agglayer's
   // B2AGG note). Deep-link it like the Sepolia side does.
@@ -236,16 +234,7 @@ export function destinationExplorer(activity: BridgeActivity): ExplorerLink {
       available: delivered && !!account,
     };
   }
-  // Send destination = the Sepolia fulfillment tx. Disabled until the solver
-  // fulfils and the tx hash is captured — never a broken/list URL.
-  const sepoliaTx = fullHash(directionFor(activity).activityDetails(activity).destinationHash);
-  const destination = activityRoute(activity)?.destination;
-  const explorer = destination && destination.kind !== "miden" ? evmNetworks[destination.network].blockExplorers.default : evmNetworks.sepolia.blockExplorers.default;
-  return {
-    label: `View on ${explorer.name}`,
-    href: sepoliaTx ? `${explorer.url}/tx/${sepoliaTx}` : undefined,
-    available: !!sepoliaTx,
-  };
+  return externalExplorer(activityRoute(activity)?.destination, directionFor(activity).activityDetails(activity).destinationHash);
 }
 
 /**

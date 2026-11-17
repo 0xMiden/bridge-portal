@@ -1,4 +1,5 @@
 import { decodeFunctionResult, encodeFunctionData, erc20Abi, formatUnits, toHex } from "viem";
+import { isEvmAsset } from "../../core/assets";
 import type { SubmissionContext } from "../../core/submission";
 import { prepareDepositWallet } from "../../evm/deposit-wallet";
 import { suggestEvmFees } from "../../evm/fee-suggestions";
@@ -13,7 +14,7 @@ import type { NearQuoteResponse } from "./schema";
 export async function submitNearEvmDeposit(context: SubmissionContext, quote: NearQuoteResponse, id: string) {
   const { route, input, phase } = context;
   const asset = route.source;
-  if (route.mode !== "receive" || asset.kind === "miden" || !input.evmWallet.provider) throw new Error("Connect the source EVM wallet.");
+  if (route.mode !== "receive" || !isEvmAsset(asset) || !input.evmWallet.provider) throw new Error("Connect the source EVM wallet.");
   const account = evmAddressSchema.parse(input.evmAddress);
   const depositAddress = evmAddressSchema.parse(quote.quote.depositAddress);
   const units = BigInt(quote.quote.amountIn);

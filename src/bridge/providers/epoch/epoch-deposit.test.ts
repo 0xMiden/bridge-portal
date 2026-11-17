@@ -4,6 +4,7 @@ import { epochWalletPaidHealth } from "../../../../test/epoch-service";
 import { createWalletClient, custom, decodeFunctionData, encodeAbiParameters, encodeEventTopics, erc20Abi, formatUnits, parseUnits, type Hex } from "viem";
 import { evmNetworks } from "../../../config/evm-networks";
 import { getWalletClient } from "@wagmi/core";
+import { isEvmAsset } from "../../core/assets";
 import { findBridgeRoute } from "../../core/routes";
 import { submitBridgeTransfer, type TransferSubmission } from "../../../app/lib/bridge-submission";
 import { activityPersistence, loadStoredActivities, saveActivities } from "../../../app/lib/bridge-persistence";
@@ -53,7 +54,7 @@ afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 
 function setup(mode: "sequential" | "batch" | "rejected", health: unknown = epochWalletPaidHealth(COMPACT), selected = route) {
   const source = selected.source;
-  if (source.kind === "miden") throw new Error("Expected an EVM deposit");
+  if (!isEvmAsset(source)) throw new Error("Expected an EVM deposit");
   const chain = evmNetworks[source.network];
   const chainHex = `0x${chain.id.toString(16)}`;
   let claimHash: Hex;

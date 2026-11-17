@@ -1,5 +1,6 @@
 import { activityPhase, type Provider, type ProviderDirections } from "../../core/provider";
 import type { BridgeRoute } from "../../core/routes";
+import { isEvmAsset } from "../../core/assets";
 import { evmNetworks } from "../../../config/evm-networks";
 import { recoveryGuidance, type ActivityGuidance } from "../../core/activity-presentation";
 
@@ -64,7 +65,7 @@ function quoteFees(route?: BridgeRoute) {
   const evm = route?.mode === "send" ? route.destination : route?.source;
   return {
     ...fees,
-    networkFee: evm && evm.kind !== "miden" ? `${evmNetworks[evm.network].name} gas` : "Network gas",
+    networkFee: isEvmAsset(evm) ? `${evmNetworks[evm.network].name} gas` : "Network gas",
     warning: route?.recovery.environment === "mainnet"
       ? "A live quote is required for this amount. Check the output before confirming."
       : "Epoch uses mock tokens on Sepolia. Check the quoted output before confirming.",

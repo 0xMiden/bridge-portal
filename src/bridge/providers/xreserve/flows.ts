@@ -1,4 +1,5 @@
 import { configKey } from "../../../config/bridge-config";
+import { isEvmAsset } from "../../core/assets";
 import type { ProviderFlows } from "../../core/provider";
 import { captureSourceTransaction } from "../../evm/source-transaction";
 import { evmNetworks } from "../../../config/evm-networks";
@@ -19,14 +20,15 @@ export const flows: ProviderFlows = {
       return quoteTransfer(input, signal);
     },
     async submit({ input, route, phase, record, update }) {
+      const source = route.source;
+      if (!isEvmAsset(source)) throw new Error("Unsupported Circle source.");
       const { provider, address } = input.evmWallet;
       if (!provider || !address) throw new Error("Connect your Ethereum wallet.");
       const recipient = input.midenAccount;
       if (!recipient)
         throw new Error("Connect your Bread wallet or paste a Miden account to receive into.");
       const { depositOnArc } = await import("./deposit");
-      const sourceName =
-        route.source.kind === "miden" ? "Miden" : evmNetworks[route.source.network].name;
+      const sourceName = evmNetworks[source.network].name;
       const labels = {
         checking: "Checking deposit…",
         approving: "Approve USDC in your wallet…",
@@ -53,22 +55,21 @@ export const flows: ProviderFlows = {
             midenAccount: recipient,
             receivedAmount: input.amount.trim(),
           });
-          if (route.source.kind !== "miden")
-            void captureSourceTransaction(route.source.network, sourceTxHash)
-              .then((sourceTransaction) => {
-                if (sourceTransaction) update({ sourceTransaction });
-              })
-              .catch(() => undefined);
+          void captureSourceTransaction(source.network, sourceTxHash)
+            .then((sourceTransaction) => {
+              if (sourceTransaction) update({ sourceTransaction });
+            })
+            .catch(() => undefined);
         },
       };
-      if (["arc-testnet", "arc"].includes(route.source.network)) await depositOnArc(request, route.recovery);
+      if (["arc-testnet", "arc"].includes(source.network)) await depositOnArc(request, route.recovery);
       else {
-        if (!isCctpNetwork(route.source.network) || input.quote?.kind !== "cctp")
+        if (!isCctpNetwork(source.network) || input.quote?.kind !== "cctp")
           throw new Error("Review the Circle fee before sending.");
         const { depositViaCctp } = await import("./cctp-deposit");
         await depositViaCctp({
           ...request,
-          network: route.source.network,
+          network: source.network,
           quote: input.quote.authorization,
         }, route.recovery);
       }

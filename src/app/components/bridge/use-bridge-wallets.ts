@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useAppKit, useAppKitAccount, useAppKitProvider, useWalletInfo } from "@reown/appkit/react";
 import { useEvmBalance, useMidenBalance } from "../../../bridge/BalanceProvider";
+import { isEvmAsset } from "../../../bridge/core/assets";
 import type { BridgeRoute } from "../../../bridge/core/routes";
 import { evmNetworks } from "../../../config/evm-networks";
 import type { EvmProvider } from "../../../wallets/evm/evm-wallet";
@@ -25,7 +26,7 @@ export function useBridgeWallets(route: BridgeRoute) {
   const evmAddress = isConnected && address ? address : "";
   const midenAccount = miden.connected ? miden.address : "";
   const midenToken = [route.source, route.destination].find(asset => asset.kind === "miden");
-  const evmToken = [route.source, route.destination].find(asset => asset.kind !== "miden");
+  const evmToken = [route.source, route.destination].find(isEvmAsset);
   const midenBalance = useMidenBalance(midenAccount, midenToken);
   const evmBalance = useEvmBalance(evmAddress, evmToken);
   const evmBalanceLabel = evmBalance.balance

@@ -3,7 +3,7 @@
 import { Card } from "./ui/Card";
 import { DetailsList } from "./ui/DetailsList";
 import { StatusIndicator } from "./ui/Status";
-import type { BridgeNetwork } from "../../bridge/core/assets";
+import { isEvmAsset, type BridgeNetwork } from "../../bridge/core/assets";
 import { ExternalLink } from "lucide-react";
 import { type ReactNode, useEffect, useState } from "react";
 import { activityRoute } from "../../bridge/core/routes";
@@ -76,7 +76,7 @@ export function ActivityJourney({ receipt, needsClaim, children }: {
   const destinationAsset = destinationAssetSymbol(activity);
   const differentOutput = destinationAsset !== activity.asset || Number(receipt.receivedAmount) !== Number(activity.amount);
   const evmAsset = route?.source.kind === "miden" ? route.destination : route?.source;
-  const gas = useSepoliaGasEstimate(receipt.sepoliaGasUnits, evmAsset?.kind !== "miden" ? evmAsset?.network : undefined);
+  const gas = useSepoliaGasEstimate(receipt.sepoliaGasUnits, isEvmAsset(evmAsset) ? evmAsset.network : undefined);
   const networkFee = gas.fee ?? (gas.loading ? "Estimating…" : receipt.networkFee);
   const status = needsClaim ? { label: "Ready to claim", tone: "active" as const }
     : receipt.status ?? { label: "Complete", tone: "success" as const };
