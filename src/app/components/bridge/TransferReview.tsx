@@ -8,7 +8,7 @@ import type { BridgeAsset } from "../../../bridge/core/assets";
 import { routeEnvironment } from "../../../bridge/core/routes";
 import { bridgeProviders } from "../../../bridge/providers/registry";
 import { shortAddress } from "../../../wallets/identity";
-import { networkLabels } from "../../lib/bridge-presentation";
+import { networkLabels, sourceAccountLabel } from "../../lib/bridge-presentation";
 import { NetworkLogo } from "../AssetLogo";
 import { FiatAmount } from "../FiatAmount";
 import { TokenAmount } from "../TokenAmount";
@@ -109,12 +109,12 @@ function ReviewAccount({ side, asset, account }: { side: "source" | "destination
       <div className="min-w-0">
         <strong className="block text-sm font-medium leading-6">{networkLabels[asset.network]}</strong>
         <div className="preflight-address mt-1 flex flex-wrap items-center gap-1 text-sm text-muted-foreground">
-          <span>{side === "source" ? "From" : "To"}</span>
-          <button type="button" id={`preflight-${side}-value`} className={`preflight-account max-w-full text-left text-foreground wrap-anywhere ${addressButtonClasses}`} title={account}
+          <span>{side === "source" ? sourceAccountLabel(asset) : "To"}</span>
+          {asset.network === "bitcoin" ? <span className="text-foreground wrap-anywhere">{account}</span> : <button type="button" id={`preflight-${side}-value`} className={`preflight-account max-w-full text-left text-foreground wrap-anywhere ${addressButtonClasses}`} title={account}
             aria-label={`${expanded ? "Hide" : "Show full"} ${side} address: ${account}`}
             aria-expanded={expanded} onClick={() => setExpanded(current => !current)}>
             {expanded ? account : shortAddress(account)}
-          </button>
+          </button>}
           {side === "destination" ? (
             <button type="button" className={`preflight-copy grid place-items-center ${addressButtonClasses}`} aria-label={copied ? "Destination copied" : "Copy destination"} onClick={copyAddress}>
               {copied ? <Check size={14} aria-hidden="true" /> : <Copy size={14} aria-hidden="true" />}

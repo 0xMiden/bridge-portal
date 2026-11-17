@@ -9,14 +9,16 @@ import {
   networks,
   projectId,
   wagmiAdapter,
+  bitcoinAdapter,
 } from "./appkit-config";
 
 // Must run once at module scope, not inside the component.
-createAppKit({
-  adapters: [wagmiAdapter],
+export const appKit = createAppKit({
+  adapters: [wagmiAdapter, bitcoinAdapter],
   networks,
   projectId,
   metadata,
+  defaultAccountTypes: { bip122: "payment" },
   features: { analytics: false },
 });
 

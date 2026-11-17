@@ -45,7 +45,7 @@ export function useBridgeTransfer(draft: { route: BridgeRoute; amount: string },
     destinationConnected: Boolean(route.mode === "receive" ? midenAccount : externalAddress),
     insufficientBalance: quote.insufficientBalance,
     quoteLoading: quote.providers.loading && !quote.live,
-    isSubmitting, submitPhase: state.status === "submitting" ? state.phase : state.status === "preparing" ? "Preparing quote…" : "", evmNetworkLabel: wallets.evm.network.name,
+    isSubmitting, submitPhase: state.status === "submitting" ? state.phase : state.status === "preparing" ? "Preparing quote…" : "", externalNetworkLabel: wallets.external.networkLabel,
   });
   const cta = action.action === "review" ? {
     ...action,
@@ -119,12 +119,12 @@ export function useBridgeTransfer(draft: { route: BridgeRoute; amount: string },
       await submitBridgeTransfer({
         routeId: reviewed.route.id, environment, amount: reviewed.amount, quote: reviewed.quote,
         ...reviewed.accounts,
-        insufficientBalance: quote.insufficientBalance, sourceBalance: wallets.evm.balanceLabel,
-        externalWallet: { ...wallets.evm, family: "evm" },
+        insufficientBalance: quote.insufficientBalance, sourceBalance: wallets.external.balanceText,
+        externalWallet: wallets.external,
         midenWallet: wallets.miden,
         midenAsset: midenAsset && midenAsset.amountRaw > 0n ? midenAsset : null,
       }, {
-        openExternalWallet: wallets.openEvmWallet,
+        openExternalWallet: wallets.openExternalWallet,
         verifyBalanceCap: quote.balanceCap.verifyBalanceCap,
         onError: setError,
         onSubmittingChange: submitting => setState(current => submitting

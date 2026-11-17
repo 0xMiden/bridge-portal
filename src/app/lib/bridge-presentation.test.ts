@@ -51,6 +51,7 @@ describe("deriveCtaState (primary CTA progression)", () => {
   const ready: CtaInputs = {
     mode: "receive",
     sourceConnected: true,
+    externalNetworkLabel: "Sepolia",
     destinationConnected: true,
     amount: "1",
     sourceTokenSymbol: "USDC",

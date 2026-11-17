@@ -75,6 +75,10 @@ export function sourceAssetLabel(asset: BridgeAsset): string {
   return asset.kind === "miden" && asset.symbol === "ETH" ? "Miden ETH" : asset.symbol;
 }
 
+export function sourceAccountLabel(asset?: BridgeAsset): string {
+  return asset?.network === "bitcoin" ? "Refund to" : "From";
+}
+
 export function quoteFor(route: BridgeRoute, amount: string): Quote {
   return quoteFromPolicy(directionFor(route).fees(route), amount, route.destination.symbol);
 }
@@ -115,7 +119,7 @@ export interface CtaInputs extends TransferInputs {
   mode: FlowMode;
   sourceTokenSymbol: string;
   submitPhase: string;
-  evmNetworkLabel?: string;
+  externalNetworkLabel: string;
 }
 
 /** Add button copy and interaction state to the core transfer decision. */
@@ -124,8 +128,8 @@ export function deriveCtaState(input: CtaInputs): CtaState {
   const labels: Record<TransferAction, string> = {
     submitting: input.submitPhase || "Preparing…",
     "enter-amount": "Enter amount",
-    "connect-source": input.mode === "receive" ? `Connect ${input.evmNetworkLabel ?? "Sepolia"} wallet` : "Connect Bread wallet",
-    "connect-destination": input.mode === "receive" ? "Connect Bread wallet" : `Connect ${input.evmNetworkLabel ?? "Sepolia"} wallet`,
+    "connect-source": input.mode === "receive" ? `Connect ${input.externalNetworkLabel} wallet` : "Connect Bread wallet",
+    "connect-destination": input.mode === "receive" ? "Connect Bread wallet" : `Connect ${input.externalNetworkLabel} wallet`,
     insufficient: `Not enough ${input.sourceTokenSymbol}`,
     "quote-loading": "Fetching quote…",
     review: input.mode === "receive" ? "Review receive" : "Review send",

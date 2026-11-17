@@ -68,7 +68,7 @@ export function SwapPanels({ draft, wallets, transfer, panelsRef, onChange }: {
       </div>
       <div className="swap-panels relative mt-4 grid gap-4" ref={panelsRef}>
         {(["source", "destination"] as const).map(side => (
-          <TransferPanel key={route[side].kind === "miden" ? "miden" : "evm"} side={side} draft={draft} wallets={wallets} quote={quote} onChange={onChange} />
+          <TransferPanel key={route[side].kind === "miden" ? "miden" : "external"} side={side} draft={draft} wallets={wallets} quote={quote} onChange={onChange} />
         ))}
       </div>
       {quote.amountError ? <FormAlert id="amount-error">{quote.amountError}</FormAlert>
@@ -102,8 +102,8 @@ function TransferPanel({ side, draft, wallets, quote, onChange }: {
         <span>{isSource ? "From" : "To"}</span>
         <ChainSelect route={route} side={side} onSelectRoute={selectRoute} />
       </div>
-      <div className="panel-wallet col-start-2 row-start-1 min-w-0 max-w-43 justify-self-end max-[380px]:col-span-2 max-[380px]:col-start-1 max-[380px]:row-start-2" data-wallet={isMiden ? "miden" : "evm"}>
-        {isMiden ? <MidenWalletButton /> : <ExternalWalletControl wallet={wallets.evm} onConnect={wallets.openEvmWallet} onError={wallets.setError} />}
+      <div className="panel-wallet col-start-2 row-start-1 min-w-0 max-w-43 justify-self-end max-[380px]:col-span-2 max-[380px]:col-start-1 max-[380px]:row-start-2" data-wallet={isMiden ? "miden" : wallets.external.family}>
+        {isMiden ? <MidenWalletButton /> : <ExternalWalletControl wallet={wallets.external} onConnect={wallets.openExternalWallet} onError={wallets.setError} />}
       </div>
       {isSource ? (
         <label className="col-start-1 row-start-2 min-w-0 max-[380px]:row-start-3">
@@ -120,8 +120,11 @@ function TransferPanel({ side, draft, wallets, quote, onChange }: {
       </div>
       <div className="col-span-2 row-start-3 flex min-h-5 items-center justify-between gap-2 max-[380px]:row-start-4">
         <FiatAmount amount={isSource ? amount : quote.received} symbol={route[side].symbol} />
-        <small className="balance-line flex min-w-0 max-w-3/4 items-center justify-end gap-1.5 text-xs/normal text-muted-foreground">{isMiden ? <MidenBalance wallet={wallets.miden} /> : <EvmBalance wallet={wallets.evm} />}</small>
+        <small className="balance-line flex min-w-0 max-w-3/4 items-center justify-end gap-1.5 text-xs/normal text-muted-foreground">{isMiden ? <MidenBalance wallet={wallets.miden} /> : <ExternalBalance wallet={wallets.external} symbol={route[side].symbol} />}</small>
       </div>
+      {!isMiden && wallets.external.warning ? (
+        <div className="col-span-2"><FormAlert role="alert">{wallets.external.warning}</FormAlert></div>
+      ) : null}
       {isSource ? (
         <button className="swap-divider absolute -bottom-[31px] left-1/2 z-2 grid size-11 -translate-x-1/2 place-items-center rounded-xl border border-border bg-surface
           enabled:hover:border-accent enabled:hover:text-accent-foreground disabled:text-muted-foreground" type="button" aria-label="Reverse transfer direction" disabled={!reverse}
@@ -134,11 +137,11 @@ function TransferPanel({ side, draft, wallets, quote, onChange }: {
   );
 }
 
-function EvmBalance({ wallet }: { wallet: BridgeWallets["evm"] }) {
-  if (!wallet.connected) return null;
+function ExternalBalance({ wallet, symbol }: { wallet: BridgeWallets["external"]; symbol: string }) {
+  if (!wallet.connected || !wallet.balance) return null;
   if (wallet.balance.balance) return <>Available {wallet.balanceText}</>;
   if (wallet.balanceUnavailable) return <>Balance unavailable</>;
-  return <><span aria-hidden="true">Available</span><span className="h-3 w-12 rounded bg-border-strong" role="status"><span className="sr-only">Loading {wallet.token?.symbol} balance…</span></span></>;
+  return <><span aria-hidden="true">Available</span><span className="h-3 w-12 rounded bg-border-strong" role="status"><span className="sr-only">Loading {symbol} balance…</span></span></>;
 }
 
 function MidenBalance({ wallet }: { wallet: BridgeWallets["miden"] }) {

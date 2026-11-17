@@ -29,7 +29,7 @@ type MintStatus =
  */
 export function FaucetMenu() {
   const balances = useBalanceStore();
-  const { address, isConnected } = useAppKitAccount();
+  const { address, isConnected } = useAppKitAccount({ namespace: "eip155" });
   const { walletProvider } = useAppKitProvider<EvmProvider>("eip155");
   const [status, setStatus] = useState<MintStatus>({ kind: "idle" });
   const canMint = isConnected && !!address && !!walletProvider;
