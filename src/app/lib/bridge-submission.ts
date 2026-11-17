@@ -100,11 +100,12 @@ export async function submitBridgeTransfer(
       findActivity: id => { effects.activities.sync?.(); return effects.activities.get?.(id)?.activity; },
       persist: patch => {
         if (!effects.activities.get) throw new Error("Receipt storage is unavailable. Do not submit this transfer.");
+        const firstSave = !recorded;
         if (!recorded) recorded = effects.activities.record(createActivity(route, input.amount, patch));
         else update(patch);
         const receipt = effects.activities.get(recorded.id);
         if (!receipt || receipt.unsavedChanges) throw new Error("Save this receipt before opening the wallet. Storage is unavailable.");
-        effects.navigate(`/activity/${recorded.id}`);
+        if (firstSave) effects.navigate(`/activity/${recorded.id}`);
         return recorded;
       },
       record: (patch) => {
@@ -120,7 +121,8 @@ export async function submitBridgeTransfer(
   } catch (error) {
     // An RPC/solver outage after broadcast is not proof that the transfer failed.
     effects.onError(
-      recorded?.near?.submission === "prepared" ? `Transfer was not sent. Keep its prepared receipt. ${errorMessage(error)}` : recorded
+      recorded?.near?.submission === "prepared" ? `Transfer was not sent. Keep its prepared receipt. ${errorMessage(error)}`
+        : recorded?.near?.submission === "attempted" ? `Check the wallet request and keep its receipt. Do not submit again. ${errorMessage(error)}` : recorded
         ? `Transfer submitted. Keep its receipt; do not submit again. ${errorMessage(error)}`
         : errorMessage(error),
     );

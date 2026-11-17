@@ -85,6 +85,16 @@ export function nearInput(input: QuoteRequest): NearInput {
     midenAccount: input.midenAccount, externalAddress: input.externalAddress });
 }
 
+export function validateNearDeposit(quote: NearQuoteResponse) {
+  if (quote.quoteRequest.dry || !quote.quote.depositAddress) throw new Error("Review an executable NEAR quote before sending.");
+  // Public P2ID deposits need no attachment. Never silently drop a provider memo.
+  if (quote.quote.depositMemo || quote.quote.depositAttachment || quote.quote.attachment) {
+    throw new Error("This NEAR deposit requires unsupported memo or attachment instructions. Do not fund it.");
+  }
+  if (quote.quoteRequest.depositMode && quote.quoteRequest.depositMode !== "SIMPLE") throw new Error("Unsupported NEAR deposit mode.");
+  return quote.quote.depositAddress;
+}
+
 export function nearQuoteResult(response: NearQuoteResponse, routeId: string): QuoteResult {
   const decimals = nearRouteAssets(routeId).destination.decimals;
   return { kind: "near", received: formatUnits(BigInt(response.quote.amountOut), decimals),

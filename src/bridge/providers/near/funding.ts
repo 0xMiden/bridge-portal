@@ -3,8 +3,7 @@ import { Transaction } from "@miden-sdk/miden-wallet-adapter-base";
 import type { BridgeConfig } from "../../../config/bridge-config";
 import { createFeeConversionSalt } from "../../../wallets/miden/miden-transaction";
 import { parseMidenAccountId } from "../../miden-address-sdk";
-import { nearPair, verifyNearQuote } from "./quote";
-import { validateNearDeposit } from "./execute";
+import { nearPair, validateNearDeposit, verifyNearQuote } from "./quote";
 import type { NearInput, NearQuoteResponse } from "./schema";
 
 /** Standard public P2ID: the SDK derives the recipient's discovery tag. No Epoch collateral contract. */
