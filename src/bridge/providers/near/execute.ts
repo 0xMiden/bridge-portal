@@ -1,11 +1,12 @@
 import { quoteHash, type QuoteResponse } from "@defuse-protocol/one-click-sdk-typescript";
 import { formatUnits } from "viem";
-import { transactionHashSchema } from "../../evm/evm-schema";
+import { isEvmAsset } from "../../core/assets";
 import type { SubmissionContext } from "../../core/submission";
 import { assertRecipientAccount } from "../../../wallets/bridge-wallet";
+import { prepareBitcoinDeposit } from "./bitcoin-deposit";
 import { normalizeMidenAccountHex } from "../../miden-address";
 import { getMidenVerificationBaseFee } from "../../miden-rpc";
-import { nearInput, nearPair, validateNearDeposit, verifyNearQuote } from "./quote";
+import { nearInput, nearPair, validateNearDeposit, validateNearTxHash, verifyNearQuote } from "./quote";
 import { nearPost } from "./client";
 import type { NearInput, NearOperation, NearQuoteResponse } from "./schema";
 
@@ -46,15 +47,24 @@ async function notifyDeposit(context: SubmissionContext, operation: NearOperatio
   } catch { /* The monitor retries this notification without requesting another payment. */ }
 }
 
+async function prepareExternalDeposit(context: SubmissionContext, quote: NearQuoteResponse) {
+  const source = context.route.source;
+  if (source.network === "bitcoin") return prepareBitcoinDeposit(context.input, quote);
+  if (isEvmAsset(source)) {
+    const { prepareEvmDeposit } = await import("./evm-deposit");
+    return prepareEvmDeposit(context, quote);
+  }
+  throw new Error("This network does not support external deposits.");
+}
+
 async function submitExternalDeposit(context: SubmissionContext, binding: NearInput, quote: NearQuoteResponse, id: string) {
-  const { prepareEvmDeposit } = await import("./evm-deposit");
-  const deposit = await prepareEvmDeposit(context, quote);
+  const deposit = await prepareExternalDeposit(context, quote);
   await nearPost("prepare", { ...binding, quote });
   await deposit.assertWallet();
   verifyNearQuote(quote, binding, false);
   const operation = claimDeposit(context, id, quote, deposit.networkFee);
   context.phase(deposit.prompt);
-  const sourceTxHash = transactionHashSchema.parse(await deposit.send());
+  const sourceTxHash = validateNearTxHash(context.route.id, "source", await deposit.send());
   const accepted = { ...operation, submission: "accepted" as const };
   context.persist({ sourceTxHash, near: accepted });
   await notifyDeposit(context, accepted, sourceTxHash);

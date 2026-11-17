@@ -29,16 +29,24 @@ it("rejects tampered signed terms, mismatched accounts/routes and an expired pre
   expect(() => verifyNearQuote(signedPreview, input, true)).toThrow(/expired/);
 });
 
-it("verifies the signed wBTC withdrawal against the reviewed Bitcoin recipient", () => {
-  const fixture = bitcoinQuotes.send.prepared;
-  const routeId = "mainnet:near-miden-wbtc-to-bitcoin-btc";
+it.each([
+  ["receive", bitcoinQuotes.receive.prepared, "mainnet:near-bitcoin-btc-to-miden-wbtc", "0.00098248"],
+  ["send", bitcoinQuotes.send.prepared, "mainnet:near-miden-wbtc-to-bitcoin-btc", "0.00097848"],
+] as const)("verifies real executable Bitcoin %s terms with the official signature verifier", (mode, fixture, routeId, received) => {
   vi.useFakeTimers(); vi.setSystemTime(new Date(fixture.timestamp));
-  const input = nearInputSchema.parse({ routeId, mode: "send", amount: "0.001",
-    midenAccount: fixture.quoteRequest.refundTo, externalAddress: fixture.quoteRequest.recipient });
+  const input = nearInputSchema.parse({ routeId, mode, amount: "0.001",
+    midenAccount: mode === "receive" ? fixture.quoteRequest.recipient : fixture.quoteRequest.refundTo,
+    externalAddress: mode === "send" ? fixture.quoteRequest.recipient : fixture.quoteRequest.refundTo });
   const verified = verifyNearQuote(fixture, input, false);
-  expect(nearQuoteResult(verified, routeId).received).toBe("0.00097848");
+  expect(nearQuoteResult(verified, routeId).received).toBe(received);
   const changed = structuredClone(fixture);
   changed.quote.depositAddress = "3J98t1WpEZ73CNmQviecrnyiWrnqRhWNLy";
   expect(() => verifyNearQuote(changed, input, false)).toThrow(/signature/);
   expect(() => verifyNearQuote(fixture, { ...input, externalAddress: "3J98t1WpEZ73CNmQviecrnyiWrnqRhWNLy" }, false)).toThrow(/match/);
+  if (mode === "receive") {
+    // Tracking after review expiry retains the original signed terms.
+    vi.advanceTimersByTime(11 * 60_000);
+    expect(() => verifyNearQuote(fixture, input, false)).toThrow(/expired/);
+    expect(verifyNearQuote(fixture, input, false, false)).toEqual(verified);
+  }
 });

@@ -157,6 +157,8 @@ it("cancels obsolete requests and never reuses a payout after amount or wallet c
 
 it.each([
   ["mainnet:xreserve:ethereum:receive", { externalAddress: `0x${"ab".repeat(20)}` }, { externalAddress: `0x${"AB".repeat(20)}` }, 1],
+  ["mainnet:near-bitcoin-btc-to-miden-wbtc", { externalAddress: "1BoatSLRHtKNngkdXEeobR76b53LETtpyT" }, { externalAddress: "1boatslrhtknngkdxeeobr76b53lettpyt" }, 0],
+  ["mainnet:near-bitcoin-btc-to-miden-wbtc", { externalAddress: "1BoatSLRHtKNngkdXEeobR76b53LETtpyT" }, { externalAddress: "1BoatSLRHtKNngkdXEeobR76b53LETtpyT" }, 1],
 ])("binds %s offers using that chain's address rules", (routeId, accounts, quotedAccounts, count) => {
   const route = findBridgeRoute(routeId)!;
   const request = { ...input, route, ...accounts };

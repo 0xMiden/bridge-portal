@@ -1,25 +1,29 @@
 import { formatUnits } from "viem";
-import { nearRequest, nearRouteAssets } from "../src/bridge/providers/near/quote";
+import { nearRequest, nearRouteAssets, nearDepositWindow } from "../src/bridge/providers/near/quote";
 import type { NearQuoteResponse, NearInput, NearStatus } from "../src/bridge/providers/near/schema";
 
-export const nearTestInput: NearInput = {
+export const nearTestInput = {
   routeId: "mainnet:near-miden-usdcx-to-base-usdc", mode: "send", amount: "5",
   midenAccount: "mm1aqu8zjdwvcgkeug5a67kpwmnsyv2qgp7_qr7qqq9wr6w",
   externalAddress: "0x1111111111111111111111111111111111111111",
-};
-export const nearReceiveInput: NearInput = { ...nearTestInput, routeId: "mainnet:near-base-usdc-to-miden-usdcx", mode: "receive" };
+} satisfies NearInput;
+export const nearReceiveInput = { ...nearTestInput, routeId: "mainnet:near-base-usdc-to-miden-usdcx", mode: "receive" } satisfies NearInput;
 export const bitcoinAddress = "1BoatSLRHtKNngkdXEeobR76b53LETtpyT";
+export const bitcoinReceiveInput: NearInput = {
+  routeId: "mainnet:near-bitcoin-btc-to-miden-wbtc", mode: "receive", amount: "0.001",
+  midenAccount: nearTestInput.midenAccount, externalAddress: bitcoinAddress,
+};
 // Flow tests stub signature verification. quote.test.ts verifies a real service-signed fixture.
-export function nearQuoteFixture(input = nearTestInput, dry = false, patch: Partial<NearQuoteResponse["quote"]> = {}, waitMs?: number): NearQuoteResponse {
+export function nearQuoteFixture(input: NearInput = nearTestInput, dry = false, patch: Partial<NearQuoteResponse["quote"]> = {}, waitMs?: number): NearQuoteResponse {
   const { source } = nearRouteAssets(input.routeId);
-  const request = nearRequest(input, dry, new Date(Date.now() + 600_000).toISOString());
+  const request = nearRequest(input, dry, new Date(Date.now() + nearDepositWindow(input.routeId)).toISOString());
   const response: NearQuoteResponse = {
     correlationId: "synthetic-near-quote", timestamp: new Date().toISOString(), signature: "test-quote-signature",
     quoteRequest: { ...request, quoteWaitingTimeMs: waitMs ?? request.quoteWaitingTimeMs },
     quote: { amountIn: request.amount, amountInFormatted: formatUnits(BigInt(request.amount), source.decimals), amountInUsd: "5",
       minAmountIn: request.amount, amountOut: "4980000", amountOutFormatted: "4.98", amountOutUsd: "4.98", minAmountOut: "4930200",
       timeEstimate: 24, ...(dry ? {} : { depositAddress: input.mode === "send"
-        ? "mm1apu8zjdwvcgkeug5a67kpwmnsynr09mq_qr7qqq9wr6w" : "0x3333333333333333333333333333333333333333", deadline: request.deadline }), ...patch },
+        ? "mm1apu8zjdwvcgkeug5a67kpwmnsynr09mq_qr7qqq9wr6w" : source.network === "bitcoin" ? "bc1q622ascprdhkprwunjwwa3dsn5scfx7dfy8j2j7" : "0x3333333333333333333333333333333333333333", deadline: request.deadline }), ...patch },
   };
   return response;
 }

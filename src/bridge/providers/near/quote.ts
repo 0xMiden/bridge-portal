@@ -52,6 +52,10 @@ export function nearRequest(input: NearInput, dry: boolean, deadline: string) {
   } satisfies OneClickQuoteRequest;
 }
 
+export function nearDepositWindow(routeId: string) {
+  return nearRouteAssets(routeId).source.network === "bitcoin" ? 60 * 60_000 : 10 * 60_000;
+}
+
 export function nearQuoteExpiry(response: NearQuoteResponse) {
   return Math.min(
     Date.parse(response.quoteRequest.deadline),

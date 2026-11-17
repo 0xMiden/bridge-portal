@@ -298,6 +298,7 @@
     },
     {
       "id": "mainnet:near-miden-wbtc-to-bitcoin-btc",
+      "receiveId": "mainnet:near-bitcoin-btc-to-miden-wbtc",
       "source": {
         "network": "miden-mainnet",
         "kind": "miden",

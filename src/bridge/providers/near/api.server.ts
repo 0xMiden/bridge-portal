@@ -1,7 +1,7 @@
 import { ApiError, OneClickService, OpenAPI, type CancelablePromise } from "@defuse-protocol/one-click-sdk-typescript";
 import { nearInputSchema, nearPrepareInputSchema, nearTrackingInputSchema, nearDepositInputSchema, nearStatusResponseSchema, nearQuoteSchema, nearCorrelationId, nearEvmAddress } from "./schema";
 import { bitcoinAddressSchema } from "../../bitcoin/address";
-import { nearRequest, verifyNearQuote, nearTrackingInput, validateNearTxHash } from "./quote";
+import { nearRequest, verifyNearQuote, nearTrackingInput, nearDepositWindow, validateNearTxHash } from "./quote";
 import { currentBridgeConfig } from "../../../config/bridge-config";
 
 const API = "https://1click.chaindefuser.com";
@@ -68,7 +68,7 @@ async function upstream<T>(operation: "quote" | "status" | "deposit", start: () 
 
 async function quote(body: unknown, dry: boolean, signal: AbortSignal) {
   const input = dry ? nearInputSchema.parse(body) : nearPrepareInputSchema.parse(body);
-  const request = nearRequest(input, dry, new Date(Date.now() + 10 * 60_000).toISOString());
+  const request = nearRequest(input, dry, new Date(Date.now() + nearDepositWindow(input.routeId)).toISOString());
   if (!dry && currentBridgeConfig("mainnet").document.features[input.mode === "send" ? "bridgeOut" : "bridgeIn"] === false) {
     throw new NearApiError("New NEAR transfers are paused. Existing receipts continue tracking.", 503);
   }
