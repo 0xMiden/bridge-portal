@@ -1,10 +1,83 @@
 import { test, expect } from "../../fixtures/bridge";
 import { epochWalletPaidHealth } from "../../../test/epoch-service";
+import { decodeFunctionData, encodeFunctionResult } from "viem";
+import { recoveryAbi } from "../../../src/bridge/providers/epoch/recovery";
+import { EVM_ADDRESS, respondToWallet, walletRequests } from "../../fixtures/wallets";
 
 test.beforeEach(async ({ bridge, page }) => {
   // Initialize the bridge's default network stubs before overriding Epoch health.
   await bridge.waitForReady();
   await page.route(/https:\/\/[^/]+\.epochprotocol\.xyz\/health$/, route => route.fulfill({ json: epochWalletPaidHealth() }));
+});
+
+test("an active Fast withdrawal blocks review and offers cancellation on the configured Compact", async ({ bridge, page }) => {
+  const compactAddress = "0x2222222222222222222222222222222222222222";
+  await page.route(/https:\/\/[^/]+\.epochprotocol\.xyz\/health$/, route => route.fulfill({ json: epochWalletPaidHealth(compactAddress) }));
+  let status = 1;
+  await page.route("**/suggested-nonce/**", route => route.fulfill({ json: { nonce: "1" } }));
+  await page.route("**/checkIfDepositNeeded", route => route.fulfill({ json: { tokenOut: "991878" } }));
+  await page.route("**/api/evm/*/rpc", async route => {
+    const { id, method, params } = route.request().postDataJSON();
+    if (method !== "eth_call" || params[0]?.to?.toLowerCase() !== compactAddress) return route.fallback();
+    const call = decodeFunctionData({ abi: recoveryAbi, data: params[0].data });
+    switch (call.functionName) {
+      case "balanceOf":
+        return route.fulfill({ json: { jsonrpc: "2.0", id,
+          result: encodeFunctionResult({ abi: recoveryAbi, functionName: "balanceOf", result: 0n }) } });
+      case "getForcedWithdrawalStatus":
+        return route.fulfill({ json: { jsonrpc: "2.0", id,
+          result: encodeFunctionResult({ abi: recoveryAbi, functionName: "getForcedWithdrawalStatus", result: [status, 0n] }) } });
+      case "disableForcedWithdrawal":
+        return route.fulfill({ json: { jsonrpc: "2.0", id,
+          result: encodeFunctionResult({ abi: recoveryAbi, functionName: "disableForcedWithdrawal", result: true }) } });
+    }
+    return route.fallback();
+  });
+  await page.goto("/?provider=epoch&mode=receive");
+  await bridge.waitForReady();
+  await bridge.fillAmount("1");
+  const cancelWithdrawal = page.getByRole("button", { name: "Cancel withdrawal", exact: true });
+  await expect(cancelWithdrawal).toBeVisible();
+  await expect(bridge.primaryButton()).toBeDisabled();
+  await expect(page.getByText(/funds.*locked/i)).toBeVisible();
+  const walletPrompt = Promise.withResolvers<void>();
+  const rejectRequest = Promise.withResolvers<void>();
+  respondToWallet(page, async request => {
+    expect(request.method).toBe("eth_sendTransaction");
+    expect(request.params[0]).toMatchObject({ to: compactAddress, from: expect.stringMatching(new RegExp(`^${EVM_ADDRESS}$`, "i")) });
+    walletPrompt.resolve();
+    await rejectRequest.promise;
+    return { error: { message: "User rejected request", code: 4001 } };
+  });
+  try {
+    await cancelWithdrawal.click();
+    await walletPrompt.promise;
+    await page.evaluate(() => window.testWallets.changeEvmAccount("0x4444444444444444444444444444444444444444"));
+    await expect(page.locator('[data-wallet="evm"]').getByText(/0x4444/)).toBeVisible();
+  } finally {
+    rejectRequest.resolve();
+  }
+  const rejection = page.getByRole("alert").filter({ hasText: /cancel+ed the request in your wallet/i });
+  await expect(cancelWithdrawal).toBeEnabled();
+  await expect(rejection).toHaveCount(0);
+  await page.evaluate(address => window.testWallets.changeEvmAccount(address), EVM_ADDRESS);
+  await expect(rejection).toBeVisible();
+  await expect(bridge.primaryButton()).toBeDisabled();
+  status = 0;
+  await page.evaluate(() => sessionStorage.setItem("test.wallet.chain", "0x1"));
+  await page.reload();
+  await bridge.waitForReady();
+  await bridge.fillAmount("1");
+  await expect(cancelWithdrawal).toHaveCount(0);
+  await bridge.openPreflight();
+
+  status = 2;
+  const beforeConfirm = await walletRequests(page);
+  await bridge.confirmPreflight();
+  await expect(bridge.preflight()).toBeHidden();
+  await expect(page.getByRole("alert").filter({ hasText: "Cancel the withdrawal to make a Fast deposit." })).toBeVisible();
+  expect(await walletRequests(page)).toEqual(beforeConfirm);
+  expect(await bridge.readActivities()).toEqual([]);
 });
 
 for (const mode of ["receive", "send"] as const) {

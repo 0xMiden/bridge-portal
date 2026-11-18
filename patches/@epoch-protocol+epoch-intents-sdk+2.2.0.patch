@@ -27,10 +27,21 @@ index f4da655..95c4ca1 100644
                  to: tokenAddress,
                  data: encodeFunctionData({
 diff --git a/node_modules/@epoch-protocol/epoch-intents-sdk/dist/services/shared.js b/node_modules/@epoch-protocol/epoch-intents-sdk/dist/services/shared.js
-index 0711ce7..7f2881b 100644
+index 0711ce7..2236c9a 100644
 --- a/node_modules/@epoch-protocol/epoch-intents-sdk/dist/services/shared.js
 +++ b/node_modules/@epoch-protocol/epoch-intents-sdk/dist/services/shared.js
-@@ -23,6 +23,16 @@ export async function fetchServiceHealth(config) {
+@@ -4,6 +4,10 @@
+ import { APIError, } from "../types";
+ import { setGaslessConstantsFromHealth } from "../gasless/constants";
+ export async function fetchServiceHealth(config) {
++    if (config.serviceHealth) {
++        setGaslessConstantsFromHealth(config.serviceHealth);
++        return config.serviceHealth;
++    }
+     let response;
+     try {
+         response = await apiFetch(config, "/health");
+@@ -23,6 +27,16 @@ export async function fetchServiceHealth(config) {
      if (health.status !== "healthy") {
          throw new APIError("API service is unhealthy; configuration lookup failed", 503);
      }
@@ -47,3 +58,15 @@ index 0711ce7..7f2881b 100644
      if (!health.delegationManagerAddresses ||
          !health.metamaskStateless7702Implementations ||
          !health.epochLegacy7702Implementations ||
+diff --git a/node_modules/@epoch-protocol/epoch-intents-sdk/dist/types.d.ts b/node_modules/@epoch-protocol/epoch-intents-sdk/dist/types.d.ts
+index c79520c..b0fbfaab 100644
+--- a/node_modules/@epoch-protocol/epoch-intents-sdk/dist/types.d.ts
++++ b/node_modules/@epoch-protocol/epoch-intents-sdk/dist/types.d.ts
+@@ -3,6 +3,7 @@
+ export interface EpochIntentSDKConfig {
+     apiBaseUrl: string;
+     walletClient: WalletClient;
++    serviceHealth?: HealthCheckResponse;
+     /** When true, solveIntent uses gasless deposits unless `gasless: false` is passed explicitly. */
+     gaslessDefault?: boolean;
+     /** For private-key/local wallets: use the SIO gasless relay for Compact deposits.

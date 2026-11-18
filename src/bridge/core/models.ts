@@ -53,6 +53,7 @@ export type BridgeActivity = {
   epochSponsor?: string;
   /** Compact collateral evidence survives an allocator error or lost response. */
   epochDepositId?: string;
+  epochCompactAddress?: string;
   epochClaimHash?: string;
   epochDepositConfirmed?: boolean;
   epochError?: string;

@@ -16,6 +16,7 @@ import {
   epochRouteAssets,
 } from "./bridgeable-token";
 import { MIDEN_DESTINATION_CHAIN_ID } from "./config";
+import type { EpochDepositEvidence } from "./deposit-tracking";
 import type { CreateMidenP2IDENote, MidenNoteDeps } from "./miden-note";
 import { createBridgeP2IDENoteCallback } from "./miden-note";
 import { getEpochReadOnlySdk, getEpochSdk } from "./sdk";
@@ -57,7 +58,7 @@ export interface RunEpochTransferArgs {
   requestTransaction?: MidenNoteDeps["requestTransaction"];
   waitForTransaction?: MidenNoteDeps["waitForTransaction"];
   /** Publish wallet acceptance, then confirmed source evidence, before awaiting the solver. */
-  onSubmitted?: (source: { sourceTxHash?: string; midenWalletRequestId?: string; midenNoteId?: string; epochDepositId?: string; epochClaimHash?: string }) => void;
+  onSubmitted?: (source: Partial<EpochDepositEvidence> & { midenWalletRequestId?: string; midenNoteId?: string }) => void;
   /**
    * Live execution status (phase + the deposit tx hash once broadcast) for UI
    * progress on receive. The caller uses the hash to jump to the detail page as
@@ -200,7 +201,7 @@ async function runEpochReceive(
   const midenRecipient = args.midenAccount.trim();
 
   const { miden, evm, chain, tokenAddress } = epochRouteAssets(args.route);
-  const sdk = await getEpochSdk(args.route.recovery, evm.network, {
+  const sdk = await getEpochSdk(args.route.recovery, evm, {
     sponsor: evmSource, token: tokenAddress, amount: parseUnits(args.amount, evm.decimals).toString(),
     onSubmitted: source => args.onSubmitted?.(source),
   });

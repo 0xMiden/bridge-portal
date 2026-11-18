@@ -5,14 +5,8 @@ import type { BridgeRoute } from "../../../bridge/core/routes";
 import { evmNetworks } from "../../../config/evm-networks";
 import type { EvmProvider } from "../../../wallets/evm/evm-wallet";
 import { useMidenWallet } from "../../../wallets/miden/useMidenWallet";
+import { compactTokenAmount } from "../../lib/token-amount";
 import { errorMessage } from "../../lib/wallet-errors";
-
-function compactTokenAmount(value: string) {
-  if (Number(value) > 0 && Number(value) < 0.0001) return "<0.0001";
-  const [whole, fraction = ""] = value.split(".");
-  const compactFraction = fraction.slice(0, 4).replace(/0+$/, "");
-  return compactFraction ? `${whole}.${compactFraction}` : whole;
-}
 
 /** Shared wallet accounts and route balances used by the panels and submission. */
 export function useBridgeWallets(route: BridgeRoute) {

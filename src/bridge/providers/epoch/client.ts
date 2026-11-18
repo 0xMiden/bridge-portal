@@ -1,7 +1,7 @@
 "use client";
 
 import { getAccount, getWalletClient } from "@wagmi/core";
-import { type EIP1193Provider, type WalletClient, createWalletClient, custom } from "viem";
+import { type Address, type EIP1193Provider, type WalletClient, createWalletClient, custom } from "viem";
 import type { EvmNetwork } from "../../core/assets";
 import { evmNetworks } from "../../../config/evm-networks";
 
@@ -36,7 +36,7 @@ export async function getEvmConnection(): Promise<EvmConnection> {
 export async function buildEpochWalletClient(
   address: `0x${string}`,
   network: EvmNetwork,
-  tracking?: EpochDepositTracking & { compactAddress: string },
+  tracking?: EpochDepositTracking & { compactAddress: Address },
 ): Promise<WalletClient> {
   // wagmi's walletClient is EIP-1193 compliant (exposes `request`), so viem's
   // `custom()` transport adapts it without further plumbing.

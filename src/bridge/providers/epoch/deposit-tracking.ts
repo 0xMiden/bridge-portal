@@ -1,11 +1,12 @@
 import { COMPACT_ABI, getTokenId } from "@epoch-protocol/epoch-intents-sdk";
-import { decodeEventLog, decodeFunctionData, zeroAddress, type Hex } from "viem";
+import { decodeEventLog, decodeFunctionData, zeroAddress, type Address, type Hex } from "viem";
 import type { EvmProvider } from "../../../wallets/evm/evm-wallet";
 
 export type EpochDepositEvidence = {
   sourceTxHash: string;
   epochDepositId: string;
   epochClaimHash: string;
+  epochCompactAddress: Address;
 };
 
 export type EpochDepositTracking = {
@@ -15,14 +16,14 @@ export type EpochDepositTracking = {
   onSubmitted: (evidence: EpochDepositEvidence) => void;
 };
 
-type Deposit = Omit<EpochDepositEvidence, "sourceTxHash">;
+type Deposit = Pick<EpochDepositEvidence, "epochDepositId" | "epochClaimHash">;
 const isHash = (value: unknown): value is string => typeof value === "string" && /^0x[\da-f]{64}$/i.test(value);
 
 /** Observe the wallet boundary: the SDK omits deposit execution callbacks.
  * Preserve the hash before its receipt waits or POST /compact can fail. Never
  * treat an ERC-20 approval as a submitted bridge transfer.
  */
-export function trackEpochDeposits(provider: EvmProvider, chainId: number, tracking: EpochDepositTracking & { compactAddress: string }): EvmProvider {
+export function trackEpochDeposits(provider: EvmProvider, chainId: number, tracking: EpochDepositTracking & { compactAddress: Address }): EvmProvider {
   const compact = tracking.compactAddress.toLowerCase();
   const bundles = new Map<string, Deposit>();
   const published = new Set<string>();
@@ -49,7 +50,7 @@ export function trackEpochDeposits(provider: EvmProvider, chainId: number, track
     if (!isHash(hash) || published.has(hash)) return;
     published.add(hash);
     try {
-      tracking.onSubmitted({ sourceTxHash: hash, ...evidence });
+      tracking.onSubmitted({ sourceTxHash: hash, epochCompactAddress: tracking.compactAddress, ...evidence });
     } catch (error) {
       // Never turn an already-broadcast transaction into a wallet error: the
       // SDK may respond to that error by submitting its calls again.

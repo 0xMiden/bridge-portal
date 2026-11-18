@@ -3,6 +3,7 @@ import { decodeFunctionData, encodeFunctionResult, parseAbi, parseUnits } from "
 import { currentBridgeConfig } from "../../src/config/bridge-config";
 import { arcConfig, xReserveAbi } from "../../src/bridge/providers/xreserve/config";
 import { arcRecipient } from "../../src/bridge/providers/xreserve/deposit-terms";
+import { recoveryAbi } from "../../src/bridge/providers/epoch/recovery";
 
 // Intercept remote boundaries while the browser runs the production application.
 export async function stubNetwork(
@@ -63,6 +64,15 @@ export async function stubNetwork(
     const { id, method, params } = route.request().postDataJSON();
     const abi = [...xReserveAbi, ...parseAbi(["function isEmergencyState() view returns (bool)"])];
     if (method === "eth_call") {
+      try {
+        const call = decodeFunctionData({ abi: recoveryAbi, data: params[0].data });
+        switch (call.functionName) {
+          case "balanceOf":
+            return route.fulfill({ json: { jsonrpc: "2.0", id, result: encodeFunctionResult({ abi: recoveryAbi, functionName: "balanceOf", result: 0n }) } });
+          case "getForcedWithdrawalStatus":
+            return route.fulfill({ json: { jsonrpc: "2.0", id, result: encodeFunctionResult({ abi: recoveryAbi, functionName: "getForcedWithdrawalStatus", result: [0, 0n] }) } });
+        }
+      } catch { /* Use the other contract fixtures below. */ }
       try {
         const { functionName } = decodeFunctionData({ abi, data: params[0].data });
         const environment = route.request().url().includes("/arc/rpc") ? "mainnet" : "testnet";

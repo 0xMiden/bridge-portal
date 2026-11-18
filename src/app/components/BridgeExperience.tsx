@@ -17,6 +17,7 @@ import { ProviderOptions } from "./ProviderOptions";
 import { useBridgeDraft, type DraftAction } from "./bridge/use-bridge-draft";
 import { useBridgeTransfer } from "./bridge/use-bridge-transfer";
 import { useBridgeWallets } from "./bridge/use-bridge-wallets";
+import { FastWithdrawalNotice } from "./bridge/FastWithdrawalNotice";
 
 export function BridgeExperience() {
   const environment = useBridgeEnvironment();
@@ -80,6 +81,8 @@ function BridgeForm({ environment }: { environment: BridgeEnvironment }) {
           <h1 className="sr-only">Miden Bridge</h1>
           <BridgeTabs environment={environment}>
             <SwapPanels draft={draft} wallets={wallets} transfer={transfer} panelsRef={panelsRef} onChange={editDraft} />
+            <FastWithdrawalNotice key={`${draft.route.id}:${wallets.accounts.evmAddress}`} withdrawal={transfer.withdrawal}
+              symbol={draft.route.source.symbol} disabled={selectionLocked} onDisable={transfer.disableWithdrawal} />
             {transfer.quote.validation.valid ? (
               <ProviderOptions route={draft.route} offers={transfer.quote.providers.offers}
                 ready={transfer.quote.providers.ready} loading={transfer.quote.providers.loading}
