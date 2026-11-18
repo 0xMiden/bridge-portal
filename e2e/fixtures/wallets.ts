@@ -15,6 +15,7 @@ declare global {
     testWallets: {
       requests: WalletRequest[];
       rejectSwitch: boolean;
+      changeEvmAccount: (address: string) => void;
       changeMidenAccount: (address: string) => void;
     };
     respondToWallet: (request: WalletRequest) => Promise<Response>;
@@ -64,12 +65,19 @@ export async function installWallets(page: Page) {
       requestTransaction: (transaction: unknown) => call("miden", "requestTransaction", [transaction]),
       waitForTransaction: (id: string) => call("miden", "waitForTransaction", [id]),
     };
-    window.testWallets = { requests, rejectSwitch: false, changeMidenAccount: address => {
-      extension.address = address;
-      midenListeners.forEach(listener => listener());
-    } };
+    let evmAddress = evm;
     let chainId = sessionStorage.getItem("test.wallet.chain") ?? "0xaa36a7";
     const listeners = new Map<string, Set<(value: unknown) => void>>();
+    window.testWallets = { requests, rejectSwitch: false,
+      changeEvmAccount: address => {
+        evmAddress = address;
+        listeners.get("accountsChanged")?.forEach(listener => listener([address]));
+      },
+      changeMidenAccount: address => {
+        extension.address = address;
+        midenListeners.forEach(listener => listener());
+      },
+    };
     const provider = {
       on: (event: string, listener: (value: unknown) => void) => {
         if (!listeners.has(event)) listeners.set(event, new Set());
@@ -78,7 +86,7 @@ export async function installWallets(page: Page) {
       removeListener: (event: string, listener: (value: unknown) => void) => listeners.get(event)?.delete(listener),
       request: async ({ method, params = [] }: { method: string; params?: unknown[] }) => {
         switch (method) {
-          case "eth_requestAccounts": case "eth_accounts": return [evm];
+          case "eth_requestAccounts": case "eth_accounts": return [evmAddress];
           case "eth_chainId": return chainId;
           case "wallet_getCapabilities": return {};
           case "wallet_switchEthereumChain": {

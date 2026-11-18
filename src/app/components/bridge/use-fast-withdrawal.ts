@@ -17,7 +17,7 @@ export function useFastWithdrawal(route: BridgeRoute, wallets: BridgeWallets) {
   const queryClient = useQueryClient();
   const lockSelection = useLockNetworkSelection();
   const [pending, setPending] = useState(false);
-  const [error, setError] = useState("");
+  const [cancelError, setCancelError] = useState<{ key: string; message: string }>();
   const health = useQuery({
     queryKey: ["epoch-health", environment],
     enabled,
@@ -28,8 +28,10 @@ export function useFastWithdrawal(route: BridgeRoute, wallets: BridgeWallets) {
   if (asset && health.data) {
     try { lock = configuredRecoveryLock(asset, health.data); } catch { /* Display a failed status check. */ }
   }
+  const lockKey = lock ? recoveryLockKey(lock) : "";
+  const cancellationKey = `${environment}:${sponsor ?? ""}:${lockKey}`;
   const query = useQuery({
-    queryKey: ["compact-recovery", environment, sponsor, lock ? recoveryLockKey(lock) : ""],
+    queryKey: ["compact-recovery", environment, sponsor, lockKey],
     enabled: Boolean(lock && sponsor && !health.isError),
     retry: false,
     staleTime: 0,
@@ -44,7 +46,7 @@ export function useFastWithdrawal(route: BridgeRoute, wallets: BridgeWallets) {
   const blocked = enabled && (checking || failed || active || pending);
 
   async function disable() {
-    setError("");
+    setCancelError(undefined);
     setPending(true);
     const unlock = lockSelection();
     try {
@@ -52,7 +54,7 @@ export function useFastWithdrawal(route: BridgeRoute, wallets: BridgeWallets) {
       await executeRecovery(query.data, "cancel", sponsor, wallets.evm.provider);
       return true;
     } catch (cause) {
-      setError(errorMessage(cause));
+      setCancelError({ key: cancellationKey, message: errorMessage(cause) });
       return false;
     } finally {
       await queryClient.invalidateQueries({ queryKey: ["compact-recovery", environment, sponsor] });
@@ -82,6 +84,7 @@ export function useFastWithdrawal(route: BridgeRoute, wallets: BridgeWallets) {
     else await query.refetch();
   }
 
+  const error = cancelError?.key === cancellationKey ? cancelError.message : "";
   return { enabled, active, blocked, pending, error, failed, checking, disable, verify, refresh };
 }
 
