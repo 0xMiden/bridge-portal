@@ -2,7 +2,7 @@ import { test, expect } from "../../fixtures/bridge";
 import { epochWalletPaidHealth } from "../../../test/epoch-service";
 import { decodeFunctionData, encodeFunctionResult } from "viem";
 import { recoveryAbi } from "../../../src/bridge/providers/epoch/recovery";
-import { EVM_ADDRESS, respondToWallet } from "../../fixtures/wallets";
+import { EVM_ADDRESS, respondToWallet, walletRequests } from "../../fixtures/wallets";
 
 test.beforeEach(async ({ bridge, page }) => {
   // Initialize the bridge's default network stubs before overriding Epoch health.
@@ -64,11 +64,20 @@ test("an active Fast withdrawal blocks review and offers cancellation on the con
   await expect(rejection).toBeVisible();
   await expect(bridge.primaryButton()).toBeDisabled();
   status = 0;
+  await page.evaluate(() => sessionStorage.setItem("test.wallet.chain", "0x1"));
   await page.reload();
   await bridge.waitForReady();
   await bridge.fillAmount("1");
   await expect(cancelWithdrawal).toHaveCount(0);
   await bridge.openPreflight();
+
+  status = 2;
+  const beforeConfirm = await walletRequests(page);
+  await bridge.confirmPreflight();
+  await expect(bridge.preflight()).toBeHidden();
+  await expect(page.getByRole("alert").filter({ hasText: "Cancel the withdrawal to make a Fast deposit." })).toBeVisible();
+  expect(await walletRequests(page)).toEqual(beforeConfirm);
+  expect(await bridge.readActivities()).toEqual([]);
 });
 
 for (const mode of ["receive", "send"] as const) {
