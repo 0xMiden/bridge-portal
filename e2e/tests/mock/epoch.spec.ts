@@ -1,6 +1,6 @@
 import { test, expect } from "../../fixtures/bridge";
 import { epochWalletPaidHealth } from "../../../test/epoch-service";
-import { decodeFunctionData, encodeFunctionResult } from "viem";
+import { decodeFunctionData, encodeFunctionResult, toFunctionSelector } from "viem";
 import { recoveryAbi } from "../../../src/bridge/providers/epoch/recovery";
 import { EVM_ADDRESS, respondToWallet, walletRequests } from "../../fixtures/wallets";
 
@@ -78,6 +78,47 @@ test("an active Fast withdrawal blocks review and offers cancellation on the con
   await expect(page.getByRole("alert").filter({ hasText: "Cancel the withdrawal to make a Fast deposit." })).toBeVisible();
   expect(await walletRequests(page)).toEqual(beforeConfirm);
   expect(await bridge.readActivities()).toEqual([]);
+});
+
+test("a failed Fast withdrawal check blocks the deposit and can be retried in Recovery", async ({ bridge, page }) => {
+  await page.route("**/suggested-nonce/**", route => route.fulfill({ json: { nonce: "1" } }));
+  await page.route("**/checkIfDepositNeeded", route => route.fulfill({ json: { tokenOut: "991878" } }));
+  const statusSelector = toFunctionSelector("getForcedWithdrawalStatus(address,uint256)");
+  let unavailable = false;
+  await page.route("**/api/evm/sepolia/rpc", route => {
+    const { id, method, params } = route.request().postDataJSON();
+    if (!unavailable || method !== "eth_call" || !params[0]?.data?.startsWith(statusSelector)) return route.fallback();
+    return route.fulfill({ json: { jsonrpc: "2.0", id, error: { code: -32000, message: "Status unavailable" } } });
+  });
+
+  await page.goto("/?provider=epoch&mode=receive");
+  await bridge.waitForReady();
+  await bridge.fillAmount("1");
+  await bridge.openPreflight();
+  const beforeConfirm = await walletRequests(page);
+  unavailable = true;
+  await bridge.confirmPreflight();
+  await expect(bridge.preflight()).toBeHidden();
+  const recoveryLink = page.getByRole("region", { name: "Transfer route" })
+    .getByRole("link", { name: "Check withdrawal status in Recovery" });
+  await expect(recoveryLink).toBeVisible();
+  await expect(bridge.primaryButton()).toBeDisabled();
+  await expect(page.getByRole("alert").filter({ hasText: /Could not check withdrawal status/ })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Retry withdrawal check" })).toHaveCount(0);
+  expect(await walletRequests(page)).toEqual(beforeConfirm);
+
+  await recoveryLink.click();
+  const deposits = page.getByRole("region", { name: "Locked deposits" });
+  const failure = deposits.getByRole("alert").filter({ hasText: /Could not check deposits for .*USDC on Sepolia/ });
+  await expect(failure).toBeVisible();
+  unavailable = false;
+  await deposits.getByRole("button", { name: "Refresh", exact: true }).click();
+  await expect(deposits.getByText("No locked deposits found.")).toBeVisible();
+  await expect(failure).toHaveCount(0);
+
+  await page.goBack();
+  await bridge.fillAmount("1");
+  await bridge.openPreflight();
 });
 
 for (const mode of ["receive", "send"] as const) {

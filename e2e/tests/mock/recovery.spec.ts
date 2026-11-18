@@ -3,6 +3,7 @@ import { decodeFunctionData, encodeFunctionResult, parseUnits, type Address, typ
 import { createActivity } from "../../../src/app/lib/bridge-presentation";
 import { findBridgeRoute } from "../../../src/bridge/core/routes";
 import { legacyRecoveryLock, recoveryAbi, recoveryAssets } from "../../../src/bridge/providers/epoch/recovery";
+import { epochWalletPaidHealth } from "../../../test/epoch-service";
 import { EVM_ADDRESS, respondToWallet, SOURCE_TX, walletRequests } from "../../fixtures/wallets";
 
 test("Recovery opens the funded lock from a saved deposit while the allocator is offline", async ({ bridge, page }) => {
@@ -25,6 +26,8 @@ test("Recovery opens the funded lock from a saved deposit while the allocator is
     return route.fulfill({ json: { jsonrpc: "2.0", id: requestId, result } });
   });
   await page.goto("/recovery");
+  const deposits = page.getByRole("region", { name: "Locked deposits" });
+  await expect(deposits.getByRole("alert")).toHaveText("Could not check current Fast deposits.");
   const savedDeposit = page.getByRole("button", { name: /0\.45 USDC.*Sepolia/ });
   await expect(savedDeposit).toBeVisible();
   await savedDeposit.click();
@@ -35,6 +38,7 @@ test("Recovery opens the funded lock from a saved deposit while the allocator is
 
 test("Recovery opens and refreshes individual on-chain deposits", async ({ bridge, page }, info) => {
   await bridge.waitForReady();
+  await page.route(/https:\/\/[^/]+\.epochprotocol\.xyz\/health$/, route => route.fulfill({ json: epochWalletPaidHealth() }));
   const assets = recoveryAssets("testnet");
   const asset = assets.find(token => token.symbol === "USDC");
   const otherAsset = assets.find(token => token.symbol === "WBTC");
