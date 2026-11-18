@@ -1,9 +1,8 @@
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { getAddress } from "viem";
-import { assetKey } from "../../../bridge/core/assets";
 import type { BridgeRoute } from "../../../bridge/core/routes";
-import { readLockedDeposit } from "../../../bridge/providers/epoch/recovery";
+import { configuredRecoveryLock, readEpochHealth, readLockedDeposit, recoveryLockKey, type LockedDeposit, type RecoveryLock } from "../../../bridge/providers/epoch/recovery";
 import { executeRecovery } from "../../../bridge/providers/epoch/recovery-execute";
 import { errorMessage } from "../../lib/wallet-errors";
 import { useLockNetworkSelection } from "../NetworkProvider";
@@ -19,18 +18,30 @@ export function useFastWithdrawal(route: BridgeRoute, wallets: BridgeWallets) {
   const lockSelection = useLockNetworkSelection();
   const [pending, setPending] = useState(false);
   const [error, setError] = useState("");
-  const query = useQuery({
-    queryKey: ["compact-recovery", environment, sponsor, asset ? assetKey(asset) : ""],
+  const health = useQuery({
+    queryKey: ["epoch-health", environment],
     enabled,
+    retry: false,
+    queryFn: () => readEpochHealth(route.recovery),
+  });
+  let lock: RecoveryLock | undefined;
+  if (asset && health.data) {
+    try { lock = configuredRecoveryLock(asset, health.data); } catch { /* Display a failed status check. */ }
+  }
+  const query = useQuery({
+    queryKey: ["compact-recovery", environment, sponsor, lock ? recoveryLockKey(lock) : ""],
+    enabled: Boolean(lock && sponsor && !health.isError),
     retry: false,
     staleTime: 0,
     queryFn: () => {
-      if (!asset || !sponsor) throw new Error("Connect the source wallet first.");
-      return readLockedDeposit(asset, environment, sponsor);
+      if (!lock || !sponsor) throw new Error("Could not verify the deposit lock.");
+      return readLockedDeposit(lock, sponsor);
     },
   });
-  const active = enabled && !query.isError && Boolean(query.data && query.data.status !== 0);
-  const blocked = enabled && (query.isPending || query.isError || active || pending);
+  const failed = enabled && (health.isError || (health.isSuccess && !lock) || query.isError);
+  const checking = enabled && !failed && query.isPending;
+  const active = enabled && !failed && Boolean(query.data && query.data.status !== 0);
+  const blocked = enabled && (checking || failed || active || pending);
 
   async function disable() {
     setError("");
@@ -38,7 +49,7 @@ export function useFastWithdrawal(route: BridgeRoute, wallets: BridgeWallets) {
     const unlock = lockSelection();
     try {
       if (!sponsor || !wallets.evm.provider || !query.data) throw new Error("Connect the source wallet first.");
-      await executeRecovery(query.data, "cancel", sponsor, environment, wallets.evm.provider);
+      await executeRecovery(query.data, "cancel", sponsor, wallets.evm.provider);
       return true;
     } catch (cause) {
       setError(errorMessage(cause));
@@ -51,14 +62,27 @@ export function useFastWithdrawal(route: BridgeRoute, wallets: BridgeWallets) {
   }
 
   async function verify() {
-    if (!enabled) return;
-    const result = await query.refetch();
-    if (result.isError) throw new Error("Could not check withdrawal status. Try again.");
-    if (result.data?.status !== 0) throw new Error("Cancel the withdrawal to make a Fast deposit.");
+    if (!asset || !sponsor) return;
+    let deposit: LockedDeposit;
+    try {
+      const { data } = await health.refetch({ throwOnError: true });
+      if (!data) throw new Error("Missing Epoch configuration.");
+      const currentLock = configuredRecoveryLock(asset, data);
+      const queryKey = ["compact-recovery", environment, sponsor, recoveryLockKey(currentLock)];
+      deposit = await readLockedDeposit(currentLock, sponsor);
+      queryClient.setQueryData(queryKey, deposit);
+    } catch {
+      throw new Error("Could not check withdrawal status. Try again.");
+    }
+    if (deposit.status !== 0) throw new Error("Cancel the withdrawal to make a Fast deposit.");
   }
 
-  return { enabled, active, blocked, pending, error, failed: enabled && query.isError,
-    checking: enabled && query.isPending, disable, verify, refresh: query.refetch };
+  async function refresh() {
+    if (health.isError || !lock) await health.refetch();
+    else await query.refetch();
+  }
+
+  return { enabled, active, blocked, pending, error, failed, checking, disable, verify, refresh };
 }
 
 export type FastWithdrawal = ReturnType<typeof useFastWithdrawal>;

@@ -1,37 +1,32 @@
 "use client";
 import type { BridgeConfig } from "../../../config/bridge-config";
 import { assertConfigNetwork } from "../../../config/bridge-config";
-import type { EvmNetwork } from "../../core/assets";
+import type { EvmAsset, EvmNetwork } from "../../core/assets";
 
 import { EpochIntentSDK } from "@epoch-protocol/epoch-intents-sdk";
 import { getAddress } from "viem";
-import { evmNetworks } from "../../../config/evm-networks";
 import { buildEpochReadOnlyWalletClient, buildEpochWalletClient, getEvmConnection } from "./client";
 import { epochAllocatorUrl } from "./config";
 import type { EpochDepositTracking } from "./deposit-tracking";
+import { configuredRecoveryLock, readEpochHealth, readLockedDeposit } from "./recovery";
 
 type SdkCache = { key: string; sdk: EpochIntentSDK };
 let readOnlyCache: SdkCache | null = null;
 
 /** Resolve the current connection again before signing a collateral deposit. */
-export async function getEpochSdk(recovery: BridgeConfig, network: EvmNetwork, tracking?: EpochDepositTracking): Promise<EpochIntentSDK | null> {
-  assertConfigNetwork(recovery, network);
+export async function getEpochSdk(recovery: BridgeConfig, asset: EvmAsset, tracking: EpochDepositTracking): Promise<EpochIntentSDK | null> {
+  assertConfigNetwork(recovery, asset.network);
   const { address } = await getEvmConnection();
   if (!address) return null;
-  if (tracking && tracking.sponsor.toLowerCase() !== address.toLowerCase())
+  if (tracking.sponsor.toLowerCase() !== address.toLowerCase())
     throw new Error("Your connected wallet changed. Review the transfer again.");
-  const apiBaseUrl = epochAllocatorUrl(recovery);
-  let depositTracking;
-  if (tracking) {
-    // SDK 2.2 resolves its deployment from this service, not its static exports.
-    const readOnlySdk = await getEpochReadOnlySdk(address as `0x${string}`, recovery, network);
-    const health = await readOnlySdk.getHealthCheck();
-    const compactAddress = health.compactAddresses?.[evmNetworks[network].id];
-    if (!compactAddress) throw new Error("Epoch has no Compact address configured for this network.");
-    depositTracking = { ...tracking, compactAddress: getAddress(compactAddress) };
-  }
-  const walletClient = await buildEpochWalletClient(address as `0x${string}`, network, depositTracking);
-  return new EpochIntentSDK({ apiBaseUrl, walletClient, allowGaslessSmartAccount: false });
+  const sponsor = getAddress(address);
+  const serviceHealth = await readEpochHealth(recovery);
+  const lock = configuredRecoveryLock(asset, serviceHealth);
+  const { status } = await readLockedDeposit(lock, sponsor);
+  if (status !== 0) throw new Error("Cancel the withdrawal to make a Fast deposit.");
+  const walletClient = await buildEpochWalletClient(sponsor, asset.network, { ...tracking, compactAddress: lock.compactAddress });
+  return new EpochIntentSDK({ apiBaseUrl: epochAllocatorUrl(recovery), walletClient, allowGaslessSmartAccount: false, serviceHealth });
 }
 
 /** Miden sends and status reads need a sponsor address, without an EVM signer. */

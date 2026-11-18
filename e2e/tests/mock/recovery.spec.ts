@@ -1,7 +1,36 @@
 import { test, expect } from "../../fixtures/bridge";
 import { decodeFunctionData, encodeFunctionResult, parseUnits, type Address, type Hex } from "viem";
-import { COMPACT_ADDRESS, recoveryAbi, recoveryAssets, recoveryLockId } from "../../../src/bridge/providers/epoch/recovery";
-import { respondToWallet, SOURCE_TX, walletRequests } from "../../fixtures/wallets";
+import { createActivity } from "../../../src/app/lib/bridge-presentation";
+import { findBridgeRoute } from "../../../src/bridge/core/routes";
+import { legacyRecoveryLock, recoveryAbi, recoveryAssets } from "../../../src/bridge/providers/epoch/recovery";
+import { EVM_ADDRESS, respondToWallet, SOURCE_TX, walletRequests } from "../../fixtures/wallets";
+
+test("Recovery opens the funded lock from a saved deposit while the allocator is offline", async ({ bridge, page }) => {
+  const route = findBridgeRoute("epoch-test-usdc-to-miden")!;
+  const compactAddress = "0x2222222222222222222222222222222222222222";
+  const id = BigInt("0x580000000000000000000abc2bb4ffd7e2c6d432b697554efd77fa13bdbefd69");
+  const activity = createActivity(route, "0.45", { sourceTxHash: SOURCE_TX, epochSponsor: EVM_ADDRESS,
+    epochDepositId: id.toString(), epochCompactAddress: compactAddress, status: "source_finality" });
+  await page.evaluate(receipt => {
+    localStorage.setItem("miden.bridge.ui.activities.v2", JSON.stringify([receipt]));
+  }, activity);
+  await page.route("**/api/evm/sepolia/rpc", async route => {
+    const { id: requestId, method, params } = route.request().postDataJSON();
+    if (method !== "eth_call" || params[0]?.to?.toLowerCase() !== compactAddress) return route.fallback();
+    const call = decodeFunctionData({ abi: recoveryAbi, data: params[0].data });
+    expect(call.args).toEqual([expect.stringMatching(new RegExp(`^${EVM_ADDRESS}$`, "i")), id]);
+    if (call.functionName !== "balanceOf") return route.fallback();
+    const result = encodeFunctionResult({ abi: recoveryAbi, functionName: "balanceOf", result: parseUnits("0.45", 18) });
+    return route.fulfill({ json: { jsonrpc: "2.0", id: requestId, result } });
+  });
+  await page.goto("/recovery");
+  const savedDeposit = page.getByRole("button", { name: /0\.45 USDC.*Sepolia/ });
+  await expect(savedDeposit).toBeVisible();
+  await savedDeposit.click();
+  const detail = page.getByRole("region", { name: "Deposit details" });
+  await expect(detail.getByRole("heading", { name: "0.45 USDC", exact: true })).toBeVisible();
+  await expect(detail.getByRole("button", { name: "Start withdrawal", exact: true })).toBeEnabled();
+});
 
 test("Recovery opens and refreshes individual on-chain deposits", async ({ bridge, page }, info) => {
   await bridge.waitForReady();
@@ -9,8 +38,8 @@ test("Recovery opens and refreshes individual on-chain deposits", async ({ bridg
   const asset = assets.find(token => token.symbol === "USDC");
   const otherAsset = assets.find(token => token.symbol === "WBTC");
   if (!asset || !otherAsset) throw new Error("Missing Epoch deposit fixtures");
-  const id = recoveryLockId(asset, "testnet");
-  const otherId = recoveryLockId(otherAsset, "testnet");
+  const { id, compactAddress } = legacyRecoveryLock(asset, "testnet");
+  const { id: otherId } = legacyRecoveryLock(otherAsset, "testnet");
   let status = 0;
   let deadline = 0n;
   let balance = parseUnits("1.23456789", asset.decimals);
@@ -29,7 +58,7 @@ test("Recovery opens and refreshes individual on-chain deposits", async ({ bridg
         transactionHash: SOURCE_TX, blockNumber: "0x1", status: "0x1", logs: [],
       } } });
     }
-    if (method !== "eth_call" || params[0]?.to?.toLowerCase() !== COMPACT_ADDRESS.toLowerCase()) return route.fallback();
+    if (method !== "eth_call" || params[0]?.to?.toLowerCase() !== compactAddress.toLowerCase()) return route.fallback();
     if (fail) return route.fulfill({ status: 502, json: { error: "RPC unavailable" } });
     const call = decodeFunctionData({ abi: recoveryAbi, data: params[0].data });
     const matching = call.args[1] === id;
@@ -72,7 +101,7 @@ test("Recovery opens and refreshes individual on-chain deposits", async ({ bridg
     if (request.method === "wallet_revokePermissions") return { result: null };
     expect(request.method).toBe("eth_sendTransaction");
     const [transaction] = request.params as [{ to: Address; data: Hex }];
-    expect(transaction.to.toLowerCase()).toBe(COMPACT_ADDRESS.toLowerCase());
+    expect(transaction.to.toLowerCase()).toBe(compactAddress.toLowerCase());
     expect(decodeFunctionData({ abi: recoveryAbi, data: transaction.data })).toEqual({
       functionName: "enableForcedWithdrawal", args: [id],
     });

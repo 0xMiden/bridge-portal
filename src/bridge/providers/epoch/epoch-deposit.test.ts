@@ -133,7 +133,7 @@ function setup(mode: "sequential" | "batch" | "rejected", health: unknown = epoc
     return Response.json({ error: "Internal server error", code: "INTERNAL_ERROR" }, { status: 500 });
   });
   vi.stubGlobal("fetch", vi.fn(async (url: string) => {
-    if (url.endsWith("/health")) return Response.json(health);
+    if (url.endsWith("/health")) return Response.json(typeof health === "function" ? health() : health);
     if (url.includes("/suggested-nonce/")) return Response.json({ nonce: "0x42" });
     if (url.endsWith("/checkIfDepositNeeded")) return Response.json({ resourceLockRequired: true, tokenIn: parseUnits("1", source.decimals).toString(), tokenOut: "918687", transactions: [] });
     if (url.endsWith("/compact")) return allocation();
@@ -165,7 +165,8 @@ it.each(["sequential", "batch"] as const)("retains the real SDK's %s deposit acr
     status: "source_finality", epochSponsor: SPONSOR,
   }]);
   const [stored] = loadStoredActivities();
-  expect(stored).toMatchObject({ sourceTxHash: TX, epochDepositId: depositId, epochError: "Internal server error · HTTP 500 · INTERNAL_ERROR" });
+  expect(stored).toMatchObject({ sourceTxHash: TX, epochDepositId: depositId, epochCompactAddress: COMPACT,
+    epochError: "Internal server error · HTTP 500 · INTERNAL_ERROR" });
   expect(stored.epochIntentNonce).toBeUndefined();
   expect(effects.navigate).toHaveBeenCalledOnce();
   expect(effects.onError).toHaveBeenCalledWith(expect.stringContaining("do not submit again"));
@@ -237,6 +238,26 @@ it("does not request a signature when the service lacks SDK 2.2 configuration", 
   expect(allocation).not.toHaveBeenCalled();
   expect(loadStoredActivities()).toEqual([]);
   expect(effects.onError).toHaveBeenCalledWith(expect.stringContaining("no Compact address configured"));
+});
+
+it("does not switch away from a lock with an active withdrawal mid-submission", async () => {
+  const health = epochWalletPaidHealth(COMPACT);
+  let requested = false;
+  const { input, effects, allocation, sent } = setup("sequential", () => {
+    if (requested) return { ...health, compactLockResetPeriod: 3, compactLockScope: 1 };
+    requested = true;
+    return health;
+  });
+  rpc.readContract.mockImplementation(async ({ address, functionName, args }) => {
+    if (functionName === "getForcedWithdrawalStatus")
+      return address.toLowerCase() === COMPACT && args[1] === BigInt(depositId) ? [1, 12345n] : [0, 0n];
+    return 0n;
+  });
+  await submitBridgeTransfer(input, effects);
+  expect(effects.onError).toHaveBeenCalledWith("Cancel the withdrawal to make a Fast deposit.");
+  expect(sent).toEqual([]);
+  expect(allocation).not.toHaveBeenCalled();
+  expect(loadStoredActivities()).toEqual([]);
 });
 
 it.each(["pending", "reverted", "rpc-error"] as const)("tracks an interrupted deposit with a %s source receipt", async state => {

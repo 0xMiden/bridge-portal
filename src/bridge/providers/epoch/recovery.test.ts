@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { decodeFunctionData, encodeFunctionResult, http, zeroAddress } from "viem";
 import { createLockTag, getAllocatorId, getTokenId } from "@epoch-protocol/epoch-intents-sdk/dist/helpers/chains";
 import { assetKey, type EvmAsset } from "../../core/assets";
-import { readLockedDeposit, recoveryAbi, recoveryAssets, recoveryLockId, withdrawalReady } from "./recovery";
+import { legacyRecoveryLock, readLockedDeposit, recoveryAbi, recoveryAssets, withdrawalReady } from "./recovery";
 
 const sponsor = "0x1111111111111111111111111111111111111111";
 const native: EvmAsset = { kind: "native", symbol: "ETH", decimals: 18, network: "ethereum" };
@@ -19,7 +19,7 @@ describe("Compact recovery", () => {
     for (const asset of [...recoveryAssets(environment), native]) {
       const token = asset.kind === "native" ? zeroAddress : asset.address;
       const tag = createLockTag(4n, 0n, getAllocatorId(BigInt(allocator)));
-      expect(recoveryLockId(asset, environment)).toBe(getTokenId(tag, BigInt(token)));
+      expect(legacyRecoveryLock(asset, environment).id).toBe(getTokenId(tag, BigInt(token)));
     }
   });
 
@@ -31,23 +31,24 @@ describe("Compact recovery", () => {
 
   it("reads balances and withdrawal deadlines from the contract without allocator access", async () => {
     const balance = 12345678901234567890n;
+    const lock = legacyRecoveryLock(native, "mainnet");
     vi.stubGlobal("fetch", vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
       const body = await new Request(input, init).json();
       const call = decodeFunctionData({ abi: recoveryAbi, data: body.params[0].data });
-      expect(call.args).toEqual([sponsor, recoveryLockId(native, "mainnet")]);
+      expect(call.args).toEqual([sponsor, lock.id]);
       const result = call.functionName === "balanceOf"
         ? encodeFunctionResult({ abi: recoveryAbi, functionName: "balanceOf", result: balance })
         : encodeFunctionResult({ abi: recoveryAbi, functionName: "getForcedWithdrawalStatus", result: [1, 12345n] });
       return Response.json({ jsonrpc: "2.0", id: body.id, result });
     }));
-    expect(await readLockedDeposit(native, "mainnet", sponsor)).toEqual({
-      asset: native, id: recoveryLockId(native, "mainnet"), balance, status: 1, withdrawableAt: 12345n,
+    expect(await readLockedDeposit(lock, sponsor)).toEqual({
+      ...lock, balance, status: 1, withdrawableAt: 12345n,
     });
   });
 
   it("preserves failed reads as errors", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => Response.json({ error: "RPC unavailable" }, { status: 502 })));
-    await expect(readLockedDeposit(native, "mainnet", sponsor)).rejects.toThrow();
+    await expect(readLockedDeposit(legacyRecoveryLock(native, "mainnet"), sponsor)).rejects.toThrow();
   });
 
   it("uses the contract deadline when Pending becomes due", () => {

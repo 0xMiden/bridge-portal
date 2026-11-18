@@ -1,7 +1,7 @@
 import { test, expect } from "../../fixtures/bridge";
 import { epochWalletPaidHealth } from "../../../test/epoch-service";
 import { decodeFunctionData, encodeFunctionResult } from "viem";
-import { COMPACT_ADDRESS, recoveryAbi } from "../../../src/bridge/providers/epoch/recovery";
+import { recoveryAbi } from "../../../src/bridge/providers/epoch/recovery";
 import { respondToWallet } from "../../fixtures/wallets";
 
 test.beforeEach(async ({ bridge, page }) => {
@@ -10,13 +10,15 @@ test.beforeEach(async ({ bridge, page }) => {
   await page.route(/https:\/\/[^/]+\.epochprotocol\.xyz\/health$/, route => route.fulfill({ json: epochWalletPaidHealth() }));
 });
 
-test("an active Fast withdrawal blocks review and offers cancellation", async ({ bridge, page }) => {
+test("an active Fast withdrawal blocks review and offers cancellation on the configured Compact", async ({ bridge, page }) => {
+  const compactAddress = "0x2222222222222222222222222222222222222222";
+  await page.route(/https:\/\/[^/]+\.epochprotocol\.xyz\/health$/, route => route.fulfill({ json: epochWalletPaidHealth(compactAddress) }));
   let status = 1;
   await page.route("**/suggested-nonce/**", route => route.fulfill({ json: { nonce: "1" } }));
   await page.route("**/checkIfDepositNeeded", route => route.fulfill({ json: { tokenOut: "991878" } }));
   await page.route("**/api/evm/*/rpc", async route => {
     const { id, method, params } = route.request().postDataJSON();
-    if (method !== "eth_call" || params[0]?.to?.toLowerCase() !== COMPACT_ADDRESS.toLowerCase()) return route.fallback();
+    if (method !== "eth_call" || params[0]?.to?.toLowerCase() !== compactAddress) return route.fallback();
     const call = decodeFunctionData({ abi: recoveryAbi, data: params[0].data });
     switch (call.functionName) {
       case "balanceOf":
@@ -40,6 +42,7 @@ test("an active Fast withdrawal blocks review and offers cancellation", async ({
   await expect(page.getByText(/funds.*locked/i)).toBeVisible();
   respondToWallet(page, request => {
     expect(request.method).toBe("eth_sendTransaction");
+    expect(request.params[0]).toMatchObject({ to: compactAddress });
     return { error: { message: "User rejected request", code: 4001 } };
   });
   await cancelWithdrawal.click();

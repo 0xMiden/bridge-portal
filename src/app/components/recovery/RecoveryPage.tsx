@@ -1,19 +1,20 @@
 "use client";
 
 import { useAppKit, useAppKitAccount, useAppKitProvider, useDisconnect } from "@reown/appkit/react";
-import { useQueries, useQueryClient } from "@tanstack/react-query";
+import { useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, RefreshCcw, Wallet } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { getAddress, type Address } from "viem";
-import { assetKey } from "../../../bridge/core/assets";
-import { recoveryAssets, readLockedDeposit, type LockedDeposit, type RecoveryAction } from "../../../bridge/providers/epoch/recovery";
+import { readEpochHealth, readLockedDeposit, recoveryLockKey, recoveryLocks, type LockedDeposit, type RecoveryAction } from "../../../bridge/providers/epoch/recovery";
 import { executeRecovery } from "../../../bridge/providers/epoch/recovery-execute";
 import { useBalanceStore } from "../../../bridge/BalanceProvider";
+import { currentBridgeConfig } from "../../../config/bridge-config";
 import { evmNetworks } from "../../../config/evm-networks";
 import { isUserRejection } from "../../../wallets/errors";
 import type { EvmProvider } from "../../../wallets/evm/evm-wallet";
 import { shortAddress } from "../../../wallets/identity";
 import { errorMessage } from "../../lib/wallet-errors";
+import { useActivitySnapshot } from "../ActivityProvider";
 import { useBridgeEnvironment, useLockNetworkSelection, useNetworkSelectionLocked } from "../NetworkProvider";
 import { Button } from "../ui/Button";
 import { Card } from "../ui/Card";
@@ -92,6 +93,7 @@ function RecoveryBalances({ sponsor, disconnecting }: { sponsor: Address; discon
   const { walletProvider } = useAppKitProvider<EvmProvider>("eip155");
   const queryClient = useQueryClient();
   const balances = useBalanceStore();
+  const { receipts } = useActivitySnapshot();
   const [selectedKey, setSelectedKey] = useState("");
   const [pending, setPending] = useState<RecoveryAction | null>(null);
   const [error, setError] = useState("");
@@ -99,23 +101,28 @@ function RecoveryBalances({ sponsor, disconnecting }: { sponsor: Address; discon
   const backButton = useRef<HTMLButtonElement>(null);
   const listHeading = useRef<HTMLHeadingElement>(null);
   const returnFocus = useRef("");
-  const assets = recoveryAssets(environment);
-  const results = useQueries({ queries: assets.map(asset => ({
-    queryKey: ["compact-recovery", environment, sponsor, assetKey(asset)],
-    queryFn: () => readLockedDeposit(asset, environment, sponsor),
+  const health = useQuery({
+    queryKey: ["epoch-health", environment],
+    queryFn: () => readEpochHealth(currentBridgeConfig(environment)),
+    retry: false,
+  });
+  const locks = recoveryLocks(environment, sponsor, receipts.map(({ activity }) => activity), health.data);
+  const results = useQueries({ queries: locks.map(lock => ({
+    queryKey: ["compact-recovery", environment, sponsor, recoveryLockKey(lock)],
+    queryFn: () => readLockedDeposit(lock, sponsor),
     staleTime: 0,
     retry: false,
     refetchOnWindowFocus: true,
   })) });
-  const selectedIndex = selectedKey ? assets.findIndex(asset => assetKey(asset) === selectedKey) : -1;
+  const selectedIndex = selectedKey ? locks.findIndex(lock => recoveryLockKey(lock) === selectedKey) : -1;
   const selectedResult = selectedIndex < 0 ? undefined : results[selectedIndex];
   const selected = selectedResult?.isError ? undefined : selectedResult?.data;
-  const fetching = selectedResult?.isFetching ?? results.some(result => result.isFetching);
+  const fetching = selectedResult?.isFetching ?? (health.isFetching || results.some(result => result.isFetching));
   const checking = fetching || (selectedResult?.isPending ?? results.some(result => result.isPending));
   const busy = disconnecting || pending !== null;
   const deposits = results.flatMap(result => result.isError || !result.data ? [] : [result.data])
     .filter(deposit => deposit.balance > 0n || deposit.status !== 0);
-  const failed = assets.filter((_, index) => (!selectedResult || index === selectedIndex) && results[index].isError);
+  const failed = locks.filter((_, index) => (!selectedResult || index === selectedIndex) && results[index].isError);
   const hasVisibleDeposit = selectedResult ? Boolean(selected) : deposits.length > 0;
 
   useEffect(() => {
@@ -139,7 +146,8 @@ function RecoveryBalances({ sponsor, disconnecting }: { sponsor: Address; discon
     setConfirmed(null);
   }
 
-  async function refresh() {
+  async function refresh(checkDeployment = false) {
+    if (checkDeployment) await health.refetch();
     await queryClient.invalidateQueries({ queryKey: ["compact-recovery", environment, sponsor] });
   }
 
@@ -151,7 +159,7 @@ function RecoveryBalances({ sponsor, disconnecting }: { sponsor: Address; discon
     try {
       try {
         if (!walletProvider) throw new Error("Connect your EVM wallet first.");
-        await executeRecovery(deposit, action, sponsor, environment, walletProvider);
+        await executeRecovery(deposit, action, sponsor, walletProvider);
         setConfirmed(action);
         await queryClient.invalidateQueries(balances.evmQuery(sponsor, deposit.asset));
       } catch (cause) {
@@ -182,7 +190,7 @@ function RecoveryBalances({ sponsor, disconnecting }: { sponsor: Address; discon
         ) : (
           <h2 ref={listHeading} tabIndex={-1} className="text-base font-semibold">Locked deposits</h2>
         )}
-        <Button variant="toolbar" type="button" disabled={fetching || busy} onClick={() => selectedResult ? selectedResult.refetch() : refresh()}>
+        <Button variant="toolbar" type="button" disabled={fetching || busy} onClick={() => selectedResult ? selectedResult.refetch() : refresh(true)}>
           <span className={fetching ? "motion-safe:animate-spin" : undefined}>
             <RefreshCcw size={16} aria-hidden="true" />
           </span>
@@ -191,7 +199,7 @@ function RecoveryBalances({ sponsor, disconnecting }: { sponsor: Address; discon
       </div>
       {failed.length > 0 ? (
         <FormAlert className="mt-0!">
-          Could not check deposits for {failed.map(asset => `${asset.symbol} on ${evmNetworks[asset.network].name}`).join(", ")}.
+          Could not check deposits for {[...new Set(failed.map(({ asset }) => `${asset.symbol} on ${evmNetworks[asset.network].name}`))].join(", ")}.
         </FormAlert>
       ) : null}
       {error ? <FormAlert className="mt-0!">{error}</FormAlert> : null}
@@ -219,7 +227,7 @@ function RecoveryBalances({ sponsor, disconnecting }: { sponsor: Address; discon
         <Card className="overflow-hidden p-0!">
           <ul className="divide-y divide-border">
             {deposits.map(deposit => {
-              const key = assetKey(deposit.asset);
+              const key = recoveryLockKey(deposit);
               return (
                 <li key={key}>
                   <RecoveryDepositRow

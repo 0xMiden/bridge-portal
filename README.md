@@ -125,7 +125,8 @@ and execution fetches and validates another quote before signing collateral.
 Epoch intents SDK `2.2.0` and commons SDK `2.1.0` are pinned together.
 The SDK now requires deployment addresses, lock/expiry settings, Miden recall
 buffer and gasless configuration from the allocator's `/health` response.
-Deposit recovery tracks the service-configured Compact address.
+Fast deposits check the source lock from the allocator's per-chain configuration before signing. Execution uses that same configuration for the duration of the attempt.
+Recovery scans current and known legacy locks, and saves the funded Compact address and lock ID with new deposit receipts so they remain recoverable if the allocator changes or goes offline.
 The portal explicitly disables gasless smart-account execution. A versioned
 `patch-package` fix lets SDK 2.2.0 treat omitted gasless metadata as unavailable
 capabilities in that mode, while keeping contract addresses and timing settings
