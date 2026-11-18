@@ -35,7 +35,7 @@ export function NetworkSelect({ disabled = false }: { disabled?: boolean }) {
       onChange={next => {
         if (isBridgeEnvironment(next) && next !== environment) {
           selectEnvironment(next);
-          if (pathname !== "/") router.push("/");
+          if (pathname !== "/" && pathname !== "/recovery") router.push("/");
         }
       }}
     >

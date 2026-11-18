@@ -2,14 +2,18 @@ import { test, expect } from "../../fixtures/bridge";
 import { decodeFunctionData, encodeFunctionResult, parseUnits } from "viem";
 import { COMPACT_ADDRESS, recoveryAbi, recoveryAssets, recoveryLockId } from "../../../src/bridge/providers/epoch/recovery";
 
-test("Recovery shows on-chain locks without transfer history and refreshes external withdrawals", async ({ bridge, page }, info) => {
+test("Recovery opens and refreshes individual on-chain deposits", async ({ bridge, page }, info) => {
   await bridge.waitForReady();
-  const asset = recoveryAssets("testnet").find(token => token.symbol === "USDC");
-  if (!asset) throw new Error("Missing Fast USDC fixture");
+  const assets = recoveryAssets("testnet");
+  const asset = assets.find(token => token.symbol === "USDC");
+  const otherAsset = assets.find(token => token.symbol === "WBTC");
+  if (!asset || !otherAsset) throw new Error("Missing Epoch deposit fixtures");
   const id = recoveryLockId(asset, "testnet");
+  const otherId = recoveryLockId(otherAsset, "testnet");
   let status = 0;
   let deadline = 0n;
   let balance = parseUnits("1.23456789", asset.decimals);
+  let otherBalance = parseUnits("0.025", otherAsset.decimals);
   let fail = false;
   await page.route("**/api/evm/*/rpc", async route => {
     const { id: requestId, method, params } = route.request().postDataJSON();
@@ -17,46 +21,69 @@ test("Recovery shows on-chain locks without transfer history and refreshes exter
     if (fail) return route.fulfill({ status: 502, json: { error: "RPC unavailable" } });
     const call = decodeFunctionData({ abi: recoveryAbi, data: params[0].data });
     const matching = call.args[1] === id;
+    const amount = matching ? balance : call.args[1] === otherId ? otherBalance : 0n;
     const result = call.functionName === "balanceOf"
-      ? encodeFunctionResult({ abi: recoveryAbi, functionName: "balanceOf", result: matching ? balance : 0n })
+      ? encodeFunctionResult({ abi: recoveryAbi, functionName: "balanceOf", result: amount })
       : encodeFunctionResult({ abi: recoveryAbi, functionName: "getForcedWithdrawalStatus", result: matching ? [status, deadline] : [0, 0n] });
     return route.fulfill({ json: { jsonrpc: "2.0", id: requestId, result } });
   });
   await page.getByRole("link", { name: "Recovery", exact: true }).click();
   await expect(page).toHaveURL(/\/recovery$/);
-  await expect(page.getByRole("heading", { name: "Recover Fast deposits" })).toBeVisible();
-  const amount = page.getByRole("heading", { name: "1.2345 USDC", exact: true });
+  await expect(page.getByRole("heading", { name: "Recover Epoch deposits" })).toBeVisible();
+  const recovery = page.getByRole("region", { name: "Recover Epoch deposits" });
+  const deposits = recovery.getByRole("region", { name: "Locked deposits" });
+  const detail = recovery.getByRole("region", { name: "Deposit details" });
+  const usdc = deposits.getByRole("button", { name: /1\.2345 USDC.*Sepolia/ });
+  const wbtc = deposits.getByRole("button", { name: /0\.025 WBTC.*Sepolia/ });
+  const back = detail.getByRole("button", { name: "All locked deposits" });
+  const refreshDetail = detail.getByRole("button", { name: "Refresh", exact: true });
+  const withdraw = detail.getByRole("button", { name: "Withdraw to wallet" });
+  await expect(deposits.getByRole("listitem")).toHaveCount(2);
+  await expect(deposits.getByRole("button", { name: "Start withdrawal", exact: true })).toHaveCount(0);
+  await wbtc.click();
+  await expect(detail.getByRole("heading", { name: "0.025 WBTC", exact: true })).toBeVisible();
+  await back.click();
+  await expect(wbtc).toBeFocused();
+
+  await usdc.click();
+  const amount = detail.getByRole("heading", { name: "1.2345 USDC", exact: true });
   await expect(amount).toBeVisible();
   await expect(amount).toHaveAccessibleDescription("1.23456789 USDC");
-  await expect(page.getByRole("button", { name: "Start withdrawal", exact: true })).toBeEnabled();
+  await expect(detail.getByRole("listitem")).toHaveCount(2);
+  await expect(detail.getByRole("button", { name: "Start withdrawal", exact: true })).toBeEnabled();
   status = 1;
   deadline = BigInt(Math.floor(Date.now() / 1000) + 3900);
-  await page.getByRole("button", { name: "Refresh", exact: true }).click();
-  await expect(page.getByText(/Available in \d+m \d+s/)).toBeVisible();
-  await expect(page.getByRole("button", { name: "Withdraw to wallet" })).toBeDisabled();
-  await expect(page.getByRole("button", { name: "Cancel withdrawal" })).toBeEnabled();
+  await refreshDetail.click();
+  await expect(detail.getByText(/Available in \d+m \d+s/)).toBeVisible();
+  await expect(withdraw).toHaveCount(0);
+  await expect(detail.getByRole("button", { name: "Cancel withdrawal" })).toBeEnabled();
   deadline = BigInt(Math.floor(Date.now() / 1000) - 1);
-  await page.getByRole("button", { name: "Refresh", exact: true }).click();
-  await expect(page.getByRole("button", { name: "Withdraw to wallet" })).toBeEnabled();
+  await refreshDetail.click();
+  await expect(withdraw).toBeEnabled();
   await page.setViewportSize({ width: 390, height: 844 });
   await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await page.screenshot({ path: info.outputPath("recovery-mobile.png"), fullPage: true, animations: "disabled" });
   balance = 1n;
-  await page.getByRole("button", { name: "Refresh", exact: true }).click();
-  await expect(page.getByRole("heading", { name: "<0.0001 USDC", exact: true })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Withdraw to wallet" })).toBeEnabled();
+  await refreshDetail.click();
+  await expect(detail.getByRole("heading", { name: "<0.0001 USDC", exact: true })).toBeVisible();
+  await expect(withdraw).toBeEnabled();
   fail = true;
-  await page.getByRole("button", { name: "Refresh", exact: true }).click();
-  await expect(page.getByRole("region", { name: "Locked deposits" }).getByRole("alert")).toContainText("Could not check deposits for");
-  await expect(page.getByText("No locked deposits found.")).toHaveCount(0);
+  await refreshDetail.click();
+  await expect(detail.getByRole("alert")).toContainText("Could not check deposits for USDC on Sepolia");
+  await expect(withdraw).toHaveCount(0);
   fail = false;
   balance = 0n;
   status = 0;
-  await page.getByRole("button", { name: "Refresh", exact: true }).click();
-  await expect(page.getByText("No locked deposits found.")).toBeVisible();
+  await refreshDetail.click();
+  await expect(detail.getByText("No locked funds remain.")).toBeVisible();
+  await back.click();
+  await expect(wbtc).toBeVisible();
+  otherBalance = 0n;
+  const refreshList = deposits.getByRole("button", { name: "Refresh", exact: true });
+  const empty = deposits.getByText("No locked deposits found.");
+  await refreshList.click();
+  await expect(empty).toBeVisible();
 
-  const recovery = page.getByRole("region", { name: "Recover Fast deposits" });
-  const deposits = recovery.getByRole("region", { name: "Locked deposits" });
   const disconnect = recovery.getByRole("button", { name: "Disconnect", exact: true });
   const connect = recovery.getByRole("button", { name: "Connect wallet", exact: true });
   await expect(disconnect).toBeEnabled();
@@ -66,5 +93,14 @@ test("Recovery shows on-chain locks without transfer history and refreshes exter
 
   await connect.click();
   await page.getByText("Browser test wallet", { exact: true }).click();
-  await expect(deposits.getByText("No locked deposits found.")).toBeVisible();
+  await expect(empty).toBeVisible();
+
+  otherBalance = parseUnits("0.025", otherAsset.decimals);
+  await refreshList.click();
+  await wbtc.click();
+  await expect(detail.getByRole("heading", { name: "0.025 WBTC", exact: true })).toBeVisible();
+  await page.getByRole("combobox", { name: "Bridge network" }).click();
+  await page.getByRole("option", { name: "Mainnet", exact: true }).click();
+  await expect(empty).toBeVisible();
+  await expect(page).toHaveURL(/\/recovery$/);
 });
