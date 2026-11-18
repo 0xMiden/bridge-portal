@@ -12,6 +12,7 @@ import { useBalanceStore } from "../../../bridge/BalanceProvider";
 import { evmNetworks } from "../../../config/evm-networks";
 import type { EvmProvider } from "../../../wallets/evm/evm-wallet";
 import { shortAddress } from "../../../wallets/identity";
+import { compactTokenAmount } from "../../lib/token-amount";
 import { errorMessage } from "../../lib/wallet-errors";
 import { NetworkLogo, TokenLogo } from "../AssetLogo";
 import { useBridgeEnvironment, useLockNetworkSelection, useNetworkSelectionLocked } from "../NetworkProvider";
@@ -189,6 +190,8 @@ function RecoveryDeposit({ deposit, busy, pending, onAction }: {
     return () => clearInterval(timer);
   }, [deposit.status]);
   const { asset, balance, status } = deposit;
+  const exactAmount = formatUnits(balance, asset.decimals);
+  const displayAmount = compactTokenAmount(exactAmount);
   const active = status !== 0;
   const hasBalance = balance > 0n;
   const ready = withdrawalReady(deposit, now);
@@ -206,7 +209,12 @@ function RecoveryDeposit({ deposit, busy, pending, onAction }: {
         <div className="flex min-w-0 items-center gap-3">
           <TokenLogo asset={asset} />
           <div className="grid min-w-0 gap-1">
-            <h3 className="text-xl leading-tight font-semibold tabular-nums wrap-anywhere">{formatUnits(balance, asset.decimals)} {asset.symbol}</h3>
+            <h3
+              className="text-xl leading-tight font-semibold tabular-nums wrap-anywhere"
+              title={displayAmount !== exactAmount ? `${exactAmount} ${asset.symbol}` : undefined}
+            >
+              {displayAmount} {asset.symbol}
+            </h3>
             <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
               <NetworkLogo network={asset.network} variant="selector" />
               {evmNetworks[asset.network].name}

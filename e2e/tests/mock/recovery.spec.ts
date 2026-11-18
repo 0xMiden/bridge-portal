@@ -9,7 +9,7 @@ test("Recovery shows on-chain locks without transfer history and refreshes exter
   const id = recoveryLockId(asset, "testnet");
   let status = 0;
   let deadline = 0n;
-  let balance = parseUnits("1", asset.decimals);
+  let balance = parseUnits("1.23456789", asset.decimals);
   let fail = false;
   await page.route("**/api/evm/*/rpc", async route => {
     const { id: requestId, method, params } = route.request().postDataJSON();
@@ -25,7 +25,9 @@ test("Recovery shows on-chain locks without transfer history and refreshes exter
   await page.getByRole("link", { name: "Recovery", exact: true }).click();
   await expect(page).toHaveURL(/\/recovery$/);
   await expect(page.getByRole("heading", { name: "Recover Fast deposits" })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "1 USDC", exact: true })).toBeVisible();
+  const amount = page.getByRole("heading", { name: "1.2345 USDC", exact: true });
+  await expect(amount).toBeVisible();
+  await expect(amount).toHaveAccessibleDescription("1.23456789 USDC");
   await expect(page.getByRole("button", { name: "Start withdrawal", exact: true })).toBeEnabled();
   status = 1;
   deadline = BigInt(Math.floor(Date.now() / 1000) + 3900);
@@ -39,6 +41,10 @@ test("Recovery shows on-chain locks without transfer history and refreshes exter
   await page.setViewportSize({ width: 390, height: 844 });
   await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await page.screenshot({ path: info.outputPath("recovery-mobile.png"), fullPage: true, animations: "disabled" });
+  balance = 1n;
+  await page.getByRole("button", { name: "Refresh", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "<0.0001 USDC", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Withdraw to wallet" })).toBeEnabled();
   fail = true;
   await page.getByRole("button", { name: "Refresh", exact: true }).click();
   await expect(page.getByRole("region", { name: "Locked deposits" }).getByRole("alert")).toContainText("Could not check deposits for");
