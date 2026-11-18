@@ -131,7 +131,7 @@ export function RecoveryDepositDetail({ deposit, busy, pendingAction, startConfi
                 Your funds arrive when it confirms.
               </li>
             </ol>
-            <p>Starting a withdrawal pauses Epoch deposits for this wallet, token, and network until you withdraw or cancel.</p>
+            <p>Starting a withdrawal pauses Fast deposits into this lock. To resume deposits, cancel the withdrawal even if you’ve already withdrawn the funds.</p>
           </div>
           <Button variant="bridge" type="button" disabled={busy} onClick={() => onAction("start")}>
             <span aria-live="polite">{startLabel}</span>
