@@ -48,6 +48,7 @@ jobs:
             BASE_SEPOLIA_RPC_URL: 84532,
             ARBITRUM_SEPOLIA_RPC_URL: 421614,
           };
+          if (process.env.ROBINHOOD_RPC_URL?.trim()) networks.ROBINHOOD_RPC_URL = 4663;
           const secrets = {};
           const checks = await Promise.allSettled(Object.entries(networks).map(async ([name, chainId]) => {
             const url = process.env[name]?.trim();
@@ -73,7 +74,7 @@ jobs:
             process.exit(1);
           }
           writeFileSync(process.env.RPC_SECRETS_FILE, JSON.stringify(secrets), { mode: 0o600 });
-          console.log("All eight EVM RPCs verified; runtime secrets prepared.");
+          console.log(`Verified ${Object.keys(secrets).length} EVM RPCs; runtime secrets prepared.`);
           NODE
           npx opennextjs-cloudflare deploy -- --secrets-file "$secrets_file"
         env:
@@ -82,6 +83,7 @@ jobs:
           ARC_MAINNET_RPC_URL: ${{ secrets.ARC_MAINNET_RPC_URL }}
           BASE_RPC_URL: ${{ secrets.BASE_RPC_URL }}
           ARBITRUM_RPC_URL: ${{ secrets.ARBITRUM_RPC_URL }}
+          ROBINHOOD_RPC_URL: ${{ secrets.ROBINHOOD_RPC_URL }}
           AGGLAYER_SEPOLIA_RPC_URL: ${{ secrets.AGGLAYER_SEPOLIA_RPC_URL }}
           ARC_TESTNET_RPC_URL: ${{ secrets.ARC_TESTNET_RPC_URL }}
           BASE_SEPOLIA_RPC_URL: ${{ secrets.BASE_SEPOLIA_RPC_URL }}
