@@ -83,14 +83,17 @@ function recordedLock(activity: Activity, environment: BridgeEnvironment, sponso
 export function recoveryLocks(environment: BridgeEnvironment, sponsor: Address, activities: readonly Activity[], health?: HealthCheckResponse) {
   const assets = recoveryAssets(environment);
   const known = assets.map(asset => legacyRecoveryLock(asset, environment));
+  const unconfiguredAssets: EvmAsset[] = [];
   if (health) for (const asset of assets) {
-    try { known.push(configuredRecoveryLock(asset, health)); } catch { continue; }
+    try { known.push(configuredRecoveryLock(asset, health)); }
+    catch { unconfiguredAssets.push(asset); }
   }
   for (const activity of activities) {
     const lock = recordedLock(activity, environment, sponsor);
     if (lock) known.push(lock);
   }
-  return [...new Map(known.map(lock => [recoveryLockKey(lock), lock])).values()];
+  const locks = [...new Map(known.map(lock => [recoveryLockKey(lock), lock])).values()];
+  return { locks, unconfiguredAssets };
 }
 
 export function recoveryClient(asset: EvmAsset) {

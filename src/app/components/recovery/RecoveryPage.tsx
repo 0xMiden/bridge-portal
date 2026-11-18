@@ -112,7 +112,7 @@ function RecoveryBalances({ sponsor, disconnecting }: { sponsor: Address; discon
   });
   const startBlocksKey = ["compact-recovery-start-blocks", environment, sponsor] as const;
   const { data: startBlocks } = useQuery<Record<string, bigint>>({ queryKey: startBlocksKey, queryFn: skipToken, gcTime: Infinity });
-  const locks = recoveryLocks(environment, sponsor, receipts.map(({ activity }) => activity), health.data);
+  const { locks, unconfiguredAssets } = recoveryLocks(environment, sponsor, receipts.map(({ activity }) => activity), health.data);
   const results = useQueries({ queries: locks.map(lock => ({
     queryKey: ["compact-recovery", environment, sponsor, recoveryLockKey(lock)],
     queryFn: () => readLockedDeposit(lock, sponsor,
@@ -126,14 +126,17 @@ function RecoveryBalances({ sponsor, disconnecting }: { sponsor: Address; discon
   const awaitingStart = awaitingStartBlock(selectedResult?.data, startBlocks?.[selectedKey]);
   const selected = selectedResult?.isError && !awaitingStart ? undefined : selectedResult?.data;
   const fetching = selectedResult?.isFetching ?? (health.isFetching || results.some(result => result.isFetching));
-  const checking = fetching || (selectedResult?.isPending ?? results.some(result => result.isPending));
+  const checking = fetching || (selectedResult?.isPending ?? (health.isPending || results.some(result => result.isPending)));
   const busy = disconnecting || pending !== null;
   const deposits = results.flatMap((result, index) => {
     if (!result.data) return [];
     const key = recoveryLockKey(locks[index]);
     return result.isError && !awaitingStartBlock(result.data, startBlocks?.[key]) ? [] : [result.data];
   }).filter(deposit => deposit.balance > 0n || deposit.status !== 0);
-  const failed = locks.filter((_, index) => (!selectedResult || index === selectedIndex) && results[index].isError);
+  const failedAssets = locks.filter((_, index) => (!selectedResult || index === selectedIndex) && results[index].isError)
+    .map(({ asset }) => asset);
+  const configurationFailed = !selectedResult && health.isError;
+  if (!selectedResult && health.isSuccess) failedAssets.push(...unconfiguredAssets);
   const hasVisibleDeposit = selectedResult ? Boolean(selected) : deposits.length > 0;
 
   useEffect(() => {
@@ -211,9 +214,10 @@ function RecoveryBalances({ sponsor, disconnecting }: { sponsor: Address; discon
           Refresh
         </Button>
       </div>
-      {failed.length > 0 ? (
+      {configurationFailed ? <FormAlert className="mt-0!">Could not check current Fast deposits.</FormAlert> : null}
+      {failedAssets.length > 0 ? (
         <FormAlert className="mt-0!">
-          Could not check deposits for {[...new Set(failed.map(({ asset }) => `${asset.symbol} on ${evmNetworks[asset.network].name}`))].join(", ")}.
+          Could not check deposits for {[...new Set(failedAssets.map(asset => `${asset.symbol} on ${evmNetworks[asset.network].name}`))].join(", ")}.
         </FormAlert>
       ) : null}
       {error ? <FormAlert className="mt-0!">{error}</FormAlert> : null}
@@ -225,7 +229,7 @@ function RecoveryBalances({ sponsor, disconnecting }: { sponsor: Address; discon
           {selectedResult ? "Checking deposit…" : "Checking deposits…"}
         </p>
       ) : null}
-      {!selectedResult && !checking && !failed.length && !deposits.length ? (
+      {!selectedResult && !checking && !configurationFailed && !failedAssets.length && !deposits.length ? (
         <Card variant="empty" role="status" className="text-sm text-muted-foreground">No locked deposits found.</Card>
       ) : null}
       {selected ? (

@@ -10,15 +10,6 @@ export function FastWithdrawalNotice({ withdrawal, symbol, disabled, onDisable }
   disabled: boolean;
   onDisable: () => Promise<void>;
 }) {
-  if (!withdrawal.enabled) return null;
-  if (withdrawal.failed) return (
-    <Card className="grid gap-3">
-      <FormAlert className="mt-0!">Could not check withdrawal status for {symbol}.</FormAlert>
-      <Button variant="secondary" className="w-fit" type="button" disabled={disabled} onClick={() => withdrawal.refresh()}>
-        Retry withdrawal check
-      </Button>
-    </Card>
-  );
   if (!withdrawal.active) return null;
   return (
     <Card className="grid gap-3">
