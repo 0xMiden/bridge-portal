@@ -1,6 +1,7 @@
 import { test, expect } from "../../fixtures/bridge";
-import { decodeFunctionData, encodeFunctionResult, parseUnits } from "viem";
+import { decodeFunctionData, encodeFunctionResult, parseUnits, type Address, type Hex } from "viem";
 import { COMPACT_ADDRESS, recoveryAbi, recoveryAssets, recoveryLockId } from "../../../src/bridge/providers/epoch/recovery";
+import { respondToWallet, SOURCE_TX, walletRequests } from "../../fixtures/wallets";
 
 test("Recovery opens and refreshes individual on-chain deposits", async ({ bridge, page }, info) => {
   await bridge.waitForReady();
@@ -15,13 +16,29 @@ test("Recovery opens and refreshes individual on-chain deposits", async ({ bridg
   let balance = parseUnits("1.23456789", asset.decimals);
   let otherBalance = parseUnits("0.025", otherAsset.decimals);
   let fail = false;
+  let receiptRequested = false;
+  const confirmReceipt = Promise.withResolvers<void>();
   await page.route("**/api/evm/*/rpc", async route => {
     const { id: requestId, method, params } = route.request().postDataJSON();
+    if (method === "eth_getTransactionReceipt" && params[0] === SOURCE_TX) {
+      receiptRequested = true;
+      await confirmReceipt.promise;
+      status = 1;
+      deadline = BigInt(Math.floor(Date.now() / 1000) + 3900);
+      return route.fulfill({ json: { jsonrpc: "2.0", id: requestId, result: {
+        transactionHash: SOURCE_TX, blockNumber: "0x1", status: "0x1", logs: [],
+      } } });
+    }
     if (method !== "eth_call" || params[0]?.to?.toLowerCase() !== COMPACT_ADDRESS.toLowerCase()) return route.fallback();
     if (fail) return route.fulfill({ status: 502, json: { error: "RPC unavailable" } });
     const call = decodeFunctionData({ abi: recoveryAbi, data: params[0].data });
     const matching = call.args[1] === id;
     const amount = matching ? balance : call.args[1] === otherId ? otherBalance : 0n;
+    if (call.functionName === "enableForcedWithdrawal") {
+      return route.fulfill({ json: { jsonrpc: "2.0", id: requestId,
+        result: encodeFunctionResult({ abi: recoveryAbi, functionName: "enableForcedWithdrawal", result: 3900n }),
+      } });
+    }
     const result = call.functionName === "balanceOf"
       ? encodeFunctionResult({ abi: recoveryAbi, functionName: "balanceOf", result: amount })
       : encodeFunctionResult({ abi: recoveryAbi, functionName: "getForcedWithdrawalStatus", result: matching ? [status, deadline] : [0, 0n] });
@@ -50,11 +67,36 @@ test("Recovery opens and refreshes individual on-chain deposits", async ({ bridg
   await expect(amount).toBeVisible();
   await expect(amount).toHaveAccessibleDescription("1.23456789 USDC");
   await expect(detail.getByRole("listitem")).toHaveCount(2);
-  await expect(detail.getByRole("button", { name: "Start withdrawal", exact: true })).toBeEnabled();
-  status = 1;
-  deadline = BigInt(Math.floor(Date.now() / 1000) + 3900);
-  await refreshDetail.click();
-  await expect(detail.getByText(/Available in \d+m \d+s/)).toBeVisible();
+  let rejectStart = true;
+  respondToWallet(page, request => {
+    if (request.method === "wallet_revokePermissions") return { result: null };
+    expect(request.method).toBe("eth_sendTransaction");
+    const [transaction] = request.params as [{ to: Address; data: Hex }];
+    expect(transaction.to.toLowerCase()).toBe(COMPACT_ADDRESS.toLowerCase());
+    expect(decodeFunctionData({ abi: recoveryAbi, data: transaction.data })).toEqual({
+      functionName: "enableForcedWithdrawal", args: [id],
+    });
+    if (rejectStart) return { error: { code: 4001, message: "User rejected the request." } };
+    return { result: SOURCE_TX };
+  });
+  const start = detail.getByRole("button", { name: "Start withdrawal", exact: true });
+  await start.click();
+  await expect.poll(async () => (await walletRequests(page)).filter(request => request.method === "eth_sendTransaction").length).toBe(1);
+  await expect(start).toBeEnabled();
+  await expect(detail.getByRole("alert")).toHaveCount(0);
+
+  rejectStart = false;
+  await start.click();
+  try {
+    await expect.poll(() => receiptRequested).toBe(true);
+    await expect(detail.getByRole("button", { name: "Waiting for confirmation…", exact: true })).toBeDisabled();
+    await expect(detail.getByText("Waiting for confirmation…", { exact: true })).toHaveCount(1);
+  } finally {
+    confirmReceipt.resolve();
+  }
+  await expect(detail.getByRole("article").getByRole("status")).toHaveText("Withdrawal started");
+  await expect(detail.getByText(/^\d+m \d+s$/)).toBeVisible();
+  await expect(detail.getByText(/^Withdrawal started\.?$/)).toHaveCount(1);
   await expect(withdraw).toHaveCount(0);
   await expect(detail.getByRole("button", { name: "Cancel withdrawal" })).toBeEnabled();
   deadline = BigInt(Math.floor(Date.now() / 1000) - 1);

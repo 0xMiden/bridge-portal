@@ -22,12 +22,13 @@ function useWithdrawalStatus(deposit: LockedDeposit) {
     return () => clearInterval(timer);
   }, [waiting]);
 
-  if (!active) return { active, canWithdraw, label: "Withdrawal not started" };
-  if (ready) return { active, canWithdraw, label: canWithdraw ? "Ready to withdraw" : "Withdrawal active" };
+  if (!active) return { active, canWithdraw, label: "Withdrawal not started", timeLeft: null };
+  if (ready) return { active, canWithdraw, label: canWithdraw ? "Ready to withdraw" : "Withdrawal active", timeLeft: null };
   const remaining = Math.max(0, Number(deposit.withdrawableAt) - now);
   const minutes = Math.floor(remaining / 60);
   const seconds = String(remaining % 60).padStart(2, "0");
-  return { active, canWithdraw, label: `Available in ${minutes}m ${seconds}s` };
+  const timeLeft = `${minutes}m ${seconds}s`;
+  return { active, canWithdraw, label: `Available in ${timeLeft}`, timeLeft };
 }
 
 function DepositIdentity({ deposit, detail = false, status }: { deposit: LockedDeposit; detail?: boolean; status?: string }) {
@@ -82,30 +83,39 @@ export function RecoveryDepositRow({ id, deposit, disabled, onSelect }: {
   );
 }
 
-export function RecoveryDepositDetail({ deposit, busy, pending, onAction }: {
+export function RecoveryDepositDetail({ deposit, busy, pendingAction, startConfirmed, onAction }: {
   deposit: LockedDeposit;
   busy: boolean;
-  pending: boolean;
+  pendingAction: RecoveryAction | null;
+  startConfirmed: boolean;
   onAction: (action: RecoveryAction) => Promise<void>;
 }) {
-  const { active, canWithdraw, label } = useWithdrawalStatus(deposit);
+  const { active, canWithdraw, label, timeLeft } = useWithdrawalStatus(deposit);
   const hasBalance = deposit.balance > 0n;
+  const checkingTimer = startConfirmed && !active;
+  const started = checkingTimer || (hasBalance && timeLeft !== null);
+  const waitingForConfirmation = "Waiting for confirmation…";
+  const startLabel = pendingAction === "start" ? waitingForConfirmation : "Start withdrawal";
   return (
     <Card as="article" className="grid gap-3">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <DepositIdentity deposit={deposit} detail />
-        {active ? (
-          <StatusIndicator tone={canWithdraw ? "success" : "warning"} className="tabular-nums">{label}</StatusIndicator>
+        {active || checkingTimer ? (
+          <StatusIndicator tone={canWithdraw ? "success" : "warning"} role={hasBalance ? "status" : undefined} className="tabular-nums">
+            {started ? "Withdrawal started" : label}
+          </StatusIndicator>
         ) : null}
       </div>
       {!hasBalance ? (
         <p className="text-sm text-muted-foreground">
           No locked funds remain.{active ? " Cancel the withdrawal to resume Epoch deposits." : ""}
         </p>
+      ) : checkingTimer ? (
+        <p className="text-sm text-muted-foreground">Checking the withdrawal timer…</p>
       ) : active ? (
         <p className="text-sm text-muted-foreground">
           {canWithdraw ? "Approve the withdrawal in your wallet. Your funds arrive when the transaction confirms." :
-            <>Select <strong className="font-medium text-foreground">Withdraw to wallet</strong> when the timer ends.</>}
+            <>Select <strong className="font-medium text-foreground">Withdraw to wallet</strong> in <span className="font-medium tabular-nums">{timeLeft}</span>.</>}
         </p>
       ) : (
         <>
@@ -122,18 +132,21 @@ export function RecoveryDepositDetail({ deposit, busy, pending, onAction }: {
             </ol>
             <p>Starting a withdrawal pauses Epoch deposits for this wallet, token, and network until you withdraw or cancel.</p>
           </div>
-          <Button variant="bridge" type="button" disabled={busy} onClick={() => onAction("start")}>Start withdrawal</Button>
+          <Button variant="bridge" type="button" disabled={busy} onClick={() => onAction("start")}>
+            <span aria-live="polite">{startLabel}</span>
+          </Button>
         </>
       )}
       {canWithdraw ? (
-        <Button variant="bridge" type="button" disabled={busy} onClick={() => onAction("withdraw")}>Withdraw to wallet</Button>
+        <Button variant="bridge" type="button" disabled={busy} onClick={() => onAction("withdraw")}>
+          <span aria-live="polite">{pendingAction === "withdraw" ? waitingForConfirmation : "Withdraw to wallet"}</span>
+        </Button>
       ) : null}
       {active ? (
         <Button variant="secondary" className="justify-self-start" type="button" disabled={busy} onClick={() => onAction("cancel")}>
-          Cancel withdrawal
+          <span aria-live="polite">{pendingAction === "cancel" ? waitingForConfirmation : "Cancel withdrawal"}</span>
         </Button>
       ) : null}
-      {pending ? <p role="status" className="text-sm text-muted-foreground">Waiting for confirmation…</p> : null}
     </Card>
   );
 }

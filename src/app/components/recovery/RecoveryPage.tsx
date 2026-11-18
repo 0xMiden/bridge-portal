@@ -10,6 +10,7 @@ import { recoveryAssets, readLockedDeposit, type LockedDeposit, type RecoveryAct
 import { executeRecovery } from "../../../bridge/providers/epoch/recovery-execute";
 import { useBalanceStore } from "../../../bridge/BalanceProvider";
 import { evmNetworks } from "../../../config/evm-networks";
+import { isUserRejection } from "../../../wallets/errors";
 import type { EvmProvider } from "../../../wallets/evm/evm-wallet";
 import { shortAddress } from "../../../wallets/identity";
 import { errorMessage } from "../../lib/wallet-errors";
@@ -18,12 +19,6 @@ import { Button } from "../ui/Button";
 import { Card } from "../ui/Card";
 import { FormAlert } from "../ui/Feedback";
 import { RecoveryDepositDetail, RecoveryDepositRow } from "./RecoveryDeposit";
-
-const confirmationMessages = {
-  start: "Withdrawal started.",
-  cancel: "Withdrawal canceled.",
-  withdraw: "Withdrawal complete.",
-} satisfies Record<RecoveryAction, string>;
 
 export function RecoveryPage() {
   const environment = useBridgeEnvironment();
@@ -40,7 +35,7 @@ export function RecoveryPage() {
     try {
       await open({ namespace: "eip155", view: "Connect" });
     } catch (cause) {
-      setError(errorMessage(cause));
+      if (!isUserRejection(cause)) setError(errorMessage(cause));
     }
   }
 
@@ -50,7 +45,7 @@ export function RecoveryPage() {
     try {
       await disconnect({ namespace: "eip155" });
     } catch (cause) {
-      setError(errorMessage(cause));
+      if (!isUserRejection(cause)) setError(errorMessage(cause));
     } finally {
       setDisconnecting(false);
     }
@@ -59,30 +54,31 @@ export function RecoveryPage() {
   return (
     <section aria-labelledby="recovery-title" className="mx-auto mt-6 grid w-full max-w-137 gap-4 pb-10 mobile:mt-4">
       <h1 id="recovery-title" className="text-2xl font-semibold tracking-tight">Recover Epoch deposits</h1>
-      <Card className="grid gap-3">
-        {sponsor ? (
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="flex min-w-0 items-center gap-3">
-              <span className="grid size-10 shrink-0 place-items-center rounded-md bg-accent-soft text-accent-foreground">
-                <Wallet size={18} aria-hidden="true" />
-              </span>
-              <div>
-                <p className="text-xs text-muted-foreground">Deposit wallet</p>
-                <p className="font-mono text-sm font-medium" title={sponsor}>{shortAddress(sponsor)}</p>
-              </div>
+      <Card aria-labelledby="deposit-wallet-title" className="grid gap-3 p-3! sm:p-4!">
+        <div className={`grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 ${sponsor ? "" : "max-[360px]:grid-cols-1"}`}>
+          <div className="flex min-w-0 items-center gap-3">
+            <span className={`grid size-10 shrink-0 place-items-center rounded-md ${sponsor ? "bg-accent-soft text-accent-foreground" : "bg-surface-muted text-muted-foreground"}`}>
+              <Wallet size={18} aria-hidden="true" />
+            </span>
+            <div className="grid min-w-0 gap-0.5">
+              <h2 id="deposit-wallet-title" className="text-sm font-semibold">Deposit wallet</h2>
+              {sponsor ? (
+                <p className="font-mono text-xs text-muted-foreground wrap-anywhere" title={sponsor}>{shortAddress(sponsor)}</p>
+              ) : (
+                <p className="text-xs text-muted-foreground">Use the EVM wallet you deposited from.</p>
+              )}
             </div>
-            <Button variant="secondary" type="button" disabled={selectionLocked || disconnecting} onClick={disconnectWallet}>
+          </div>
+          {sponsor ? (
+            <Button variant="secondary" className="whitespace-nowrap" type="button" disabled={selectionLocked || disconnecting} onClick={disconnectWallet}>
               {disconnecting ? "Disconnecting…" : "Disconnect"}
             </Button>
-          </div>
-        ) : (
-          <>
-            <p className="text-sm text-muted-foreground">Connect the EVM wallet you used to deposit.</p>
-            <Button variant="bridge" type="button" disabled={disconnecting} onClick={connect}>
-              <Wallet size={16} aria-hidden="true" />Connect wallet
+          ) : (
+            <Button variant="bridge" className="w-auto! min-h-11!" type="button" disabled={disconnecting} onClick={connect}>
+              Connect wallet
             </Button>
-          </>
-        )}
+          )}
+        </div>
         {error ? <FormAlert className="mt-0!">{error}</FormAlert> : null}
       </Card>
       {sponsor ? <RecoveryBalances key={`${environment}:${sponsor}`} sponsor={sponsor} disconnecting={disconnecting} /> : null}
@@ -97,9 +93,9 @@ function RecoveryBalances({ sponsor, disconnecting }: { sponsor: Address; discon
   const queryClient = useQueryClient();
   const balances = useBalanceStore();
   const [selectedKey, setSelectedKey] = useState("");
-  const [pending, setPending] = useState(false);
+  const [pending, setPending] = useState<RecoveryAction | null>(null);
   const [error, setError] = useState("");
-  const [notice, setNotice] = useState("");
+  const [confirmed, setConfirmed] = useState<RecoveryAction | null>(null);
   const backButton = useRef<HTMLButtonElement>(null);
   const listHeading = useRef<HTMLHeadingElement>(null);
   const returnFocus = useRef("");
@@ -116,7 +112,7 @@ function RecoveryBalances({ sponsor, disconnecting }: { sponsor: Address; discon
   const selected = selectedResult?.isError ? undefined : selectedResult?.data;
   const fetching = selectedResult?.isFetching ?? results.some(result => result.isFetching);
   const checking = fetching || (selectedResult?.isPending ?? results.some(result => result.isPending));
-  const busy = disconnecting || pending;
+  const busy = disconnecting || pending !== null;
   const deposits = results.flatMap(result => result.isError || !result.data ? [] : [result.data])
     .filter(deposit => deposit.balance > 0n || deposit.status !== 0);
   const failed = assets.filter((_, index) => (!selectedResult || index === selectedIndex) && results[index].isError);
@@ -140,7 +136,7 @@ function RecoveryBalances({ sponsor, disconnecting }: { sponsor: Address; discon
   function showDepositList() {
     setSelectedKey("");
     setError("");
-    setNotice("");
+    setConfirmed(null);
   }
 
   async function refresh() {
@@ -149,23 +145,23 @@ function RecoveryBalances({ sponsor, disconnecting }: { sponsor: Address; discon
 
   async function recover(deposit: LockedDeposit, action: RecoveryAction) {
     setError("");
-    setNotice("");
-    setPending(true);
+    setConfirmed(null);
+    setPending(action);
     const unlock = lockSelection();
     try {
-      if (!walletProvider) throw new Error("Connect your EVM wallet first.");
-      await executeRecovery(deposit, action, sponsor, environment, walletProvider);
-      setNotice(confirmationMessages[action]);
-      await queryClient.invalidateQueries(balances.evmQuery(sponsor, deposit.asset));
-    } catch (cause) {
-      setError(errorMessage(cause));
-    } finally {
       try {
-        await refresh();
-      } finally {
-        setPending(false);
-        unlock();
+        if (!walletProvider) throw new Error("Connect your EVM wallet first.");
+        await executeRecovery(deposit, action, sponsor, environment, walletProvider);
+        setConfirmed(action);
+        await queryClient.invalidateQueries(balances.evmQuery(sponsor, deposit.asset));
+      } catch (cause) {
+        if (isUserRejection(cause)) return;
+        setError(errorMessage(cause));
       }
+      await refresh();
+    } finally {
+      setPending(null);
+      unlock();
     }
   }
 
@@ -179,7 +175,7 @@ function RecoveryBalances({ sponsor, disconnecting }: { sponsor: Address; discon
               underline-offset-4 hover:text-foreground hover:underline disabled:opacity-60"
             type="button"
             onClick={showDepositList}
-            disabled={pending}
+            disabled={pending !== null}
           >
             <ArrowLeft size={16} className="shrink-0" aria-hidden="true" />All locked deposits
           </button>
@@ -199,8 +195,8 @@ function RecoveryBalances({ sponsor, disconnecting }: { sponsor: Address; discon
         </FormAlert>
       ) : null}
       {error ? <FormAlert className="mt-0!">{error}</FormAlert> : null}
-      {notice ? (
-        <p role="status" className="rounded-md bg-success-soft p-3 text-sm text-success-foreground">{notice}</p>
+      {confirmed === "withdraw" ? (
+        <p role="status" className="rounded-md bg-success-soft p-3 text-sm text-success-foreground">Withdrawal complete.</p>
       ) : null}
       {checking ? (
         <p role="status" className={hasVisibleDeposit ? "sr-only" : "text-sm text-muted-foreground"}>
@@ -214,7 +210,8 @@ function RecoveryBalances({ sponsor, disconnecting }: { sponsor: Address; discon
         <RecoveryDepositDetail
           deposit={selected}
           busy={busy}
-          pending={pending && !error && !notice}
+          pendingAction={error || confirmed ? null : pending}
+          startConfirmed={pending === "start" && confirmed === "start"}
           onAction={action => recover(selected, action)}
         />
       ) : null}
