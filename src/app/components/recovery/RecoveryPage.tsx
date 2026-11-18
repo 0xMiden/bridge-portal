@@ -1,6 +1,6 @@
 "use client";
 
-import { useAppKit, useAppKitAccount, useAppKitProvider } from "@reown/appkit/react";
+import { useAppKit, useAppKitAccount, useAppKitProvider, useDisconnect } from "@reown/appkit/react";
 import { useQueries, useQueryClient } from "@tanstack/react-query";
 import { RefreshCcw, Wallet } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -14,7 +14,7 @@ import type { EvmProvider } from "../../../wallets/evm/evm-wallet";
 import { shortAddress } from "../../../wallets/identity";
 import { errorMessage } from "../../lib/wallet-errors";
 import { NetworkLogo, TokenLogo } from "../AssetLogo";
-import { useBridgeEnvironment, useLockNetworkSelection } from "../NetworkProvider";
+import { useBridgeEnvironment, useLockNetworkSelection, useNetworkSelectionLocked } from "../NetworkProvider";
 import { Button } from "../ui/Button";
 import { Card } from "../ui/Card";
 import { FormAlert } from "../ui/Feedback";
@@ -28,8 +28,11 @@ const confirmationMessages = {
 
 export function RecoveryPage() {
   const environment = useBridgeEnvironment();
+  const selectionLocked = useNetworkSelectionLocked();
   const { address, isConnected } = useAppKitAccount({ namespace: "eip155" });
   const { open } = useAppKit();
+  const { disconnect } = useDisconnect();
+  const [disconnecting, setDisconnecting] = useState(false);
   const [error, setError] = useState("");
   const sponsor = isConnected && address ? getAddress(address) : undefined;
 
@@ -39,6 +42,18 @@ export function RecoveryPage() {
       await open({ namespace: "eip155", view: "Connect" });
     } catch (cause) {
       setError(errorMessage(cause));
+    }
+  }
+
+  async function disconnectWallet() {
+    setError("");
+    setDisconnecting(true);
+    try {
+      await disconnect({ namespace: "eip155" });
+    } catch (cause) {
+      setError(errorMessage(cause));
+    } finally {
+      setDisconnecting(false);
     }
   }
 
@@ -57,24 +72,26 @@ export function RecoveryPage() {
                 <p className="font-mono text-sm font-medium" title={sponsor}>{shortAddress(sponsor)}</p>
               </div>
             </div>
-            <Button variant="secondary" type="button" onClick={connect}>Change wallet</Button>
+            <Button variant="secondary" type="button" disabled={selectionLocked || disconnecting} onClick={disconnectWallet}>
+              {disconnecting ? "Disconnecting…" : "Disconnect"}
+            </Button>
           </div>
         ) : (
           <>
             <p className="text-sm text-muted-foreground">Connect the EVM wallet you used to deposit.</p>
-            <Button variant="bridge" type="button" onClick={connect}>
+            <Button variant="bridge" type="button" disabled={disconnecting} onClick={connect}>
               <Wallet size={16} aria-hidden="true" />Connect wallet
             </Button>
           </>
         )}
         {error ? <FormAlert className="mt-0!">{error}</FormAlert> : null}
       </Card>
-      {sponsor ? <RecoveryBalances key={`${environment}:${sponsor}`} sponsor={sponsor} /> : null}
+      {sponsor ? <RecoveryBalances key={`${environment}:${sponsor}`} sponsor={sponsor} disconnecting={disconnecting} /> : null}
     </section>
   );
 }
 
-function RecoveryBalances({ sponsor }: { sponsor: Address }) {
+function RecoveryBalances({ sponsor, disconnecting }: { sponsor: Address; disconnecting: boolean }) {
   const environment = useBridgeEnvironment();
   const lockSelection = useLockNetworkSelection();
   const { walletProvider } = useAppKitProvider<EvmProvider>("eip155");
@@ -92,6 +109,7 @@ function RecoveryBalances({ sponsor }: { sponsor: Address }) {
     refetchOnWindowFocus: true,
   })) });
   const loading = results.some(result => result.isFetching);
+  const busy = disconnecting || Boolean(pending);
   const deposits = results.flatMap(result => result.isError || !result.data ? [] : [result.data])
     .filter(deposit => deposit.balance > 0n || deposit.status !== 0);
   const failed = assets.filter((_, index) => results[index].isError);
@@ -123,7 +141,7 @@ function RecoveryBalances({ sponsor }: { sponsor: Address }) {
     <section aria-labelledby="locked-deposits" className="grid gap-3">
       <div className="flex items-center justify-between gap-3">
         <h2 id="locked-deposits" className="text-base font-semibold">Locked deposits</h2>
-        <Button variant="toolbar" type="button" disabled={loading || Boolean(pending)} onClick={refresh}>
+        <Button variant="toolbar" type="button" disabled={loading || busy} onClick={refresh}>
           <span className={loading ? "motion-safe:animate-spin" : undefined}>
             <RefreshCcw size={16} aria-hidden="true" />
           </span>
@@ -149,7 +167,7 @@ function RecoveryBalances({ sponsor }: { sponsor: Address }) {
         <RecoveryDeposit
           key={assetKey(deposit.asset)}
           deposit={deposit}
-          busy={Boolean(pending)}
+          busy={busy}
           pending={pending === assetKey(deposit.asset)}
           onAction={action => recover(deposit, action)}
         />

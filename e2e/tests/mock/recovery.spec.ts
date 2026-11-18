@@ -48,4 +48,17 @@ test("Recovery shows on-chain locks without transfer history and refreshes exter
   status = 0;
   await page.getByRole("button", { name: "Refresh", exact: true }).click();
   await expect(page.getByText("No locked deposits found.")).toBeVisible();
+
+  const recovery = page.getByRole("region", { name: "Recover Fast deposits" });
+  const deposits = recovery.getByRole("region", { name: "Locked deposits" });
+  const disconnect = recovery.getByRole("button", { name: "Disconnect", exact: true });
+  const connect = recovery.getByRole("button", { name: "Connect wallet", exact: true });
+  await expect(disconnect).toBeEnabled();
+  await disconnect.click();
+  await expect(connect).toBeEnabled();
+  await expect(deposits).toHaveCount(0);
+
+  await connect.click();
+  await page.getByText("Browser test wallet", { exact: true }).click();
+  await expect(deposits.getByText("No locked deposits found.")).toBeVisible();
 });
