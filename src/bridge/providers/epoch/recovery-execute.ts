@@ -44,6 +44,13 @@ export async function executeRecovery(deposit: LockedDeposit, action: RecoveryAc
       break;
     }
   }
-  const receipt = await client.waitForTransactionReceipt({ hash });
+  let expectedHash = hash;
+  const receipt = await client.waitForTransactionReceipt({
+    hash,
+    onReplaced: ({ reason, transaction }) => {
+      if (reason === "repriced") expectedHash = transaction.hash;
+    },
+  });
+  if (receipt.transactionHash !== expectedHash) throw new Error("The recovery transaction was canceled or replaced.");
   if (receipt.status !== "success") throw new Error("The recovery transaction failed. Scan the balances again.");
 }

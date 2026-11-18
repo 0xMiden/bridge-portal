@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { createPublicClient, createWalletClient, decodeFunctionData, encodeFunctionResult, http } from "viem";
+import { createPublicClient, createWalletClient, decodeFunctionData, encodeFunctionData, encodeFunctionResult, http } from "viem";
 import { mainnet } from "viem/chains";
 import { getAccount, getWalletClient } from "@wagmi/core";
 import { COMPACT_ADDRESS, readLockedDeposit, recoveryAbi, recoveryClient, type LockedDeposit } from "./recovery";
@@ -81,5 +81,36 @@ describe("recovery signing checks", () => {
     vi.spyOn(client, "simulateContract").mockRejectedValue(new Error("PrematureWithdrawal"));
     await expect(executeRecovery(deposit, "withdraw", sponsor, "mainnet", provider)).rejects.toThrow("PrematureWithdrawal");
     expect(wallet.writeContract).not.toHaveBeenCalled();
+  });
+
+  it.each(["cancelled", "replaced", "repriced"] as const)("recognizes a %s withdrawal on-chain", async replacement => {
+    const replacementHash = `0x${"bb".repeat(32)}`;
+    const original = {
+      hash, from: sponsor, to: COMPACT_ADDRESS, nonce: "0x1", value: "0x0",
+      input: encodeFunctionData({ abi: recoveryAbi, functionName: "forcedWithdrawal", args: [deposit.id, sponsor, deposit.balance] }),
+    };
+    const transaction = {
+      ...original, hash: replacementHash, blockNumber: "0x2",
+      to: replacement === "cancelled" ? sponsor : COMPACT_ADDRESS,
+      input: replacement === "repriced" ? original.input : "0x",
+    };
+    vi.stubGlobal("fetch", vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      const { id, method, params } = await new Request(input, init).json();
+      const result = (() => {
+        switch (method) {
+          case "eth_call": return encodeFunctionResult({ abi: recoveryAbi, functionName: "forcedWithdrawal", result: true });
+          case "eth_blockNumber": return "0x2";
+          case "eth_getTransactionByHash": return params[0] === hash ? original : null;
+          case "eth_getBlockByNumber": return { number: "0x2", transactions: [transaction] };
+          case "eth_getTransactionReceipt": return params[0] === replacementHash
+            ? { transactionHash: replacementHash, blockNumber: "0x2", status: "0x1", logs: [] } : null;
+          default: throw new Error(`Unexpected RPC call ${method}`);
+        }
+      })();
+      return Response.json({ jsonrpc: "2.0", id, result });
+    }));
+    const execution = executeRecovery(deposit, "withdraw", sponsor, "mainnet", provider);
+    if (replacement === "repriced") await expect(execution).resolves.toBeUndefined();
+    else await expect(execution).rejects.toThrow("The recovery transaction was canceled or replaced.");
   });
 });
