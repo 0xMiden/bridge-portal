@@ -53,8 +53,8 @@ export function useFastWithdrawal(route: BridgeRoute, wallets: BridgeWallets) {
   async function verify() {
     if (!enabled) return;
     const result = await query.refetch();
-    if (result.isError) throw new Error("Could not check the Fast withdrawal status. Try again.");
-    if (result.data?.status !== 0) throw new Error("Disable withdrawal for this token before you bridge again.");
+    if (result.isError) throw new Error("Could not check withdrawal status. Try again.");
+    if (result.data?.status !== 0) throw new Error("Cancel the withdrawal to make a Fast deposit.");
   }
 
   return { enabled, active, blocked, pending, error, failed: enabled && query.isError,

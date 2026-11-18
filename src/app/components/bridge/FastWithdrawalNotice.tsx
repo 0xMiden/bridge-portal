@@ -1,3 +1,4 @@
+import { AlertTriangle } from "lucide-react";
 import type { FastWithdrawal } from "./use-fast-withdrawal";
 import { Button } from "../ui/Button";
 import { Card } from "../ui/Card";
@@ -11,19 +12,29 @@ export function FastWithdrawalNotice({ withdrawal, symbol, disabled, onDisable }
 }) {
   if (!withdrawal.enabled) return null;
   if (withdrawal.failed) return (
-    <Card>
-      <FormAlert>Could not check the Fast withdrawal status for {symbol}.</FormAlert>
-      <Button variant="secondary" type="button" disabled={disabled} onClick={() => withdrawal.refresh()}>Retry withdrawal check</Button>
+    <Card className="grid gap-3">
+      <FormAlert className="mt-0!">Could not check withdrawal status for {symbol}.</FormAlert>
+      <Button variant="secondary" className="w-fit" type="button" disabled={disabled} onClick={() => withdrawal.refresh()}>
+        Retry withdrawal check
+      </Button>
     </Card>
   );
   if (!withdrawal.active) return null;
   return (
-    <Card className="space-y-3">
-      <p className="text-sm">Withdrawal is active for {symbol} on this chain. Disable withdrawal to use Fast bridge-in again. This cancels the withdrawal countdown and keeps your tokens in The Compact.</p>
-      <Button variant="secondary" type="button" disabled={disabled || withdrawal.pending} onClick={onDisable}>
-        {withdrawal.pending ? "Disabling withdrawal…" : "Disable withdrawal to bridge again"}
+    <Card className="grid gap-3">
+      <div className="flex items-start gap-3">
+        <span className="grid size-9 shrink-0 place-items-center rounded-md bg-warning-soft text-warning-foreground">
+          <AlertTriangle size={17} aria-hidden="true" />
+        </span>
+        <div className="grid gap-0.5">
+          <h2 className="text-sm font-semibold">Withdrawal active for {symbol}</h2>
+          <p className="text-sm text-muted-foreground">Fast deposits are paused. Canceling keeps your funds locked.</p>
+        </div>
+      </div>
+      <Button variant="secondary" className="w-fit" type="button" disabled={disabled || withdrawal.pending} onClick={onDisable}>
+        {withdrawal.pending ? "Canceling withdrawal…" : "Cancel withdrawal"}
       </Button>
-      {withdrawal.error ? <FormAlert>{withdrawal.error}</FormAlert> : null}
+      {withdrawal.error ? <FormAlert className="mt-0!">{withdrawal.error}</FormAlert> : null}
     </Card>
   );
 }

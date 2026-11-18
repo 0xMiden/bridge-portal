@@ -2,6 +2,7 @@
 
 import { useAppKit, useAppKitAccount, useAppKitProvider } from "@reown/appkit/react";
 import { useQueries, useQueryClient } from "@tanstack/react-query";
+import { RefreshCcw, Wallet } from "lucide-react";
 import { useEffect, useState } from "react";
 import { formatUnits, getAddress, type Address } from "viem";
 import { assetKey } from "../../../bridge/core/assets";
@@ -12,10 +13,18 @@ import { evmNetworks } from "../../../config/evm-networks";
 import type { EvmProvider } from "../../../wallets/evm/evm-wallet";
 import { shortAddress } from "../../../wallets/identity";
 import { errorMessage } from "../../lib/wallet-errors";
+import { NetworkLogo, TokenLogo } from "../AssetLogo";
 import { useBridgeEnvironment, useLockNetworkSelection } from "../NetworkProvider";
 import { Button } from "../ui/Button";
 import { Card } from "../ui/Card";
 import { FormAlert } from "../ui/Feedback";
+import { StatusIndicator } from "../ui/Status";
+
+const confirmationMessages = {
+  start: "Withdrawal started.",
+  cancel: "Withdrawal canceled.",
+  withdraw: "Withdrawal complete.",
+} satisfies Record<RecoveryAction, string>;
 
 export function RecoveryPage() {
   const environment = useBridgeEnvironment();
@@ -25,20 +34,40 @@ export function RecoveryPage() {
   const sponsor = isConnected && address ? getAddress(address) : undefined;
 
   async function connect() {
-    try { await open({ namespace: "eip155", view: "Connect" }); }
-    catch (cause) { setError(errorMessage(cause)); }
+    setError("");
+    try {
+      await open({ namespace: "eip155", view: "Connect" });
+    } catch (cause) {
+      setError(errorMessage(cause));
+    }
   }
 
   return (
-    <section className="mx-auto my-10 grid w-full max-w-2xl gap-5 mobile:my-6">
-      <div className="space-y-2">
-        <h1 className="text-2xl font-semibold">Recover Fast deposits</h1>
-        <p className="text-sm text-muted-foreground">Find tokens locked in The Compact on {environment}, including deposits made in Bread or another app.</p>
-      </div>
-      <Card className="space-y-3">
-        <p className="text-sm wrap-anywhere">{sponsor ? `Connected wallet: ${shortAddress(sponsor)}` : "Connect the EVM wallet that made the deposit."}</p>
-        <Button variant="secondary" type="button" onClick={connect}>{sponsor ? "Change wallet" : "Connect wallet"}</Button>
-        {error ? <FormAlert>{error}</FormAlert> : null}
+    <section aria-labelledby="recovery-title" className="mx-auto mt-6 grid w-full max-w-137 gap-4 pb-10 mobile:mt-4">
+      <h1 id="recovery-title" className="text-2xl font-semibold tracking-tight">Recover Fast deposits</h1>
+      <Card className="grid gap-3">
+        {sponsor ? (
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex min-w-0 items-center gap-3">
+              <span className="grid size-10 shrink-0 place-items-center rounded-md bg-accent-soft text-accent-foreground">
+                <Wallet size={18} aria-hidden="true" />
+              </span>
+              <div>
+                <p className="text-xs text-muted-foreground">Deposit wallet</p>
+                <p className="font-mono text-sm font-medium" title={sponsor}>{shortAddress(sponsor)}</p>
+              </div>
+            </div>
+            <Button variant="secondary" type="button" onClick={connect}>Change wallet</Button>
+          </div>
+        ) : (
+          <>
+            <p className="text-sm text-muted-foreground">Connect the EVM wallet you used to deposit.</p>
+            <Button variant="bridge" type="button" onClick={connect}>
+              <Wallet size={16} aria-hidden="true" />Connect wallet
+            </Button>
+          </>
+        )}
+        {error ? <FormAlert className="mt-0!">{error}</FormAlert> : null}
       </Card>
       {sponsor ? <RecoveryBalances key={`${environment}:${sponsor}`} sponsor={sponsor} /> : null}
     </section>
@@ -79,7 +108,7 @@ function RecoveryBalances({ sponsor }: { sponsor: Address }) {
     try {
       if (!walletProvider) throw new Error("Connect your EVM wallet first.");
       await executeRecovery(deposit, action, sponsor, environment, walletProvider);
-      setNotice("Transaction confirmed. Balances have been refreshed.");
+      setNotice(confirmationMessages[action]);
       await queryClient.invalidateQueries(balances.evmQuery(sponsor, deposit.asset));
     } catch (cause) {
       setError(errorMessage(cause));
@@ -91,20 +120,41 @@ function RecoveryBalances({ sponsor }: { sponsor: Address }) {
   }
 
   return (
-    <>
+    <section aria-labelledby="locked-deposits" className="grid gap-3">
       <div className="flex items-center justify-between gap-3">
-        <h2 className="font-semibold">Locked deposits and withdrawals</h2>
-        <Button variant="secondary" type="button" disabled={loading || Boolean(pending)} onClick={refresh}>{loading ? "Scanning…" : "Refresh"}</Button>
+        <h2 id="locked-deposits" className="text-base font-semibold">Locked deposits</h2>
+        <Button variant="toolbar" type="button" disabled={loading || Boolean(pending)} onClick={refresh}>
+          <span className={loading ? "motion-safe:animate-spin" : undefined}>
+            <RefreshCcw size={16} aria-hidden="true" />
+          </span>
+          Refresh
+        </Button>
       </div>
-      <p className="text-sm text-muted-foreground">Starting withdrawal begins a 65-minute wait. Fast bridge-in for that token and wallet is blocked until you cancel or complete withdrawal. Recovered tokens return to this wallet.</p>
-      {failed.length > 0 ? <FormAlert>Could not read {failed.map(asset => `${asset.symbol} on ${evmNetworks[asset.network].name}`).join(", ")}. These balances are not known. Select Refresh to retry.</FormAlert> : null}
-      {error ? <FormAlert>{error}</FormAlert> : null}
-      {notice ? <p role="status" className="text-sm">{notice}</p> : null}
-      {loading ? <p role="status" className="text-sm text-muted-foreground">Checking on-chain balances…</p> : null}
-      {!loading && !failed.length && !deposits.length ? <Card><p>No locked Fast deposits found for this wallet on {environment}.</p></Card> : null}
-      {deposits.map(deposit => <RecoveryDeposit key={assetKey(deposit.asset)} deposit={deposit}
-        busy={Boolean(pending)} pending={pending === assetKey(deposit.asset)} onAction={action => recover(deposit, action)} />)}
-    </>
+      {failed.length > 0 ? (
+        <FormAlert className="mt-0!">
+          Could not check deposits for {failed.map(asset => `${asset.symbol} on ${evmNetworks[asset.network].name}`).join(", ")}.
+        </FormAlert>
+      ) : null}
+      {error ? <FormAlert className="mt-0!">{error}</FormAlert> : null}
+      {notice ? (
+        <p role="status" className="rounded-md bg-success-soft p-3 text-sm text-success-foreground">{notice}</p>
+      ) : null}
+      {loading ? (
+        <p role="status" className={deposits.length ? "sr-only" : "text-sm text-muted-foreground"}>Checking deposits…</p>
+      ) : null}
+      {!loading && !failed.length && !deposits.length ? (
+        <Card variant="empty" role="status" className="text-sm text-muted-foreground">No locked deposits found.</Card>
+      ) : null}
+      {deposits.map(deposit => (
+        <RecoveryDeposit
+          key={assetKey(deposit.asset)}
+          deposit={deposit}
+          busy={Boolean(pending)}
+          pending={pending === assetKey(deposit.asset)}
+          onAction={action => recover(deposit, action)}
+        />
+      ))}
+    </section>
   );
 }
 
@@ -120,24 +170,51 @@ function RecoveryDeposit({ deposit, busy, pending, onAction }: {
     const timer = setInterval(() => setNow(Math.floor(Date.now() / 1000)), 1000);
     return () => clearInterval(timer);
   }, [deposit.status]);
+  const { asset, balance, status } = deposit;
+  const active = status !== 0;
+  const hasBalance = balance > 0n;
   const ready = withdrawalReady(deposit, now);
+  const canWithdraw = ready && hasBalance;
   const remaining = Math.max(0, Number(deposit.withdrawableAt) - now);
   const minutes = Math.floor(remaining / 60);
   const seconds = String(remaining % 60).padStart(2, "0");
-  const active = deposit.status !== 0;
+  const withdrawalLabel = ready
+    ? (hasBalance ? "Ready to withdraw" : "Withdrawal active")
+    : `Available in ${minutes}m ${seconds}s`;
 
   return (
-    <Card variant="receipt" className="space-y-3">
-      <h3 className="font-semibold wrap-anywhere">{formatUnits(deposit.balance, deposit.asset.decimals)} {deposit.asset.symbol} locked on {evmNetworks[deposit.asset.network].name}</h3>
-      {active ? <p className="text-sm text-muted-foreground">{ready ? "Ready to withdraw" : `Withdrawal available in ${minutes}:${seconds}`}</p> : null}
-      <div className="flex flex-wrap gap-2">
-        {!active ? <Button variant="secondary" type="button" disabled={busy || deposit.balance === 0n} onClick={() => onAction("start")}>Start withdrawal</Button> : null}
-        {active ? <>
-          <Button variant="secondary" type="button" disabled={busy || !ready || deposit.balance === 0n} onClick={() => onAction("withdraw")}>Withdraw to wallet</Button>
-          <Button variant="secondary" type="button" disabled={busy} onClick={() => onAction("cancel")}>Disable withdrawal to bridge again</Button>
-        </> : null}
+    <Card as="article" className="grid gap-3">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="flex min-w-0 items-center gap-3">
+          <TokenLogo asset={asset} />
+          <div className="grid min-w-0 gap-1">
+            <h3 className="text-xl leading-tight font-semibold tabular-nums wrap-anywhere">{formatUnits(balance, asset.decimals)} {asset.symbol}</h3>
+            <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+              <NetworkLogo network={asset.network} variant="selector" />
+              {evmNetworks[asset.network].name}
+            </p>
+          </div>
+        </div>
+        {active ? (
+          <StatusIndicator tone={canWithdraw ? "success" : "warning"} className="tabular-nums">{withdrawalLabel}</StatusIndicator>
+        ) : null}
       </div>
-      {pending ? <p role="status" className="text-sm text-muted-foreground">Complete the request in your wallet. Then wait for confirmation.</p> : null}
+      {active ? (
+        <div className="grid grid-cols-2 gap-2">
+          <Button variant={canWithdraw ? "bridge" : "secondary"} type="button" disabled={busy || !canWithdraw} onClick={() => onAction("withdraw")}>
+            Withdraw to wallet
+          </Button>
+          <Button variant="secondary" type="button" disabled={busy} onClick={() => onAction("cancel")}>Cancel withdrawal</Button>
+        </div>
+      ) : (
+        <>
+          <p className="text-sm text-muted-foreground">
+            You can withdraw 65 minutes after starting. Fast deposits for this token pause until you withdraw or cancel.
+          </p>
+          <Button variant="bridge" type="button" disabled={busy || !hasBalance} onClick={() => onAction("start")}>Start withdrawal</Button>
+        </>
+      )}
+      {pending ? <p role="status" className="text-sm text-muted-foreground">Waiting for confirmation…</p> : null}
     </Card>
   );
 }

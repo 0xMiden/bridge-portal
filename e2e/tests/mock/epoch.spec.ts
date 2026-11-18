@@ -1,7 +1,7 @@
 import { test, expect } from "../../fixtures/bridge";
 import { epochWalletPaidHealth } from "../../../test/epoch-service";
 import { decodeFunctionData, encodeFunctionResult } from "viem";
-import { recoveryAbi } from "../../../src/bridge/providers/epoch/recovery";
+import { COMPACT_ADDRESS, recoveryAbi } from "../../../src/bridge/providers/epoch/recovery";
 import { respondToWallet } from "../../fixtures/wallets";
 
 test.beforeEach(async ({ bridge, page }) => {
@@ -10,13 +10,13 @@ test.beforeEach(async ({ bridge, page }) => {
   await page.route(/https:\/\/[^/]+\.epochprotocol\.xyz\/health$/, route => route.fulfill({ json: epochWalletPaidHealth() }));
 });
 
-test("an active Fast withdrawal blocks review and offers a disable action", async ({ bridge, page }) => {
+test("an active Fast withdrawal blocks review and offers cancellation", async ({ bridge, page }) => {
   let status = 1;
   await page.route("**/suggested-nonce/**", route => route.fulfill({ json: { nonce: "1" } }));
   await page.route("**/checkIfDepositNeeded", route => route.fulfill({ json: { tokenOut: "991878" } }));
   await page.route("**/api/evm/*/rpc", async route => {
     const { id, method, params } = route.request().postDataJSON();
-    if (method !== "eth_call") return route.fallback();
+    if (method !== "eth_call" || params[0]?.to?.toLowerCase() !== COMPACT_ADDRESS.toLowerCase()) return route.fallback();
     const call = decodeFunctionData({ abi: recoveryAbi, data: params[0].data });
     switch (call.functionName) {
       case "balanceOf":
@@ -34,22 +34,22 @@ test("an active Fast withdrawal blocks review and offers a disable action", asyn
   await page.goto("/?provider=epoch&mode=receive");
   await bridge.waitForReady();
   await bridge.fillAmount("1");
-  const disable = page.getByRole("button", { name: "Disable withdrawal to bridge again", exact: true });
-  await expect(disable).toBeVisible();
+  const cancelWithdrawal = page.getByRole("button", { name: "Cancel withdrawal", exact: true });
+  await expect(cancelWithdrawal).toBeVisible();
   await expect(bridge.primaryButton()).toBeDisabled();
-  await expect(page.getByText(/This cancels the withdrawal countdown/)).toBeVisible();
+  await expect(page.getByText(/funds.*locked/i)).toBeVisible();
   respondToWallet(page, request => {
     expect(request.method).toBe("eth_sendTransaction");
     return { error: { message: "User rejected request", code: 4001 } };
   });
-  await disable.click();
-  await expect(page.getByRole("alert")).toContainText(/reject|denied/i);
+  await cancelWithdrawal.click();
+  await expect(page.getByRole("alert").filter({ hasText: /cancel+ed the request in your wallet/i })).toBeVisible();
   await expect(bridge.primaryButton()).toBeDisabled();
   status = 0;
   await page.reload();
   await bridge.waitForReady();
   await bridge.fillAmount("1");
-  await expect(disable).toHaveCount(0);
+  await expect(cancelWithdrawal).toHaveCount(0);
   await bridge.openPreflight();
 });
 
