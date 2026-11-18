@@ -6,6 +6,7 @@ import { legacyRecoveryLock, recoveryAbi, recoveryAssets } from "../../../src/br
 import { EVM_ADDRESS, respondToWallet, SOURCE_TX, walletRequests } from "../../fixtures/wallets";
 
 test("Recovery opens the funded lock from a saved deposit while the allocator is offline", async ({ bridge, page }) => {
+  await bridge.waitForReady();
   const route = findBridgeRoute("epoch-test-usdc-to-miden")!;
   const compactAddress = "0x2222222222222222222222222222222222222222";
   const id = BigInt("0x580000000000000000000abc2bb4ffd7e2c6d432b697554efd77fa13bdbefd69");
@@ -45,7 +46,10 @@ test("Recovery opens and refreshes individual on-chain deposits", async ({ bridg
   let balance = parseUnits("1.23456789", asset.decimals);
   let otherBalance = parseUnits("0.025", otherAsset.decimals);
   let fail = false;
+  let latestBehind = false;
+  let receiptBlockAvailable = false;
   let receiptRequested = false;
+  const receiptBlock = "0x2";
   const confirmReceipt = Promise.withResolvers<void>();
   await page.route("**/api/evm/*/rpc", async route => {
     const { id: requestId, method, params } = route.request().postDataJSON();
@@ -53,13 +57,17 @@ test("Recovery opens and refreshes individual on-chain deposits", async ({ bridg
       receiptRequested = true;
       await confirmReceipt.promise;
       status = 1;
+      latestBehind = true;
       deadline = BigInt(Math.floor(Date.now() / 1000) + 3900);
       return route.fulfill({ json: { jsonrpc: "2.0", id: requestId, result: {
-        transactionHash: SOURCE_TX, blockNumber: "0x1", status: "0x1", logs: [],
+        transactionHash: SOURCE_TX, blockNumber: receiptBlock, status: "0x1", logs: [],
       } } });
     }
+    if (method === "eth_blockNumber") return route.fulfill({ json: { jsonrpc: "2.0", id: requestId, result: latestBehind ? "0x1" : receiptBlock } });
     if (method !== "eth_call" || params[0]?.to?.toLowerCase() !== compactAddress.toLowerCase()) return route.fallback();
     if (fail) return route.fulfill({ status: 502, json: { error: "RPC unavailable" } });
+    if (params[1] === receiptBlock && !receiptBlockAvailable)
+      return route.fulfill({ json: { jsonrpc: "2.0", id: requestId, error: { code: -32000, message: "Block not found" } } });
     const call = decodeFunctionData({ abi: recoveryAbi, data: params[0].data });
     const matching = call.args[1] === id;
     const amount = matching ? balance : call.args[1] === otherId ? otherBalance : 0n;
@@ -68,9 +76,10 @@ test("Recovery opens and refreshes individual on-chain deposits", async ({ bridg
         result: encodeFunctionResult({ abi: recoveryAbi, functionName: "enableForcedWithdrawal", result: 3900n }),
       } });
     }
+    const visibleStatus = matching && (!latestBehind || params[1] === receiptBlock);
     const result = call.functionName === "balanceOf"
       ? encodeFunctionResult({ abi: recoveryAbi, functionName: "balanceOf", result: amount })
-      : encodeFunctionResult({ abi: recoveryAbi, functionName: "getForcedWithdrawalStatus", result: matching ? [status, deadline] : [0, 0n] });
+      : encodeFunctionResult({ abi: recoveryAbi, functionName: "getForcedWithdrawalStatus", result: visibleStatus ? [status, deadline] : [0, 0n] });
     return route.fulfill({ json: { jsonrpc: "2.0", id: requestId, result } });
   });
   await page.getByRole("link", { name: "Recovery", exact: true }).click();
@@ -123,11 +132,23 @@ test("Recovery opens and refreshes individual on-chain deposits", async ({ bridg
   } finally {
     confirmReceipt.resolve();
   }
+  await expect(refreshDetail).toBeEnabled();
+  await expect(start).toHaveCount(0);
   await expect(detail.getByRole("article").getByRole("status")).toHaveText("Withdrawal started");
+  await expect(detail.getByText("Checking the withdrawal timer…")).toBeVisible();
+  await back.click();
+  await wbtc.click();
+  await expect(start).toBeEnabled();
+  await back.click();
+  await usdc.click();
+  await expect(start).toHaveCount(0);
+  receiptBlockAvailable = true;
+  await refreshDetail.click();
   await expect(detail.getByText(/^\d+m \d+s$/)).toBeVisible();
   await expect(detail.getByText(/^Withdrawal started\.?$/)).toHaveCount(1);
   await expect(withdraw).toHaveCount(0);
   await expect(detail.getByRole("button", { name: "Cancel withdrawal" })).toBeEnabled();
+  latestBehind = false;
   deadline = BigInt(Math.floor(Date.now() / 1000) - 1);
   await refreshDetail.click();
   await expect(withdraw).toBeEnabled();

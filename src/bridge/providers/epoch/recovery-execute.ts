@@ -13,7 +13,7 @@ export async function executeRecovery(deposit: LockedDeposit, action: RecoveryAc
   await ensureEvmNetwork(provider, chain);
   const config = wagmiAdapter.wagmiConfig;
   const wallet = await getWalletClient(config, { chainId: chain.id });
-  const current = await readLockedDeposit(deposit, sponsor);
+  const current = await readLockedDeposit(deposit, sponsor, deposit.blockNumber);
   const connected = getAccount(config).address;
   if (!connected || getAddress(connected) !== sponsor || getAddress(wallet.account.address) !== sponsor)
     throw new Error("Your connected wallet changed. Scan the balances again.");
@@ -51,4 +51,5 @@ export async function executeRecovery(deposit: LockedDeposit, action: RecoveryAc
   });
   if (receipt.transactionHash !== expectedHash) throw new Error("The recovery transaction was canceled or replaced.");
   if (receipt.status !== "success") throw new Error("The recovery transaction failed. Scan the balances again.");
+  return receipt.blockNumber;
 }

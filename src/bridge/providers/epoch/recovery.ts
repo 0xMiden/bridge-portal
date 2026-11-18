@@ -101,17 +101,21 @@ export type LockedDeposit = RecoveryLock & {
   balance: bigint;
   status: number;
   withdrawableAt: bigint;
+  blockNumber?: bigint;
 };
 
-export async function readLockedDeposit(lock: RecoveryLock, sponsor: Address): Promise<LockedDeposit> {
+export async function readLockedDeposit(lock: RecoveryLock, sponsor: Address, minimumBlock?: bigint): Promise<LockedDeposit> {
   const { asset, compactAddress: address, id } = lock;
   const client = recoveryClient(asset);
+  const blockNumber = minimumBlock === undefined ? undefined : await client.getBlockNumber().then(latest =>
+    latest < minimumBlock ? minimumBlock : latest,
+  );
   const [balance, [status, withdrawableAt]] = await Promise.all([
-    client.readContract({ address, abi: recoveryAbi, functionName: "balanceOf", args: [sponsor, id] }),
-    client.readContract({ address, abi: recoveryAbi, functionName: "getForcedWithdrawalStatus", args: [sponsor, id] }),
+    client.readContract({ address, abi: recoveryAbi, functionName: "balanceOf", args: [sponsor, id], blockNumber }),
+    client.readContract({ address, abi: recoveryAbi, functionName: "getForcedWithdrawalStatus", args: [sponsor, id], blockNumber }),
   ]);
   if (status > 2) throw new Error("The withdrawal status is not supported.");
-  return { ...lock, balance, status, withdrawableAt };
+  return { asset, compactAddress: address, id, balance, status, withdrawableAt, blockNumber };
 }
 
 export type RecoveryAction = "start" | "cancel" | "withdraw";

@@ -1,7 +1,7 @@
 "use client";
 
 import { useAppKit, useAppKitAccount, useAppKitProvider, useDisconnect } from "@reown/appkit/react";
-import { useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
+import { skipToken, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, RefreshCcw, Wallet } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { getAddress, type Address } from "viem";
@@ -87,6 +87,10 @@ export function RecoveryPage() {
   );
 }
 
+function awaitingStartBlock(deposit: LockedDeposit | undefined, startBlock: bigint | undefined) {
+  return startBlock !== undefined && (deposit?.blockNumber === undefined || deposit.blockNumber < startBlock);
+}
+
 function RecoveryBalances({ sponsor, disconnecting }: { sponsor: Address; disconnecting: boolean }) {
   const environment = useBridgeEnvironment();
   const lockSelection = useLockNetworkSelection();
@@ -106,22 +110,29 @@ function RecoveryBalances({ sponsor, disconnecting }: { sponsor: Address; discon
     queryFn: () => readEpochHealth(currentBridgeConfig(environment)),
     retry: false,
   });
+  const startBlocksKey = ["compact-recovery-start-blocks", environment, sponsor] as const;
+  const { data: startBlocks } = useQuery<Record<string, bigint>>({ queryKey: startBlocksKey, queryFn: skipToken, gcTime: Infinity });
   const locks = recoveryLocks(environment, sponsor, receipts.map(({ activity }) => activity), health.data);
   const results = useQueries({ queries: locks.map(lock => ({
     queryKey: ["compact-recovery", environment, sponsor, recoveryLockKey(lock)],
-    queryFn: () => readLockedDeposit(lock, sponsor),
+    queryFn: () => readLockedDeposit(lock, sponsor,
+      queryClient.getQueryData<Record<string, bigint>>(startBlocksKey)?.[recoveryLockKey(lock)]),
     staleTime: 0,
     retry: false,
     refetchOnWindowFocus: true,
   })) });
   const selectedIndex = selectedKey ? locks.findIndex(lock => recoveryLockKey(lock) === selectedKey) : -1;
   const selectedResult = selectedIndex < 0 ? undefined : results[selectedIndex];
-  const selected = selectedResult?.isError ? undefined : selectedResult?.data;
+  const awaitingStart = awaitingStartBlock(selectedResult?.data, startBlocks?.[selectedKey]);
+  const selected = selectedResult?.isError && !awaitingStart ? undefined : selectedResult?.data;
   const fetching = selectedResult?.isFetching ?? (health.isFetching || results.some(result => result.isFetching));
   const checking = fetching || (selectedResult?.isPending ?? results.some(result => result.isPending));
   const busy = disconnecting || pending !== null;
-  const deposits = results.flatMap(result => result.isError || !result.data ? [] : [result.data])
-    .filter(deposit => deposit.balance > 0n || deposit.status !== 0);
+  const deposits = results.flatMap((result, index) => {
+    if (!result.data) return [];
+    const key = recoveryLockKey(locks[index]);
+    return result.isError && !awaitingStartBlock(result.data, startBlocks?.[key]) ? [] : [result.data];
+  }).filter(deposit => deposit.balance > 0n || deposit.status !== 0);
   const failed = locks.filter((_, index) => (!selectedResult || index === selectedIndex) && results[index].isError);
   const hasVisibleDeposit = selectedResult ? Boolean(selected) : deposits.length > 0;
 
@@ -159,7 +170,10 @@ function RecoveryBalances({ sponsor, disconnecting }: { sponsor: Address; discon
     try {
       try {
         if (!walletProvider) throw new Error("Connect your EVM wallet first.");
-        await executeRecovery(deposit, action, sponsor, walletProvider);
+        const blockNumber = await executeRecovery(deposit, action, sponsor, walletProvider);
+        if (action === "start") queryClient.setQueryData<Record<string, bigint>>(startBlocksKey, current => ({
+          ...current, [recoveryLockKey(deposit)]: blockNumber,
+        }));
         setConfirmed(action);
         await queryClient.invalidateQueries(balances.evmQuery(sponsor, deposit.asset));
       } catch (cause) {
@@ -217,9 +231,9 @@ function RecoveryBalances({ sponsor, disconnecting }: { sponsor: Address; discon
       {selected ? (
         <RecoveryDepositDetail
           deposit={selected}
-          busy={busy}
+          busy={busy || awaitingStart}
           pendingAction={error || confirmed ? null : pending}
-          startConfirmed={pending === "start" && confirmed === "start"}
+          startConfirmed={awaitingStart}
           onAction={action => recover(selected, action)}
         />
       ) : null}
@@ -233,6 +247,7 @@ function RecoveryBalances({ sponsor, disconnecting }: { sponsor: Address; discon
                   <RecoveryDepositRow
                     id={`recovery-deposit-${key}`}
                     deposit={deposit}
+                    startConfirmed={awaitingStartBlock(deposit, startBlocks?.[key])}
                     disabled={busy}
                     onSelect={() => showDeposit(key)}
                   />

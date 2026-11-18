@@ -111,7 +111,7 @@ describe("recovery signing checks", () => {
       return Response.json({ jsonrpc: "2.0", id, result });
     }));
     const execution = executeRecovery(deposit, "withdraw", sponsor, provider);
-    if (replacement === "repriced") await expect(execution).resolves.toBeUndefined();
+    if (replacement === "repriced") await expect(execution).resolves.toBe(2n);
     else await expect(execution).rejects.toThrow("The recovery transaction was canceled or replaced.");
   });
 });

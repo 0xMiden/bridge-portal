@@ -60,9 +60,10 @@ function DepositIdentity({ deposit, detail = false, status }: { deposit: LockedD
   );
 }
 
-export function RecoveryDepositRow({ id, deposit, disabled, onSelect }: {
+export function RecoveryDepositRow({ id, deposit, startConfirmed, disabled, onSelect }: {
   id: string;
   deposit: LockedDeposit;
+  startConfirmed: boolean;
   disabled: boolean;
   onSelect: () => void;
 }) {
@@ -77,7 +78,7 @@ export function RecoveryDepositRow({ id, deposit, disabled, onSelect }: {
       disabled={disabled}
       onClick={onSelect}
     >
-      <DepositIdentity deposit={deposit} status={label} />
+      <DepositIdentity deposit={deposit} status={startConfirmed ? "Withdrawal started" : label} />
       <ChevronRight size={16} className="shrink-0 text-muted-foreground" aria-hidden="true" />
     </button>
   );
