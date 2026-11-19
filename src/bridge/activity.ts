@@ -36,7 +36,7 @@ export function applyActivityPatch(activity: Activity, patch: Partial<Activity>,
 }
 
 export interface ActivityPersistence {
-  read(): { activities: Activity[]; complete: boolean; needsMigration: boolean; write(changes: Activity[]): void };
+  read(): { activities: Activity[]; complete: boolean; canFund(id: string): boolean; needsMigration: boolean; write(changes: Activity[]): void };
   withWriteLock(commit: () => boolean): boolean | Promise<boolean>;
 }
 
@@ -96,18 +96,18 @@ export class ActivityStore {
   }
 
   /** Restore history and replay only unsaved changes onto the latest durable rows. */
-  sync = (): boolean | Promise<boolean> => {
+  sync = (fundingId?: string): boolean | Promise<boolean> => {
     // Read inside the lock. A queued writer must merge against the previous
     // writer's committed history, including transfers from other providers.
-    return this.persistence.withWriteLock(() => this.reconcile());
+    return this.persistence.withWriteLock(() => this.reconcile(fundingId));
   };
 
-  private reconcile(): boolean {
+  private reconcile(fundingId?: string): boolean {
     let receipts = this.snapshot.receipts;
     let saved = true;
     try {
       const history = this.persistence.read();
-      saved = history.complete;
+      saved = fundingId ? history.canFund(fundingId) : history.complete;
       const stored = new Map(history.activities.map(activity => [activity.id, { activity }]));
       const pending: ActivityReceipt[] = [];
       for (const receipt of receipts) {

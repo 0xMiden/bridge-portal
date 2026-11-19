@@ -93,7 +93,14 @@ async function submitExternalDeposit(context: SubmissionContext, binding: NearIn
   const sourceTxHash = validateNearTxHash(context.route.source, hash);
   const accepted = { ...operation, submission: "accepted" as const };
   await context.persist({ sourceTxHash, near: accepted });
-  await notifyDeposit(context, accepted, sourceTxHash);
+  const source = context.route.source;
+  async function saveEvmIdentity() {
+    if (!isEvmAsset(source)) return;
+    const { captureSourceTransaction } = await import("../../evm/source-transaction");
+    const sourceTransaction = await captureSourceTransaction(source.network, sourceTxHash).catch(() => undefined);
+    if (sourceTransaction) context.update({ sourceTransaction });
+  }
+  await Promise.all([saveEvmIdentity(), notifyDeposit(context, accepted, sourceTxHash)]);
 }
 
 async function submitMidenDeposit(context: SubmissionContext, binding: NearInput, quote: NearQuoteResponse, id: string) {

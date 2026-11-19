@@ -62,7 +62,7 @@ export const nearOperationSchema = z.object({
   notification: z.enum(["pending", "sent"]),
   networkFee: z.string().max(100).optional(),
   statusUpdatedAt: z.iso.datetime().optional(),
-  confirmedEvmTxHash: z.string().regex(/^0x[\da-f]{64}$/i).optional(),
+  finalizedEvmTxHash: z.string().regex(/^0x[\da-f]{64}$/i).optional(),
   originTxHashes: z.array(txHash).max(32).optional(),
   destinationTxHashes: z.array(txHash).max(32).optional(),
   refundedAmount: z.string().max(100).optional(),

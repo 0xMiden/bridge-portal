@@ -10,9 +10,9 @@ import { nearQuoteResult } from "./quote";
 import { nearMonitor } from "./tracking";
 import { nearReceiveInput, nearQuoteFixture, nearStatus, nearTxHash, nearDestinationHash } from "../../../../test/near-quotes";
 
-const rpc = vi.hoisted(() => ({ balance: vi.fn(), read: vi.fn(), call: vi.fn(), gas: vi.fn(), block: vi.fn(), tip: vi.fn(), receipt: vi.fn(), resolve: vi.fn(), networks: [] as string[] }));
+const rpc = vi.hoisted(() => ({ balance: vi.fn(), read: vi.fn(), call: vi.fn(), gas: vi.fn(), block: vi.fn(), tip: vi.fn(), receipt: vi.fn(), capture: vi.fn(), resolve: vi.fn(), networks: [] as string[] }));
 vi.mock("../../evm/transport", () => ({ evmReadTransport: (network: string) => ({ network }) }));
-vi.mock("../../evm/source-transaction", () => ({ recoverSourceTransaction: rpc.resolve }));
+vi.mock("../../evm/source-transaction", () => ({ recoverSourceTransaction: rpc.resolve, captureSourceTransaction: rpc.capture }));
 vi.mock("viem", async original => ({ ...await original<typeof import("viem")>(),
   createPublicClient: ({ transport }: { transport: { network: string } }) => {
     rpc.networks.push(transport.network);
@@ -25,6 +25,8 @@ vi.mock("@defuse-protocol/one-click-sdk-typescript", async original => {
   return { ...actual, verifyQuoteSignature: vi.fn(() => true) };
 });
 
+const nearBlockHash = `0x${"ef".repeat(32)}`;
+const mined = { blockNumber: 1n, blockHash: nearBlockHash };
 const fetcher = vi.fn<typeof fetch>();
 beforeEach(() => {
   vi.resetAllMocks(); rpc.networks.length = 0;
@@ -34,7 +36,8 @@ beforeEach(() => {
   vi.stubGlobal("fetch", fetcher);
   rpc.balance.mockResolvedValue(10n ** 18n); rpc.read.mockResolvedValue(10_000_000n);
   rpc.call.mockResolvedValue({ data: "0x" }); rpc.gas.mockResolvedValue(50_000n);
-  rpc.block.mockResolvedValue({ baseFeePerGas: 1_000_000_000n }); rpc.tip.mockResolvedValue(100_000_000n);
+  rpc.block.mockResolvedValue({ number: 1n, hash: nearBlockHash, baseFeePerGas: 1_000_000_000n }); rpc.tip.mockResolvedValue(100_000_000n);
+  rpc.capture.mockResolvedValue(undefined);
   rpc.receipt.mockRejectedValue(Object.assign(new Error("Pending"), { name: "TransactionReceiptNotFoundError" }));
   rpc.resolve.mockResolvedValue({});
 });
@@ -183,8 +186,10 @@ it.each([
   fetcher.mockImplementation(async () => Response.json({ ...payload, swapDetails: {
     ...payload.swapDetails, originChainTxHashes: status === "KNOWN_DEPOSIT_TX" ? [{ hash: nearTxHash }] : [],
   } }));
-  if (state === "confirmed" || state === "reverted") rpc.receipt.mockResolvedValue({ transactionHash: nearTxHash, status: state === "reverted" ? "reverted" : "success" });
+  if (state === "confirmed" || state === "reverted") rpc.receipt.mockResolvedValue({ ...mined, transactionHash: nearTxHash, status: state === "reverted" ? "reverted" : "success" });
   if (state === "cancelled" || state === "repriced") rpc.resolve.mockResolvedValue({ hash: nearDestinationHash, reason: state });
+  if (state === "cancelled") rpc.receipt.mockRejectedValueOnce(Object.assign(new Error("Pending"), { name: "TransactionReceiptNotFoundError" }))
+    .mockResolvedValue({ ...mined, transactionHash: nearDestinationHash, status: "success" });
   const observed = await nearMonitor.observe(activity, new AbortController().signal);
   test.effects.activities.patch(activity.id, observed.patch);
   const saved = loadStoredActivities()[0];
@@ -201,7 +206,7 @@ it("rechecks an older known-hash receipt that was saved as confirmed without cha
   saveActivities([{ ...activity, near: { ...activity.near!, status: "KNOWN_DEPOSIT_TX", submission: "confirmed" } }]);
   const [reopened] = loadStoredActivities();
   fetcher.mockImplementation(async () => Response.json(nearStatus(test.quote, "KNOWN_DEPOSIT_TX")));
-  rpc.receipt.mockResolvedValue({ transactionHash: nearTxHash, status: "reverted" });
+  rpc.receipt.mockResolvedValue({ ...mined, transactionHash: nearTxHash, status: "reverted" });
   const observation = await nearMonitor.observe(reopened, new AbortController().signal);
   expect(observation.patch.failureLeg).toBe("source");
   expect(reopened.near?.submission).toBe("accepted");
@@ -216,9 +221,47 @@ it("checks a deposit hash recovered from 1Click after the wallet response was lo
   fetcher.mockResolvedValueOnce(Response.json({ ...nearStatus(test.quote, "KNOWN_DEPOSIT_TX"), swapDetails: {
     originChainTxHashes: [{ hash: nearTxHash }], destinationChainTxHashes: [],
   } }));
-  rpc.receipt.mockResolvedValue({ transactionHash: nearTxHash, status: "reverted" });
+  rpc.receipt.mockResolvedValue({ ...mined, transactionHash: nearTxHash, status: "reverted" });
   const observed = await nearMonitor.observe(receipt, new AbortController().signal);
   expect(observed.patch).toMatchObject({ sourceTxHash: nearTxHash, failureLeg: "source", near: { status: "FAILED" } });
+});
+
+it("retains the broadcast nonce and finds a finalized cancellation while 1Click is unavailable", async () => {
+  const test = setup();
+  const identity = { hash: nearTxHash, from: test.input.externalAddress, nonce: 7, input: "0x",
+    to: test.quote.quote.depositAddress, value: test.quote.quote.amountIn };
+  rpc.capture.mockImplementation(async () => {
+    expect(loadStoredActivities()[0].sourceTxHash).toBe(nearTxHash);
+    return identity;
+  });
+  await submitBridgeTransfer(test.input, test.effects);
+  const [reopened] = loadStoredActivities();
+  expect(reopened.sourceTransaction).toEqual(identity);
+  fetcher.mockResolvedValueOnce(Response.json({ error: "Unavailable" }, { status: 503 }));
+  rpc.resolve.mockResolvedValue({ hash: nearDestinationHash, reason: "cancelled", transaction: identity });
+  rpc.receipt.mockRejectedValueOnce(Object.assign(new Error("Pending"), { name: "TransactionReceiptNotFoundError" }))
+    .mockResolvedValue({ ...mined, transactionHash: nearDestinationHash, status: "success" });
+  const result = await nearMonitor.observe(reopened, new AbortController().signal);
+  expect(result.patch).toMatchObject({ sourceTxHash: nearDestinationHash, near: { status: "FAILED" }, failureLeg: "source" });
+  expect(test.writes).toHaveLength(1);
+});
+
+it.each(["unfinalized", "orphaned"])("keeps tracking a reverted receipt from an %s block", async state => {
+  const test = setup();
+  await submitBridgeTransfer(test.input, test.effects);
+  const [activity] = loadStoredActivities();
+  fetcher.mockImplementation(async () => Response.json(nearStatus(test.quote, "KNOWN_DEPOSIT_TX")));
+  rpc.receipt.mockResolvedValue({ ...mined, transactionHash: nearTxHash, status: "reverted" });
+  if (state === "unfinalized") rpc.block.mockResolvedValue({ number: 0n, hash: nearBlockHash });
+  else rpc.block.mockResolvedValueOnce({ number: 2n, hash: nearBlockHash }).mockResolvedValueOnce({ number: 1n, hash: nearDestinationHash });
+  const signal = new AbortController().signal;
+  test.effects.activities.patch(activity.id, (await nearMonitor.observe(activity, signal)).patch);
+  const [provisional] = loadStoredActivities();
+  expect(nearMonitor.canPoll(provisional)).toBe(true);
+  rpc.receipt.mockResolvedValue({ ...mined, blockHash: nearDestinationHash, transactionHash: nearTxHash, status: "success" });
+  rpc.block.mockResolvedValue({ number: 1n, hash: nearDestinationHash });
+  test.effects.activities.patch(activity.id, (await nearMonitor.observe(provisional, signal)).patch);
+  expect(loadStoredActivities()[0]).toMatchObject({ near: { status: "KNOWN_DEPOSIT_TX", submission: "confirmed" } });
 });
 
 it("stops before searching for replacements when the receipt view closes during the RPC read", async () => {

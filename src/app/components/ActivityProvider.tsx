@@ -14,10 +14,11 @@ export function ActivityProvider({ children }: { children: ReactNode }) {
       if (isActivityStorageEvent(event.key)) store.sync();
     };
     window.addEventListener("storage", onStorage);
-    window.addEventListener("focus", store.sync);
+    const onFocus = () => { void store.sync(); };
+    window.addEventListener("focus", onFocus);
     return () => {
       window.removeEventListener("storage", onStorage);
-      window.removeEventListener("focus", store.sync);
+      window.removeEventListener("focus", onFocus);
     };
   }, [store]);
   return <ActivityContext.Provider value={store}>{children}</ActivityContext.Provider>;

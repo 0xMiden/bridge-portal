@@ -30,7 +30,7 @@ export function mergeNearActivityPatch(activity: Activity, patch: Partial<Activi
   const near: NearOperation = { ...current, ...observation, quote: current.quote,
     submission: submissionOrder[current.submission] > submissionOrder[incoming.submission] ? current.submission : incoming.submission,
     notification: current.notification === "sent" ? "sent" : incoming.notification,
-    confirmedEvmTxHash: observation.confirmedEvmTxHash ?? current.confirmedEvmTxHash,
+    finalizedEvmTxHash: observation.finalizedEvmTxHash ?? current.finalizedEvmTxHash,
     originTxHashes: observation.originTxHashes?.length ? observation.originTxHashes : current.originTxHashes,
     destinationTxHashes: observation.destinationTxHashes?.length ? observation.destinationTxHashes : current.destinationTxHashes,
     refundedAmount: observation.refundedAmount ?? current.refundedAmount,

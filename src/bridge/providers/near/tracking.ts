@@ -59,7 +59,11 @@ export const nearMonitor: ActivityMonitor = {
       } };
     } catch (error) {
       signal.throwIfAborted();
-      return { patch: { near: { ...operation, notification } },
+      // Independent chain evidence remains available when 1Click cannot return a valid status.
+      const source = activity.mode === "receive" && awaitsNearDeposit(operation.status)
+        ? await observeNearEvmSource(activity, signal) : { patch: {} };
+      if (source.patch.failureLeg === "source") return source;
+      return { patch: { ...source.patch, near: { ...(source.patch.near ?? operation), notification } },
         warning: operation.status === "SUCCESS" ? "Delivery was confirmed. The settled amount could not be refreshed."
           : `${error instanceof Error ? error.message : "NEAR status is unavailable."} Transfer remains pending. Retry here; do not send another deposit.` };
     }

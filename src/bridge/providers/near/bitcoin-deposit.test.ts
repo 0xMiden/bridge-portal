@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { submitBridgeTransfer, type TransferSubmission } from "../../../app/lib/bridge-submission";
-import { activityPersistence, loadStoredActivities, saveActivities } from "../../../app/lib/bridge-persistence";
+import { activityPersistence, activityStorageKey, loadStoredActivities, saveActivities } from "../../../app/lib/bridge-persistence";
 import { activityDetailFor } from "../../../app/lib/activity-detail-presentation";
 import { ActivityStore } from "../../activity";
 import { observeActivity } from "../../tracking";
@@ -186,6 +186,27 @@ it("saves a definitive wallet refusal as a terminal receipt without asking for t
   expect(activityDetailFor(receipt).guidance?.title).toMatch(/cancelled in your wallet/i);
   await submitBridgeTransfer(test.input, test.effects);
   expect(test.sendTransfer).toHaveBeenCalledTimes(1);
+});
+
+it.each([activityStorageKey, "miden.bridge.ui.activities.v2"])("preserves a malformed funding claim in %s across other writes and reload", async key => {
+  const test = setup();
+  await submitBridgeTransfer(test.input, test.effects);
+  const [funded] = loadStoredActivities();
+  const damaged = { ...funded, near: { ...funded.near!, networkFee: null } };
+  saveActivities([]);
+  window.localStorage.setItem(key, JSON.stringify([damaged]));
+  const reopened = new ActivityStore(activityPersistence);
+  await reopened.sync();
+  reopened.record({ ...funded, id: "other-receipt" });
+  // An older portal can replace its whole v2 history on its next write.
+  window.localStorage.setItem("miden.bridge.ui.activities.v2", "[]");
+  test.effects.activities = new ActivityStore(activityPersistence);
+  await submitBridgeTransfer(test.input, test.effects);
+  expect(test.sendTransfer).toHaveBeenCalledTimes(1);
+  expect(test.effects.onError).toHaveBeenCalledWith(expect.stringMatching(/existing receipt could not be checked/i));
+  expect(await test.effects.activities.sync("unrelated-quote-id")).toBe(true);
+  expect(JSON.parse(window.localStorage.getItem(activityStorageKey)!)).toContainEqual(damaged);
+  expect(loadStoredActivities().map(row => row.id)).toEqual(["other-receipt"]);
 });
 
 it.each(["WalletStandardConnector", "BitcoinWalletConnectConnector"])("checks %s payment support before saving a funding attempt", async name => {

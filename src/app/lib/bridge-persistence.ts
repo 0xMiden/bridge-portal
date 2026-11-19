@@ -97,63 +97,89 @@ function normalizeActivity(activity: Activity): Activity {
   return normalizeActivityState(activity);
 }
 
-function normalizeActivities(parsed: unknown): Activity[] {
-  if (!Array.isArray(parsed)) return [];
-  return parsed.flatMap((activity: Activity) => {
-    if (!activity || !isBridgeProvider(activity.provider) || !isFlowMode(activity.mode)) return [];
-    const route = receiptRouteSchema.safeParse(activity.routeSnapshot);
-    if (!route.success) return [];
-    const routeSnapshot = route.data;
-    if (activity.provider === "near") {
-      const operation = nearOperationSchema.safeParse(activity.near);
-      if (!operation.success) return [];
-      const near = operation.data;
-      // Earlier portals counted a reported EVM hash as a mined deposit.
-      if (isEvmAsset(routeSnapshot.source) && awaitsNearDeposit(near.status) && near.submission === "confirmed" &&
-          (typeof activity.sourceTxHash !== "string" || near.confirmedEvmTxHash?.toLowerCase() !== activity.sourceTxHash.toLowerCase())) {
-        near.submission = activity.sourceTxHash ? "accepted" : "attempted";
+function normalizeStoredActivity(activity: Activity): Activity | undefined {
+  if (!activity || !isBridgeProvider(activity.provider) || !isFlowMode(activity.mode)) return;
+  const route = receiptRouteSchema.safeParse(activity.routeSnapshot);
+  if (!route.success) return;
+  const routeSnapshot = route.data;
+  if (activity.provider === "near") {
+    const operation = nearOperationSchema.safeParse(activity.near);
+    if (!operation.success) return;
+    const near = operation.data;
+    if (isEvmAsset(routeSnapshot.source) && (typeof activity.sourceTxHash !== "string" ||
+        near.finalizedEvmTxHash?.toLowerCase() !== activity.sourceTxHash.toLowerCase())) {
+      // Older receipts could stop tracking on an unfinalized cancellation or revert.
+      if (near.status === "FAILED" && activity.failureLeg === "source") {
+        near.status = "KNOWN_DEPOSIT_TX";
+        activity = { ...activity, failureLeg: undefined, sourceTxHash: activity.sourceOriginalTxHash ?? activity.sourceTxHash };
       }
-      activity = { ...activity, near };
-      // Older receipts reused receivedAmount for the quote before settlement.
-      // A differing final amount is known to be actual. Recheck ambiguous ones.
-      if (!operation.data.statusUpdatedAt && activity.receivedAmount !== undefined &&
-          (operation.data.status !== "SUCCESS" || activity.receivedAmount === nearExpectedAmount(operation.data, routeSnapshot.destination.decimals))) {
-        activity = { ...activity, receivedAmount: undefined };
-      }
-      if (activity.mode === "receive") {
-        const recipient = nearMidenAddress.safeParse(operation.data.quote.quoteRequest.recipient);
-        if (!recipient.success) return [];
-        activity = { ...activity, midenAccount: recipient.data, midenAccountHex: normalizeMidenAccountHex(recipient.data) };
-      }
+      if (awaitsNearDeposit(near.status) && near.submission === "confirmed") near.submission = activity.sourceTxHash ? "accepted" : "attempted";
     }
-    if (routeSnapshot.provider !== activity.provider || routeSnapshot.mode !== activity.mode ||
-        activity.asset !== routeSnapshot.source.symbol || typeof activity.updatedAt !== "number" ||
-        [activity.id, activity.amount, activity.summary, activity.eta, activity.txHash].some(value => typeof value !== "string")) return [];
-    const network = routeEnvironment(routeSnapshot);
-    return [normalizeActivity({ ...activity, environment: network, routeSnapshot })];
-  });
+    activity = { ...activity, near };
+    // Older receipts reused receivedAmount for the quote before settlement.
+    // A differing final amount is known to be actual. Recheck ambiguous ones.
+    if (!operation.data.statusUpdatedAt && activity.receivedAmount !== undefined &&
+        (operation.data.status !== "SUCCESS" || activity.receivedAmount === nearExpectedAmount(operation.data, routeSnapshot.destination.decimals))) {
+      activity = { ...activity, receivedAmount: undefined };
+    }
+    if (activity.mode === "receive") {
+      const recipient = nearMidenAddress.safeParse(operation.data.quote.quoteRequest.recipient);
+      if (!recipient.success) return;
+      activity = { ...activity, midenAccount: recipient.data, midenAccountHex: normalizeMidenAccountHex(recipient.data) };
+    }
+  }
+  if (routeSnapshot.provider !== activity.provider || routeSnapshot.mode !== activity.mode ||
+      activity.asset !== routeSnapshot.source.symbol || typeof activity.updatedAt !== "number" ||
+      [activity.id, activity.amount, activity.summary, activity.eta, activity.txHash].some(value => typeof value !== "string")) return;
+  const network = routeEnvironment(routeSnapshot);
+  return normalizeActivity({ ...activity, environment: network, routeSnapshot });
 }
+
+type UnreadableClaim = { id?: string; raw: unknown };
 
 function readRows(key: string) {
   try {
-    const raw = window.localStorage.getItem(key);
-    if (raw === null) return [];
-    const parsed: unknown = JSON.parse(raw);
-    if (Array.isArray(parsed)) return normalizeActivities(parsed);
+    const parsed: unknown = JSON.parse(window.localStorage.getItem(key) ?? "[]");
+    if (!Array.isArray(parsed)) return;
+    const activities: Activity[] = [];
+    const claims: UnreadableClaim[] = [];
+    for (const row of parsed) {
+      let activity: Activity | undefined;
+      try { activity = normalizeStoredActivity(row); }
+      catch { /* Isolate malformed data so other receipts can still be restored. */ }
+      if (activity) activities.push(activity);
+      else if (row?.provider === "near" || row?.near || (typeof row?.id === "string" && row.id.startsWith("act-near-"))) {
+        // Even an unrenderable receipt can record a wallet payment for this quote.
+        const id = typeof row.id === "string" && /^act-near-[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(row.id) ? row.id : undefined;
+        claims.push({ id, raw: row });
+      }
+    }
+    return { activities, claims };
   } catch { /* An unreadable generation cannot rule out an earlier funding claim. */ }
 }
 
-export function saveActivities(activities: Activity[]) {
-  window.localStorage.setItem(activityStorageKey, JSON.stringify(activities));
+export function saveActivities(activities: Activity[], preserved: unknown[] = []) {
+  window.localStorage.setItem(activityStorageKey, JSON.stringify([...activities, ...preserved]));
 }
 
 function readHistory() {
   const currentRows = readRows(activityStorageKey);
   const legacyRows = readRows(legacyActivityStorageKey);
-  const saved = new Map(currentRows?.map(activity => [activity.id, activity]));
+  const saved = new Map(currentRows?.activities.map(activity => [activity.id, activity]));
   let needsMigration = false;
   const history = new Map(saved);
-  for (const legacy of legacyRows ?? []) {
+  const claims = [...(currentRows?.claims ?? [])];
+  // Protect unreadable legacy claims from the next write made by an older portal.
+  const preserved = new Set(claims.map(claim => JSON.stringify(claim.raw)));
+  for (const claim of legacyRows?.claims ?? []) {
+    const raw = JSON.stringify(claim.raw);
+    if (!preserved.has(raw)) {
+      claims.push(claim);
+      preserved.add(raw);
+      needsMigration = true;
+    }
+  }
+  for (const legacy of legacyRows?.activities ?? []) {
     const current = saved.get(legacy.id);
     if (!current) {
       history.set(legacy.id, legacy);
@@ -172,14 +198,15 @@ function readHistory() {
   }
   return {
     activities: [...history.values()],
-    complete: currentRows !== undefined && legacyRows !== undefined,
+    complete: Boolean(currentRows && legacyRows && !claims.length),
+    canFund: (id: string) => Boolean(currentRows && legacyRows && claims.every(claim => claim.id && claim.id !== id)),
     needsMigration,
     write(changes: Activity[]) {
       if (!currentRows) throw new Error("Cannot update unreadable receipt storage.");
       // Untouched legacy history stays in v2. Old tabs can keep writing there
       // without replacing a current funding claim.
       for (const activity of changes) saved.set(activity.id, activity);
-      saveActivities([...saved.values()]);
+      saveActivities([...saved.values()], claims.map(claim => claim.raw));
     },
   };
 }

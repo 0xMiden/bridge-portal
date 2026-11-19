@@ -98,7 +98,7 @@ export async function submitBridgeTransfer(
       phase: effects.onPhaseChange,
       update,
       findActivity: async id => {
-        const complete = await effects.activities.sync?.();
+        const complete = await effects.activities.sync?.(id);
         const known = effects.activities.get?.(id)?.activity;
         if (!complete && (!known?.near || known.near.submission === "prepared")) {
           throw new Error("Storage is unavailable. The existing receipt could not be checked.");
@@ -110,7 +110,7 @@ export async function submitBridgeTransfer(
         const firstSave = !recorded;
         if (!recorded) recorded = effects.activities.record(createActivity(route, input.amount, patch));
         else update(patch);
-        const saved = await effects.activities.sync();
+        const saved = await effects.activities.sync(recorded.id);
         const receipt = effects.activities.get(recorded.id);
         if (!saved || !receipt || receipt.unsavedChanges) throw new Error("Save this receipt before opening the wallet. Storage is unavailable.");
         recorded = receipt.activity;
