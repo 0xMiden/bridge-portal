@@ -32,6 +32,8 @@ The [Reown Bitcoin adapter patch](patches/@reown+appkit-adapter-bitcoin+1.8.20.p
 passes integer satoshis to UniSat, checks the wallet's active chain and keeps
 account-change listeners in sync on connect and disconnect. The Bitcoin browser
 tests cover these behaviors through the [UniSat wallet API](https://docs.unisat.io/developer-support/open-api-documentation/unisat-wallet).
+The patch also reads Leather’s active native SegWit payment address before funding
+and recognizes a payment refusal from Sats Connect.
 
 ## Prerequisites
 

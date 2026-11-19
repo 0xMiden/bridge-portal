@@ -190,12 +190,15 @@ describe("root Miden wallet session", () => {
     const { session } = setup();
     const source = wallet();
     session.updateWallet(source);
-    const { requestTransaction, requestSend } = session.getSnapshot();
+    const { requestTransaction, requestSend, assertAccount } = session.getSnapshot();
     const transaction = {} as Parameters<NonNullable<typeof requestTransaction>>[0];
     const send = {} as Parameters<NonNullable<typeof requestSend>>[0];
     await requestTransaction!(transaction);
     await requestSend!(send);
+    assertAccount!(ACCOUNT_A);
+    expect(() => assertAccount!(ACCOUNT_B)).toThrow("wallet changed");
     source.adapter.address = ACCOUNT_B; // Before React publishes the next adapter snapshot.
+    expect(() => assertAccount!(ACCOUNT_A)).toThrow("wallet changed");
     expect(() => requestTransaction!(transaction)).toThrow("wallet changed");
     expect(() => requestSend!(send)).toThrow("wallet changed");
     source.adapter.address = ACCOUNT_A;

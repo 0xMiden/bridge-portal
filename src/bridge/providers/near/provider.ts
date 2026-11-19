@@ -2,7 +2,7 @@ import type { Provider, ProviderDirection } from "../../core/provider";
 import { isEvmAsset } from "../../core/assets";
 import { evmNetworks } from "../../../config/evm-networks";
 import type { BridgeActivity } from "../../core/models";
-import { nearExpectedAmount } from "./operation";
+import { missingNearSettlement, nearExpectedAmount } from "./operation";
 
 function receivedAmount(activity: BridgeActivity) {
   const { near, routeSnapshot } = activity;
@@ -53,6 +53,7 @@ const send: ProviderDirection = {
     sourceHash: activity.sourceTxHash, destinationHash: activity.near?.status === "SUCCESS" ? activity.destinationTxHash : undefined,
     destinationKind: "tx", received: receivedAmount(activity),
     networkFee: activity.near?.networkFee,
+    settlementPending: missingNearSettlement(activity),
     refund: activity.near?.status === "REFUNDED" && activity.near.refundedAmount ? `${activity.near.refundedAmount} ${activity.asset}` : undefined,
     reference: activity.near ? { label: "NEAR quote reference", value: activity.near.quote.correlationId } : undefined,
   }),

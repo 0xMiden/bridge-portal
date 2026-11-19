@@ -19,6 +19,7 @@ export interface TransferSubmission extends TransferAccounts {
     connected: boolean;
     /** Current connected account, also used for the transfer recipient. */
     address: string;
+    assertAccount?: (address: string) => void;
     requestTransaction?: MessageSignerWalletAdapter["requestTransaction"];
     waitForTransaction?: MessageSignerWalletAdapter["waitForTransaction"];
     requestAssets?: MessageSignerWalletAdapter["requestAssets"];

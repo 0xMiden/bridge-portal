@@ -9,7 +9,8 @@ import { type Activity } from "./bridge-presentation";
 
 import type { BridgeEnvironment } from "../../config/environment";
 import { nearMidenAddress, nearOperationSchema } from "../../bridge/providers/near/schema";
-import { nearExpectedAmount } from "../../bridge/providers/near/operation";
+import { awaitsNearDeposit, nearExpectedAmount } from "../../bridge/providers/near/operation";
+import { isEvmAsset } from "../../bridge/core/assets";
 import { normalizeMidenAccountHex } from "../../bridge/miden-address";
 
 export const activityStorageKey = "miden.bridge.ui.activities.v3";
@@ -106,7 +107,13 @@ function normalizeActivities(parsed: unknown): Activity[] {
     if (activity.provider === "near") {
       const operation = nearOperationSchema.safeParse(activity.near);
       if (!operation.success) return [];
-      activity = { ...activity, near: operation.data };
+      const near = operation.data;
+      // Earlier portals counted a reported EVM hash as a mined deposit.
+      if (isEvmAsset(routeSnapshot.source) && awaitsNearDeposit(near.status) && near.submission === "confirmed" &&
+          (typeof activity.sourceTxHash !== "string" || near.confirmedEvmTxHash?.toLowerCase() !== activity.sourceTxHash.toLowerCase())) {
+        near.submission = activity.sourceTxHash ? "accepted" : "attempted";
+      }
+      activity = { ...activity, near };
       // Older receipts reused receivedAmount for the quote before settlement.
       // A differing final amount is known to be actual. Recheck ambiguous ones.
       if (!operation.data.statusUpdatedAt && activity.receivedAmount !== undefined &&
@@ -128,8 +135,12 @@ function normalizeActivities(parsed: unknown): Activity[] {
 }
 
 function readRows(key: string) {
-  const raw = window.localStorage.getItem(key);
-  return raw ? normalizeActivities(JSON.parse(raw)) : [];
+  try {
+    const raw = window.localStorage.getItem(key);
+    if (raw === null) return [];
+    const parsed: unknown = JSON.parse(raw);
+    if (Array.isArray(parsed)) return normalizeActivities(parsed);
+  } catch { /* An unreadable generation cannot rule out an earlier funding claim. */ }
 }
 
 export function saveActivities(activities: Activity[]) {
@@ -137,10 +148,12 @@ export function saveActivities(activities: Activity[]) {
 }
 
 function readHistory() {
-  const saved = new Map(readRows(activityStorageKey).map(activity => [activity.id, activity]));
+  const currentRows = readRows(activityStorageKey);
+  const legacyRows = readRows(legacyActivityStorageKey);
+  const saved = new Map(currentRows?.map(activity => [activity.id, activity]));
   let needsMigration = false;
   const history = new Map(saved);
-  for (const legacy of readRows(legacyActivityStorageKey)) {
+  for (const legacy of legacyRows ?? []) {
     const current = saved.get(legacy.id);
     if (!current) {
       history.set(legacy.id, legacy);
@@ -159,8 +172,10 @@ function readHistory() {
   }
   return {
     activities: [...history.values()],
+    complete: currentRows !== undefined && legacyRows !== undefined,
     needsMigration,
     write(changes: Activity[]) {
+      if (!currentRows) throw new Error("Cannot update unreadable receipt storage.");
       // Untouched legacy history stays in v2. Old tabs can keep writing there
       // without replacing a current funding claim.
       for (const activity of changes) saved.set(activity.id, activity);

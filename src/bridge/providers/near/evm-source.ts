@@ -11,15 +11,18 @@ import { recoverSourceTransaction } from "../../evm/source-transaction";
 export async function observeNearEvmSource(activity: Activity, signal: AbortSignal): Promise<ActivityObservation> {
   const asset = activityRoute(activity)?.source;
   const operation = activity.near;
-  if (!isEvmAsset(asset) || !activity.sourceTxHash || !operation || operation.submission === "confirmed") return { patch: {} };
+  if (!isEvmAsset(asset) || !activity.sourceTxHash || !operation ||
+      operation.confirmedEvmTxHash?.toLowerCase() === activity.sourceTxHash.toLowerCase()) return { patch: {} };
   const patch: Partial<Activity> = {};
   try {
-    const client = createPublicClient({ transport: evmReadTransport(asset.network) });
+    signal.throwIfAborted();
+    const client = createPublicClient({ transport: evmReadTransport(asset.network, signal) });
     let hash = activity.sourceTxHash;
     let receipt = await findTransactionReceipt(client, hash as Hex);
+    signal.throwIfAborted();
     let warning: string | undefined;
     if (!receipt) {
-      const resolved = await recoverSourceTransaction(asset.network, hash, activity.sourceTransaction);
+      const resolved = await recoverSourceTransaction(asset.network, hash, activity.sourceTransaction, signal);
       signal.throwIfAborted();
       patch.sourceTransaction = resolved.transaction;
       warning = resolved.warning;
@@ -40,7 +43,7 @@ export async function observeNearEvmSource(activity: Activity, signal: AbortSign
       patch: { ...patch, failureLeg: "source", near: { ...operation, status: "FAILED" } },
       warning: "The EVM deposit reverted. No Miden delivery was confirmed.",
     };
-    if (receipt) patch.near = { ...operation, submission: "confirmed" };
+    if (receipt?.status === "success") patch.near = { ...operation, submission: "confirmed", confirmedEvmTxHash: hash };
     return { patch, warning };
   } catch {
     signal.throwIfAborted();

@@ -1,9 +1,17 @@
-import type { NearOperation } from "./schema";
-import type { Activity } from "../../core/models";
+import type { NearOperation, NearStatus } from "./schema";
+import type { Activity, BridgeActivity } from "../../core/models";
 import { formatUnits } from "viem";
 
 const submissionOrder = { prepared: 0, awaiting_deposit: 1, attempted: 1, not_sent: 2, declined: 2, accepted: 3, confirmed: 4 };
 const statusOrder = { PENDING_DEPOSIT: 0, KNOWN_DEPOSIT_TX: 1, INCOMPLETE_DEPOSIT: 2, PROCESSING: 3, SUCCESS: 4, REFUNDED: 4, FAILED: 4 };
+
+export function awaitsNearDeposit(status: NearStatus) {
+  return status === "PENDING_DEPOSIT" || status === "KNOWN_DEPOSIT_TX";
+}
+
+export function missingNearSettlement(activity: BridgeActivity) {
+  return activity.near?.status === "SUCCESS" && (activity.receivedAmount === undefined || !activity.destinationTxHash);
+}
 
 export function nearExpectedAmount(operation: NearOperation, decimals: number) {
   return formatUnits(BigInt(operation.quote.quote.amountOut), decimals);
@@ -22,6 +30,7 @@ export function mergeNearActivityPatch(activity: Activity, patch: Partial<Activi
   const near: NearOperation = { ...current, ...observation, quote: current.quote,
     submission: submissionOrder[current.submission] > submissionOrder[incoming.submission] ? current.submission : incoming.submission,
     notification: current.notification === "sent" ? "sent" : incoming.notification,
+    confirmedEvmTxHash: observation.confirmedEvmTxHash ?? current.confirmedEvmTxHash,
     originTxHashes: observation.originTxHashes?.length ? observation.originTxHashes : current.originTxHashes,
     destinationTxHashes: observation.destinationTxHashes?.length ? observation.destinationTxHashes : current.destinationTxHashes,
     refundedAmount: observation.refundedAmount ?? current.refundedAmount,

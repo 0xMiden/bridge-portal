@@ -78,12 +78,18 @@ async function prepareExternalDeposit(context: SubmissionContext, quote: NearQuo
 
 async function submitExternalDeposit(context: SubmissionContext, binding: NearInput, quote: NearQuoteResponse, id: string) {
   const deposit = await prepareExternalDeposit(context, quote);
+  const assertWallets = async () => {
+    await deposit.assertWallet();
+    const { midenWallet, midenAccount } = context.input;
+    if (!midenWallet.assertAccount) throw new Error("Reconnect Bread to verify your receiving account.");
+    midenWallet.assertAccount(midenAccount);
+  };
   await nearPost("prepare", { ...binding, quote });
-  await deposit.assertWallet();
+  await assertWallets();
   verifyNearQuote(quote, binding, false);
   const operation = await claimDeposit(context, id, quote, deposit.networkFee);
   context.phase(deposit.prompt);
-  const hash = await requestFunding(context, operation, deposit.assertWallet, deposit.send);
+  const hash = await requestFunding(context, operation, assertWallets, deposit.send);
   const sourceTxHash = validateNearTxHash(context.route.source, hash);
   const accepted = { ...operation, submission: "accepted" as const };
   await context.persist({ sourceTxHash, near: accepted });

@@ -98,8 +98,12 @@ export async function submitBridgeTransfer(
       phase: effects.onPhaseChange,
       update,
       findActivity: async id => {
-        if (!await effects.activities.sync?.()) throw new Error("Storage is unavailable. The existing receipt could not be checked.");
-        return effects.activities.get?.(id)?.activity;
+        const complete = await effects.activities.sync?.();
+        const known = effects.activities.get?.(id)?.activity;
+        if (!complete && (!known?.near || known.near.submission === "prepared")) {
+          throw new Error("Storage is unavailable. The existing receipt could not be checked.");
+        }
+        return known;
       },
       persist: async patch => {
         if (!effects.activities.get || !effects.activities.sync) throw new Error("Receipt storage is unavailable. Do not submit this transfer.");

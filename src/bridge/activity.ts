@@ -36,7 +36,7 @@ export function applyActivityPatch(activity: Activity, patch: Partial<Activity>,
 }
 
 export interface ActivityPersistence {
-  read(): { activities: Activity[]; needsMigration: boolean; write(changes: Activity[]): void };
+  read(): { activities: Activity[]; complete: boolean; needsMigration: boolean; write(changes: Activity[]): void };
   withWriteLock(commit: () => boolean): boolean | Promise<boolean>;
 }
 
@@ -50,6 +50,16 @@ type ActivitySnapshot = {
   ready: boolean;
   receipts: readonly ActivityReceipt[];
 };
+
+// Optional fields are omitted on disk. Compare receipt data the same way after a reload.
+function sameReceiptValue(a: unknown, b: unknown): boolean {
+  if (a === b) return true;
+  if (!a || !b || typeof a !== "object" || typeof b !== "object" || Array.isArray(a) !== Array.isArray(b)) return false;
+  const left = a as Record<string, unknown>;
+  const right = b as Record<string, unknown>;
+  return Object.keys(left).every(key => sameReceiptValue(left[key], right[key])) &&
+    Object.keys(right).every(key => Object.hasOwn(left, key) || right[key] === undefined);
+}
 
 /** App-scoped activity state shared by submission, monitoring and rendering. */
 export class ActivityStore {
@@ -97,10 +107,14 @@ export class ActivityStore {
     let saved = true;
     try {
       const history = this.persistence.read();
+      saved = history.complete;
       const stored = new Map(history.activities.map(activity => [activity.id, { activity }]));
       const pending: ActivityReceipt[] = [];
       for (const receipt of receipts) {
-        if (!receipt.unsavedChanges) continue;
+        if (!receipt.unsavedChanges) {
+          if (!history.complete && !stored.has(receipt.activity.id)) stored.set(receipt.activity.id, receipt);
+          continue;
+        }
         const remote = stored.get(receipt.activity.id);
         stored.delete(receipt.activity.id);
         pending.push({
@@ -129,9 +143,13 @@ export class ActivityStore {
     const current = this.get(activity.id);
     // Capture effective changes after the domain merger rejects stale phases.
     const changed = Object.fromEntries(Object.entries(activity).filter(([key, value]) =>
-      value !== undefined && value !== current?.activity[key as keyof Activity],
+      key !== "updatedAt" && value !== undefined && !sameReceiptValue(value, current?.activity[key as keyof Activity]),
     ));
-    const receipt = { activity, unsavedChanges: { ...current?.unsavedChanges, ...changed } };
+    if (current && !Object.keys(changed).length) {
+      if (current.unsavedChanges) this.sync();
+      return current.activity;
+    }
+    const receipt = { activity, unsavedChanges: { ...current?.unsavedChanges, ...changed, updatedAt: activity.updatedAt } };
     const receipts = current
       ? this.snapshot.receipts.map(item => item.activity.id === activity.id ? receipt : item)
       : [receipt, ...this.snapshot.receipts];

@@ -59,13 +59,13 @@ function setup(kind: "native" | "erc20" = "native") {
     expect(saved.near?.submission).toBe("attempted");
     expect(saved.near?.quote.signature).toBe(quote.signature);
     writes.push((params as WalletTx[])[0]);
-    if (wallet.failSend) throw new Error("Wallet response interrupted");
+    if (wallet.failSend) throw Object.assign(new Error("Request canceled"), { code: -32000 });
     return nearTxHash;
   });
   const input: TransferSubmission = { ...bound, environment: "mainnet", insufficientBalance: false, sourceBalance: "10", midenAsset: null,
     quote: { ...nearQuoteResult(quote, route.id), request: { ...bound, recovery: route.recovery } },
     externalWallet: { family: "evm", connected: true, address: bound.externalAddress, provider },
-    midenWallet: { connected: true, address: bound.midenAccount, requestTransaction: vi.fn() },
+    midenWallet: { connected: true, address: bound.midenAccount, assertAccount: vi.fn(), requestTransaction: vi.fn() },
   };
   const effects = { openExternalWallet: vi.fn(), verifyBalanceCap: vi.fn(async () => {}), onError: vi.fn(), onSubmittingChange: vi.fn(), onPhaseChange: vi.fn(),
     activities: new ActivityStore(activityPersistence), navigate: vi.fn() };
@@ -105,7 +105,7 @@ it.each(["native", "erc20"] as const)("funds a %s quote once on the source chain
 it("retains an ambiguous wallet attempt across reload without funding it again", async () => {
   const test = setup(); test.wallet.failSend = true;
   await submitBridgeTransfer(test.input, test.effects);
-  expect(test.effects.onError).toHaveBeenCalledWith(expect.stringContaining("Wallet response interrupted"));
+  expect(test.effects.onError).toHaveBeenCalledWith(expect.stringContaining("Check the wallet request"));
   expect(loadStoredActivities()[0]).toMatchObject({ near: { submission: "attempted" } });
   test.effects.activities = new ActivityStore(activityPersistence); test.effects.activities.sync();
   await submitBridgeTransfer(test.input, test.effects);
@@ -170,11 +170,19 @@ it.each(["SUCCESS", "REFUNDED"] as const)("tracks %s with Miden output precision
   }
 });
 
-it.each(["pending", "confirmed", "reverted", "cancelled", "repriced"])("retains a %s EVM source outcome while NEAR awaits the deposit", async state => {
+it.each([
+  ["pending", "PENDING_DEPOSIT"], ["confirmed", "PENDING_DEPOSIT"], ["reverted", "PENDING_DEPOSIT"],
+  ["pending", "KNOWN_DEPOSIT_TX"], ["confirmed", "KNOWN_DEPOSIT_TX"], ["reverted", "KNOWN_DEPOSIT_TX"],
+  ["cancelled", "KNOWN_DEPOSIT_TX"], ["repriced", "KNOWN_DEPOSIT_TX"],
+] as const)("retains a %s EVM source outcome when NEAR reports %s", async (state, status) => {
   const test = setup();
   await submitBridgeTransfer(test.input, test.effects);
   expect(test.effects.onError).not.toHaveBeenCalled();
   const activity = loadStoredActivities()[0];
+  const payload = nearStatus(test.quote, status);
+  fetcher.mockImplementation(async () => Response.json({ ...payload, swapDetails: {
+    ...payload.swapDetails, originChainTxHashes: status === "KNOWN_DEPOSIT_TX" ? [{ hash: nearTxHash }] : [],
+  } }));
   if (state === "confirmed" || state === "reverted") rpc.receipt.mockResolvedValue({ transactionHash: nearTxHash, status: state === "reverted" ? "reverted" : "success" });
   if (state === "cancelled" || state === "repriced") rpc.resolve.mockResolvedValue({ hash: nearDestinationHash, reason: state });
   const observed = await nearMonitor.observe(activity, new AbortController().signal);
@@ -184,4 +192,43 @@ it.each(["pending", "confirmed", "reverted", "cancelled", "repriced"])("retains 
   expect(saved.near?.submission).toBe(state === "confirmed" ? "confirmed" : "accepted");
   expect(saved.sourceTxHash).toBe(state === "cancelled" || state === "repriced" ? nearDestinationHash : nearTxHash);
   expect(saved.destinationTxHash).toBeUndefined();
+});
+
+it("rechecks an older known-hash receipt that was saved as confirmed without chain evidence", async () => {
+  const test = setup();
+  await submitBridgeTransfer(test.input, test.effects);
+  const [activity] = loadStoredActivities();
+  saveActivities([{ ...activity, near: { ...activity.near!, status: "KNOWN_DEPOSIT_TX", submission: "confirmed" } }]);
+  const [reopened] = loadStoredActivities();
+  fetcher.mockImplementation(async () => Response.json(nearStatus(test.quote, "KNOWN_DEPOSIT_TX")));
+  rpc.receipt.mockResolvedValue({ transactionHash: nearTxHash, status: "reverted" });
+  const observation = await nearMonitor.observe(reopened, new AbortController().signal);
+  expect(observation.patch.failureLeg).toBe("source");
+  expect(reopened.near?.submission).toBe("accepted");
+});
+
+it("checks a deposit hash recovered from 1Click after the wallet response was lost", async () => {
+  const test = setup();
+  test.wallet.failSend = true;
+  await submitBridgeTransfer(test.input, test.effects);
+  const [receipt] = loadStoredActivities();
+  expect(receipt.sourceTxHash).toBeUndefined();
+  fetcher.mockResolvedValueOnce(Response.json({ ...nearStatus(test.quote, "KNOWN_DEPOSIT_TX"), swapDetails: {
+    originChainTxHashes: [{ hash: nearTxHash }], destinationChainTxHashes: [],
+  } }));
+  rpc.receipt.mockResolvedValue({ transactionHash: nearTxHash, status: "reverted" });
+  const observed = await nearMonitor.observe(receipt, new AbortController().signal);
+  expect(observed.patch).toMatchObject({ sourceTxHash: nearTxHash, failureLeg: "source", near: { status: "FAILED" } });
+});
+
+it("stops before searching for replacements when the receipt view closes during the RPC read", async () => {
+  const test = setup();
+  await submitBridgeTransfer(test.input, test.effects);
+  const controller = new AbortController();
+  rpc.receipt.mockImplementation(async () => {
+    controller.abort();
+    throw Object.assign(new Error("Pending"), { name: "TransactionReceiptNotFoundError" });
+  });
+  await expect(nearMonitor.observe(loadStoredActivities()[0], controller.signal)).rejects.toMatchObject({ name: "AbortError" });
+  expect(rpc.resolve).not.toHaveBeenCalled();
 });

@@ -1,3 +1,65 @@
+diff --git a/node_modules/@reown/appkit-adapter-bitcoin/dist/esm/src/connectors/LeatherConnector.js b/node_modules/@reown/appkit-adapter-bitcoin/dist/esm/src/connectors/LeatherConnector.js
+--- a/node_modules/@reown/appkit-adapter-bitcoin/dist/esm/src/connectors/LeatherConnector.js
++++ b/node_modules/@reown/appkit-adapter-bitcoin/dist/esm/src/connectors/LeatherConnector.js
+@@ -1,6 +1,7 @@
+ import { ConstantsUtil } from '@reown/appkit-common';
+ import { ChainController } from '@reown/appkit-controllers';
+ import { bitcoin, bitcoinSignet, bitcoinTestnet } from '@reown/appkit/networks';
++import { AddressPurpose } from '../utils/BitcoinConnector.js';
+ import { SatsConnectConnector } from './SatsConnectConnector.js';
+ export class LeatherConnector extends SatsConnectConnector {
+     constructor({ connector }) {
+@@ -16,16 +17,21 @@
+         return this.wallet?.icon?.replace('data:image/svg', 'data:image/svg+xml');
+     }
+     async getAccountAddresses() {
+-        // Keep the connected accounts in memory to avoid repeated requests because Leather doesn't have a connect method
+-        if (this.connectedAccounts) {
+-            return this.connectedAccounts;
++        // Leather identifies its active Bitcoin accounts by script type, in no guaranteed order.
++        const { addresses } = await this.internalRequest('getAddresses', {});
++        const payment = addresses.find(a => a.symbol === 'BTC' && a.type === 'p2wpkh');
++        if (!payment) {
++            throw new Error('No Bitcoin payment account available');
+         }
+-        this.connectedAccounts = await super.getAccountAddresses();
+-        return this.connectedAccounts;
++        const ordinal = addresses.find(a => a.symbol === 'BTC' && a.type === 'p2tr');
++        return [
++            { ...payment, purpose: AddressPurpose.Payment, path: payment.derivationPath },
++            ...(ordinal ? [{ ...ordinal, purpose: AddressPurpose.Ordinal, path: ordinal.derivationPath }] : [])
++        ];
+     }
+     disconnect() {
+         // Leather doesn't have disconnect method
+-        this.connectedAccounts = undefined;
++        this.unbindEvents();
+         return Promise.resolve();
+     }
+     async sendTransfer({ amount, recipient }) {
+diff --git a/node_modules/@reown/appkit-adapter-bitcoin/dist/esm/src/connectors/SatsConnectConnector.js b/node_modules/@reown/appkit-adapter-bitcoin/dist/esm/src/connectors/SatsConnectConnector.js
+--- a/node_modules/@reown/appkit-adapter-bitcoin/dist/esm/src/connectors/SatsConnectConnector.js
++++ b/node_modules/@reown/appkit-adapter-bitcoin/dist/esm/src/connectors/SatsConnectConnector.js
+@@ -1,5 +1,5 @@
+-import { BitcoinNetworkType, MessageSigningProtocols, AddressPurpose as SatsConnectAddressPurpose, getProviderById, getProviders } from 'sats-connect';
+-import { ConstantsUtil, PresetsUtil } from '@reown/appkit-common';
++import { BitcoinNetworkType, MessageSigningProtocols, RpcErrorCode, AddressPurpose as SatsConnectAddressPurpose, getProviderById, getProviders } from 'sats-connect';
++import { ConstantsUtil, PresetsUtil, UserRejectedRequestError } from '@reown/appkit-common';
+ import { ChainController, CoreHelperUtil } from '@reown/appkit-controllers';
+ import { HelpersUtil } from '@reown/appkit-utils';
+ import { mapSatsConnectAddressPurpose } from '../utils/BitcoinConnector.js';
+@@ -126,6 +126,11 @@
+         }
+         const res = await this.internalRequest('sendTransfer', {
+             recipients: [{ address: recipient, amount: parsedAmount }]
++        }).catch(error => {
++            if (error?.code === RpcErrorCode.USER_REJECTION) {
++                throw new UserRejectedRequestError(error);
++            }
++            throw error;
+         });
+         return res.txid;
+     }
 diff --git a/node_modules/@reown/appkit-adapter-bitcoin/dist/esm/src/connectors/UnisatConnector/index.js b/node_modules/@reown/appkit-adapter-bitcoin/dist/esm/src/connectors/UnisatConnector/index.js
 --- a/node_modules/@reown/appkit-adapter-bitcoin/dist/esm/src/connectors/UnisatConnector/index.js
 +++ b/node_modules/@reown/appkit-adapter-bitcoin/dist/esm/src/connectors/UnisatConnector/index.js

@@ -3,6 +3,7 @@ import { submitBridgeTransfer, type TransferSubmission } from "../../../app/lib/
 import { activityPersistence, loadStoredActivities, saveActivities } from "../../../app/lib/bridge-persistence";
 import { activityDetailFor } from "../../../app/lib/activity-detail-presentation";
 import { ActivityStore } from "../../activity";
+import { observeActivity } from "../../tracking";
 import { findBridgeRoute } from "../../core/routes";
 import { nearQuoteResult } from "./quote";
 import { nearMonitor } from "./tracking";
@@ -39,7 +40,7 @@ function setup() {
     quote: { ...nearQuoteResult(quote, route.id), request: { ...accounts, amount: "0.001", routeId: route.id, recovery: route.recovery } },
     externalWallet: { family: "bitcoin", connected: true, address: accounts.externalAddress, assertAccount,
       provider: { sendTransfer, getAccountAddresses: vi.fn() } },
-    midenWallet: { connected: true, address: accounts.midenAccount, requestTransaction: walletRequest },
+    midenWallet: { connected: true, address: accounts.midenAccount, assertAccount: vi.fn(), requestTransaction: walletRequest },
   };
   const effects = { openExternalWallet: vi.fn(), onError: vi.fn(), onSubmittingChange: vi.fn(), onPhaseChange: vi.fn(),
     verifyBalanceCap: vi.fn(), activities: new ActivityStore(activityPersistence), navigate: vi.fn() };
@@ -96,7 +97,7 @@ it("saves the attempt before one Bitcoin payment, resumes after reload and track
   expect(test.sendTransfer).toHaveBeenCalledTimes(1);
 });
 
-it("shows an unknown delivered amount when settlement omits amountOut, including after reload", async () => {
+it("can refresh missing settlement evidence after reload without polling a completed transfer indefinitely", async () => {
   const test = setup();
   await submitBridgeTransfer(test.input, test.effects);
   const saved = loadStoredActivities()[0];
@@ -104,7 +105,43 @@ it("shows an unknown delivered amount when settlement omits amountOut, including
   fetcher.mockResolvedValueOnce(Response.json(nearStatus(test.quote, "SUCCESS")));
   const observation = await nearMonitor.observe(saved, new AbortController().signal);
   test.effects.activities.patch(saved.id, observation.patch);
-  expect(activityDetailFor(loadStoredActivities()[0]).receipt).toMatchObject({ receivedLabel: "Received", receivedAmount: "—" });
+  const [reloaded] = loadStoredActivities();
+  const detail = activityDetailFor(reloaded);
+  expect(detail.receipt).toMatchObject({ receivedLabel: "Received", receivedAmount: "—" });
+  expect(detail.progress).toMatchObject({ canRefresh: true });
+  const signal = new AbortController().signal;
+  expect(await observeActivity(reloaded, signal)).toBeNull();
+  fetcher.mockResolvedValueOnce(Response.json({ ...nearStatus(test.quote, "SUCCESS"), swapDetails: {
+    originChainTxHashes: [], destinationChainTxHashes: [{ hash: nearTxHash }], amountOut: "97123",
+  } }));
+  const fresh = await observeActivity(reloaded, signal, true);
+  test.effects.activities.patch(reloaded.id, fresh!.patch);
+  const [settled] = loadStoredActivities();
+  expect(settled).toMatchObject({ destinationTxHash: nearTxHash, receivedAmount: "0.00097123" });
+  expect(activityDetailFor(settled).progress).toMatchObject({ canRefresh: false });
+  expect(await observeActivity(settled, signal, true)).toBeNull();
+});
+
+it("keeps the durable receipt unchanged when two tabs observe the same pending status", async () => {
+  vi.useFakeTimers();
+  const test = setup();
+  await submitBridgeTransfer(test.input, test.effects);
+  const [saved] = loadStoredActivities();
+  const reply = { ...nearStatus(test.quote, "KNOWN_DEPOSIT_TX"), swapDetails: {
+    originChainTxHashes: [{ hash: "ab".repeat(32) }], destinationChainTxHashes: [],
+  } };
+  fetcher.mockImplementation(async () => Response.json(reply));
+  const signal = new AbortController().signal;
+  const first = await observeActivity(saved, signal);
+  test.effects.activities.patch(saved.id, first!.patch);
+  const peer = new ActivityStore(activityPersistence);
+  await peer.sync();
+  const write = vi.spyOn(window.localStorage, "setItem");
+  vi.advanceTimersByTime(5_000);
+  const repeated = await observeActivity(peer.get(saved.id)!.activity, signal);
+  peer.patch(saved.id, repeated!.patch);
+  expect(write).not.toHaveBeenCalled();
+  expect(loadStoredActivities()[0].updatedAt).toBe(saved.updatedAt);
 });
 
 it("keeps the wallet hash if settlement does not identify which deposit was mined", async () => {
@@ -215,6 +252,25 @@ it("stops before payment if storage contention outlasts the reviewed quote", asy
   const [receipt] = loadStoredActivities();
   expect(nearMonitor.canPoll(receipt)).toBe(false);
   expect(activityDetailFor(receipt).guidance?.body).toMatch(/fresh quote/);
+});
+
+it.each(["prepare", "funding claim"])("stops the Bitcoin prompt when the Bread recipient disconnects during %s", async when => {
+  const test = setup();
+  let connected = true;
+  test.input.midenWallet.assertAccount = () => { if (!connected) throw new Error("Your Miden wallet changed."); };
+  if (when === "prepare") {
+    fetcher.mockImplementation(async () => { connected = false; return Response.json(test.quote); });
+  } else {
+    const write = window.localStorage.setItem.bind(window.localStorage);
+    vi.spyOn(window.localStorage, "setItem").mockImplementation((key, value) => {
+      if (JSON.parse(value)[0]?.near?.submission === "attempted") connected = false;
+      write(key, value);
+    });
+  }
+  await submitBridgeTransfer(test.input, test.effects);
+  expect(test.sendTransfer).not.toHaveBeenCalled();
+  expect(test.effects.onError).toHaveBeenCalledWith(expect.stringContaining("Miden wallet changed"));
+  expect(loadStoredActivities().map(row => row.near?.submission)).toEqual(when === "prepare" ? [] : ["not_sent"]);
 });
 
 it("retains the Bitcoin refund separately and keeps polling incomplete deposits after expiry", async () => {

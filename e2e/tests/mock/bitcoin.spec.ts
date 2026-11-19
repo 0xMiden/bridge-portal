@@ -3,6 +3,9 @@ import { installWallets, respondToWallet, SOURCE_TX, walletRequests, type Wallet
 import { stubNetwork } from "../../fixtures/mock-network";
 import { connectBitcoinWallet, installBitcoinWallet, selectBitcoinRoute } from "../../fixtures/bitcoin-wallet";
 import { browserMidenSdk } from "../../../test/miden-sdk";
+import { createActivity } from "../../../src/app/lib/bridge-presentation";
+import { findBridgeRoute } from "../../../src/bridge/core/routes";
+import { nearQuoteSchema } from "../../../src/bridge/providers/near/schema";
 import fixtures from "../../../test/fixtures/near-bitcoin.json";
 
 const { receive: { preview, prepared }, send: { preview: sendPreview, prepared: sendPrepared },
@@ -61,6 +64,44 @@ test("a silent UniSat chain change with the same payment address stops the depos
   await expect(page.getByRole("region", { name: "Miden bridge", exact: true }).getByRole("alert"))
     .toContainText("Switch your wallet to Bitcoin mainnet");
   expect(await walletRequests(page)).toEqual([]);
+});
+
+test("a receipt shows progress saved by another tab without starting an extra status request", async ({ page, context }) => {
+  await installWallets(page);
+  await stubNetwork(page);
+  await selectBitcoinRoute(page, "receive");
+  const receipt = createActivity(findBridgeRoute("mainnet:near-bitcoin-btc-to-miden-wbtc")!, "0.001", {
+    id: "act-peer", sourceTxHash: "ab".repeat(32),
+    near: { quote: nearQuoteSchema.parse(prepared), submission: "accepted", status: "PENDING_DEPOSIT", notification: "sent" },
+  });
+  const peer = await context.newPage();
+  await peer.route("**/peer", route => route.fulfill({ contentType: "text/html", body: "<title>Peer tab</title>" }));
+  await peer.goto("/peer");
+  await peer.evaluate(row => localStorage.setItem("miden.bridge.ui.activities.v3", JSON.stringify([row])), receipt);
+  const now = Date.parse(prepared.timestamp);
+  await page.clock.install({ time: new Date(now) });
+  let reads = 0;
+  await page.route("**/api/near/status", route => {
+    reads++;
+    return route.fulfill({ json: { correlationId: "peer-receipt", quoteResponse: prepared, status: "PENDING_DEPOSIT",
+      updatedAt: prepared.timestamp, swapDetails: { originChainTxHashes: [], destinationChainTxHashes: [] } } });
+  });
+  await page.goto("/activity/act-peer");
+  await expect.poll(() => peer.evaluate(() => JSON.parse(localStorage.getItem("miden.bridge.ui.activities.v3")!)[0].near.statusUpdatedAt))
+    .toBe(prepared.timestamp);
+  await page.clock.pauseAt(new Date(await page.evaluate(() => Date.now()) + 100));
+  const initialReads = reads;
+  await peer.evaluate(() => {
+    const key = "miden.bridge.ui.activities.v3";
+    const rows = JSON.parse(localStorage.getItem(key)!);
+    rows[0].sourceTxHash = "cd".repeat(32);
+    localStorage.setItem(key, JSON.stringify(rows));
+  });
+  await expect(page.getByRole("link", { name: "View on mempool.space" })).toHaveAttribute("href", `https://mempool.space/tx/${"cd".repeat(32)}`);
+  await page.clock.runFor(1_000);
+  expect(reads).toBe(initialReads);
+  await page.clock.runFor(4_000);
+  await expect.poll(() => reads).toBe(initialReads + 1);
 });
 
 test("Bitcoin deposit requests exact satoshis through Reown once and tracks delivery after reload", async ({ page }) => {

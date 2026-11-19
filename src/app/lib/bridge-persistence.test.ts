@@ -168,6 +168,24 @@ function bitcoinFundingAttempt() {
   } });
 }
 
+it("tracks a funded v3 receipt across reloads while unreadable v2 history prevents a new funding claim", async () => {
+  const receipt = bitcoinFundingAttempt();
+  receipt.sourceTxHash = "ab".repeat(32);
+  receipt.near!.submission = "accepted";
+  saveActivities([receipt]);
+  storage.set(legacyStorageKey, "{broken");
+  expect(await store.sync()).toBe(false);
+  expect(store.get(receipt.id)?.activity.sourceTxHash).toBe(receipt.sourceTxHash);
+  store.patch(receipt.id, { near: { ...receipt.near!, status: "PROCESSING" } });
+  const reopened = new ActivityStore(activityPersistence);
+  expect(await reopened.sync()).toBe(false);
+  expect(reopened.get(receipt.id)).toMatchObject({ activity: { sourceTxHash: receipt.sourceTxHash, near: { status: "PROCESSING" } } });
+  expect(reopened.get(receipt.id)?.unsavedChanges).toBeUndefined();
+  expect(storage.get(legacyStorageKey)).toBe("{broken");
+  storage.set(legacyStorageKey, "[]");
+  expect(await reopened.sync()).toBe(true);
+});
+
 it("keeps an acknowledged funding attempt when another tab is midway through a history update", async () => {
   const deposit = bitcoinFundingAttempt();
   const funding = new ActivityStore(activityPersistence);
