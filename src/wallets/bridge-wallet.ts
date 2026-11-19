@@ -6,8 +6,9 @@ import type { TransferSubmission } from "../bridge/core/submission";
 import type { EvmProvider } from "./evm/evm-wallet";
 
 export type BitcoinProvider = Pick<BitcoinConnector, "getAccountAddresses" | "sendTransfer"> & {
-  /** Connectors with their own asynchronous sender check can bind it before the prompt. */
-  prepareTransfer?: (params: Parameters<BitcoinConnector["sendTransfer"]>[0], reviewedSender: string) => Promise<() => Promise<string>>;
+  /** Bind the reviewed sender before opening the extension's payment prompt. */
+  prepareTransfer?: (params: Parameters<BitcoinConnector["sendTransfer"]>[0], reviewedSender: string,
+    paymentAccount: BitcoinConnector.AccountAddress) => Promise<() => Promise<string>>;
   type?: string;
   wallet?: { features?: Readonly<Record<string, unknown>> };
   provider?: { session?: { namespaces: Record<string, { methods: string[] }> } };
@@ -26,7 +27,7 @@ export function supportsBitcoinPayments(provider?: BitcoinProvider): provider is
 
 export type ExternalWallet = { connected: boolean; address: string } & (
   | { family: "evm"; provider?: EvmProvider }
-  | { family: "bitcoin"; provider?: BitcoinProvider; assertAccount: (address: string) => Promise<void> }
+  | { family: "bitcoin"; provider?: BitcoinProvider; assertAccount: (address: string) => Promise<BitcoinConnector.AccountAddress> }
 );
 
 export function requireEvmWallet(wallet: ExternalWallet) {

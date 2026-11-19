@@ -9,7 +9,7 @@ diff --git a/node_modules/@reown/appkit-adapter-bitcoin/dist/esm/src/connectors/
  import { SatsConnectConnector } from './SatsConnectConnector.js';
  export class LeatherConnector extends SatsConnectConnector {
      constructor({ connector }) {
-@@ -16,16 +17,21 @@
+@@ -16,27 +17,57 @@
          return this.wallet?.icon?.replace('data:image/svg', 'data:image/svg+xml');
      }
      async getAccountAddresses() {
@@ -36,7 +36,49 @@ diff --git a/node_modules/@reown/appkit-adapter-bitcoin/dist/esm/src/connectors/
 +        this.unbindEvents();
          return Promise.resolve();
      }
-     async sendTransfer({ amount, recipient }) {
+-    async sendTransfer({ amount, recipient }) {
++    async sendTransfer(params) {
++        const send = await this.prepareTransfer(params);
++        return send();
++    }
++    async prepareTransfer({ amount, recipient }, reviewedSender, verifiedPayment) {
++        const payment = verifiedPayment ?? (await this.getAccountAddresses()).find(a => a.purpose === AddressPurpose.Payment);
++        if (!payment || payment.purpose !== AddressPurpose.Payment ||
++            (reviewedSender !== undefined && payment.address !== reviewedSender)) {
++            throw new Error('Your Bitcoin payment account changed. Review the transfer again.');
++        }
++        const network = this.getNetwork();
++        const path = /^m\/84'\/([01])'\/(0|[1-9]\d{0,9})'\/0\/0$/.exec(payment.path ?? '');
++        const account = Number(path?.[2]);
++        if (!path || path[1] !== (network === 'mainnet' ? '0' : '1') || account >= 2 ** 31) {
++            throw new Error('Leather did not provide a valid signing account for this payment.');
++        }
++        // Leather sendTransfer omits accountIndex for zero. Mobile uses the connected account.
++        if (account === 0) {
++            throw new Error('Leather cannot pin Account 1 for this payment. Choose another Leather account or Bitcoin wallet.');
++        }
++        // Before leather-io/mono#2384, the extension overwrote even a nonzero requested account.
++        const product = this.getWalletProvider().getProductInfo?.();
++        const version = /^(\d+)\.(\d+)\.(\d+)$/.exec(product?.version ?? '');
++        const [major, minor, patch] = version ? version.slice(1).map(Number) : [];
++        const honorsAccount = major > 6 || (major === 6 && (minor > 103 || (minor === 103 && patch >= 1)));
++        if (window.ReactNativeWebView || !honorsAccount) {
++            throw new Error('Use the Leather browser extension 6.103.1 or later, or choose another Bitcoin wallet for this payment.');
++        }
+         const params = {
+             recipients: [{ address: recipient, amount }],
+-            network: this.getNetwork()
++            network,
++            account
+         };
+-        const res = await this.internalRequest('sendTransfer',
+-        // @ts-expect-error - expected LeatherWallet params don't match sats-connect
+-        params);
+-        return res.txid;
++        return async () => (await this.internalRequest('sendTransfer', params)).txid;
+     }
+     async signPSBT({ psbt, broadcast = false, signInputs }) {
+         const signInputObj = signInputs?.[0];
 diff --git a/node_modules/@reown/appkit-adapter-bitcoin/dist/esm/src/connectors/SatsConnectConnector.js b/node_modules/@reown/appkit-adapter-bitcoin/dist/esm/src/connectors/SatsConnectConnector.js
 --- a/node_modules/@reown/appkit-adapter-bitcoin/dist/esm/src/connectors/SatsConnectConnector.js
 +++ b/node_modules/@reown/appkit-adapter-bitcoin/dist/esm/src/connectors/SatsConnectConnector.js

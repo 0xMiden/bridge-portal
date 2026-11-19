@@ -34,10 +34,12 @@ export function useBitcoinWallet(requirePayment: boolean) {
     }
     checkConnection();
     const addresses = await provider.getAccountAddresses();
-    if (addresses.find(item => item.purpose === "payment")?.address !== reviewedAddress) {
+    const payment = addresses.find(item => item.purpose === "payment");
+    if (!payment || payment.address !== reviewedAddress) {
       throw new Error("Your Bitcoin payment account changed. Review the transfer again.");
     }
     checkConnection();
+    return payment;
   }
 
   return { connected: account.isConnected, address, provider, info, valid, warning, assertAccount };

@@ -27,10 +27,10 @@ beforeEach(() => {
 });
 afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); vi.useRealTimers(); });
 
-function setup() {
-  const route = findBridgeRoute(bitcoinReceiveInput.routeId)!;
-  const quote = nearQuoteFixture(bitcoinReceiveInput, false, { amountOut: "98248", minAmountOut: "97265" });
-  const accounts = { midenAccount: bitcoinReceiveInput.midenAccount, externalAddress: bitcoinReceiveInput.externalAddress };
+function setup(binding = bitcoinReceiveInput) {
+  const route = findBridgeRoute(binding.routeId)!;
+  const quote = nearQuoteFixture(binding, false, { amountOut: "98248", minAmountOut: "97265" });
+  const accounts = { midenAccount: binding.midenAccount, externalAddress: binding.externalAddress };
   const walletRequest = vi.fn();
   const sendTransfer = vi.fn().mockResolvedValue("ab".repeat(32));
   const assertAccount = vi.fn().mockResolvedValue(undefined);
@@ -223,6 +223,51 @@ it.each(["WalletStandardConnector", "BitcoinWalletConnectConnector"])("checks %s
   expect(loadStoredActivities()).toEqual([]);
   expect(send).not.toHaveBeenCalled();
   expect(test.effects.onError).toHaveBeenCalledWith(expect.stringMatching(/supports payments/));
+});
+
+it.each([
+  { scenario: "a reviewed payment account", path: "m/84'/0'/12'/0/0", version: "6.103.1", pin: 12 },
+  { scenario: "a missing derivation path" },
+  { scenario: "a Taproot path on a payment record", path: "m/86'/0'/12'/0/0" },
+  { scenario: "a child index outside BIP32", path: "m/84'/0'/2147483648'/0/0" },
+  { scenario: "Leather Account 1", path: "m/84'/0'/0'/0/0" },
+  { scenario: "an extension that overrides a requested account", path: "m/84'/0'/12'/0/0", version: "6.103.0" },
+  { scenario: "the mobile wallet that signs with its connected account", path: "m/84'/0'/12'/0/0", mobile: true },
+])("checks Leather's native signing account before payment for $scenario", async ({ path, pin, version, mobile }) => {
+  const address = "bc1q530dz4h80kwlzywlhx2qn0k6vdtftd93c499yq";
+  const test = setup({ ...bitcoinReceiveInput, externalAddress: address });
+  const { bitcoin } = await import("@reown/appkit/networks");
+  const { ChainController } = await import("@reown/appkit-controllers");
+  vi.spyOn(ChainController, "getActiveCaipNetwork").mockReturnValue(bitcoin);
+  const send = vi.fn().mockResolvedValue({ result: { txid: "ab".repeat(32) } });
+  const getAddresses = vi.fn(async () => ({ result: { addresses: [
+    { symbol: "BTC", type: "p2tr", derivationPath: "m/86'/0'/5'/0/0", address: "ordinal" },
+    { symbol: "BTC", type: "p2wpkh", derivationPath: path, address },
+  ] } }));
+  Object.assign(window, {
+    LeatherProvider: {
+      getProductInfo: () => ({ version: version ?? "6.116.0" }),
+      request: (method: string, params: unknown) => method === "getAddresses" ? getAddresses() : send(method, params),
+    },
+    ...(mobile && { ReactNativeWebView: { postMessage: vi.fn() } }),
+  });
+  const entry = import.meta.resolve("@reown/appkit-adapter-bitcoin");
+  const { LeatherConnector } = await import(new URL("../src/connectors/LeatherConnector.js", entry).href);
+  const connector = new LeatherConnector({ connector: { wallet: { id: "LeatherProvider" }, requestedChains: [bitcoin] } });
+  if (test.input.externalWallet.family !== "bitcoin") throw new Error("Expected Bitcoin wallet");
+  test.input.externalWallet.provider = connector;
+  test.assertAccount.mockImplementation(async () => (await connector.getAccountAddresses())[0]);
+  await submitBridgeTransfer(test.input, test.effects);
+  if (pin !== undefined) {
+    expect(send).toHaveBeenCalledExactlyOnceWith("sendTransfer", {
+      account: pin, network: "mainnet", recipients: [{ address: test.quote.quote.depositAddress, amount: test.quote.quote.amountIn }],
+    });
+    expect(getAddresses).toHaveBeenCalledTimes(test.assertAccount.mock.calls.length);
+    expect(loadStoredActivities()[0].near?.submission).toBe("accepted");
+  } else {
+    expect(send).not.toHaveBeenCalled();
+    expect(loadStoredActivities()[0].near?.submission).toBe("not_sent");
+  }
 });
 
 it.each([

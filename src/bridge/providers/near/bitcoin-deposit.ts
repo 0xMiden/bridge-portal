@@ -20,9 +20,9 @@ export function prepareBitcoinDeposit(input: TransferSubmission, quote: NearQuot
     networkFee: "Paid in your Bitcoin wallet",
     prompt: "Confirm the deposit in your Bitcoin wallet…",
     prepareSend: async () => {
-      await assertWallet();
+      const paymentAccount = await assertWallet();
       const payment = { recipient, amount };
-      if (provider.prepareTransfer) return provider.prepareTransfer(payment, sender);
+      if (provider.prepareTransfer) return provider.prepareTransfer(payment, sender, paymentAccount);
       return () => provider.sendTransfer(payment);
     },
   };
