@@ -27,6 +27,9 @@ const send: ProviderDirection = {
   ],
   phases: {
     not_sent: notSent,
+    leather_signing_account: { ...notSent, guidance: { ...notSent.guidance,
+      body: "Use the Leather browser extension 6.103.1 or later with Account 2 or higher, or choose another Bitcoin wallet. Then review a new transfer.",
+    } },
     declined: { ...notSent, headline: "Cancelled in your wallet", guidance: { ...notSent.guidance, title: "Cancelled in your wallet" } },
     signature: { order: 0, status: "signature", headline: "Confirm in your wallet", guidance },
     PENDING_DEPOSIT: { order: 1, status: "source_finality", headline: "Waiting for the Miden deposit", guidance },
@@ -45,7 +48,8 @@ const send: ProviderDirection = {
   phaseFields: ["status"],
   resolvePhase: ({ near }) => {
     if (!near || (near.submission === "prepared" && near.status === "PENDING_DEPOSIT")) return "signature";
-    if (near.submission === "declined" || near.submission === "not_sent") return near.submission;
+    if (near.submission === "not_sent") return near.fundingIssue ?? "not_sent";
+    if (near.submission === "declined") return near.submission;
     return near.status;
   },
   consumeNote: false, tracking: "automatic", pollMs: 5_000,

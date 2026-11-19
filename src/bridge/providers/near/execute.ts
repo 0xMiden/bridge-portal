@@ -56,7 +56,9 @@ async function requestFunding(context: SubmissionContext, operation: NearOperati
     assertBreadAccount(context);
     if (nearQuoteExpiry(operation.quote) <= Date.now()) throw new Error("NEAR quote expired. Review a fresh quote.");
   } catch (error) {
-    await context.persist({ near: { ...operation, submission: "not_sent" } });
+    const leatherAccount = error instanceof Error && "code" in error && error.code === "LEATHER_SIGNING_ACCOUNT";
+    await context.persist({ near: { ...operation, submission: "not_sent",
+      fundingIssue: leatherAccount ? "leather_signing_account" : undefined } });
     throw error;
   }
   try { return await send(); }

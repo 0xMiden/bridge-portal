@@ -1,15 +1,19 @@
 diff --git a/node_modules/@reown/appkit-adapter-bitcoin/dist/esm/src/connectors/LeatherConnector.js b/node_modules/@reown/appkit-adapter-bitcoin/dist/esm/src/connectors/LeatherConnector.js
 --- a/node_modules/@reown/appkit-adapter-bitcoin/dist/esm/src/connectors/LeatherConnector.js
 +++ b/node_modules/@reown/appkit-adapter-bitcoin/dist/esm/src/connectors/LeatherConnector.js
-@@ -1,6 +1,7 @@
+@@ -1,7 +1,11 @@
  import { ConstantsUtil } from '@reown/appkit-common';
  import { ChainController } from '@reown/appkit-controllers';
  import { bitcoin, bitcoinSignet, bitcoinTestnet } from '@reown/appkit/networks';
 +import { AddressPurpose } from '../utils/BitcoinConnector.js';
  import { SatsConnectConnector } from './SatsConnectConnector.js';
++function signingAccountError(message) {
++    return Object.assign(new Error(message), { code: 'LEATHER_SIGNING_ACCOUNT' });
++}
  export class LeatherConnector extends SatsConnectConnector {
      constructor({ connector }) {
-@@ -16,27 +17,57 @@
+         if (connector.wallet.id !== LeatherConnector.ProviderId) {
+@@ -16,27 +20,57 @@
          return this.wallet?.icon?.replace('data:image/svg', 'data:image/svg+xml');
      }
      async getAccountAddresses() {
@@ -51,11 +55,11 @@ diff --git a/node_modules/@reown/appkit-adapter-bitcoin/dist/esm/src/connectors/
 +        const path = /^m\/84'\/([01])'\/(0|[1-9]\d{0,9})'\/0\/0$/.exec(payment.path ?? '');
 +        const account = Number(path?.[2]);
 +        if (!path || path[1] !== (network === 'mainnet' ? '0' : '1') || account >= 2 ** 31) {
-+            throw new Error('Leather did not provide a valid signing account for this payment.');
++            throw signingAccountError('Leather did not provide a valid signing account for this payment.');
 +        }
 +        // Leather sendTransfer omits accountIndex for zero. Mobile uses the connected account.
 +        if (account === 0) {
-+            throw new Error('Leather cannot pin Account 1 for this payment. Choose another Leather account or Bitcoin wallet.');
++            throw signingAccountError('Leather cannot pin Account 1 for this payment. Choose another Leather account or Bitcoin wallet.');
 +        }
 +        // Before leather-io/mono#2384, the extension overwrote even a nonzero requested account.
 +        const product = this.getWalletProvider().getProductInfo?.();
@@ -63,7 +67,7 @@ diff --git a/node_modules/@reown/appkit-adapter-bitcoin/dist/esm/src/connectors/
 +        const [major, minor, patch] = version ? version.slice(1).map(Number) : [];
 +        const honorsAccount = major > 6 || (major === 6 && (minor > 103 || (minor === 103 && patch >= 1)));
 +        if (window.ReactNativeWebView || !honorsAccount) {
-+            throw new Error('Use the Leather browser extension 6.103.1 or later, or choose another Bitcoin wallet for this payment.');
++            throw signingAccountError('Use the Leather browser extension 6.103.1 or later, or choose another Bitcoin wallet for this payment.');
 +        }
          const params = {
              recipients: [{ address: recipient, amount }],

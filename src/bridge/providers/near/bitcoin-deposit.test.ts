@@ -266,7 +266,9 @@ it.each([
     expect(loadStoredActivities()[0].near?.submission).toBe("accepted");
   } else {
     expect(send).not.toHaveBeenCalled();
-    expect(loadStoredActivities()[0].near?.submission).toBe("not_sent");
+    const [receipt] = loadStoredActivities();
+    expect(receipt.near?.submission).toBe("not_sent");
+    expect(activityDetailFor(receipt).guidance?.body).toMatch(/Leather.*Account 2.*another Bitcoin wallet/i);
   }
 });
 
