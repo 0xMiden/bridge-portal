@@ -8,6 +8,7 @@ import { type Activity } from "./bridge-presentation";
 
 import type { BridgeEnvironment } from "../../config/environment";
 import { nearMidenAddress, nearOperationSchema } from "../../bridge/providers/near/schema";
+import { nearExpectedAmount } from "../../bridge/providers/near/operation";
 import { normalizeMidenAccountHex } from "../../bridge/miden-address";
 
 export const activityStorageKey = "miden.bridge.ui.activities.v2";
@@ -100,6 +101,12 @@ function normalizeActivities(parsed: unknown): Activity[] {
       const operation = nearOperationSchema.safeParse(activity.near);
       if (!operation.success) return [];
       activity = { ...activity, near: operation.data };
+      // Older receipts reused receivedAmount for the quote before settlement.
+      // A differing final amount is known to be actual. Recheck ambiguous ones.
+      if (!operation.data.statusUpdatedAt && activity.receivedAmount !== undefined &&
+          (operation.data.status !== "SUCCESS" || activity.receivedAmount === nearExpectedAmount(operation.data, routeSnapshot.destination.decimals))) {
+        activity = { ...activity, receivedAmount: undefined };
+      }
       if (activity.mode === "receive") {
         const recipient = nearMidenAddress.safeParse(operation.data.quote.quoteRequest.recipient);
         if (!recipient.success) return [];

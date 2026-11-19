@@ -1,18 +1,15 @@
 import type { Provider, ProviderDirection } from "../../core/provider";
 import { isEvmAsset } from "../../core/assets";
 import { evmNetworks } from "../../../config/evm-networks";
-import { formatUnits } from "viem";
 import type { BridgeActivity } from "../../core/models";
+import { nearExpectedAmount } from "./operation";
 
 function receivedAmount(activity: BridgeActivity) {
   const { near, routeSnapshot } = activity;
   if (!near || !routeSnapshot) return;
   if (near.status === "REFUNDED" || near.submission === "declined" || near.submission === "not_sent") return "0";
-  const expected = formatUnits(BigInt(near.quote.quote.amountOut), routeSnapshot.destination.decimals);
-  if (near.status !== "SUCCESS") return expected;
-  // Old receipts used one field for both estimate and delivery. A differing
-  // amount is known to be settled; an ambiguous value is refreshed by tracking.
-  return near.settledAmount ?? (activity.receivedAmount !== expected ? activity.receivedAmount : undefined);
+  if (near.status === "SUCCESS") return activity.receivedAmount;
+  return nearExpectedAmount(near, routeSnapshot.destination.decimals);
 }
 
 const guidance = { tone: "active", icon: "alert", title: "Keep this receipt",

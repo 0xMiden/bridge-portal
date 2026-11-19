@@ -1,8 +1,13 @@
 import type { NearOperation } from "./schema";
 import type { Activity } from "../../core/models";
+import { formatUnits } from "viem";
 
 const submissionOrder = { prepared: 0, awaiting_deposit: 1, attempted: 1, not_sent: 2, declined: 2, accepted: 3, confirmed: 4 };
 const statusOrder = { PENDING_DEPOSIT: 0, KNOWN_DEPOSIT_TX: 1, INCOMPLETE_DEPOSIT: 2, PROCESSING: 3, SUCCESS: 4, REFUNDED: 4, FAILED: 4 };
+
+export function nearExpectedAmount(operation: NearOperation, decimals: number) {
+  return formatUnits(BigInt(operation.quote.quote.amountOut), decimals);
+}
 
 /** Wallet callbacks and polls can finish out of order; neither may erase accepted evidence. */
 export function mergeNearActivityPatch(activity: Activity, patch: Partial<Activity>): Partial<Activity> {
@@ -19,7 +24,6 @@ export function mergeNearActivityPatch(activity: Activity, patch: Partial<Activi
     notification: current.notification === "sent" ? "sent" : incoming.notification,
     originTxHashes: observation.originTxHashes?.length ? observation.originTxHashes : current.originTxHashes,
     destinationTxHashes: observation.destinationTxHashes?.length ? observation.destinationTxHashes : current.destinationTxHashes,
-    settledAmount: observation.settledAmount ?? current.settledAmount,
     refundedAmount: observation.refundedAmount ?? current.refundedAmount,
     refundReason: observation.refundReason ?? current.refundReason,
   };
@@ -32,6 +36,7 @@ export function mergeNearActivityPatch(activity: Activity, patch: Partial<Activi
       sourceOriginalTxHash: activity.sourceOriginalTxHash ?? patch.sourceOriginalTxHash ?? (replacement && incoming.submission === "accepted" ? patch.sourceTxHash : undefined),
       destinationTxHash: activity.destinationTxHash ?? patch.destinationTxHash,
       midenTxId: activity.midenTxId ?? patch.midenTxId,
+      receivedAmount: activity.receivedAmount ?? (near.status === "SUCCESS" ? patch.receivedAmount : undefined),
     };
   }
   return { ...patch, near, sourceOriginalTxHash: activity.sourceOriginalTxHash ?? patch.sourceOriginalTxHash ?? (replacement ? activity.sourceTxHash : undefined) };

@@ -41,9 +41,9 @@ export const nearMonitor: ActivityMonitor = {
         sourceTxHash: source.patch.sourceTxHash ?? detected,
         destinationTxHash,
         midenTxId: activity.mode === "receive" ? destinationTxHash : undefined,
+        receivedAmount: status.status === "SUCCESS" && status.swapDetails.amountOut !== undefined
+          ? formatUnits(BigInt(status.swapDetails.amountOut), pair.destination.decimals) : undefined,
         near: { ...operation, notification, status: status.status, statusUpdatedAt: status.updatedAt,
-          settledAmount: status.status === "SUCCESS" && status.swapDetails.amountOut !== undefined
-            ? formatUnits(BigInt(status.swapDetails.amountOut), pair.destination.decimals) : undefined,
           originTxHashes: status.swapDetails.originChainTxHashes.map(tx => tx.hash),
           destinationTxHashes: status.swapDetails.destinationChainTxHashes.map(tx => tx.hash),
           submission: status.swapDetails.originChainTxHashes.length ? "confirmed" : source.patch.near?.submission ?? operation.submission,

@@ -137,7 +137,6 @@ test("Bitcoin deposit requests exact satoshis through Reown once and tracks deli
   await page.getByRole("button", { name: "Refresh status", exact: true }).click();
   await expect(page.getByRole("link", { name: "View on mempool.space" })).toHaveAttribute("href", `https://mempool.space/tx/${"ab".repeat(32)}`);
   delivered = true;
-  await page.getByRole("button", { name: "Refresh status", exact: true }).click();
   await expect(page.getByText("Complete", { exact: true })).toBeVisible();
   await expect(page.getByRole("link", { name: "View on Midenscan" })).toBeEnabled();
   expect(allocations).toBe(1);
@@ -232,11 +231,10 @@ test("Bitcoin withdrawal reviews the recipient, funds once through Bread and res
   await expect(page).toHaveURL(receiptUrl);
   await expect(page.getByRole("link", { name: "View on Midenscan" })).toHaveAttribute("href", new RegExp(SOURCE_TX));
   delivered = true;
-  await page.getByRole("button", { name: "Refresh status", exact: true }).click();
   await expect(page.getByText("Complete", { exact: true })).toBeVisible();
   await expect(page.getByRole("link", { name: "View on mempool.space" })).toHaveAttribute("href", `https://mempool.space/tx/${"cd".repeat(32)}`);
-  const receipts = await page.evaluate(() => JSON.parse(localStorage.getItem("miden.bridge.ui.activities.v2") ?? "[]"));
-  expect(receipts).toMatchObject([{ receivedAmount: "0.00097848", near: { quote: sendPrepared, submission: "confirmed", status: "SUCCESS" } }]);
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem("miden.bridge.ui.activities.v2") ?? "[]")))
+    .toMatchObject([{ receivedAmount: "0.00097848", near: { quote: sendPrepared, submission: "confirmed", status: "SUCCESS" } }]);
   expect(allocations).toBe(1);
   expect(requests.map(request => request.method)).toEqual(["requestTransaction", "waitForTransaction"]);
 });
