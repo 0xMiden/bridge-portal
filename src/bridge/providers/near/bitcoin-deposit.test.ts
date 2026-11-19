@@ -230,20 +230,29 @@ it.each([
   { scenario: "a missing derivation path" },
   { scenario: "a Taproot path on a payment record", path: "m/86'/0'/12'/0/0" },
   { scenario: "a child index outside BIP32", path: "m/84'/0'/2147483648'/0/0" },
-  { scenario: "Leather Account 1", path: "m/84'/0'/0'/0/0" },
+  { scenario: "Leather Account 1 after a receipt poll", path: "m/84'/0'/0'/0/0", pollDuringCheck: true },
   { scenario: "an extension that overrides a requested account", path: "m/84'/0'/12'/0/0", version: "6.103.0" },
   { scenario: "the mobile wallet that signs with its connected account", path: "m/84'/0'/12'/0/0", mobile: true },
-])("checks Leather's native signing account before payment for $scenario", async ({ path, pin, version, mobile }) => {
+])("checks Leather's native signing account before payment for $scenario", async ({ path, pin, version, mobile, pollDuringCheck }) => {
   const address = "bc1q530dz4h80kwlzywlhx2qn0k6vdtftd93c499yq";
   const test = setup({ ...bitcoinReceiveInput, externalAddress: address });
   const { bitcoin } = await import("@reown/appkit/networks");
   const { ChainController } = await import("@reown/appkit-controllers");
   vi.spyOn(ChainController, "getActiveCaipNetwork").mockReturnValue(bitcoin);
   const send = vi.fn().mockResolvedValue({ result: { txid: "ab".repeat(32) } });
-  const getAddresses = vi.fn(async () => ({ result: { addresses: [
-    { symbol: "BTC", type: "p2tr", derivationPath: "m/86'/0'/5'/0/0", address: "ordinal" },
-    { symbol: "BTC", type: "p2wpkh", derivationPath: path, address },
-  ] } }));
+  const getAddresses = vi.fn(async () => {
+    const [receipt] = loadStoredActivities();
+    if (pollDuringCheck && receipt?.near?.submission === "attempted") {
+      const observation = await observeActivity(receipt, new AbortController().signal);
+      if (!observation?.patch.near?.statusUpdatedAt) throw new Error("Expected a timestamped receipt poll");
+      test.effects.activities.patch(receipt.id, observation.patch);
+      await test.effects.activities.sync(receipt.id);
+    }
+    return { result: { addresses: [
+      { symbol: "BTC", type: "p2tr", derivationPath: "m/86'/0'/5'/0/0", address: "ordinal" },
+      { symbol: "BTC", type: "p2wpkh", derivationPath: path, address },
+    ] } };
+  });
   Object.assign(window, {
     LeatherProvider: {
       getProductInfo: () => ({ version: version ?? "6.116.0" }),
@@ -268,6 +277,7 @@ it.each([
     expect(send).not.toHaveBeenCalled();
     const [receipt] = loadStoredActivities();
     expect(receipt.near?.submission).toBe("not_sent");
+    if (pollDuringCheck) expect(receipt.near?.statusUpdatedAt).toBeDefined();
     expect(activityDetailFor(receipt).guidance?.body).toMatch(/Leather.*Account 2.*another Bitcoin wallet/i);
   }
 });
