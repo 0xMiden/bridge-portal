@@ -92,7 +92,7 @@ describe.each([
   it("uses the same source faucet and destination asset for send quotes and execution", async () => {
     const selected = route("send");
     expect(selected.disabled).toBeFalsy();
-    const preview = await quoteEpochSend({ route: selected, amount: "1.25", evmAddress: account, midenAccount });
+    const preview = await quoteEpochSend({ route: selected, amount: "1.25", externalAddress: account, midenAccount });
     const result = await runEpochTransfer({
       route: selected, amount: "1.25", evmAddress: account, midenAccount,
       minReceived: preview.received,
@@ -113,7 +113,7 @@ describe.each([
   it("uses the same source asset and destination faucet for receive quotes and execution", async () => {
     const selected = route("receive");
     expect(selected.disabled).toBeFalsy();
-    const preview = await quoteEpochReceive({ route: selected, amount: "1.25", evmAddress: account, midenAccount });
+    const preview = await quoteEpochReceive({ route: selected, amount: "1.25", externalAddress: account, midenAccount });
     expect(getEpochReadOnlySdk).toHaveBeenCalledWith(account, selected.recovery, selected.source.network);
     expect(getEpochSdk).not.toHaveBeenCalled();
     const result = await runEpochTransfer({ route: selected, amount: "1.25", minReceived: preview.received, evmAddress: account, midenAccount });
@@ -161,11 +161,11 @@ it("publishes the committed Miden source before an allocator failure", async () 
 // Preview success must never authorize a later deposit without another live quote.
 it.each(["send", "receive"] as const)("Cedar %s stops before signing if liquidity disappears after preview", async mode => {
   const route = findBridgeRoute(`mainnet:epoch:polygon:${mode}`)!;
-  const input = { route, amount: "10", evmAddress: account, midenAccount };
+  const input = { route, amount: "10", externalAddress: account, midenAccount };
   const preview = await (mode === "send" ? quoteEpochSend(input) : quoteEpochReceive(input));
   vi.mocked(mode === "send" ? getCrossChainQuote : getEVMToMidenQuote).mockRejectedValueOnce(new Error("No liquidity available for this transfer."));
   const requestTransaction = vi.fn();
-  await expect(runEpochTransfer({ ...input, minReceived: preview.received, requestTransaction, waitForTransaction: vi.fn() })).rejects.toThrow("No liquidity");
+  await expect(runEpochTransfer({ ...input, evmAddress: account, minReceived: preview.received, requestTransaction, waitForTransaction: vi.fn() })).rejects.toThrow("No liquidity");
   expect(buildCrossChainIntent).not.toHaveBeenCalled();
   expect(buildEVMToMidenIntent).not.toHaveBeenCalled();
   expect(requestTransaction).not.toHaveBeenCalled();

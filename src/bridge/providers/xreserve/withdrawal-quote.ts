@@ -56,7 +56,7 @@ export async function quoteTransfer(input: QuoteRequest, signal: AbortSignal): P
     network: input.route.destination.network,
     amount: input.amount,
     sender: input.midenAccount,
-    recipient: input.evmAddress,
+    recipient: input.externalAddress,
   }, signal);
   return {
     kind: "withdrawal", received: formatUnits(BigInt(quote.received), 6), fee: formatUnits(BigInt(quote.fee), 6),

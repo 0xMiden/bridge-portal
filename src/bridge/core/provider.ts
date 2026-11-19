@@ -51,6 +51,9 @@ export type ActivityDetails = {
   destinationKind: "tx" | "note";
   received?: string;
   fee?: string;
+  networkFee?: string;
+  settlementPending?: boolean;
+  refund?: string;
   reference?: { label: string; value: string };
   destinationBlock?: number;
 };
@@ -61,7 +64,7 @@ export type ActivityObservation = {
 };
 
 export type ActivityMonitor = {
-  canPoll: (activity: Activity) => boolean;
+  canPoll: (activity: Activity, refresh?: boolean) => boolean;
   observe: (activity: Activity, signal: AbortSignal) => Promise<ActivityObservation>;
 };
 

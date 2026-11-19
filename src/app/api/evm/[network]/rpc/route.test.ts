@@ -147,6 +147,23 @@ it("rejects broadcasts and malformed or oversized requests without network calls
   ).toBe(413);
   expect(fetch).not.toHaveBeenCalled();
 });
+
+it("cancels the upstream nonce read on disconnect without trying another provider", async () => {
+  const receipt = new AbortController();
+  let upstream: AbortSignal | null | undefined;
+  const fetch = vi.fn(async (_url: string, init: RequestInit) => {
+    upstream = init.signal;
+    receipt.abort();
+    throw new TypeError("Connection closed");
+  });
+  vi.stubGlobal("fetch", fetch);
+  const read = request({ ...payload, method: "eth_getTransactionCount", params: [`0x${"12".repeat(20)}`, "latest"] });
+  const response = await post(new Request(read, { signal: receipt.signal }));
+  expect(fetch).toHaveBeenCalledTimes(1);
+  expect(upstream?.aborted).toBe(true);
+  expect(response.status).toBe(499);
+});
+
 it("returns an outage before the browser times out when private and public RPCs all hang", async () => {
   vi.stubEnv("ARC_TESTNET_RPC_URL", "https://arc-testnet.g.alchemy.com/v2/test-key");
   vi.useFakeTimers();

@@ -1,11 +1,11 @@
 import type { Activity } from "./core/models";
 import { bridgeProviders } from "./providers/registry";
 
-export async function observeActivity(activity: Activity, signal: AbortSignal) {
+export async function observeActivity(activity: Activity, signal: AbortSignal, refresh = false) {
   const { flows } = await bridgeProviders[activity.provider].load();
   if (signal.aborted) return null;
   const monitor = flows[activity.mode].monitor;
-  if (!monitor.canPoll(activity)) return null;
+  if (!monitor.canPoll(activity, refresh)) return null;
   const observation = await monitor.observe(activity, signal);
   if (signal.aborted) return null;
   // Merge only defined changes; never write back the snapshot used to poll.

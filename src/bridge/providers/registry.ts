@@ -3,12 +3,14 @@ import type { Provider, ProviderDirection } from "../core/provider";
 import { agglayer, agglayerDirection } from "./agglayer/provider";
 import { epoch } from "./epoch/provider";
 import { xreserve } from "./xreserve/provider";
+import { near } from "./near/provider";
 
 /** Light configuration is synchronous; protocol dependencies load on demand. */
 export const bridgeProviders: Record<BridgeProvider, Provider> = {
   xreserve,
   agglayer,
   epoch,
+  near,
 };
 
 export function isBridgeProvider(value: unknown): value is BridgeProvider {

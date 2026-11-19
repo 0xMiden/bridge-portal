@@ -1,25 +1,35 @@
 import { z } from "zod";
-import { bridgeConfigSchema } from "../../config/wallet-config/schema";
+import { isEvmAsset, sameAsset } from "./assets";
+import { bitcoinAssetFields, bridgeConfigSchema } from "../../config/wallet-config/schema";
 import { matchesMainnetEpochPair, tokenLogoSchema } from "../../config/wallet-config/token-connections";
 import { evmAddressSchema } from "../evm/evm-schema";
 
 const network = z.enum(["sepolia", "arc-testnet", "base-sepolia", "arbitrum-sepolia", "ethereum", "arc", "base", "arbitrum", "polygon", "robinhood"]);
 const metadata = { symbol: z.string().min(1).max(11), name: z.string().max(100).optional(), logo: tokenLogoSchema.optional(), decimals: z.int().min(0).max(18) };
-const asset = z.discriminatedUnion("kind", [
+const asset = z.union([
+  z.object({ ...metadata, ...bitcoinAssetFields }),
   z.object({ ...metadata, kind: z.literal("native"), network }),
   z.object({ ...metadata, decimals: z.int().min(0).max(255), kind: z.literal("erc20"), network, address: evmAddressSchema }),
   z.object({ ...metadata, kind: z.literal("miden"), network: z.enum(["miden-testnet", "miden-mainnet"]), faucetId: z.string().regex(/^0x[\da-f]{30}$/i) }),
 ]);
 /** Receipts are self-contained. Route names and current token lists may change. */
 export const receiptRouteSchema = z.object({
-  id: z.string().min(1).max(200), provider: z.enum(["epoch", "agglayer", "xreserve"]), mode: z.enum(["send", "receive"]),
+  id: z.string().min(1).max(200), provider: z.enum(["epoch", "agglayer", "xreserve", "near"]), mode: z.enum(["send", "receive"]),
   source: asset, destination: asset, recovery: bridgeConfigSchema, disabled: z.boolean().optional(),
 }).refine(route => {
   const miden = route.mode === "receive" ? route.destination : route.source;
-  const evm = route.mode === "receive" ? route.source : route.destination;
-  if (miden.kind !== "miden" || evm.kind === "miden" || miden.network !== `miden-${route.recovery.environment}`) return false;
-  const bridge = route.recovery.document.supportedEvmChains[evm.network]?.bridges;
+  const external = route.mode === "receive" ? route.source : route.destination;
+  if (miden.kind !== "miden" || miden.network !== `miden-${route.recovery.environment}`) return false;
   const derived = route.recovery.derived;
+  if (route.provider === "near") {
+    const pair = route.recovery.near?.routes.find(pair => (route.mode === "send" ? pair.id : pair.receiveId) === route.id);
+    if (!pair) return false;
+    return sameAsset(miden, pair.source) && miden.decimals === pair.source.decimals &&
+      sameAsset(external, pair.destination) && external.decimals === pair.destination.decimals;
+  }
+  const evm = external;
+  if (!isEvmAsset(evm)) return false;
+  const bridge = route.recovery.document.supportedEvmChains[evm.network]?.bridges;
   if (route.provider === "epoch") {
     if (!bridge?.epoch) return false;
     if (route.recovery.environment === "testnet") return evm.kind === "erc20";

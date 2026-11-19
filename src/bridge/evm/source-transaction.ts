@@ -5,8 +5,8 @@ import { evmReadTransport } from "./transport";
 
 export type { SourceTransaction } from "./source-transaction-schema";
 
-function sourceClient(network: EvmNetwork) {
-  return createPublicClient({ transport: evmReadTransport(network) });
+function sourceClient(network: EvmNetwork, signal?: AbortSignal) {
+  return createPublicClient({ transport: evmReadTransport(network, signal) });
 }
 
 type SourceClient = ReturnType<typeof sourceClient>;
@@ -42,11 +42,12 @@ type Resolution = {
 };
 
 /** Find the first block whose account nonce exceeds the pending transaction's nonce. */
-async function findNonceBlock(client: SourceClient, transaction: SourceTransaction) {
+async function findNonceBlock(client: SourceClient, transaction: SourceTransaction, signal?: AbortSignal) {
   const head = await client.getBlockNumber({ cacheTime: 0 });
-  const countAt = (blockNumber: bigint) => client.getTransactionCount({
-    address: transaction.from, blockNumber,
-  });
+  const countAt = (blockNumber: bigint) => {
+    signal?.throwIfAborted();
+    return client.getTransactionCount({ address: transaction.from, blockNumber });
+  };
   const nonce = transaction.nonce;
   if (await countAt(head) <= nonce) return undefined; // Still pending; elapsed time never implies cancellation.
   let low = head;
@@ -76,9 +77,10 @@ function replacementReason(original: SourceTransaction, replacement: Transaction
 }
 
 async function findReplacement(
-  client: SourceClient, hash: string, transaction: SourceTransaction,
+  client: SourceClient, hash: string, transaction: SourceTransaction, signal?: AbortSignal,
 ): Promise<Resolution> {
-  const number = await findNonceBlock(client, transaction);
+  const number = await findNonceBlock(client, transaction, signal);
+  signal?.throwIfAborted();
   if (number === undefined) return { transaction };
   const block = await client.getBlock({ blockNumber: number, includeTransactions: true });
   const replacement = block.transactions.find(tx =>
@@ -93,21 +95,24 @@ async function findReplacement(
 
 /** Resolve the original or its replacement, preserving usable identity when an RPC fails. */
 export async function recoverSourceTransaction(
-  network: EvmNetwork, hash: string, saved?: SourceTransaction,
+  network: EvmNetwork, hash: string, saved?: SourceTransaction, signal?: AbortSignal,
 ): Promise<Resolution> {
   let transaction: SourceTransaction | undefined;
   try {
+    signal?.throwIfAborted();
     if (saved) transaction = sourceTransactionSchema.parse(saved);
-    const client = sourceClient(network);
+    const client = sourceClient(network, signal);
     const original = await getTransaction(client, hash);
+    signal?.throwIfAborted();
     if (original) transaction = identity(original);
     if (original?.blockNumber) return { transaction }; // Provider status will handle the receipt.
     // A successful null lookup can mean the RPC has not seen the wallet's
     // broadcast yet. Without identity, there is no evidence of a replacement;
     // keep tracking the original hash and retry capture on the next poll.
     if (!transaction) return {};
-    return await findReplacement(client, hash, transaction);
+    return await findReplacement(client, hash, transaction, signal);
   } catch {
+    signal?.throwIfAborted();
     return { transaction, warning: "Unable to check for a replacement transaction. Tracking will retry." };
   }
 }

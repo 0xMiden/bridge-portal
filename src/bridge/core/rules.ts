@@ -113,8 +113,7 @@ export function activityStartedAt(activity: BridgeActivity): number {
  * a leg actually landed. Source is usually already stamped at creation; this
  * backfills it for activities that arrive hash-first (e.g. merged history).
  */
-export function stampLegTimes<T extends BridgeActivity>(activity: T): T {
-  const now = Date.now();
+export function stampLegTimes<T extends BridgeActivity>(activity: T, now = Date.now()): T {
   let next = activity;
   if (next.sourceTxHash && !next.sourceTxAt) {
     // The source leg is the transfer's start — use its real start time (id-

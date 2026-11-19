@@ -5,9 +5,9 @@ cross-chain Receive/Send surface.
 
 The app serves both networks at `/`. The network selector remembers the choice
 for the current tab and resets the transfer form and Miden wallet session. New
-tabs default to mainnet. Mainnet supports Agglayer, Circle USDCx, and Epoch routes;
-testnet also retains these providers. `/activity/:id` receipts automatically use their saved
-network, including existing testnet transfers.
+tabs default to mainnet. Mainnet supports Agglayer, Circle USDCx, Epoch and NEAR
+Intents; testnet supports Agglayer, Circle USDCx and Epoch. `/activity/:id` receipts
+automatically use their saved network, including existing testnet transfers.
 
 ## Product model
 
@@ -18,6 +18,23 @@ integration notes live in
 Architecture decisions are recorded under [docs/decisions/](docs/decisions/) —
 e.g. [why we ship single-thread WASM without cross-origin isolation
 (no COOP/COEP)](docs/decisions/wasm-threading-coop-coep.md).
+
+NEAR Intents supports 13 Miden ↔ EVM pairs and native BTC on Bitcoin mainnet ↔
+wBTC on Miden. Each direction follows its `bridgeIn` or `bridgeOut` setting.
+To deposit BTC, connect a mainnet wallet that supports direct Bitcoin payments
+and approve the quoted satoshi amount. To withdraw wBTC to that account, approve the
+Miden deposit in Bread. The portal saves the receipt before either wallet prompt
+and resumes tracking after reload. Older receipts retain their signed asset IDs.
+The [NEAR Intents asset registry](src/config/near/config.ts) selects the active
+release for new quotes and retains earlier asset bindings for receipt recovery.
+
+The [Reown Bitcoin adapter patch](patches/@reown+appkit-adapter-bitcoin+1.8.20.patch)
+passes integer satoshis to UniSat, checks the wallet's active chain and keeps
+account-change listeners in sync on connect and disconnect. The Bitcoin browser
+tests cover these behaviors through the [UniSat wallet API](https://docs.unisat.io/developer-support/open-api-documentation/unisat-wallet).
+The patch also reads Leather’s active native SegWit payment address before funding
+and recognizes a payment refusal from Sats Connect. UniSat and OKX compare their
+last sender lookup with the reviewed refund address before opening the payment prompt.
 
 ## Prerequisites
 
@@ -62,6 +79,7 @@ automatically and require no wallet credentials. In brief:
 | Var | Scope | Purpose |
 | --- | --- | --- |
 | `BRIDGE_API_BASE` | server | Proxy target for `/api/bridge/*`. |
+| `NEAR_API_KEY` | server | NEAR 1Click partner credential; never expose it to the client. |
 | `ETHEREUM_RPC_URL` | server | Ethereum mainnet RPC. |
 | `ARC_MAINNET_RPC_URL` | server | Arc mainnet RPC. |
 | `BASE_RPC_URL` | server | Base mainnet RPC. |
@@ -175,9 +193,9 @@ changes do not automatically alter a running portal.
 
 Each transfer saves its original assets and validated bridge configuration in
 its receipt. Recovery uses that context after a deployment changes or removes a
-route; historical deployments are not accumulated in the bundle. The activity
-key is `miden.bridge.ui.activities.v2`; earlier transfers are intentionally not
-migrated. Status APIs accept bounded recovery payloads and validate network,
+route. Current receipts use `miden.bridge.ui.activities.v3`. The portal also reads
+v2 receipts and preserves old NEAR funding claims when it opens. An older tab
+can continue updating its own history during a rollout. Status APIs accept bounded recovery payloads and validate network,
 chain, domain and approved service roots. New Circle quote/validation requests
 must match the server's bundled configuration and an enabled direction; a stale
 client is asked to reload and review again. On-chain preflight checks still run

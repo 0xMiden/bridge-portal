@@ -18,8 +18,8 @@ function Fee({ recovery, enabled = true }: { recovery: BridgeConfig; enabled?: b
 
 function RouteFee({ route }: { route: BridgeRoute }) {
   const wallets = {
-    accounts: { evmAddress: "", midenAccount: "" },
-    evm: { connected: false, balance: {}, token: route.destination.kind !== "miden" ? route.destination : route.source },
+    accounts: { externalAddress: "", midenAccount: "" },
+    external: { family: "evm", connected: false, balance: {} },
   } as BridgeWallets;
   return <>{useBridgeQuote(route, "2", wallets).networkFee}</>;
 }

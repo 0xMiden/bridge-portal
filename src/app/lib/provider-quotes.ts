@@ -1,3 +1,4 @@
+import { hasTransferAccounts, sameTransferAccounts } from "../../bridge/core/accounts";
 import { queryOptions, type UseQueryResult } from "@tanstack/react-query";
 import { sameAsset } from "../../bridge/core/assets";
 import { isQuoteReviewable, type QuoteRequest, type TransferQuote } from "../../bridge/core/quote";
@@ -28,7 +29,7 @@ export function transferQuoteOptions(input: QuoteRequest, frozen: boolean) {
   try { validateTransferAmount(input.route, input.amount); valid = true; } catch { /* Wait for a valid amount. */ }
   return queryOptions({
     queryKey: ["transfer-quote", input],
-    enabled: !frozen && valid && Boolean(input.midenAccount && input.evmAddress),
+    enabled: !frozen && valid && hasTransferAccounts(input.route, input),
     queryFn: async ({ signal }) => {
       // Cancel the typing delay and discard late responses when the request changes.
       await new Promise<void>((resolve, reject) => {
@@ -56,8 +57,7 @@ export function availableProviderQuotes(
     const quote = result?.data;
     if (!result?.isSuccess || !isQuoteReviewable(quote) || !isValidAmount(quote.received)) return [];
     if (quote.request.routeId !== input.route.id || quote.request.amount !== input.amount ||
-      quote.request.midenAccount !== input.midenAccount ||
-      quote.request.evmAddress.toLowerCase() !== input.evmAddress.toLowerCase()) return [];
+      !sameTransferAccounts(input.route, quote.request, input)) return [];
     return [{ route: input.route, quote }];
   });
 }

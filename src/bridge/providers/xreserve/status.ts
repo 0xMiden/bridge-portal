@@ -1,4 +1,5 @@
 import { recoverSourceTransaction } from "../../evm/source-transaction";
+import { isEvmAsset } from "../../core/assets";
 import { activityRoute } from "../../core/routes";
 import { isCctpNetwork, arcConfig } from "./config";
 import type { CctpStatusResponse } from "./cctp-status";
@@ -25,7 +26,7 @@ export async function observeXreserveDeposit(activity: BridgeActivity, signal?: 
   const route = activityRoute(activity);
   const recovery = route?.recovery;
   const ARC = arcConfig(recovery);
-  const network = route?.source.kind !== "miden" ? route?.source.network : undefined;
+  const network = isEvmAsset(route?.source) ? route.source.network : undefined;
   const cctp = network && isCctpNetwork(network);
   if (!network) throw new Error("Unknown deposit origin.");
   const fetchStatus = async (hash: string) => {
@@ -39,7 +40,7 @@ export async function observeXreserveDeposit(activity: BridgeActivity, signal?: 
   // Once a burn/deposit is mined, submitted can mean Circle forwarding rather
   // than an unmined source transaction. Only search for replacements before that.
   if (observation.status === "submitted" && !observation.source && !observation.deposit) {
-    const resolved = await recoverSourceTransaction(network, activity.sourceTxHash, activity.sourceTransaction);
+    const resolved = await recoverSourceTransaction(network, activity.sourceTxHash, activity.sourceTransaction, signal);
     if (signal?.aborted) return { patch: {} };
     if (resolved.transaction) sourcePatch.sourceTransaction = resolved.transaction;
     if (resolved.hash) {

@@ -70,19 +70,21 @@ type RpcResponse = { jsonrpc: "2.0"; id: string | number } & (
 export async function forwardEvmRpc(
   network: EvmNetwork,
   body: RpcRequest,
-  fetchImpl: typeof fetch = fetch,
+  { signal, fetchImpl = fetch }: { signal?: AbortSignal; fetchImpl?: typeof fetch } = {},
 ): Promise<RpcResponse> {
   const urls = evmRpcUrls(network);
   // Leave room within the browser's 30-second timeout even with four providers.
   const timeoutMs = Math.min(8_000, Math.floor(24_000 / urls.length));
   for (const url of urls) {
+    signal?.throwIfAborted();
+    const timeout = AbortSignal.timeout(timeoutMs);
     try {
       const response = await fetchImpl(url, {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify(body),
         cache: "no-store",
-        signal: AbortSignal.timeout(timeoutMs),
+        signal: signal ? AbortSignal.any([signal, timeout]) : timeout,
       });
       if (!response.ok) continue;
       const payload = await response.json();
@@ -108,7 +110,7 @@ export async function evmRpc<T>(
   params: unknown[],
   fetchImpl: typeof fetch = fetch,
 ): Promise<T> {
-  const payload = await forwardEvmRpc(network, { jsonrpc: "2.0", id: 1, method, params }, fetchImpl);
+  const payload = await forwardEvmRpc(network, { jsonrpc: "2.0", id: 1, method, params }, { fetchImpl });
   if (payload.error) throw Object.assign(new Error(payload.error.message), payload.error);
   return payload.result as T;
 }

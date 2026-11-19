@@ -30,13 +30,13 @@ export function useActivityTracking(id: string) {
     if (!ready || demo) return;
     const controller = new AbortController();
     let timer: ReturnType<typeof setTimeout>;
-    async function poll() {
+    async function poll(refresh = false) {
       let delay = 3_000;
       try {
         const current = store.get(id)?.activity;
         if (controller.signal.aborted || !current || current.environment !== environment) return;
         delay = directionFor(current).pollMs;
-        const observation = await observeActivity(current, controller.signal);
+        const observation = await observeActivity(current, controller.signal, refresh);
         if (controller.signal.aborted) return;
         if (observation) {
           // Patch the newest receipt, never the snapshot captured before the request.
@@ -50,6 +50,7 @@ export function useActivityTracking(id: string) {
           delay =
             current.status === "complete" ||
             current.status === "failed" ||
+            current.status === "refunded" ||
             directionFor(current).tracking === "manual"
               ? 30_000
               : 3_000;
@@ -65,20 +66,18 @@ export function useActivityTracking(id: string) {
       }
     }
     queueMicrotask(() => {
-      void poll();
+      void poll(true);
     });
     const refresh = () => setVersion((value) => value + 1);
     const onVisible = () => {
       if (document.visibilityState === "visible") refresh();
     };
     window.addEventListener("focus", refresh);
-    window.addEventListener("storage", refresh);
     document.addEventListener("visibilitychange", onVisible);
     return () => {
       controller.abort();
       clearTimeout(timer);
       window.removeEventListener("focus", refresh);
-      window.removeEventListener("storage", refresh);
       document.removeEventListener("visibilitychange", onVisible);
     };
   }, [id, version, environment, store, ready, demo]);

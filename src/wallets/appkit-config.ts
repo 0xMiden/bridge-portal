@@ -1,16 +1,19 @@
 import { WagmiAdapter } from "@reown/appkit-adapter-wagmi";
-import { sepolia, baseSepolia, arbitrumSepolia, mainnet, base, arbitrum, polygon, robinhood } from "@reown/appkit/networks";
+import { BitcoinAdapter } from "@reown/appkit-adapter-bitcoin";
+import { sepolia, baseSepolia, arbitrumSepolia, mainnet, base, arbitrum, polygon, robinhood, bitcoin } from "@reown/appkit/networks";
 import type { AppKitNetwork } from "@reown/appkit/networks";
-import { arcTestnet, arcMainnet } from "../../config/arc";
-import { evmReadTransport } from "../../bridge/evm/transport";
-import { SITE_DESCRIPTION, SITE_NAME } from "../../config/site";
+import { arcTestnet, arcMainnet } from "../config/arc";
+import { evmReadTransport } from "../bridge/evm/transport";
+import { SITE_DESCRIPTION, SITE_NAME } from "../config/site";
 
 export const projectId = process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID!;
 
-export const networks: [AppKitNetwork, ...AppKitNetwork[]] = [sepolia, arcTestnet, baseSepolia, arbitrumSepolia, mainnet, arcMainnet, base, arbitrum, polygon, robinhood];
+const evmNetworks: [AppKitNetwork, ...AppKitNetwork[]] = [sepolia, arcTestnet, baseSepolia, arbitrumSepolia, mainnet, arcMainnet, base, arbitrum, polygon, robinhood];
+export const networks: [AppKitNetwork, ...AppKitNetwork[]] = [...evmNetworks, bitcoin];
+export const bitcoinAdapter = new BitcoinAdapter({ projectId });
 
 export const wagmiAdapter = new WagmiAdapter({
-  networks,
+  networks: evmNetworks,
   projectId,
   ssr: true,
   transports: {

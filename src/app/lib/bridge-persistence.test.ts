@@ -3,6 +3,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createActivity } from "./bridge-presentation";
 import { activityRoute, findBridgeRoute, routesForEnvironment } from "../../bridge/core/routes";
 import { currentBridgeConfig } from "../../config/bridge-config";
+import bitcoinQuotes from "../../../test/fixtures/near-bitcoin.json";
+import { nearQuoteSchema } from "../../bridge/providers/near/schema";
 import {
   activityPersistence, activityStorageKey, loadStoredActivities, loadStoredMode, loadStoredRoute, loadStoredRouteId,
   saveActivities, saveStoredMode, saveStoredRoute,
@@ -13,6 +15,7 @@ const activity = createActivity(findBridgeRoute("agglayer-eth-to-sepolia")!, "1"
   agglayerExitHashes: [`0x${"ab".repeat(32)}`],
 });
 let storage: Map<string, string>;
+const legacyStorageKey = "miden.bridge.ui.activities.v2";
 let store: ActivityStore;
 beforeEach(() => {
   storage = new Map();
@@ -64,6 +67,29 @@ it("ignores old history and malformed receipts without guessing a deployment", (
   malformed.routeSnapshot!.recovery.document["bridge-providers"].agglayer.indexerUrl = "http://localhost/private";
   saveActivities([malformed, { ...activity, routeSnapshot: undefined }, { ...activity, mode: "receive" }, activity]);
   expect(loadStoredActivities()).toEqual([activity]);
+});
+
+it.each([
+  ["send", "mainnet:near-miden-wbtc-to-bitcoin-btc", bitcoinQuotes.send.legacy],
+  ["receive", "mainnet:near-bitcoin-btc-to-miden-wbtc", bitcoinQuotes.receive.legacy],
+] as const)("keeps the original signed Bitcoin %s receipt and legacy route snapshot after the ID migration", (mode, routeId, quote) => {
+  const historical = structuredClone(findBridgeRoute(routeId)!);
+  const pair = historical.recovery.near!.routes.find(pair => pair.id === routeId || pair.receiveId === routeId)!;
+  pair.source.assetId = mode === "send" ? quote.quoteRequest.originAsset : quote.quoteRequest.destinationAsset;
+  const receipt = createActivity(historical, "0.001", { id: `legacy-bitcoin-${mode}`, near: {
+    quote: nearQuoteSchema.parse(quote), submission: mode === "send" ? "confirmed" : "awaiting_deposit", status: "PENDING_DEPOSIT", notification: "pending",
+  } });
+  const legacy = JSON.stringify([receipt], (_key, value) =>
+    value?.network === "bitcoin" && value.kind === "native" ? { ...value, kind: "bitcoin" } : value);
+  storage.set(legacyStorageKey, legacy);
+  store.sync();
+  storage.set(legacyStorageKey, "[]");
+  store.sync();
+  store.patch(receipt.id, { near: { ...receipt.near!, status: "KNOWN_DEPOSIT_TX" } });
+  const [restored] = loadStoredActivities("mainnet");
+  expect(restored).toMatchObject({ id: receipt.id, near: { quote, status: "KNOWN_DEPOSIT_TX" } });
+  expect(activityRoute(restored)?.recovery).toEqual(historical.recovery);
+  expect(activityRoute(restored)?.recovery).not.toEqual(findBridgeRoute(routeId)!.recovery);
 });
 
 it.each([null, "", "null", "{}"])("returns no receipts for absent or non-array data: %s", raw => {
@@ -133,6 +159,74 @@ it("persists and patches receipt progress without losing acknowledged transactio
   expect(loadStoredActivities()).toMatchObject([
     { id: activity.id, status: "complete", destinationTxHash: "0xarrival", destinationTxAt: 1_700_000_100_000, updatedAt: 1_700_000_100_000 }, { id: other.id, status: other.status },
   ]);
+});
+
+function bitcoinFundingAttempt() {
+  const route = findBridgeRoute("mainnet:near-bitcoin-btc-to-miden-wbtc")!;
+  return createActivity(route, "0.001", { id: "funding", near: {
+    quote: nearQuoteSchema.parse(bitcoinQuotes.receive.prepared), submission: "attempted", status: "PENDING_DEPOSIT", notification: "pending",
+  } });
+}
+
+it("tracks a funded v3 receipt across reloads while unreadable v2 history prevents a new funding claim", async () => {
+  const receipt = bitcoinFundingAttempt();
+  receipt.sourceTxHash = "ab".repeat(32);
+  receipt.near!.submission = "accepted";
+  saveActivities([receipt]);
+  storage.set(legacyStorageKey, "{broken");
+  expect(await store.sync()).toBe(false);
+  expect(store.get(receipt.id)?.activity.sourceTxHash).toBe(receipt.sourceTxHash);
+  store.patch(receipt.id, { near: { ...receipt.near!, status: "PROCESSING" } });
+  const reopened = new ActivityStore(activityPersistence);
+  expect(await reopened.sync()).toBe(false);
+  expect(reopened.get(receipt.id)).toMatchObject({ activity: { sourceTxHash: receipt.sourceTxHash, near: { status: "PROCESSING" } } });
+  expect(reopened.get(receipt.id)?.unsavedChanges).toBeUndefined();
+  expect(storage.get(legacyStorageKey)).toBe("{broken");
+  storage.set(legacyStorageKey, "[]");
+  expect(await reopened.sync()).toBe(true);
+});
+
+it("keeps an acknowledged funding attempt when another tab is midway through a history update", async () => {
+  const deposit = bitcoinFundingAttempt();
+  const funding = new ActivityStore(activityPersistence);
+  let tail = Promise.resolve();
+  vi.stubGlobal("navigator", { locks: { request: (_name: string, callback: () => void) => {
+    tail = tail.then(callback);
+    return tail;
+  } } });
+  saveActivities([activity]);
+  await store.sync();
+  await funding.sync();
+  // Start the funding write after the monitor has read the old history.
+  vi.spyOn(window.localStorage, "getItem").mockImplementationOnce(key => {
+    const beforeFunding = storage.get(key) ?? null;
+    funding.record(deposit);
+    return beforeFunding;
+  });
+  store.patch(activity.id, { destinationTxHash: "0xarrival" });
+  await store.sync();
+  await funding.sync();
+  const reopened = new ActivityStore(activityPersistence);
+  await reopened.sync();
+  expect(reopened.get(deposit.id)?.activity.near?.submission).toBe("attempted");
+  expect(reopened.get(activity.id)?.activity.destinationTxHash).toBe("0xarrival");
+});
+
+it("keeps the funding claim when an older portal writes only the providers it recognizes", () => {
+  storage.set(legacyStorageKey, JSON.stringify([activity]));
+  store.sync();
+  store.patch(activity.id, { midenTxId: "0xmiden" });
+  const deposit = store.record(bitcoinFundingAttempt());
+  expect(store.get(deposit.id)?.unsavedChanges).toBeUndefined();
+  // The prior release drops unknown providers on its next write, even when it
+  // reads after the funding tab commits. It can still report new and late transfers.
+  const completed = { ...activity, status: "complete", destinationTxHash: "0xarrival", updatedAt: Date.now() + 1000 };
+  storage.set(legacyStorageKey, JSON.stringify([completed, { ...activity, id: "old-tab-deposit" }]));
+  const reopened = new ActivityStore(activityPersistence);
+  reopened.sync();
+  expect(reopened.get(deposit.id)?.activity.near?.submission).toBe("attempted");
+  expect(reopened.get(activity.id)?.activity).toMatchObject({ status: "complete", midenTxId: "0xmiden", destinationTxHash: "0xarrival" });
+  expect(reopened.get("old-tab-deposit")).toBeDefined();
 });
 
 it.each([false, true])("keeps history newest first through late updates and reconciliation (storage unavailable: %s)", unavailable => {

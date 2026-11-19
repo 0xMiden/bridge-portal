@@ -15,9 +15,10 @@ export function BridgeTabs({ environment, children }: { environment: BridgeEnvir
   const { expanded, scrollY, setExpanded, rememberScroll } = useActivityNavigation(environment);
   const { receipts } = useActivitySnapshot();
   const activities = receipts.map(receipt => receipt.activity).filter(activity => activity.environment === environment);
-  const inFlight = activities.filter(activity => activity.status !== "complete" && activity.status !== "failed" &&
-    !(activity.status === "signature" && !activity.sourceTxHash));
-  const past = activities.filter(activity => activity.status === "complete" || activity.status === "failed").slice(0, 12);
+  const terminal = new Set(["complete", "failed", "refunded"]);
+  const inFlight = activities.filter(activity => !terminal.has(activity.status) &&
+    !(activity.status === "signature" && !activity.sourceTxHash && !activity.near));
+  const past = activities.filter(activity => terminal.has(activity.status)).slice(0, 12);
 
   useLayoutEffect(() => {
     if (activeTab === "activity" && scrollY !== null) {

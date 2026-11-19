@@ -80,14 +80,14 @@ function setup(provider: "agglayer" | "epoch") {
   const requestTransaction = vi.fn().mockResolvedValue(REQUEST);
   const waitForTransaction = vi.fn();
   const input: TransferSubmission = {
-    routeId: route.id, amount: "1", midenAccount: MIDEN, evmAddress: SPONSOR,
-    insufficientBalance: false, evmBalance: "10", midenAsset: { ...route.source, amountRaw: 10000000000n },
-    evmWallet: { connected: true, address: SPONSOR },
+    routeId: route.id, amount: "1", midenAccount: MIDEN, externalAddress: SPONSOR,
+    insufficientBalance: false, sourceBalance: "10", midenAsset: { ...route.source, amountRaw: 10000000000n },
+    externalWallet: { family: "evm", connected: true, address: SPONSOR },
     midenWallet: { connected: true, address: MIDEN, requestTransaction, waitForTransaction },
     quote: { kind: "epoch", received: "1", validity: { kind: "time", expiresAt: Date.now() + 60000 },
-      request: { routeId: route.id, recovery: route.recovery, amount: "1", midenAccount: MIDEN, evmAddress: SPONSOR } },
+      request: { routeId: route.id, recovery: route.recovery, amount: "1", midenAccount: MIDEN, externalAddress: SPONSOR } },
   };
-  const effects = { openEvmWallet: vi.fn(), onError: vi.fn(), onSubmittingChange: vi.fn(), onPhaseChange: vi.fn(), activities: new ActivityStore(activityPersistence), navigate: vi.fn() };
+  const effects = { openExternalWallet: vi.fn(), onError: vi.fn(), onSubmittingChange: vi.fn(), onPhaseChange: vi.fn(), activities: new ActivityStore(activityPersistence), navigate: vi.fn() };
   return { input, effects, requestTransaction, waitForTransaction };
 }
 
