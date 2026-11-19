@@ -46,10 +46,13 @@ function assertBreadAccount({ input }: SubmissionContext) {
   input.midenWallet.assertAccount(input.midenAccount);
 }
 
-async function requestFunding(context: SubmissionContext, operation: NearOperation, assertExternal: () => Promise<void>, send: () => Promise<string>) {
+type WalletRequest = () => Promise<string>;
+
+async function requestFunding(context: SubmissionContext, operation: NearOperation, prepareRequest: () => Promise<WalletRequest>) {
+  let send: WalletRequest;
   try {
     // Saving the claim can wait behind another tab's storage lock.
-    await assertExternal();
+    send = await prepareRequest();
     assertBreadAccount(context);
     if (nearQuoteExpiry(operation.quote) <= Date.now()) throw new Error("NEAR quote expired. Review a fresh quote.");
   } catch (error) {
@@ -90,7 +93,7 @@ async function submitExternalDeposit(context: SubmissionContext, binding: NearIn
   verifyNearQuote(quote, binding, false);
   const operation = await claimDeposit(context, id, quote, deposit.networkFee);
   context.phase(deposit.prompt);
-  const hash = await requestFunding(context, operation, deposit.assertWallet, deposit.send);
+  const hash = await requestFunding(context, operation, deposit.prepareSend);
   const sourceTxHash = validateNearTxHash(context.route.source, hash);
   const accepted = { ...operation, submission: "accepted" as const };
   await context.persist({ sourceTxHash, near: accepted });
@@ -117,7 +120,10 @@ async function submitMidenDeposit(context: SubmissionContext, binding: NearInput
   if (!input.midenWallet.requestTransaction || !input.midenWallet.waitForTransaction) throw new Error("Reconnect Bread before transferring.");
   const operation = await claimDeposit(context, id, quote, networkFee, deposit.noteId);
   context.phase("Confirm the public deposit in Bread…");
-  const requestId = await requestFunding(context, operation, () => assertRecipientAccount(input), () => input.midenWallet.requestTransaction!(deposit.transaction));
+  const requestId = await requestFunding(context, operation, async () => {
+    await assertRecipientAccount(input);
+    return () => input.midenWallet.requestTransaction!(deposit.transaction);
+  });
   context.update({ midenWalletRequestId: requestId, near: { ...operation, submission: "accepted" } });
   const confirmed = await input.midenWallet.waitForTransaction(requestId);
   if (!confirmed.outputNotes?.some(note => note.id().toString() === deposit.noteId) || !/^0x[\da-f]{64}$/i.test(confirmed.txHash)) {

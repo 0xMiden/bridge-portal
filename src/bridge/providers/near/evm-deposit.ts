@@ -39,15 +39,16 @@ export async function prepareEvmDeposit(context: SubmissionContext, quote: NearQ
   const gasPrice = fees?.maxFeePerGas ?? await client.getGasPrice();
   const fee = gas * gasPrice;
   if (nativeBalance < transaction.value + fee) throw new Error(`Not enough ${chain.nativeCurrency.symbol} for the deposit and network fee.`);
+  const send = () => provider.request<string>({
+    method: "eth_sendTransaction", params: [{ from: account, to: transaction.to, data: transaction.data,
+      value: toHex(transaction.value), chainId: toHex(chain.id), gas: toHex(gas),
+      ...(fees ? { maxFeePerGas: toHex(fees.maxFeePerGas), maxPriorityFeePerGas: toHex(fees.maxPriorityFeePerGas) } : { gasPrice: toHex(gasPrice) }),
+    }],
+  });
   return {
     assertWallet,
     networkFee: `${formatUnits(fee, chain.nativeCurrency.decimals)} ${chain.nativeCurrency.symbol}`,
     prompt: "Confirm the deposit in your EVM wallet…",
-    send: () => provider.request<string>({
-      method: "eth_sendTransaction", params: [{ from: account, to: transaction.to, data: transaction.data,
-        value: toHex(transaction.value), chainId: toHex(chain.id), gas: toHex(gas),
-        ...(fees ? { maxFeePerGas: toHex(fees.maxFeePerGas), maxPriorityFeePerGas: toHex(fees.maxPriorityFeePerGas) } : { gasPrice: toHex(gasPrice) }),
-      }],
-    }),
+    prepareSend: async () => { await assertWallet(); return send; },
   };
 }

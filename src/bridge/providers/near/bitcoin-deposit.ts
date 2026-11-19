@@ -13,10 +13,17 @@ export function prepareBitcoinDeposit(input: TransferSubmission, quote: NearQuot
   const amount = quote.quote.amountIn;
   // Some connectors pass satoshis to the extension as a JavaScript number.
   if (BigInt(amount) > BigInt(Number.MAX_SAFE_INTEGER)) throw new Error("This Bitcoin amount exceeds the wallet limit.");
+  const sender = quote.quoteRequest.refundTo;
+  const assertWallet = () => wallet.assertAccount(sender);
   return {
-    assertWallet: () => wallet.assertAccount(input.externalAddress),
+    assertWallet,
     networkFee: "Paid in your Bitcoin wallet",
     prompt: "Confirm the deposit in your Bitcoin wallet…",
-    send: () => provider.sendTransfer({ recipient, amount }),
+    prepareSend: async () => {
+      await assertWallet();
+      const payment = { recipient, amount };
+      if (provider.prepareTransfer) return provider.prepareTransfer(payment, sender);
+      return () => provider.sendTransfer(payment);
+    },
   };
 }

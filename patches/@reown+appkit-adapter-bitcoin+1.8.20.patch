@@ -89,29 +89,38 @@ diff --git a/node_modules/@reown/appkit-adapter-bitcoin/dist/esm/src/connectors/
          const publicKey = await this.wallet.getPublicKey();
          const accountList = accounts.map(account => ({
              address: account,
-@@ -49,15 +50,16 @@
+@@ -49,16 +50,24 @@
          return this.wallet.signMessage(params.message, protocol);
      }
      async sendTransfer(params) {
 -        const network = ChainController.getActiveCaipNetwork(ConstantsUtil.CHAIN.BITCOIN);
 -        if (!network) {
 -            throw new Error('No active network available');
--        }
-         const from = (await this.wallet.getAccounts())[0];
++        const send = await this.prepareTransfer(params);
++        return send();
++    }
++    async prepareTransfer(params, reviewedSender) {
++        const satoshis = Number(params.amount);
++        if (!Number.isSafeInteger(satoshis) || satoshis <= 0) {
++            throw new Error('Invalid satoshi amount');
+         }
+-        const from = (await this.wallet.getAccounts())[0];
++        const wallet = this.wallet;
++        await this.assertNetwork();
++        const from = (await wallet.getAccounts())[0];
          if (!from) {
              throw new Error('No account available');
          }
 -        const result = await this.wallet.sendBitcoin(params.recipient, Number(UnitsUtil.parseSatoshis(params.amount, network)));
-+        const satoshis = Number(params.amount);
-+        if (!Number.isSafeInteger(satoshis) || satoshis <= 0) {
-+            throw new Error('Invalid satoshi amount');
+-        return result;
++        if (reviewedSender !== undefined && from !== reviewedSender) {
++            throw new Error('Your Bitcoin payment account changed. Review the transfer again.');
 +        }
-+        await this.assertNetwork();
-+        const result = await this.wallet.sendBitcoin(params.recipient, satoshis);
-         return result;
++        return () => wallet.sendBitcoin(params.recipient, satoshis);
      }
      async signPSBT(params) {
-@@ -89,6 +91,20 @@
+         const psbtHex = Buffer.from(params.psbt, 'base64').toString('hex');
+@@ -89,6 +98,20 @@
              txid
          };
      }
@@ -132,7 +141,7 @@ diff --git a/node_modules/@reown/appkit-adapter-bitcoin/dist/esm/src/connectors/
      async switchNetwork(caipNetworkId) {
          const network = this.getNetwork(caipNetworkId);
          await this.wallet.switchChain(network);
-@@ -97,16 +113,19 @@
+@@ -97,16 +120,19 @@
          return Promise.reject(new MethodNotSupportedError(this.id, 'request'));
      }
      onAccountsChanged(account) {
@@ -155,3 +164,38 @@ diff --git a/node_modules/@reown/appkit-adapter-bitcoin/dist/esm/src/connectors/
      }
      static getWallet(params) {
          if (!CoreHelperUtil.isClient()) {
+diff --git a/node_modules/@reown/appkit-adapter-bitcoin/dist/esm/src/connectors/OKXConnector.js b/node_modules/@reown/appkit-adapter-bitcoin/dist/esm/src/connectors/OKXConnector.js
+--- a/node_modules/@reown/appkit-adapter-bitcoin/dist/esm/src/connectors/OKXConnector.js
++++ b/node_modules/@reown/appkit-adapter-bitcoin/dist/esm/src/connectors/OKXConnector.js
+@@ -54,20 +54,24 @@
+         return this.wallet.signMessage(params.message, protocol);
+     }
+     async sendTransfer(params) {
++        const send = await this.prepareTransfer(params);
++        return send();
++    }
++    async prepareTransfer(params, reviewedSender) {
+         const network = ChainController.getActiveCaipNetwork(ConstantsUtil.CHAIN.BITCOIN);
+         if (!network) {
+             throw new Error('No active network available');
+         }
+-        const from = (await this.wallet.getAccounts())[0];
++        const wallet = this.wallet;
++        const from = (await wallet.getAccounts())[0];
+         if (!from) {
+             throw new Error('No account available');
+         }
+-        const result = await this.wallet.send({
+-            from,
+-            to: params.recipient,
+-            value: UnitsUtil.parseSatoshis(params.amount, network)
+-        });
+-        return result.txhash;
++        if (reviewedSender !== undefined && from !== reviewedSender) {
++            throw new Error('Your Bitcoin payment account changed. Review the transfer again.');
++        }
++        const payment = { from, to: params.recipient, value: UnitsUtil.parseSatoshis(params.amount, network) };
++        return async () => (await wallet.send(payment)).txhash;
+     }
+     async signPSBT(params) {
+         const psbtHex = Buffer.from(params.psbt, 'base64').toString('hex');

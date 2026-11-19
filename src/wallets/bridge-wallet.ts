@@ -6,6 +6,8 @@ import type { TransferSubmission } from "../bridge/core/submission";
 import type { EvmProvider } from "./evm/evm-wallet";
 
 export type BitcoinProvider = Pick<BitcoinConnector, "getAccountAddresses" | "sendTransfer"> & {
+  /** Connectors with their own asynchronous sender check can bind it before the prompt. */
+  prepareTransfer?: (params: Parameters<BitcoinConnector["sendTransfer"]>[0], reviewedSender: string) => Promise<() => Promise<string>>;
   type?: string;
   wallet?: { features?: Readonly<Record<string, unknown>> };
   provider?: { session?: { namespaces: Record<string, { methods: string[] }> } };

@@ -225,6 +225,35 @@ it.each(["WalletStandardConnector", "BitcoinWalletConnectConnector"])("checks %s
   expect(test.effects.onError).toHaveBeenCalledWith(expect.stringMatching(/supports payments/));
 });
 
+it.each([
+  ["UniSat", "changed"], ["OKX", "changed"], ["UniSat", "unavailable"], ["OKX", "accepted"],
+] as const)("binds the final %s sender read when the account is %s", async (name, outcome) => {
+  const test = setup();
+  const { ChainController } = await import("@reown/appkit-controllers");
+  const { bitcoin } = await import("@reown/appkit/networks");
+  vi.spyOn(ChainController, "getActiveCaipNetwork").mockReturnValue(bitcoin);
+  const send = vi.fn().mockResolvedValue({ txhash: "ab".repeat(32) });
+  const wallet = { getChain: async () => ({ enum: "BITCOIN_MAINNET" }), getAccounts: async () => {
+    expect(loadStoredActivities()[0].near?.submission).toBe("attempted");
+    if (outcome === "unavailable") throw new Error("Bitcoin accounts unavailable");
+    return [outcome === "changed" ? "3J98t1WpEZ73CNmQviecrnyiWrnqRhWNLy" : test.input.externalAddress];
+  }, send, sendBitcoin: send };
+  const entry = import.meta.resolve("@reown/appkit-adapter-bitcoin");
+  const connector = name === "UniSat"
+    ? new (await import(new URL("../src/connectors/UnisatConnector/index.js", entry).href)).UnisatConnector({ id: "unisat", wallet, requestedChains: [bitcoin] })
+    : new (await import(new URL("../src/connectors/OKXConnector.js", entry).href)).OKXConnector({ wallet, requestedChains: [bitcoin], requestedCaipNetworkId: bitcoin.caipNetworkId });
+  if (test.input.externalWallet.family !== "bitcoin") throw new Error("Expected Bitcoin wallet");
+  test.input.externalWallet.provider = connector;
+  await submitBridgeTransfer(test.input, test.effects);
+  if (outcome === "accepted") {
+    expect(send).toHaveBeenCalledExactlyOnceWith({ from: test.input.externalAddress, to: test.quote.quote.depositAddress, value: "0.001" });
+    expect(loadStoredActivities()[0].near?.submission).toBe("accepted");
+  } else {
+    expect(send).not.toHaveBeenCalled();
+    expect(loadStoredActivities()[0].near?.submission).toBe("not_sent");
+  }
+});
+
 it.each(["storage", "cap", "refund-address", "quote-address", "expired", "disconnected", "account-changed", "account-changed-during-prepare"] as const)("blocks the Bitcoin payment on %s failure", async failure => {
   const test = setup();
   if (failure === "storage") vi.spyOn(window.localStorage, "setItem").mockImplementation(() => { throw new Error("Quota"); });
