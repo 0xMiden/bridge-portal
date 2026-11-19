@@ -15,6 +15,7 @@ const activity = createActivity(findBridgeRoute("agglayer-eth-to-sepolia")!, "1"
   agglayerExitHashes: [`0x${"ab".repeat(32)}`],
 });
 let storage: Map<string, string>;
+const legacyStorageKey = "miden.bridge.ui.activities.v2";
 let store: ActivityStore;
 beforeEach(() => {
   storage = new Map();
@@ -80,7 +81,9 @@ it.each([
   } });
   const legacy = JSON.stringify([receipt], (_key, value) =>
     value?.network === "bitcoin" && value.kind === "native" ? { ...value, kind: "bitcoin" } : value);
-  storage.set(activityStorageKey, legacy);
+  storage.set(legacyStorageKey, legacy);
+  store.sync();
+  storage.set(legacyStorageKey, "[]");
   store.sync();
   store.patch(receipt.id, { near: { ...receipt.near!, status: "KNOWN_DEPOSIT_TX" } });
   const [restored] = loadStoredActivities("mainnet");
@@ -158,11 +161,15 @@ it("persists and patches receipt progress without losing acknowledged transactio
   ]);
 });
 
-it("keeps an acknowledged funding attempt when another tab is midway through a history update", async () => {
+function bitcoinFundingAttempt() {
   const route = findBridgeRoute("mainnet:near-bitcoin-btc-to-miden-wbtc")!;
-  const deposit = createActivity(route, "0.001", { id: "funding", near: {
+  return createActivity(route, "0.001", { id: "funding", near: {
     quote: nearQuoteSchema.parse(bitcoinQuotes.receive.prepared), submission: "attempted", status: "PENDING_DEPOSIT", notification: "pending",
   } });
+}
+
+it("keeps an acknowledged funding attempt when another tab is midway through a history update", async () => {
+  const deposit = bitcoinFundingAttempt();
   const funding = new ActivityStore(activityPersistence);
   let tail = Promise.resolve();
   vi.stubGlobal("navigator", { locks: { request: (_name: string, callback: () => void) => {
@@ -170,8 +177,8 @@ it("keeps an acknowledged funding attempt when another tab is midway through a h
     return tail;
   } } });
   saveActivities([activity]);
-  store.sync();
-  funding.sync();
+  await store.sync();
+  await funding.sync();
   // Start the funding write after the monitor has read the old history.
   vi.spyOn(window.localStorage, "getItem").mockImplementationOnce(key => {
     const beforeFunding = storage.get(key) ?? null;
@@ -185,6 +192,23 @@ it("keeps an acknowledged funding attempt when another tab is midway through a h
   await reopened.sync();
   expect(reopened.get(deposit.id)?.activity.near?.submission).toBe("attempted");
   expect(reopened.get(activity.id)?.activity.destinationTxHash).toBe("0xarrival");
+});
+
+it("keeps the funding claim when an older portal writes only the providers it recognizes", () => {
+  storage.set(legacyStorageKey, JSON.stringify([activity]));
+  store.sync();
+  store.patch(activity.id, { midenTxId: "0xmiden" });
+  const deposit = store.record(bitcoinFundingAttempt());
+  expect(store.get(deposit.id)?.unsavedChanges).toBeUndefined();
+  // The prior release drops unknown providers on its next write, even when it
+  // reads after the funding tab commits. It can still report new and late transfers.
+  const completed = { ...activity, status: "complete", destinationTxHash: "0xarrival", updatedAt: Date.now() + 1000 };
+  storage.set(legacyStorageKey, JSON.stringify([completed, { ...activity, id: "old-tab-deposit" }]));
+  const reopened = new ActivityStore(activityPersistence);
+  reopened.sync();
+  expect(reopened.get(deposit.id)?.activity.near?.submission).toBe("attempted");
+  expect(reopened.get(activity.id)?.activity).toMatchObject({ status: "complete", midenTxId: "0xmiden", destinationTxHash: "0xarrival" });
+  expect(reopened.get("old-tab-deposit")).toBeDefined();
 });
 
 it.each([false, true])("keeps history newest first through late updates and reconciliation (storage unavailable: %s)", unavailable => {

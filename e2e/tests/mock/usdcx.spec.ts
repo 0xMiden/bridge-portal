@@ -268,8 +268,8 @@ test("a saved deposit resumes tracking after reload without claiming delivery du
   await expect(receipt.getByTitle("1.000001 USDCx", { exact: true })).toHaveText("1 USDCx");
   await expect(receipt.getByRole("link", { name: /Arc explorer/i })).toHaveAttribute("href", `https://explorer.testnet.arc.io/tx/${hash}`);
   await expect(receipt.getByText("Miden note", { exact: true }).locator("..")).toContainText("Pending");
-  const stored = () => page.evaluate(() => JSON.parse(localStorage.getItem("miden.bridge.ui.activities.v2")!)[0]);
-  await expect.poll(async () => (await stored()).xreserveStatus).toBe("confirmed");
+  const stored = () => page.evaluate(() => JSON.parse(localStorage.getItem("miden.bridge.ui.activities.v3") ?? "[]")[0]);
+  await expect.poll(async () => (await stored())?.xreserveStatus).toBe("confirmed");
 
   unavailable = true;
   const previousReads = statusReads;

@@ -126,7 +126,7 @@ test("network selection isolates forms, preferences and tabs", async ({ bridge, 
 });
 
 test("receipt links restore their saved network and preserve testnet receipts", async ({ page, bridge }, info) => {
-  await page.evaluate(routeSnapshot => localStorage.setItem("miden.bridge.ui.activities.v2", JSON.stringify([{
+  await page.evaluate(routeSnapshot => localStorage.setItem("miden.bridge.ui.activities.v3", JSON.stringify([{
     id: "legacy", routeSnapshot, environment: "testnet", mode: "receive", provider: "agglayer", status: "complete", amount: "0.01", asset: "ETH",
     summary: "Receive 0.01 ETH on Miden", eta: "10-20 min", txHash: "0xpending", updatedAt: 1_700_000_000_000,
   }])), routesForEnvironment("testnet").find(route => route.id === "agglayer-eth-to-miden")!);
@@ -155,9 +155,9 @@ test("receipt links restore their saved network and preserve testnet receipts", 
     route.provider === "agglayer" && route.mode === "receive" && route.source.network === "ethereum");
   expect(mainnetRoute).toBeDefined();
   await page.evaluate(routeSnapshot => {
-    const activities = JSON.parse(localStorage.getItem("miden.bridge.ui.activities.v2")!);
+    const activities = JSON.parse(localStorage.getItem("miden.bridge.ui.activities.v3")!);
     activities.push({ ...activities[0], id: "mainnet-receipt", environment: "mainnet", routeSnapshot });
-    localStorage.setItem("miden.bridge.ui.activities.v2", JSON.stringify(activities));
+    localStorage.setItem("miden.bridge.ui.activities.v3", JSON.stringify(activities));
   }, mainnetRoute);
   await page.goto("/activity/mainnet-receipt");
   await expect(page.getByRole("combobox", { name: "Bridge network" })).toHaveText("Mainnet");

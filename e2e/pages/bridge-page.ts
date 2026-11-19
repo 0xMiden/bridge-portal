@@ -116,7 +116,7 @@ export class BridgePage {
   /** Inspect the durable receipt format used for reload/recovery. */
   async readActivities(): Promise<Array<Record<string, unknown>>> {
     return this.page.evaluate(
-      () => JSON.parse(localStorage.getItem("miden.bridge.ui.activities.v2") ?? "[]") as Array<Record<string, unknown>>,
+      () => JSON.parse(localStorage.getItem("miden.bridge.ui.activities.v3") ?? "[]") as Array<Record<string, unknown>>,
     );
   }
 

@@ -96,7 +96,7 @@ test("Bitcoin deposit requests exact satoshis through Reown once and tracks deli
     requests.push(request);
     // UniSat's API takes integer satoshis, not a decimal BTC amount.
     expect(request).toEqual({ wallet: "bitcoin", method: "sendBitcoin", params: [prepared.quote.depositAddress, 100000] });
-    const receipts = await page.evaluate(() => JSON.parse(localStorage.getItem("miden.bridge.ui.activities.v2") ?? "[]"));
+    const receipts = await page.evaluate(() => JSON.parse(localStorage.getItem("miden.bridge.ui.activities.v3") ?? "[]"));
     expect(receipts).toMatchObject([{ near: { submission: "attempted", quote: prepared } }]);
     return { result: "ab".repeat(32) };
   });
@@ -199,7 +199,7 @@ test("Bitcoin withdrawal reviews the recipient, funds once through Bread and res
       expect(notes).toHaveLength(1);
       expect(notes[0].metadata().noteType()).toBe(sdk.NoteType.Public);
       expect(notes[0].assets().fungibleAssets().map(asset => [asset.faucetId().toString(), asset.amount()])).toEqual([[faucetId, 100000n]]);
-      const receipts = await page.evaluate(() => JSON.parse(localStorage.getItem("miden.bridge.ui.activities.v2") ?? "[]"));
+      const receipts = await page.evaluate(() => JSON.parse(localStorage.getItem("miden.bridge.ui.activities.v3") ?? "[]"));
       expect(receipts).toMatchObject([{ midenNoteId: notes[0].id().toString(), near: { submission: "attempted", quote: sendPrepared } }]);
       outputNote = Buffer.from(notes[0].serialize()).toString("base64");
       return { result: { transactionId: "bitcoin-withdrawal-request" } };
@@ -233,7 +233,7 @@ test("Bitcoin withdrawal reviews the recipient, funds once through Bread and res
   delivered = true;
   await expect(page.getByText("Complete", { exact: true })).toBeVisible();
   await expect(page.getByRole("link", { name: "View on mempool.space" })).toHaveAttribute("href", `https://mempool.space/tx/${"cd".repeat(32)}`);
-  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem("miden.bridge.ui.activities.v2") ?? "[]")))
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem("miden.bridge.ui.activities.v3") ?? "[]")))
     .toMatchObject([{ receivedAmount: "0.00097848", near: { quote: sendPrepared, submission: "confirmed", status: "SUCCESS" } }]);
   expect(allocations).toBe(1);
   expect(requests.map(request => request.method)).toEqual(["requestTransaction", "waitForTransaction"]);

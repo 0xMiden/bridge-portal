@@ -7,7 +7,7 @@ import type { Activity } from "../../../src/app/lib/bridge-presentation";
 import { stubNetwork } from "../../fixtures/mock-network";
 import { startOnTestnet } from "../../fixtures/testnet";
 
-const STORAGE_KEY = "miden.bridge.ui.activities.v2";
+const STORAGE_KEY = "miden.bridge.ui.activities.v3";
 const SOURCE_TX = `0x${"ab".repeat(32)}`;
 const EXIT_HASH = `0x${"ef".repeat(32)}`;
 const DESTINATION_TX = `0x${"cd".repeat(32)}`;
@@ -254,7 +254,7 @@ test("an unsaved receipt survives client navigation and can be downloaded", asyn
   await page.evaluate(() => {
     const setItem = Storage.prototype.setItem;
     Storage.prototype.setItem = function (key, value) {
-      if (key === "miden.bridge.ui.activities.v2") throw new DOMException("Storage full", "QuotaExceededError");
+      if (key === "miden.bridge.ui.activities.v3") throw new DOMException("Storage full", "QuotaExceededError");
       setItem.call(this, key, value);
     };
   });
@@ -264,7 +264,7 @@ test("an unsaved receipt survives client navigation and can be downloaded", asyn
   await expect(page.getByRole("alert").filter({ hasText: "This receipt could not be saved" }))
     .toContainText("Download it before refreshing or closing this tab");
   await expect(page.getByText("Safe to leave.", { exact: false })).toBeHidden();
-  expect(await page.evaluate(() => localStorage.getItem("miden.bridge.ui.activities.v2"))).toBeNull();
+  expect(await page.evaluate(() => localStorage.getItem("miden.bridge.ui.activities.v3"))).toBeNull();
 
   const receiptUrl = page.url();
   await page.getByRole("link", { name: "New transfer", exact: true }).click();

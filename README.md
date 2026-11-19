@@ -190,9 +190,9 @@ changes do not automatically alter a running portal.
 
 Each transfer saves its original assets and validated bridge configuration in
 its receipt. Recovery uses that context after a deployment changes or removes a
-route; historical deployments are not accumulated in the bundle. The activity
-key is `miden.bridge.ui.activities.v2`; earlier transfers are intentionally not
-migrated. Status APIs accept bounded recovery payloads and validate network,
+route. Current receipts use `miden.bridge.ui.activities.v3`. The portal also reads
+v2 receipts and preserves old NEAR funding claims when it opens. An older tab
+can continue updating its own history during a rollout. Status APIs accept bounded recovery payloads and validate network,
 chain, domain and approved service roots. New Circle quote/validation requests
 must match the server's bundled configuration and an enabled direction; a stale
 client is asked to reload and review again. On-chain preflight checks still run

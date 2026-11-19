@@ -1,6 +1,7 @@
 import { receiptRouteSchema } from "../../bridge/core/receipt-route";
 import { bridgeProviders } from "../../bridge/providers/registry";
-import { normalizeActivityState, type ActivityPersistence } from "../../bridge/activity";
+import { applyActivityPatch, normalizeActivityState, type ActivityPersistence } from "../../bridge/activity";
+import { activityStartedAt } from "../../bridge/core/rules";
 import { routeEnvironment, routesForEnvironment } from "../../bridge/core/routes";
 import { isFlowMode, type BridgeProvider, type FlowMode } from "../../bridge/core/models";
 import { isBridgeProvider } from "../../bridge/providers/registry";
@@ -11,7 +12,12 @@ import { nearMidenAddress, nearOperationSchema } from "../../bridge/providers/ne
 import { nearExpectedAmount } from "../../bridge/providers/near/operation";
 import { normalizeMidenAccountHex } from "../../bridge/miden-address";
 
-export const activityStorageKey = "miden.bridge.ui.activities.v2";
+export const activityStorageKey = "miden.bridge.ui.activities.v3";
+const legacyActivityStorageKey = "miden.bridge.ui.activities.v2";
+
+export function isActivityStorageEvent(key: string | null) {
+  return key === null || key === activityStorageKey || key === legacyActivityStorageKey;
+}
 
 // Persist the last-selected route so a refresh returns to it (e.g. Agglayer)
 // instead of snapping back to the default every time.
@@ -121,20 +127,56 @@ function normalizeActivities(parsed: unknown): Activity[] {
   });
 }
 
-/** Validate and migrate untrusted historical receipts at the storage boundary. */
-export function loadStoredActivities(environment?: BridgeEnvironment): Activity[] {
-  const raw = window.localStorage.getItem(activityStorageKey);
-  const activities = raw ? normalizeActivities(JSON.parse(raw)) : [];
-  return activities.filter(activity => !environment || activity.environment === environment);
+function readRows(key: string) {
+  const raw = window.localStorage.getItem(key);
+  return raw ? normalizeActivities(JSON.parse(raw)) : [];
 }
 
 export function saveActivities(activities: Activity[]) {
   window.localStorage.setItem(activityStorageKey, JSON.stringify(activities));
 }
 
+function readHistory() {
+  const saved = new Map(readRows(activityStorageKey).map(activity => [activity.id, activity]));
+  let needsMigration = false;
+  const history = new Map(saved);
+  for (const legacy of readRows(legacyActivityStorageKey)) {
+    const current = saved.get(legacy.id);
+    if (!current) {
+      history.set(legacy.id, legacy);
+      // Protect earlier NEAR receipts as soon as the current portal opens.
+      if (legacy.provider === "near") {
+        saved.set(legacy.id, legacy);
+        needsMigration = true;
+      }
+    } else if (legacy.updatedAt > current.updatedAt && legacy.provider === current.provider && legacy.mode === current.mode &&
+        legacy.routeId === current.routeId && legacy.near?.quote.signature === current.near?.quote.signature) {
+      const merged = applyActivityPatch(current, legacy, legacy.updatedAt);
+      history.set(legacy.id, merged);
+      saved.set(legacy.id, merged);
+      needsMigration = true;
+    }
+  }
+  return {
+    activities: [...history.values()],
+    needsMigration,
+    write(changes: Activity[]) {
+      // Untouched legacy history stays in v2. Old tabs can keep writing there
+      // without replacing a current funding claim.
+      for (const activity of changes) saved.set(activity.id, activity);
+      saveActivities([...saved.values()]);
+    },
+  };
+}
+
+/** Validate and migrate untrusted historical receipts at the storage boundary. */
+export function loadStoredActivities(environment?: BridgeEnvironment): Activity[] {
+  return readHistory().activities.filter(activity => !environment || activity.environment === environment)
+    .sort((a, b) => activityStartedAt(b) - activityStartedAt(a));
+}
+
 export const activityPersistence: ActivityPersistence = {
-  read: loadStoredActivities,
-  write: saveActivities,
+  read: readHistory,
   withWriteLock: commit => globalThis.navigator?.locks
     ? navigator.locks.request(activityStorageKey, commit).catch(() => false)
     : commit(),

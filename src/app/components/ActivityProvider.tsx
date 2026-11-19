@@ -2,7 +2,7 @@
 
 import { createContext, useContext, useEffect, useState, useSyncExternalStore, type ReactNode } from "react";
 import { ActivityStore } from "../../bridge/activity";
-import { activityPersistence, activityStorageKey } from "../lib/bridge-persistence";
+import { activityPersistence, isActivityStorageEvent } from "../lib/bridge-persistence";
 
 const ActivityContext = createContext<ActivityStore | null>(null);
 
@@ -11,7 +11,7 @@ export function ActivityProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     store.sync();
     const onStorage = (event: StorageEvent) => {
-      if (event.key === activityStorageKey || event.key === null) store.sync();
+      if (isActivityStorageEvent(event.key)) store.sync();
     };
     window.addEventListener("storage", onStorage);
     window.addEventListener("focus", store.sync);

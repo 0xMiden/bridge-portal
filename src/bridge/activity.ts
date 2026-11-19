@@ -19,11 +19,11 @@ export function normalizeActivityState<T extends BridgeActivity>(activity: T): T
 }
 
 /** Merge observations without allowing stale polls to regress a terminal transfer. */
-export function applyActivityPatch(activity: Activity, patch: Partial<Activity>): Activity {
+export function applyActivityPatch(activity: Activity, patch: Partial<Activity>, observedAt = Date.now()): Activity {
   if (patch.near) patch = mergeNearActivityPatch(activity, patch);
   const previous = activityState(activity);
   const observed = Object.fromEntries(Object.entries(patch).filter(([, value]) => value !== undefined));
-  let next = normalizeActivityState({ ...activity, ...observed, updatedAt: Date.now() });
+  let next = normalizeActivityState({ ...activity, ...observed, updatedAt: observedAt });
   const settled = previous.status === "complete" || previous.status === "failed" || previous.status === "refunded";
   const incoming = activityState(next);
   const stale = incoming.status !== "failed" && incoming.status !== "complete" && incoming.order < previous.order;
@@ -32,12 +32,11 @@ export function applyActivityPatch(activity: Activity, patch: Partial<Activity>)
     const phase = Object.fromEntries(directionFor(activity).phaseFields.map((key) => [key, activity[key]]));
     next = { ...next, ...phase, status: previous.status, eta: activity.eta };
   }
-  return stampLegTimes(next);
+  return stampLegTimes(next, observedAt);
 }
 
 export interface ActivityPersistence {
-  read(): Activity[];
-  write(activities: Activity[]): void;
+  read(): { activities: Activity[]; needsMigration: boolean; write(changes: Activity[]): void };
   withWriteLock(commit: () => boolean): boolean | Promise<boolean>;
 }
 
@@ -88,7 +87,6 @@ export class ActivityStore {
 
   /** Restore history and replay only unsaved changes onto the latest durable rows. */
   sync = (): boolean | Promise<boolean> => {
-    if (!this.snapshot.receipts.some(receipt => receipt.unsavedChanges)) return this.reconcile();
     // Read inside the lock. A queued writer must merge against the previous
     // writer's committed history, including transfers from other providers.
     return this.persistence.withWriteLock(() => this.reconcile());
@@ -98,7 +96,8 @@ export class ActivityStore {
     let receipts = this.snapshot.receipts;
     let saved = true;
     try {
-      const stored = new Map(this.persistence.read().map(activity => [activity.id, { activity }]));
+      const history = this.persistence.read();
+      const stored = new Map(history.activities.map(activity => [activity.id, { activity }]));
       const pending: ActivityReceipt[] = [];
       for (const receipt of receipts) {
         if (!receipt.unsavedChanges) continue;
@@ -113,8 +112,8 @@ export class ActivityStore {
       receipts = [...pending, ...stored.values()].sort((a, b) =>
         activityStartedAt(b.activity) - activityStartedAt(a.activity),
       );
-      if (pending.length) {
-        this.persistence.write(receipts.map(receipt => receipt.activity));
+      if (pending.length || history.needsMigration) {
+        history.write(pending.map(receipt => receipt.activity));
         receipts = receipts.map(({ activity }) => ({ activity }));
       }
     } catch {
