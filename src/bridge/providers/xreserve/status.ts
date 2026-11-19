@@ -40,7 +40,7 @@ export async function observeXreserveDeposit(activity: BridgeActivity, signal?: 
   // Once a burn/deposit is mined, submitted can mean Circle forwarding rather
   // than an unmined source transaction. Only search for replacements before that.
   if (observation.status === "submitted" && !observation.source && !observation.deposit) {
-    const resolved = await recoverSourceTransaction(network, activity.sourceTxHash, activity.sourceTransaction);
+    const resolved = await recoverSourceTransaction(network, activity.sourceTxHash, activity.sourceTransaction, signal);
     if (signal?.aborted) return { patch: {} };
     if (resolved.transaction) sourcePatch.sourceTransaction = resolved.transaction;
     if (resolved.hash) {
