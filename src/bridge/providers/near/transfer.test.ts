@@ -65,7 +65,7 @@ function setup(bitcoin = false) {
     externalWallet: bitcoin
       ? { family: "bitcoin", connected: true, address: bitcoinAddress, assertAccount: assertBitcoinAccount, provider: { getAccountAddresses: vi.fn(), sendTransfer: vi.fn() } }
       : { family: "evm", connected: true, address: transferInput.externalAddress, provider: { request: evmRequest } },
-    midenWallet: { connected: true, address: nearTestInput.midenAccount, requestAssets, requestTransaction, waitForTransaction },
+    midenWallet: { connected: true, address: nearTestInput.midenAccount, assertAccount: vi.fn(), requestAssets, requestTransaction, waitForTransaction },
   };
   const effects = { openExternalWallet: vi.fn(), onError: vi.fn(), onSubmittingChange: vi.fn(), onPhaseChange: vi.fn(),
     activities: new ActivityStore(activityPersistence), navigate: vi.fn() };
@@ -211,4 +211,21 @@ it("rechecks the Bitcoin recipient after asynchronous preparation before asking 
   expect(test.effects.onError).toHaveBeenCalledWith("Bitcoin payment account changed");
   expect(test.requestTransaction).not.toHaveBeenCalled();
   expect(loadStoredActivities()).toHaveLength(0);
+});
+
+it("records not sent when Bread disconnects while an outbound funding claim is being saved", async () => {
+  const test = setup();
+  let connected = true;
+  const guard = () => { if (!connected) throw new Error("Your Miden wallet changed."); };
+  test.input.midenWallet.assertAccount = guard;
+  test.input.midenWallet.requestTransaction = request => { guard(); return test.requestTransaction(request); };
+  const write = window.localStorage.setItem.bind(window.localStorage);
+  vi.spyOn(window.localStorage, "setItem").mockImplementation((key, value) => {
+    if (JSON.parse(value)[0]?.near?.submission === "attempted") connected = false;
+    write(key, value);
+  });
+  await submitBridgeTransfer(test.input, test.effects);
+  expect(test.requestTransaction).not.toHaveBeenCalled();
+  expect(loadStoredActivities()[0].near?.submission).toBe("not_sent");
+  expect(test.effects.onError).toHaveBeenCalledWith(expect.stringMatching(/Miden wallet changed/));
 });
