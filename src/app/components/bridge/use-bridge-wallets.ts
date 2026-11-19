@@ -25,7 +25,7 @@ export function useBridgeWallets(route: BridgeRoute) {
   const { walletInfo } = useWalletInfo("eip155");
   const miden = useMidenWallet();
   const [error, setError] = useState("");
-  const bitcoinWallet = useBitcoinWallet();
+  const bitcoinWallet = useBitcoinWallet(route.source.network === "bitcoin");
   const asset = externalAsset(route);
   const evmAddress = isConnected && address ? address : "";
   const midenAccount = miden.connected ? miden.address : "";
@@ -47,7 +47,6 @@ export function useBridgeWallets(route: BridgeRoute) {
   } : {
     ...bitcoinWallet, family: "bitcoin" as const, namespace: "bip122" as const,
     networkLabel: "Bitcoin", explorer: bitcoinExplorer, balance: undefined, balanceText: "", balanceUnavailable: false,
-    warning: bitcoinWallet.connected && !bitcoinWallet.valid ? "Connect a Bitcoin mainnet payment account." : "",
   };
 
   async function openExternalWallet() {

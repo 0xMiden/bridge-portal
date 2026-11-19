@@ -1,9 +1,25 @@
 import type { Provider, ProviderDirection } from "../../core/provider";
 import { isEvmAsset } from "../../core/assets";
 import { evmNetworks } from "../../../config/evm-networks";
+import { formatUnits } from "viem";
+import type { BridgeActivity } from "../../core/models";
+
+function receivedAmount(activity: BridgeActivity) {
+  const { near, routeSnapshot } = activity;
+  if (!near || !routeSnapshot) return;
+  if (near.status === "REFUNDED" || near.submission === "declined" || near.submission === "not_sent") return "0";
+  const expected = formatUnits(BigInt(near.quote.quote.amountOut), routeSnapshot.destination.decimals);
+  if (near.status !== "SUCCESS") return expected;
+  // Old receipts used one field for both estimate and delivery. A differing
+  // amount is known to be settled; an ambiguous value is refreshed by tracking.
+  return near.settledAmount ?? (activity.receivedAmount !== expected ? activity.receivedAmount : undefined);
+}
 
 const guidance = { tone: "active", icon: "alert", title: "Keep this receipt",
   body: "Check this transfer in Bread and retry its status here. Do not send another deposit for this quote." } as const;
+const notSent = { order: 4, status: "failed", tracking: "manual", headline: "Payment was not sent",
+  guidance: { tone: "active", icon: "wallet", title: "Payment was not sent", body: "Start a new transfer to review a fresh quote.", newTransfer: true },
+} as const;
 
 const send: ProviderDirection = {
   steps: [
@@ -13,6 +29,8 @@ const send: ProviderDirection = {
     { status: "complete", label: "Funds delivered", detail: "{asset} delivered to your destination address." },
   ],
   phases: {
+    not_sent: notSent,
+    declined: { ...notSent, headline: "Cancelled in your wallet", guidance: { ...notSent.guidance, title: "Cancelled in your wallet" } },
     signature: { order: 0, status: "signature", headline: "Confirm in your wallet", guidance },
     PENDING_DEPOSIT: { order: 1, status: "source_finality", headline: "Waiting for the Miden deposit", guidance },
     KNOWN_DEPOSIT_TX: { order: 2, status: "source_finality", headline: "Miden deposit detected" },
@@ -28,11 +46,15 @@ const send: ProviderDirection = {
     FAILED: { order: 4, status: "failed", headline: "Transfer needs recovery", guidance },
   },
   phaseFields: ["status"],
-  resolvePhase: activity => activity.near?.submission === "prepared" && activity.near.status === "PENDING_DEPOSIT" ? "signature" : activity.near?.status ?? "signature",
+  resolvePhase: ({ near }) => {
+    if (!near || (near.submission === "prepared" && near.status === "PENDING_DEPOSIT")) return "signature";
+    if (near.submission === "declined" || near.submission === "not_sent") return near.submission;
+    return near.status;
+  },
   consumeNote: false, tracking: "automatic", pollMs: 5_000,
   activityDetails: activity => ({
     sourceHash: activity.sourceTxHash, destinationHash: activity.near?.status === "SUCCESS" ? activity.destinationTxHash : undefined,
-    destinationKind: "tx", received: activity.near?.status === "REFUNDED" ? "0" : activity.receivedAmount,
+    destinationKind: "tx", received: receivedAmount(activity),
     networkFee: activity.near?.networkFee,
     refund: activity.near?.status === "REFUNDED" && activity.near.refundedAmount ? `${activity.near.refundedAmount} ${activity.asset}` : undefined,
     reference: activity.near ? { label: "NEAR quote reference", value: activity.near.quote.correlationId } : undefined,

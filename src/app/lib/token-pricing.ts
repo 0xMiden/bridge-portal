@@ -17,7 +17,9 @@ export function priceSymbol(symbol: string): PriceSymbol | null {
     case "USDC":
     case "USDCX": return "USDC";
     case "DAI": return "DAI";
+    case "USDT0":
     case "USDT": return "USDT";
+    case "CBBTC":
     case "BTC": return "BTC";
     case "WBTC": return "WBTC";
     case "WSOL":

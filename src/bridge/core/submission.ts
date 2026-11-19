@@ -44,7 +44,7 @@ export type SubmissionContext = {
   /** Retain a receipt only after the provider acknowledges the source submission. */
   record: (patch: Partial<Activity>) => Activity;
   /** Require durable storage before asking a wallet to fund a NEAR quote. */
-  persist: (patch: Partial<Activity>) => Activity;
-  findActivity: (id: string) => Activity | undefined;
+  persist: (patch: Partial<Activity>) => Promise<Activity>;
+  findActivity: (id: string) => Promise<Activity | undefined>;
   update: (patch: Partial<Activity>) => void;
 };

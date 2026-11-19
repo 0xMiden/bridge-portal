@@ -143,6 +143,8 @@ export function deriveCtaState(input: CtaInputs): CtaState {
 }
 
 export function statusLabel(status: ActivityStatus, activity?: Activity) {
+  if (status === "failed" && activity?.near?.submission === "declined") return "Cancelled";
+  if (status === "failed" && activity?.near?.submission === "not_sent") return "Not sent";
   if (activity && directionFor(activity).tracking === "manual") return activityState(activity).headline;
   const labels: Record<ActivityStatus, string> = {
     signature: "Needs signature",

@@ -161,7 +161,8 @@ it.each(["SUCCESS", "REFUNDED"] as const)("tracks %s with Miden output precision
   expect(saved.status).toBe(status === "SUCCESS" ? "complete" : "refunded");
   expect(nearMonitor.canPoll(saved)).toBe(false);
   if (status === "SUCCESS") {
-    expect(saved).toMatchObject({ receivedAmount: "0.0029", midenTxId: nearDestinationHash, destinationTxHash: nearDestinationHash });
+    expect(saved).toMatchObject({ midenTxId: nearDestinationHash, destinationTxHash: nearDestinationHash });
+    expect(activityDetailFor(saved).receipt.receivedAmount).toBe("0.0029");
     expect(activityDetailFor(saved).receipt.destinationLink).toMatchObject({ available: true, href: "https://explorer.cedar.miden.io/account/387149ae66116cf114eebd60bb7381" });
   } else {
     expect(saved.destinationTxHash).toBeUndefined();

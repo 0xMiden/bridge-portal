@@ -106,7 +106,8 @@ it("persists a public P2ID and silently retries optional notifications without a
 
 it("retains wallet acceptance across reload and treats delayed status as pending", async () => {
   const test = setup();
-  test.waitForTransaction.mockRejectedValueOnce(new Error("Wallet response interrupted"));
+  // Even a rejection code from the confirmation call comes after wallet acceptance.
+  test.waitForTransaction.mockRejectedValueOnce(Object.assign(new Error("User rejected the request"), { code: 4001 }));
   await submitBridgeTransfer(test.input, test.effects);
   expect(loadStoredActivities()[0]).toMatchObject({ near: { submission: "accepted" }, midenWalletRequestId: "near-wallet-request" });
   test.effects.activities = new ActivityStore(activityPersistence); test.effects.activities.sync();
@@ -144,9 +145,12 @@ it("renders a refund separately from EVM delivery and ignores stale pending poll
   fetcher.mockResolvedValueOnce(Response.json(response));
   const observed = await nearMonitor.observe(saved, new AbortController().signal);
   test.effects.activities.patch(saved.id, observed.patch);
-  test.effects.activities.patch(saved.id, { near: { ...saved.near!, submission: "attempted" } });
+  fetcher.mockResolvedValueOnce(Response.json(nearStatus(test.quote, "PENDING_DEPOSIT")));
+  const late = await nearMonitor.observe(saved, new AbortController().signal);
+  test.effects.activities.patch(saved.id, late.patch);
   const refunded = test.effects.activities.get(saved.id)!.activity;
-  expect(refunded).toMatchObject({ status: "refunded", near: { submission: "confirmed", refundedAmount: "4.99", status: "REFUNDED" } });
+  expect(refunded).toMatchObject({ status: "refunded", near: { submission: "confirmed", refundedAmount: "4.99",
+    refundReason: "INSUFFICIENT_LIQUIDITY", originTxHashes: [nearTxHash], status: "REFUNDED" } });
   expect(nearMonitor.canPoll(refunded)).toBe(false);
   expect(activityDetailFor(refunded)).toMatchObject({ receipt: { receivedAmount: "0", receivedLabel: "Destination delivery", refund: "4.99 USDCx" }, guidance: { title: "Refunded to Miden" } });
 });

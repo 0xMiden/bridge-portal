@@ -25,7 +25,8 @@ To deposit BTC, connect a mainnet wallet that supports direct Bitcoin payments
 and approve the quoted satoshi amount. To withdraw wBTC to that account, approve the
 Miden deposit in Bread. The portal saves the receipt before either wallet prompt
 and resumes tracking after reload. Older receipts retain their signed asset IDs.
-See the [NEAR Intents asset registry](src/config/near/v1.json).
+The [NEAR Intents asset registry](src/config/near/config.ts) selects the active
+release for new quotes and retains earlier asset bindings for receipt recovery.
 
 The [Reown Bitcoin adapter patch](patches/@reown+appkit-adapter-bitcoin+1.8.20.patch)
 passes integer satoshis to UniSat, checks the wallet's active chain and keeps

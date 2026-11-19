@@ -57,10 +57,12 @@ export const nearStatusResponseSchema = z.object({
 
 export const nearOperationSchema = z.object({
   quote: nearQuoteSchema,
-  submission: z.enum(["prepared", "awaiting_deposit", "attempted", "accepted", "confirmed"]),
+  submission: z.enum(["prepared", "awaiting_deposit", "attempted", "not_sent", "declined", "accepted", "confirmed"]),
   status: nearStatusSchema,
   notification: z.enum(["pending", "sent"]),
   networkFee: z.string().max(100).optional(),
+  statusUpdatedAt: z.iso.datetime().optional(),
+  settledAmount: z.string().max(100).optional(),
   originTxHashes: z.array(txHash).max(32).optional(),
   destinationTxHashes: z.array(txHash).max(32).optional(),
   refundedAmount: z.string().max(100).optional(),

@@ -2,7 +2,7 @@ import type { Activity, BridgeActivity } from "./core/models";
 import { directionFor } from "./providers/registry";
 import { activityStartedAt, stampLegTimes } from "./core/rules";
 import { shortAddress } from "../wallets/identity";
-import { mergeNearOperation } from "./providers/near/operation";
+import { mergeNearActivityPatch } from "./providers/near/operation";
 
 /** One interpretation for storage, polling, history and receipts. */
 export function activityState(activity: BridgeActivity) {
@@ -20,7 +20,7 @@ export function normalizeActivityState<T extends BridgeActivity>(activity: T): T
 
 /** Merge observations without allowing stale polls to regress a terminal transfer. */
 export function applyActivityPatch(activity: Activity, patch: Partial<Activity>): Activity {
-  if (activity.near && patch.near) patch = { ...patch, near: mergeNearOperation(activity.near, patch.near) };
+  if (patch.near) patch = mergeNearActivityPatch(activity, patch);
   const previous = activityState(activity);
   const observed = Object.fromEntries(Object.entries(patch).filter(([, value]) => value !== undefined));
   let next = normalizeActivityState({ ...activity, ...observed, updatedAt: Date.now() });
@@ -38,6 +38,7 @@ export function applyActivityPatch(activity: Activity, patch: Partial<Activity>)
 export interface ActivityPersistence {
   read(): Activity[];
   write(activities: Activity[]): void;
+  withWriteLock(commit: () => boolean): boolean | Promise<boolean>;
 }
 
 export type ActivityReceipt = {
@@ -86,8 +87,16 @@ export class ActivityStore {
   }
 
   /** Restore history and replay only unsaved changes onto the latest durable rows. */
-  sync = () => {
+  sync = (): boolean | Promise<boolean> => {
+    if (!this.snapshot.receipts.some(receipt => receipt.unsavedChanges)) return this.reconcile();
+    // Read inside the lock. A queued writer must merge against the previous
+    // writer's committed history, including transfers from other providers.
+    return this.persistence.withWriteLock(() => this.reconcile());
+  };
+
+  private reconcile(): boolean {
     let receipts = this.snapshot.receipts;
+    let saved = true;
     try {
       const stored = new Map(this.persistence.read().map(activity => [activity.id, { activity }]));
       const pending: ActivityReceipt[] = [];
@@ -111,9 +120,11 @@ export class ActivityStore {
     } catch {
       // Failed reads leave durable history untouched. Failed writes retain the
       // merged receipts and their changes for the next retry.
+      saved = false;
     }
     this.publish({ ready: true, receipts });
-  };
+    return saved;
+  }
 
   private update(activity: Activity): Activity {
     const current = this.get(activity.id);

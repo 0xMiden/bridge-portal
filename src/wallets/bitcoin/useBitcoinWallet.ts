@@ -4,7 +4,7 @@ import { useAppKitAccount, useAppKitProvider, useWalletInfo } from "@reown/appki
 import { bitcoin } from "@reown/appkit/networks";
 import { isBitcoinAddress } from "../../bridge/bitcoin/address";
 import { appKit } from "../AppKitProvider";
-import type { BitcoinProvider } from "../bridge-wallet";
+import { supportsBitcoinPayments, type BitcoinProvider } from "../bridge-wallet";
 
 type PaymentAccount = Pick<ReturnType<typeof useAppKitAccount>, "isConnected" | "address" | "caipAddress" | "allAccounts">;
 
@@ -14,12 +14,15 @@ function isMainnetPaymentAccount(account: PaymentAccount | undefined, address: s
     account.allAccounts.some(item => item.address === address && item.type === "payment");
 }
 
-export function useBitcoinWallet() {
+export function useBitcoinWallet(requirePayment: boolean) {
   const account = useAppKitAccount({ namespace: "bip122" });
   const { walletProvider: provider } = useAppKitProvider<BitcoinProvider>("bip122");
   const { walletInfo: info } = useWalletInfo("bip122");
   const address = account.isConnected ? account.address ?? "" : "";
-  const valid = typeof provider?.getAccountAddresses === "function" && isMainnetPaymentAccount(account, address);
+  const validAccount = typeof provider?.getAccountAddresses === "function" && isMainnetPaymentAccount(account, address);
+  const valid = validAccount && (!requirePayment || supportsBitcoinPayments(provider));
+  const warning = !account.isConnected || valid ? "" : validAccount
+    ? "Connect a Bitcoin wallet that supports payments." : "Connect a Bitcoin mainnet payment account.";
 
   async function assertAccount(reviewedAddress: string) {
     if (!provider?.getAccountAddresses) throw new Error("Connect your Bitcoin wallet before transferring.");
@@ -37,5 +40,5 @@ export function useBitcoinWallet() {
     checkConnection();
   }
 
-  return { connected: account.isConnected, address, provider, info, valid, assertAccount };
+  return { connected: account.isConnected, address, provider, info, valid, warning, assertAccount };
 }

@@ -1,7 +1,7 @@
 import { ApiError, OneClickService, OpenAPI, type CancelablePromise } from "@defuse-protocol/one-click-sdk-typescript";
 import { nearInputSchema, nearPrepareInputSchema, nearTrackingInputSchema, nearDepositInputSchema, nearStatusResponseSchema, nearQuoteSchema, nearCorrelationId, nearEvmAddress } from "./schema";
 import { bitcoinAddressSchema } from "../../bitcoin/address";
-import { nearRequest, verifyNearQuote, nearTrackingInput, nearDepositWindow, validateNearTxHash } from "./quote";
+import { nearRequest, verifyNearQuote, verifySignedNearQuote, nearReceiptAssets, nearTrackingInput, nearDepositWindow, validateNearTxHash } from "./quote";
 import { currentBridgeConfig } from "../../../config/bridge-config";
 
 const API = "https://1click.chaindefuser.com";
@@ -67,15 +67,18 @@ async function upstream<T>(operation: "quote" | "status" | "deposit", start: () 
 }
 
 async function quote(body: unknown, dry: boolean, signal: AbortSignal) {
-  const input = dry ? nearInputSchema.parse(body) : nearPrepareInputSchema.parse(body);
-  const request = nearRequest(input, dry, new Date(Date.now() + nearDepositWindow(input.routeId)).toISOString());
+  const { input, request, reviewed } = validateCaller(() => {
+    const accounts = normalizeQuoteAccounts(body);
+    const { quote: reviewed, ...input } = dry
+      ? { ...nearInputSchema.parse(accounts), quote: undefined }
+      : nearPrepareInputSchema.parse(accounts);
+    const deadline = new Date(Date.now() + nearDepositWindow(input.routeId)).toISOString();
+    return { input, request: nearRequest(input, dry, deadline), reviewed };
+  });
   if (!dry && currentBridgeConfig("mainnet").document.features[input.mode === "send" ? "bridgeOut" : "bridgeIn"] === false) {
     throw new NearApiError("New NEAR transfers are paused. Existing receipts continue tracking.", 503);
   }
-  if ("quote" in input && input.quote) {
-    const { quote: prepared, ...binding } = input;
-    return verifyNearQuote(prepared, binding, false);
-  }
+  if (reviewed) return validateCaller(() => verifySignedNearQuote(reviewed, input, false));
   const payload = await upstream("quote", () => OneClickService.getQuote(request), signal);
   try {
     const response = verifyNearQuote(payload, input, dry);
@@ -101,26 +104,34 @@ function normalizeQuoteAccounts(body: unknown) {
   return body;
 }
 
+function validateCaller<T>(read: () => T): T {
+  try { return read(); }
+  catch { throw new NearApiError("Invalid route, amount, accounts or signed NEAR quote.", 400); }
+}
+
 async function track(body: unknown, notify: boolean, signal: AbortSignal) {
-  const depositInput = notify ? nearDepositInputSchema.parse(body) : undefined;
-  const input = depositInput ?? nearTrackingInputSchema.parse(body);
-  const bound = nearTrackingInput(input.routeId, input.quote);
-  // Historic quotes are allowed to expire; their signed identity remains mandatory.
-  const original = verifyNearQuote(input.quote, bound, false, false);
+  const { original, bound, assets, txHash } = validateCaller(() => {
+    const input = notify ? nearDepositInputSchema.parse(body) : { ...nearTrackingInputSchema.parse(body), txHash: undefined };
+    const assets = nearReceiptAssets(input.routeId, input.quote);
+    const bound = nearTrackingInput(input.routeId, input.quote, assets);
+    const original = verifySignedNearQuote(input.quote, bound, false, false);
+    const txHash = input.txHash && validateNearTxHash(assets.source, input.txHash);
+    return { original, bound, assets, txHash };
+  });
   const depositAddress = original.quote.depositAddress!;
   const depositMemo = original.quote.depositMemo;
-  const payload = depositInput
+  const payload = txHash
     ? await upstream("deposit", () => OneClickService.submitDepositTx({ depositAddress,
-      txHash: depositInput.txHash, ...(depositMemo ? { memo: depositMemo } : {}) }), signal)
+      txHash, ...(depositMemo ? { memo: depositMemo } : {}) }), signal)
     : await upstream("status", () => OneClickService.getExecutionStatus(depositAddress, depositMemo), signal);
   try {
     const response = upstreamStatusSchema.parse(payload);
-    for (const tx of response.swapDetails.originChainTxHashes) validateNearTxHash(input.routeId, "source", tx.hash);
-    for (const tx of response.swapDetails.destinationChainTxHashes) validateNearTxHash(input.routeId, "destination", tx.hash);
+    for (const tx of response.swapDetails.originChainTxHashes) validateNearTxHash(assets.source, tx.hash);
+    for (const tx of response.swapDetails.destinationChainTxHashes) validateNearTxHash(assets.destination, tx.hash);
     // /status also drops quoteWaitingTimeMs even though the original signature
     // covers it. Restore only these omitted fields from the verified receipt,
     // then verify the returned quote in full; never overwrite returned terms.
-    const returned = verifyNearQuote({
+    const returned = verifySignedNearQuote({
       ...response.quoteResponse,
       correlationId: response.quoteResponse.correlationId ?? original.correlationId,
       quoteRequest: {
@@ -140,19 +151,7 @@ async function track(body: unknown, notify: boolean, signal: AbortSignal) {
 export async function handleNearRequest(request: Request, operation: "quote" | "prepare" | "status" | "deposit") {
   const correlationId = crypto.randomUUID();
   try {
-    let body = await boundedJson(request).catch(() => { throw new NearApiError("Invalid NEAR request.", 400); });
-    // Validate before starting a network call, preserving 400 for caller errors.
-    try {
-      if (operation === "quote" || operation === "prepare") {
-        body = normalizeQuoteAccounts(body);
-        const input = (operation === "prepare" ? nearPrepareInputSchema : nearInputSchema).parse(body);
-        nearRequest(input, true, new Date().toISOString());
-      } else {
-        const input = (operation === "deposit" ? nearDepositInputSchema : nearTrackingInputSchema).parse(body);
-        verifyNearQuote(input.quote, nearTrackingInput(input.routeId, input.quote), false, false);
-        if ("txHash" in input && typeof input.txHash === "string") validateNearTxHash(input.routeId, "source", input.txHash);
-      }
-    } catch { throw new NearApiError("Invalid route, amount, accounts or signed NEAR quote.", 400); }
+    const body = await boundedJson(request).catch(() => { throw new NearApiError("Invalid NEAR request.", 400); });
     const result = operation === "quote" || operation === "prepare"
       ? await quote(body, operation === "quote", request.signal)
       : await track(body, operation === "deposit", request.signal);

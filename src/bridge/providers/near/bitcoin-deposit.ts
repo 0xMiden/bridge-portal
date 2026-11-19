@@ -1,10 +1,11 @@
 import type { TransferSubmission } from "../../core/submission";
+import { supportsBitcoinPayments } from "../../../wallets/bridge-wallet";
 import { bitcoinAddressSchema } from "../../bitcoin/address";
 import type { NearQuoteResponse } from "./schema";
 
 export function prepareBitcoinDeposit(input: TransferSubmission, quote: NearQuoteResponse) {
   const wallet = input.externalWallet;
-  if (wallet.family !== "bitcoin" || typeof wallet.provider?.sendTransfer !== "function") {
+  if (wallet.family !== "bitcoin" || !supportsBitcoinPayments(wallet.provider)) {
     throw new Error("Connect a Bitcoin wallet that supports payments.");
   }
   const provider = wallet.provider;

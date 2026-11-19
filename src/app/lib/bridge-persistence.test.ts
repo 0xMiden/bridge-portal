@@ -158,6 +158,35 @@ it("persists and patches receipt progress without losing acknowledged transactio
   ]);
 });
 
+it("keeps an acknowledged funding attempt when another tab is midway through a history update", async () => {
+  const route = findBridgeRoute("mainnet:near-bitcoin-btc-to-miden-wbtc")!;
+  const deposit = createActivity(route, "0.001", { id: "funding", near: {
+    quote: nearQuoteSchema.parse(bitcoinQuotes.receive.prepared), submission: "attempted", status: "PENDING_DEPOSIT", notification: "pending",
+  } });
+  const funding = new ActivityStore(activityPersistence);
+  let tail = Promise.resolve();
+  vi.stubGlobal("navigator", { locks: { request: (_name: string, callback: () => void) => {
+    tail = tail.then(callback);
+    return tail;
+  } } });
+  saveActivities([activity]);
+  store.sync();
+  funding.sync();
+  // Start the funding write after the monitor has read the old history.
+  vi.spyOn(window.localStorage, "getItem").mockImplementationOnce(key => {
+    const beforeFunding = storage.get(key) ?? null;
+    funding.record(deposit);
+    return beforeFunding;
+  });
+  store.patch(activity.id, { destinationTxHash: "0xarrival" });
+  await store.sync();
+  await funding.sync();
+  const reopened = new ActivityStore(activityPersistence);
+  await reopened.sync();
+  expect(reopened.get(deposit.id)?.activity.near?.submission).toBe("attempted");
+  expect(reopened.get(activity.id)?.activity.destinationTxHash).toBe("0xarrival");
+});
+
 it.each([false, true])("keeps history newest first through late updates and reconciliation (storage unavailable: %s)", unavailable => {
   const older = { ...activity, id: "older", sourceTxAt: 1_700_000_000_000 };
   const newer = { ...activity, id: "newer", sourceTxAt: 1_700_000_001_000 };

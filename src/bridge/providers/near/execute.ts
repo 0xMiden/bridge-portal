@@ -3,10 +3,11 @@ import { formatUnits } from "viem";
 import { isEvmAsset } from "../../core/assets";
 import type { SubmissionContext } from "../../core/submission";
 import { assertRecipientAccount } from "../../../wallets/bridge-wallet";
+import { isUserRejection } from "../../../wallets/errors";
 import { prepareBitcoinDeposit } from "./bitcoin-deposit";
 import { normalizeMidenAccountHex } from "../../miden-address";
 import { getMidenVerificationBaseFee } from "../../miden-rpc";
-import { nearInput, nearPair, validateNearDeposit, validateNearTxHash, verifyNearQuote } from "./quote";
+import { nearInput, nearPair, nearQuoteExpiry, validateNearDeposit, validateNearTxHash, verifyNearQuote } from "./quote";
 import { nearPost } from "./client";
 import type { NearInput, NearOperation, NearQuoteResponse } from "./schema";
 
@@ -27,17 +28,35 @@ async function checkBalance(context: SubmissionContext, units: bigint) {
 }
 
 /** Save the reviewed transfer and durably claim the attempt before opening the wallet. */
-function claimDeposit(context: SubmissionContext, id: string, quote: NearQuoteResponse, networkFee: string, midenNoteId?: string) {
+async function claimDeposit(context: SubmissionContext, id: string, quote: NearQuoteResponse, networkFee: string, midenNoteId?: string) {
   const { input, route } = context;
   const operation: NearOperation = { quote, networkFee, submission: "prepared", status: "PENDING_DEPOSIT", notification: "pending" };
-  context.persist({
-    id, near: operation, midenNoteId, receivedAmount: input.quote?.received, eta: `About ${quote.quote.timeEstimate} seconds`,
+  await context.persist({
+    id, near: operation, midenNoteId, eta: `About ${quote.quote.timeEstimate} seconds`,
     destination: quote.quoteRequest.recipient, midenAccount: input.midenAccount,
     evmAddress: input.externalWallet.family === "evm" ? input.externalAddress : undefined,
     midenAccountHex: route.mode === "receive" ? normalizeMidenAccountHex(input.midenAccount) : undefined,
   });
-  context.persist({ near: { ...operation, submission: "attempted" } });
+  await context.persist({ near: { ...operation, submission: "attempted" } });
   return operation;
+}
+
+async function requestFunding(context: SubmissionContext, operation: NearOperation, assertWallet: () => Promise<void>, send: () => Promise<string>) {
+  try {
+    // Saving the claim can wait behind another tab's storage lock.
+    await assertWallet();
+    if (nearQuoteExpiry(operation.quote) <= Date.now()) throw new Error("NEAR quote expired. Review a fresh quote.");
+  } catch (error) {
+    await context.persist({ near: { ...operation, submission: "not_sent" } });
+    throw error;
+  }
+  try { return await send(); }
+  catch (error) {
+    // Only the original wallet request can prove the payment was declined.
+    // A lost response or an error while waiting for confirmation stays trackable.
+    if (isUserRejection(error)) await context.persist({ near: { ...operation, submission: "declined" } });
+    throw error;
+  }
 }
 
 async function notifyDeposit(context: SubmissionContext, operation: NearOperation, txHash: string) {
@@ -62,11 +81,12 @@ async function submitExternalDeposit(context: SubmissionContext, binding: NearIn
   await nearPost("prepare", { ...binding, quote });
   await deposit.assertWallet();
   verifyNearQuote(quote, binding, false);
-  const operation = claimDeposit(context, id, quote, deposit.networkFee);
+  const operation = await claimDeposit(context, id, quote, deposit.networkFee);
   context.phase(deposit.prompt);
-  const sourceTxHash = validateNearTxHash(context.route.id, "source", await deposit.send());
+  const hash = await requestFunding(context, operation, deposit.assertWallet, deposit.send);
+  const sourceTxHash = validateNearTxHash(context.route.source, hash);
   const accepted = { ...operation, submission: "accepted" as const };
-  context.persist({ sourceTxHash, near: accepted });
+  await context.persist({ sourceTxHash, near: accepted });
   await notifyDeposit(context, accepted, sourceTxHash);
 }
 
@@ -80,9 +100,9 @@ async function submitMidenDeposit(context: SubmissionContext, binding: NearInput
   await assertRecipientAccount(input);
   verifyNearQuote(quote, binding, false);
   if (!input.midenWallet.requestTransaction || !input.midenWallet.waitForTransaction) throw new Error("Reconnect Bread before transferring.");
-  const operation = claimDeposit(context, id, quote, networkFee, deposit.noteId);
+  const operation = await claimDeposit(context, id, quote, networkFee, deposit.noteId);
   context.phase("Confirm the public deposit in Bread…");
-  const requestId = await input.midenWallet.requestTransaction(deposit.transaction);
+  const requestId = await requestFunding(context, operation, () => assertRecipientAccount(input), () => input.midenWallet.requestTransaction!(deposit.transaction));
   context.update({ midenWalletRequestId: requestId, near: { ...operation, submission: "accepted" } });
   const confirmed = await input.midenWallet.waitForTransaction(requestId);
   if (!confirmed.outputNotes?.some(note => note.id().toString() === deposit.noteId) || !/^0x[\da-f]{64}$/i.test(confirmed.txHash)) {
@@ -104,7 +124,7 @@ export async function submitNearTransfer(context: SubmissionContext) {
   const id = `act-near-${quoteHash(quote as unknown as QuoteResponse)}`;
   if (!globalThis.navigator?.locks) throw new Error("Browser locks are required before sending.");
   await navigator.locks.request(id, async () => {
-    const existing = context.findActivity(id);
+    const existing = await context.findActivity(id);
     if (existing?.near && existing.near.submission !== "prepared") {
       context.record(existing);
       return;

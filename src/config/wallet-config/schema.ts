@@ -221,7 +221,7 @@ export const bitcoinAssetFields = {
   symbol: z.literal("BTC"), decimals: z.literal(8),
 };
 export const nearConfigSchema = z.object({
-  version: z.literal(1), environment: z.literal("mainnet"), evidenceDate: z.string().date(),
+  version: z.literal([1, 2]), environment: z.literal("mainnet"), evidenceDate: z.string().date(),
   funding: z.object({ noteType: z.literal("public"), script: z.literal("p2id"), discovery: z.literal("recipient-tag"), memo: z.literal("none") }),
   routes: z.array(z.object({
     id: z.string().regex(/^mainnet:near-miden-[a-z0-9]+-to-[a-z]+-[a-z0-9]+$/),

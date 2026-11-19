@@ -2,11 +2,13 @@ import { formatUnits } from "viem";
 import type { ActivityMonitor } from "../../core/provider";
 import { nearPost } from "./client";
 import { nearStatusResponseSchema } from "./schema";
-import { nearRouteAssets, nearTrackingInput, verifyNearQuote, validateNearTxHash } from "./quote";
+import { nearReceiptAssets, nearTrackingInput, verifySignedNearQuote, validateNearTxHash } from "./quote";
 import { observeNearEvmSource } from "./evm-source";
 
 export const nearMonitor: ActivityMonitor = {
-  canPoll: activity => Boolean(activity.near && !["SUCCESS", "REFUNDED", "FAILED"].includes(activity.near.status)),
+  canPoll: ({ near }) => Boolean(near && near.submission !== "declined" && near.submission !== "not_sent" && (
+    near.status === "SUCCESS" ? !near.statusUpdatedAt : near.status !== "REFUNDED" && near.status !== "FAILED"
+  )),
   observe: async (activity, signal) => {
     if (!activity.near || !activity.routeId) return { patch: {} };
     const operation = activity.near;
@@ -14,10 +16,11 @@ export const nearMonitor: ActivityMonitor = {
     let notification = operation.notification;
     try {
       const status = nearStatusResponseSchema.parse(await nearPost("status", body, signal));
-      verifyNearQuote(status.quoteResponse, nearTrackingInput(body.routeId, body.quote), false, false);
+      const pair = nearReceiptAssets(body.routeId, body.quote);
+      verifySignedNearQuote(status.quoteResponse, nearTrackingInput(body.routeId, body.quote, pair), false, false);
       if (status.quoteResponse.signature !== body.quote.signature) throw new Error("Quote reference mismatch.");
-      for (const tx of status.swapDetails.originChainTxHashes) validateNearTxHash(body.routeId, "source", tx.hash);
-      for (const tx of status.swapDetails.destinationChainTxHashes) validateNearTxHash(body.routeId, "destination", tx.hash);
+      for (const tx of status.swapDetails.originChainTxHashes) validateNearTxHash(pair.source, tx.hash);
+      for (const tx of status.swapDetails.destinationChainTxHashes) validateNearTxHash(pair.destination, tx.hash);
       const source = activity.mode === "receive" && status.status === "PENDING_DEPOSIT"
         ? await observeNearEvmSource(activity, signal) : { patch: {} };
       if (source.patch.failureLeg === "source") return source;
@@ -27,18 +30,20 @@ export const nearMonitor: ActivityMonitor = {
         try { await nearPost("deposit/submit", { ...body, txHash: source.patch.sourceTxHash ?? activity.sourceTxHash }, signal); notification = "sent"; }
         catch { signal.throwIfAborted(); }
       }
-      const pair = nearRouteAssets(body.routeId);
       // A refund can add origin-chain hashes; retain them without mislabelling a refund as the deposit.
-      const sourceTxHash = source.patch.sourceTxHash ?? activity.sourceTxHash ?? (status.status !== "REFUNDED" && status.swapDetails.originChainTxHashes.length === 1
-        ? status.swapDetails.originChainTxHashes[0].hash : undefined);
+      const funded = status.status === "PROCESSING" || status.status === "SUCCESS";
+      const [origin] = status.swapDetails.originChainTxHashes;
+      const singleDeposit = status.status !== "REFUNDED" && status.swapDetails.originChainTxHashes.length === 1;
+      const detected = singleDeposit && (!activity.sourceTxHash || (activity.mode === "receive" && funded)) ? origin.hash : undefined;
+      const destinationTxHash = status.status === "SUCCESS" ? status.swapDetails.destinationChainTxHashes[0]?.hash : undefined;
       return { warning: source.warning, patch: {
         ...source.patch,
-        sourceTxHash,
-        destinationTxHash: status.status === "SUCCESS" ? status.swapDetails.destinationChainTxHashes[0]?.hash : undefined,
-        midenTxId: activity.mode === "receive" && status.status === "SUCCESS" ? status.swapDetails.destinationChainTxHashes[0]?.hash : undefined,
-        receivedAmount: status.status === "SUCCESS" && status.swapDetails.amountOut
-          ? formatUnits(BigInt(status.swapDetails.amountOut), pair.destination.decimals) : undefined,
-        near: { ...operation, notification, status: status.status,
+        sourceTxHash: source.patch.sourceTxHash ?? detected,
+        destinationTxHash,
+        midenTxId: activity.mode === "receive" ? destinationTxHash : undefined,
+        near: { ...operation, notification, status: status.status, statusUpdatedAt: status.updatedAt,
+          settledAmount: status.status === "SUCCESS" && status.swapDetails.amountOut !== undefined
+            ? formatUnits(BigInt(status.swapDetails.amountOut), pair.destination.decimals) : undefined,
           originTxHashes: status.swapDetails.originChainTxHashes.map(tx => tx.hash),
           destinationTxHashes: status.swapDetails.destinationChainTxHashes.map(tx => tx.hash),
           submission: status.swapDetails.originChainTxHashes.length ? "confirmed" : source.patch.near?.submission ?? operation.submission,
@@ -49,7 +54,8 @@ export const nearMonitor: ActivityMonitor = {
     } catch (error) {
       signal.throwIfAborted();
       return { patch: { near: { ...operation, notification } },
-        warning: `${error instanceof Error ? error.message : "NEAR status is unavailable."} Transfer remains pending. Retry here; do not send another deposit.` };
+        warning: operation.status === "SUCCESS" ? "Delivery was confirmed. The settled amount could not be refreshed."
+          : `${error instanceof Error ? error.message : "NEAR status is unavailable."} Transfer remains pending. Retry here; do not send another deposit.` };
     }
   },
 };

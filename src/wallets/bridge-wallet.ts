@@ -5,7 +5,22 @@ import { externalAsset, type BridgeRoute } from "../bridge/core/routes";
 import type { TransferSubmission } from "../bridge/core/submission";
 import type { EvmProvider } from "./evm/evm-wallet";
 
-export type BitcoinProvider = Pick<BitcoinConnector, "getAccountAddresses" | "sendTransfer">;
+export type BitcoinProvider = Pick<BitcoinConnector, "getAccountAddresses" | "sendTransfer"> & {
+  type?: string;
+  wallet?: { features?: Readonly<Record<string, unknown>> };
+  provider?: { session?: { namespaces: Record<string, { methods: string[] }> } };
+};
+
+export function supportsBitcoinPayments(provider?: BitcoinProvider): provider is BitcoinProvider {
+  if (typeof provider?.sendTransfer !== "function") return false;
+  // Reown's Wallet Standard connector exposes a sendTransfer stub.
+  if (provider.wallet?.features && "bitcoin:connect" in provider.wallet.features) return false;
+  if (provider.type === "WALLET_CONNECT") {
+    const methods = provider.provider?.session?.namespaces.bip122?.methods;
+    return Boolean(methods?.includes("getAccountAddresses") && methods.includes("sendTransfer"));
+  }
+  return true;
+}
 
 export type ExternalWallet = { connected: boolean; address: string } & (
   | { family: "evm"; provider?: EvmProvider }

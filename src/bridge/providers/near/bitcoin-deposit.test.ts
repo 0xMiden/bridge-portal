@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { submitBridgeTransfer, type TransferSubmission } from "../../../app/lib/bridge-submission";
-import { activityPersistence, loadStoredActivities } from "../../../app/lib/bridge-persistence";
+import { activityPersistence, loadStoredActivities, saveActivities } from "../../../app/lib/bridge-persistence";
 import { activityDetailFor } from "../../../app/lib/activity-detail-presentation";
 import { ActivityStore } from "../../activity";
 import { findBridgeRoute } from "../../core/routes";
@@ -78,7 +78,7 @@ it("saves the attempt before one Bitcoin payment, resumes after reload and track
   test.effects.activities.patch(saved.id, notified.patch);
   expect(loadStoredActivities()[0].near?.notification).toBe("sent");
 
-  const btcHash = "ab".repeat(32);
+  const btcHash = "cd".repeat(32); // The wallet transaction was replaced before confirmation.
   for (const status of ["KNOWN_DEPOSIT_TX", "SUCCESS"] as const) {
     fetcher.mockResolvedValueOnce(Response.json({ ...nearStatus(test.quote, status), swapDetails: {
       originChainTxHashes: [{ hash: btcHash }], destinationChainTxHashes: status === "SUCCESS" ? [{ hash: nearTxHash }] : [],
@@ -89,10 +89,82 @@ it("saves the attempt before one Bitcoin payment, resumes after reload and track
     test.effects.activities.patch(saved.id, observation.patch);
   }
   const completed = loadStoredActivities()[0];
-  expect(completed).toMatchObject({ status: "complete", sourceTxHash: btcHash, midenTxId: nearTxHash, receivedAmount: "0.00098248" });
+  expect(completed).toMatchObject({ status: "complete", sourceTxHash: btcHash, sourceOriginalTxHash: "ab".repeat(32), midenTxId: nearTxHash });
+  expect(activityDetailFor(completed).receipt.receivedAmount).toBe("0.00098248");
   expect(activityDetailFor(completed).receipt.sourceLink.href).toBe(`https://mempool.space/tx/${btcHash}`);
   expect(nearMonitor.canPoll(completed)).toBe(false);
   expect(test.sendTransfer).toHaveBeenCalledTimes(1);
+});
+
+it("shows an unknown delivered amount when settlement omits amountOut, including after reload", async () => {
+  const test = setup();
+  await submitBridgeTransfer(test.input, test.effects);
+  const saved = loadStoredActivities()[0];
+  expect(activityDetailFor(saved).receipt).toMatchObject({ receivedLabel: "Expected", receivedAmount: "0.00098248" });
+  fetcher.mockResolvedValueOnce(Response.json(nearStatus(test.quote, "SUCCESS")));
+  const observation = await nearMonitor.observe(saved, new AbortController().signal);
+  test.effects.activities.patch(saved.id, observation.patch);
+  expect(activityDetailFor(loadStoredActivities()[0]).receipt).toMatchObject({ receivedLabel: "Received", receivedAmount: "—" });
+});
+
+it("keeps the wallet hash if settlement does not identify which deposit was mined", async () => {
+  const test = setup();
+  await submitBridgeTransfer(test.input, test.effects);
+  for (const state of ["KNOWN_DEPOSIT_TX", "SUCCESS"] as const) {
+    const [receipt] = loadStoredActivities();
+    fetcher.mockResolvedValueOnce(Response.json({ ...nearStatus(test.quote, state), swapDetails: {
+      originChainTxHashes: state === "KNOWN_DEPOSIT_TX" ? [{ hash: "cd".repeat(32) }] : [], destinationChainTxHashes: [],
+    } }));
+    const observed = await nearMonitor.observe(receipt, new AbortController().signal);
+    test.effects.activities.patch(receipt.id, observed.patch);
+  }
+  expect(loadStoredActivities()[0].sourceTxHash).toBe("ab".repeat(32));
+});
+
+it("refreshes an ambiguous amount on a completed receipt saved by an older portal", async () => {
+  const test = setup();
+  await submitBridgeTransfer(test.input, test.effects);
+  const [old] = loadStoredActivities();
+  saveActivities([{ ...old, receivedAmount: "0.00098248", near: { ...old.near!, status: "SUCCESS" } }]);
+  test.effects.activities.sync();
+  const receipt = loadStoredActivities()[0];
+  expect(activityDetailFor(receipt).receipt.receivedAmount).toBe("—");
+  expect(nearMonitor.canPoll(receipt)).toBe(true);
+  fetcher.mockResolvedValueOnce(Response.json({ ...nearStatus(test.quote, "SUCCESS"), swapDetails: {
+    originChainTxHashes: [], destinationChainTxHashes: [], amountOut: "98248",
+  } }));
+  const observation = await nearMonitor.observe(receipt, new AbortController().signal);
+  test.effects.activities.patch(receipt.id, observation.patch);
+  const [refreshed] = loadStoredActivities();
+  expect(activityDetailFor(refreshed).receipt.receivedAmount).toBe("0.00098248");
+  expect(nearMonitor.canPoll(refreshed)).toBe(false);
+});
+
+it("saves a definitive wallet refusal as a terminal receipt without asking for the same payment again", async () => {
+  const test = setup();
+  test.sendTransfer.mockRejectedValueOnce(Object.assign(new Error("User rejected the request"), { code: 4001 }));
+  await submitBridgeTransfer(test.input, test.effects);
+  const receipt = loadStoredActivities()[0];
+  expect(nearMonitor.canPoll(receipt)).toBe(false);
+  expect(activityDetailFor(receipt).guidance?.title).toMatch(/cancelled in your wallet/i);
+  await submitBridgeTransfer(test.input, test.effects);
+  expect(test.sendTransfer).toHaveBeenCalledTimes(1);
+});
+
+it.each(["WalletStandardConnector", "BitcoinWalletConnectConnector"])("checks %s payment support before saving a funding attempt", async name => {
+  const test = setup();
+  const entry = import.meta.resolve("@reown/appkit-adapter-bitcoin");
+  const { [name]: Connector } = await import(new URL(`../src/connectors/${name}.js`, entry).href);
+  const connector = name === "WalletStandardConnector"
+    ? new Connector({ wallet: { name: "Read-only wallet", features: { "bitcoin:connect": {} } }, requestedChains: [] })
+    : new Connector({ provider: { session: { namespaces: { bip122: { methods: ["getAccountAddresses"] } } } }, chains: [], getActiveChain: () => undefined });
+  if (test.input.externalWallet.family !== "bitcoin") throw new Error("Expected Bitcoin wallet");
+  test.input.externalWallet.provider = connector;
+  const send = vi.spyOn(connector, "sendTransfer");
+  await submitBridgeTransfer(test.input, test.effects);
+  expect(loadStoredActivities()).toEqual([]);
+  expect(send).not.toHaveBeenCalled();
+  expect(test.effects.onError).toHaveBeenCalledWith(expect.stringMatching(/supports payments/));
 });
 
 it.each(["storage", "cap", "refund-address", "quote-address", "expired", "disconnected", "account-changed", "account-changed-during-prepare"] as const)("blocks the Bitcoin payment on %s failure", async failure => {
@@ -116,7 +188,7 @@ it.each(["storage", "cap", "refund-address", "quote-address", "expired", "discon
   expect(test.sendTransfer).not.toHaveBeenCalled();
 });
 
-it.each(["rejected", "lost-response", "invalid-hash"])("retains the attempt after a %s and never repeats its payment", async failure => {
+it.each(["rejected", "lost-response", "relay rejected the request", "invalid-hash"])("retains the attempt after a %s and never repeats its payment", async failure => {
   const test = setup();
   if (failure === "invalid-hash") test.sendTransfer.mockResolvedValue(nearTxHash);
   else test.sendTransfer.mockRejectedValue(new Error(failure));
@@ -128,6 +200,21 @@ it.each(["rejected", "lost-response", "invalid-hash"])("retains the attempt afte
   test.effects.activities.sync();
   await submitBridgeTransfer(test.input, test.effects);
   expect(test.sendTransfer).toHaveBeenCalledTimes(1);
+});
+
+it("stops before payment if storage contention outlasts the reviewed quote", async () => {
+  const test = setup();
+  vi.useFakeTimers();
+  const write = window.localStorage.setItem.bind(window.localStorage);
+  vi.spyOn(window.localStorage, "setItem").mockImplementation((key, value) => {
+    if (JSON.parse(value)[0]?.near?.submission === "attempted") vi.advanceTimersByTime(11 * 60_000);
+    write(key, value);
+  });
+  await submitBridgeTransfer(test.input, test.effects);
+  expect(test.sendTransfer).not.toHaveBeenCalled();
+  const [receipt] = loadStoredActivities();
+  expect(nearMonitor.canPoll(receipt)).toBe(false);
+  expect(activityDetailFor(receipt).guidance?.body).toMatch(/fresh quote/);
 });
 
 it("retains the Bitcoin refund separately and keeps polling incomplete deposits after expiry", async () => {

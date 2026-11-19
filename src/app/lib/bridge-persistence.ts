@@ -128,4 +128,7 @@ export function saveActivities(activities: Activity[]) {
 export const activityPersistence: ActivityPersistence = {
   read: loadStoredActivities,
   write: saveActivities,
+  withWriteLock: commit => globalThis.navigator?.locks
+    ? navigator.locks.request(activityStorageKey, commit).catch(() => false)
+    : commit(),
 };

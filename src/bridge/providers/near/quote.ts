@@ -3,7 +3,7 @@ import { formatUnits } from "viem";
 import { bitcoinAddressSchema, bitcoinTxHashSchema } from "../../bitcoin/address";
 import { isEvmAsset, type BridgeAsset } from "../../core/assets";
 import { transactionHashSchema } from "../../evm/evm-schema";
-import { nearConfig } from "../../../config/near/config";
+import { nearConfig, nearReceiptPairs } from "../../../config/near/config";
 import type { QuoteRequest, QuoteResult } from "../../core/quote";
 import { nearInputSchema, nearQuoteSchema, nearMidenAddress, nearEvmAddress, type NearInput, type NearQuoteResponse } from "./schema";
 
@@ -15,11 +15,23 @@ export function nearPair(routeId: string) {
   return pair;
 }
 
-export function nearRouteAssets(routeId: string) {
-  const pair = nearPair(routeId);
+function directedAssets(routeId: string, pair: ReturnType<typeof nearPair>) {
   return pair.id === routeId
     ? { mode: "send" as const, source: pair.source, destination: pair.destination }
     : { mode: "receive" as const, source: pair.destination, destination: pair.source };
+}
+
+export function nearRouteAssets(routeId: string) {
+  return directedAssets(routeId, nearPair(routeId));
+}
+
+export function nearReceiptAssets(routeId: string, quote: NearQuoteResponse) {
+  for (const pair of nearReceiptPairs) {
+    if (pair.id !== routeId && pair.receiveId !== routeId) continue;
+    const assets = directedAssets(routeId, pair);
+    if (assets.source.assetId === quote.quoteRequest.originAsset && assets.destination.assetId === quote.quoteRequest.destinationAsset) return assets;
+  }
+  throw new Error("NEAR receipt does not match a released route.");
 }
 
 /** parseUnits rounds extra precision; transfers must reject it instead. */
@@ -33,8 +45,7 @@ export function nearSourceUnits(amount: string, decimals: number): string {
   return units.toString();
 }
 
-export function nearRequest(input: NearInput, dry: boolean, deadline: string) {
-  const pair = nearRouteAssets(input.routeId);
+export function nearRequest(input: NearInput, dry: boolean, deadline: string, pair = nearRouteAssets(input.routeId)) {
   if (input.mode !== pair.mode) throw new Error("NEAR route direction mismatch.");
   const external = pair.mode === "send" ? pair.destination : pair.source;
   const address = addressSchemaFor(external).parse(input.externalAddress);
@@ -73,17 +84,14 @@ function addressSchemaFor(asset: BridgeAsset) {
 }
 
 export function verifyNearQuote(value: unknown, input: NearInput, dry: boolean, requireLive = true): NearQuoteResponse {
-  const response = nearQuoteSchema.parse(value);
+  return verifySignedNearQuote(nearQuoteSchema.parse(value), input, dry, requireLive);
+}
+
+export function verifySignedNearQuote(response: NearQuoteResponse, input: NearInput, dry: boolean, requireLive = true): NearQuoteResponse {
   // The SDK pins the official manager public key; never accept one from a caller.
   if (!verifyQuoteSignature(response as unknown as QuoteResponse)) throw new Error("Invalid NEAR quote signature.");
-  const expected = nearRequest(nearInputSchema.parse(input), dry, response.quoteRequest.deadline);
-  const pair = nearPair(input.routeId);
-  // Old Bitcoin receipts used the original 1Click alias for the same Miden faucet.
-  const midenLeg = input.mode === "send" ? "originAsset" : "destinationAsset";
-  if (!requireLive && !dry && pair.destination.network === "bitcoin" &&
-      response.quoteRequest[midenLeg] === `nep141:miden-${pair.source.faucetId}.omft.near`) {
-    expected[midenLeg] = response.quoteRequest[midenLeg];
-  }
+  const pair = requireLive || dry ? nearRouteAssets(input.routeId) : nearReceiptAssets(input.routeId, response);
+  const expected = nearRequest(input, dry, response.quoteRequest.deadline, pair);
   for (const [key, value] of Object.entries(expected)) {
     // Relay wait controls latency, not transfer terms. Its original value is
     // signature-verified above; saved quotes may predate the current policy.
@@ -98,8 +106,7 @@ export function verifyNearQuote(value: unknown, input: NearInput, dry: boolean, 
   if (input.mode === "receive" && BigInt(quote.amountOut) > MIDEN_MAX_AMOUNT) throw new Error("Output exceeds Miden's transfer limit.");
   if (!dry && !quote.depositAddress) throw new Error("NEAR did not return a deposit address.");
   if (quote.depositAddress) {
-    const source = nearRouteAssets(input.routeId).source;
-    addressSchemaFor(source).parse(quote.depositAddress);
+    addressSchemaFor(pair.source).parse(quote.depositAddress);
   }
   if (requireLive && (nearQuoteExpiry(response) <= Date.now() || Date.parse(response.timestamp) > Date.now() + 30_000)) {
     throw new Error("NEAR quote expired. Review a fresh quote before sending.");
@@ -130,15 +137,13 @@ export function nearQuoteResult(response: NearQuoteResponse, routeId: string): Q
 }
 
 /** Signed request values recover the original binding after a reload or route pause. */
-export function nearTrackingInput(routeId: string, quote: NearQuoteResponse): NearInput {
-  const { mode, source } = nearRouteAssets(routeId);
+export function nearTrackingInput(routeId: string, quote: NearQuoteResponse, { mode, source } = nearReceiptAssets(routeId, quote)): NearInput {
   return nearInputSchema.parse({ routeId, mode, amount: formatUnits(BigInt(quote.quoteRequest.amount), source.decimals),
     midenAccount: mode === "send" ? quote.quoteRequest.refundTo : quote.quoteRequest.recipient,
     externalAddress: mode === "send" ? quote.quoteRequest.recipient : quote.quoteRequest.refundTo });
 }
 
-export function validateNearTxHash(routeId: string, side: "source" | "destination", hash: string) {
-  const asset = nearRouteAssets(routeId)[side];
+export function validateNearTxHash(asset: BridgeAsset, hash: string) {
   if (asset.network === "bitcoin") return bitcoinTxHashSchema.parse(hash);
   if (isEvmAsset(asset) || asset.kind === "miden") return transactionHashSchema.parse(hash);
   throw new Error("Unsupported NEAR transaction network.");

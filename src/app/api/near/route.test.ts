@@ -8,6 +8,7 @@ import { POST as deposit } from "./deposit/submit/route";
 import { nearTestInput, nearReceiveInput, bitcoinReceiveInput, nearQuoteFixture, nearStatus, nearTxHash, nearDestinationHash } from "../../../../test/near-quotes";
 import { verifyQuoteSignature } from "@defuse-protocol/one-click-sdk-typescript";
 import * as configs from "../../../config/bridge-config";
+import { nearConfig } from "../../../config/near/config";
 import bitcoinQuotes from "../../../../test/fixtures/near-bitcoin.json";
 import { nearQuoteSchema } from "../../../bridge/providers/near/schema";
 
@@ -23,6 +24,43 @@ const request = (body: unknown, signal?: AbortSignal) => new Request("https://po
 const outgoing = (input: RequestInfo | URL, init?: RequestInit) => new Request(input instanceof Request ? input.clone() : input, init);
 beforeEach(() => { fetcher.mockReset(); vi.mocked(verifyQuoteSignature).mockReturnValue(true); });
 afterEach(() => { vi.unstubAllGlobals(); vi.unstubAllEnvs(); vi.restoreAllMocks(); vi.useRealTimers(); });
+
+it.each([
+  ["usdcx", "usdc", "nep141:pol-0x3c499c542cef5e3811e1192ce70d8cc03d5c3359.omdep.near", "nep245:v2_1.omni.hot.tg:137_qiStmoQJDQPTebaPjgx5VBxZv6L"],
+  ["usdt", "usdt", "nep141:pol-0xc2132d05d31c914a87c6611c10748aeb04b58e8f.omdep.near", "nep245:v2_1.omni.hot.tg:137_3hpYoaLtt8MP1Z2GH1U473DMRKgr"],
+])("uses the current Polygon %s asset in either direction and tracks its retired pin", async (miden, token, active, retired) => {
+  vi.useFakeTimers();
+  for (const mode of ["send", "receive"] as const) {
+    const routeId = mode === "send" ? `mainnet:near-miden-${miden}-to-polygon-${token}` : `mainnet:near-polygon-${token}-to-miden-${miden}`;
+    const input = { ...nearTestInput, mode, routeId };
+    const field = mode === "send" ? "destinationAsset" : "originAsset";
+    fetcher.mockResolvedValueOnce(Response.json(nearQuoteFixture(input, true)));
+    expect((await preview(request(input))).status).toBe(200);
+    expect((await outgoing(...fetcher.mock.lastCall!).json())[field]).toBe(active);
+    const old = nearQuoteFixture(input);
+    old.quoteRequest[field] = retired;
+    expect((await prepare(request({ ...input, quote: old }))).status).toBe(400);
+    fetcher.mockResolvedValueOnce(Response.json(nearStatus(old)));
+    expect((await status(request({ routeId, quote: old }))).status).toBe(200);
+  }
+});
+
+it("recovers a signed receipt and its notification after the route leaves the active catalog", async () => {
+  const routeId = bitcoinReceiveInput.routeId;
+  const quote = nearQuoteSchema.parse(bitcoinQuotes.receive.prepared);
+  const actual = await vi.importActual<typeof import("@defuse-protocol/one-click-sdk-typescript")>("@defuse-protocol/one-click-sdk-typescript");
+  vi.mocked(verifyQuoteSignature).mockImplementation(actual.verifyQuoteSignature);
+  const routes = nearConfig.routes;
+  nearConfig.routes = routes.filter(pair => pair.receiveId !== routeId);
+  try {
+    expect((await prepare(request(bitcoinReceiveInput))).status).toBe(400);
+    fetcher.mockImplementation(async () => Response.json(nearStatus(quote)));
+    expect((await status(request({ routeId, quote }))).status).toBe(200);
+    expect((await deposit(request({ routeId, quote, txHash: "ab".repeat(32) }))).status).toBe(200);
+    expect((await status(request({ routeId: nearReceiveInput.routeId, quote }))).status).toBe(400);
+    expect(fetcher).toHaveBeenCalledTimes(2);
+  } finally { nearConfig.routes = routes; }
+});
 
 it("pins exact input, source decimals and chain direction while keeping the API credential server-side", async () => {
   vi.stubEnv("NEAR_API_KEY", "private-partner-key");

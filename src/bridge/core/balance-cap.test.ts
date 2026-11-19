@@ -1,6 +1,6 @@
 import { afterEach, expect, it, vi } from "vitest";
 import { evaluateBalanceCap, priceSymbolsForBalanceCap, type BalanceCapPrices } from "./balance-cap";
-import { findBridgeRoute } from "./routes";
+import { findBridgeRoute, routesForEnvironment } from "./routes";
 import type { MidenBalances } from "../miden-balances";
 import type { PriceSymbol } from "../../app/lib/token-pricing";
 
@@ -15,6 +15,20 @@ const holding = (symbol: string | undefined, amountRaw: bigint, decimals = 6) =>
 });
 
 afterEach(() => vi.restoreAllMocks());
+
+it.each(routesForEnvironment("mainnet").filter(route => route.provider === "near" && route.mode === "receive" && !route.disabled))(
+  "can value an incoming deposit for $id", route => {
+    vi.spyOn(Date, "now").mockReturnValue(now);
+    const markets = prices({ ETH: "3000", WBTC: "60000", BTC: "60000", USDC: "1", USDT: "1", POL: "0.2" });
+    const requested = priceSymbolsForBalanceCap(route, {});
+    const aliases: Record<string, PriceSymbol> = { cbBTC: "BTC", USDT0: "USDT" };
+    expect(requested).toEqual([aliases[route.source.symbol] ?? route.source.symbol.toUpperCase()]);
+    const symbol = requested[0];
+    const market = { [symbol]: markets[symbol] };
+    expect(evaluateBalanceCap(route, "0.001", {}, market).status).toBe("allowed");
+    expect(evaluateBalanceCap(route, "10000", {}, market).status).toBe("exceeded");
+  },
+);
 
 it.each([
   ["232.462", "allowed"],
