@@ -1,3 +1,5 @@
+import { sameTransferAccounts } from "../../bridge/core/accounts";
+import { validateBridgeWallet } from "../../wallets/bridge-wallet";
 import { configKey } from "../../config/bridge-config";
 import { assertMidenAccountNetwork } from "../../wallets/miden/network";
 import { validateTransferAmount } from "../../bridge/core/rules";
@@ -43,7 +45,7 @@ export async function submitBridgeTransfer(
   }
   if (input.insufficientBalance) {
     effects.onError(
-      `Not enough ${route.source.symbol} — this wallet holds ${input.evmBalance}. Lower the amount.`,
+      `Not enough ${route.source.symbol} — this wallet holds ${input.sourceBalance}. Lower the amount.`,
     );
     return;
   }
@@ -59,15 +61,11 @@ export async function submitBridgeTransfer(
   };
   effects.onSubmittingChange(true);
   try {
-    if (
-      !input.evmWallet.connected || !input.evmWallet.address ||
-      (route.mode === "receive" && !input.evmWallet.provider)
-    ) {
-      await effects.openEvmWallet();
+    if (!validateBridgeWallet(route, input)) {
+      await effects.openExternalWallet();
       return;
     }
-    if (input.midenAccount !== input.midenWallet.address ||
-        input.evmAddress.toLowerCase() !== input.evmWallet.address.toLowerCase()) {
+    if (input.midenAccount !== input.midenWallet.address) {
       throw new Error("Your connected wallet changed. Review the transfer again.");
     }
     const { flows } = await bridgeProviders[route.provider].load();
@@ -79,8 +77,7 @@ export async function submitBridgeTransfer(
         quote.request.routeId !== route.id ||
         configKey(quote.request.recovery) !== configKey(route.recovery) ||
         quote.request.amount !== input.amount ||
-        quote.request.midenAccount !== input.midenAccount ||
-        quote.request.evmAddress.toLowerCase() !== input.evmAddress.toLowerCase()
+        !sameTransferAccounts(route, quote.request, input)
       ) {
         throw new Error("Refresh and review the quote before sending.");
       }
@@ -103,11 +100,12 @@ export async function submitBridgeTransfer(
       findActivity: id => { effects.activities.sync?.(); return effects.activities.get?.(id)?.activity; },
       persist: patch => {
         if (!effects.activities.get) throw new Error("Receipt storage is unavailable. Do not submit this transfer.");
+        const firstSave = !recorded;
         if (!recorded) recorded = effects.activities.record(createActivity(route, input.amount, patch));
         else update(patch);
         const receipt = effects.activities.get(recorded.id);
         if (!receipt || receipt.unsavedChanges) throw new Error("Save this receipt before opening the wallet. Storage is unavailable.");
-        effects.navigate(`/activity/${recorded.id}`);
+        if (firstSave) effects.navigate(`/activity/${recorded.id}`);
         return recorded;
       },
       record: (patch) => {
@@ -123,7 +121,8 @@ export async function submitBridgeTransfer(
   } catch (error) {
     // An RPC/solver outage after broadcast is not proof that the transfer failed.
     effects.onError(
-      recorded?.near?.submission === "prepared" ? `Transfer was not sent. Keep its prepared receipt. ${errorMessage(error)}` : recorded
+      recorded?.near?.submission === "prepared" ? `Transfer was not sent. Keep its prepared receipt. ${errorMessage(error)}`
+        : recorded?.near?.submission === "attempted" ? `Check the wallet request and keep its receipt. Do not submit again. ${errorMessage(error)}` : recorded
         ? `Transfer submitted. Keep its receipt; do not submit again. ${errorMessage(error)}`
         : errorMessage(error),
     );

@@ -2,7 +2,7 @@ import { formatUnits } from "viem";
 import type { ActivityMonitor } from "../../core/provider";
 import { nearPost } from "./client";
 import { nearStatusResponseSchema } from "./schema";
-import { nearRouteAssets, nearTrackingInput, verifyNearQuote } from "./quote";
+import { nearRouteAssets, nearTrackingInput, verifyNearQuote, validateNearTxHash } from "./quote";
 import { observeNearEvmSource } from "./evm-source";
 
 export const nearMonitor: ActivityMonitor = {
@@ -16,6 +16,8 @@ export const nearMonitor: ActivityMonitor = {
       const status = nearStatusResponseSchema.parse(await nearPost("status", body, signal));
       verifyNearQuote(status.quoteResponse, nearTrackingInput(body.routeId, body.quote), false, false);
       if (status.quoteResponse.signature !== body.quote.signature) throw new Error("Quote reference mismatch.");
+      for (const tx of status.swapDetails.originChainTxHashes) validateNearTxHash(body.routeId, "source", tx.hash);
+      for (const tx of status.swapDetails.destinationChainTxHashes) validateNearTxHash(body.routeId, "destination", tx.hash);
       const source = activity.mode === "receive" && status.status === "PENDING_DEPOSIT"
         ? await observeNearEvmSource(activity, signal) : { patch: {} };
       if (source.patch.failureLeg === "source") return source;

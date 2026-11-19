@@ -1,25 +1,25 @@
+import { requireEvmWallet } from "../../../wallets/bridge-wallet";
 import { decodeFunctionResult, encodeFunctionData, erc20Abi, formatUnits, toHex } from "viem";
+import { isEvmAsset } from "../../core/assets";
 import type { SubmissionContext } from "../../core/submission";
 import { prepareDepositWallet } from "../../evm/deposit-wallet";
 import { suggestEvmFees } from "../../evm/fee-suggestions";
-import { evmAddressSchema, transactionHashSchema } from "../../evm/evm-schema";
+import { evmAddressSchema } from "../../evm/evm-schema";
 import { evmNetworks } from "../../../config/evm-networks";
-import { normalizeMidenAccountHex } from "../../miden-address";
-import { nearInput, verifyNearQuote } from "./quote";
-import { nearPost } from "./client";
 import type { NearQuoteResponse } from "./schema";
 
 /** Fund the quoted address directly; ERC-20 deposits need no approval/spender. */
-export async function submitNearEvmDeposit(context: SubmissionContext, quote: NearQuoteResponse, id: string) {
+export async function prepareEvmDeposit(context: SubmissionContext, quote: NearQuoteResponse) {
   const { route, input, phase } = context;
   const asset = route.source;
-  if (route.mode !== "receive" || asset.kind === "miden" || !input.evmWallet.provider) throw new Error("Connect the source EVM wallet.");
-  const account = evmAddressSchema.parse(input.evmAddress);
+  if (route.mode !== "receive" || !isEvmAsset(asset)) throw new Error("Connect the source EVM wallet.");
+  const { provider } = requireEvmWallet(input.externalWallet);
+  const account = evmAddressSchema.parse(input.externalAddress);
   const depositAddress = evmAddressSchema.parse(quote.quote.depositAddress);
   const units = BigInt(quote.quote.amountIn);
   const chain = evmNetworks[asset.network];
   phase(`Checking ${asset.symbol} balance and network fee…`);
-  const { client, assertWallet } = await prepareDepositWallet(asset.network, input.evmWallet.provider, account);
+  const { client, assertWallet } = await prepareDepositWallet(asset.network, provider, account);
   await assertWallet();
   const nativeBalance = await client.getBalance({ address: account });
   const transaction = asset.kind === "native"
@@ -39,27 +39,15 @@ export async function submitNearEvmDeposit(context: SubmissionContext, quote: Ne
   const gasPrice = fees?.maxFeePerGas ?? await client.getGasPrice();
   const fee = gas * gasPrice;
   if (nativeBalance < transaction.value + fee) throw new Error(`Not enough ${chain.nativeCurrency.symbol} for the deposit and network fee.`);
-  const binding = nearInput({ route, ...input });
-  await nearPost("prepare", { ...binding, quote });
-  await assertWallet();
-  verifyNearQuote(quote, binding, false);
-  const operation = { quote, networkFee: `${formatUnits(fee, chain.nativeCurrency.decimals)} ${chain.nativeCurrency.symbol}`,
-    submission: "prepared" as const, status: "PENDING_DEPOSIT" as const, notification: "pending" as const };
-  context.persist!({ id, near: operation, receivedAmount: input.quote!.received, evmAddress: input.evmAddress,
-    destination: input.midenAccount, midenAccount: input.midenAccount, midenAccountHex: normalizeMidenAccountHex(input.midenAccount),
-    eta: `About ${quote.quote.timeEstimate} seconds` });
-  context.persist!({ near: { ...operation, submission: "attempted" } });
-  phase("Confirm the deposit in your EVM wallet…");
-  // One wallet call, with no automatic retry if the wallet response is lost.
-  const sourceTxHash = transactionHashSchema.parse(await input.evmWallet.provider.request({
-    method: "eth_sendTransaction", params: [{ from: account, to: transaction.to, data: transaction.data,
-      value: toHex(transaction.value), chainId: toHex(chain.id), gas: toHex(gas),
-      ...(fees ? { maxFeePerGas: toHex(fees.maxFeePerGas), maxPriorityFeePerGas: toHex(fees.maxPriorityFeePerGas) } : { gasPrice: toHex(gasPrice) }),
-    }],
-  }));
-  context.persist!({ sourceTxHash, near: { ...operation, submission: "accepted" } });
-  try {
-    await nearPost("deposit/submit", { routeId: route.id, quote, txHash: sourceTxHash });
-    context.update({ near: { ...operation, submission: "accepted", notification: "sent" } });
-  } catch { /* Status tracking retries the notification; it never resends funds. */ }
+  return {
+    assertWallet,
+    networkFee: `${formatUnits(fee, chain.nativeCurrency.decimals)} ${chain.nativeCurrency.symbol}`,
+    prompt: "Confirm the deposit in your EVM wallet…",
+    send: () => provider.request<string>({
+      method: "eth_sendTransaction", params: [{ from: account, to: transaction.to, data: transaction.data,
+        value: toHex(transaction.value), chainId: toHex(chain.id), gas: toHex(gas),
+        ...(fees ? { maxFeePerGas: toHex(fees.maxFeePerGas), maxPriorityFeePerGas: toHex(fees.maxPriorityFeePerGas) } : { gasPrice: toHex(gasPrice) }),
+      }],
+    }),
+  };
 }

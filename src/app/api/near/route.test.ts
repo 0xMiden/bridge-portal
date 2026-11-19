@@ -5,9 +5,11 @@ import { POST as preview } from "./quote/route";
 import { POST as prepare } from "./prepare/route";
 import { POST as status } from "./status/route";
 import { POST as deposit } from "./deposit/submit/route";
-import { nearTestInput, nearReceiveInput, nearQuoteFixture, nearStatus, nearTxHash, nearDestinationHash } from "../../../../test/near-quotes";
+import { nearTestInput, nearReceiveInput, bitcoinReceiveInput, nearQuoteFixture, nearStatus, nearTxHash, nearDestinationHash } from "../../../../test/near-quotes";
 import { verifyQuoteSignature } from "@defuse-protocol/one-click-sdk-typescript";
 import * as configs from "../../../config/bridge-config";
+import bitcoinQuotes from "../../../../test/fixtures/near-bitcoin.json";
+import { nearQuoteSchema } from "../../../bridge/providers/near/schema";
 
 vi.mock("@defuse-protocol/one-click-sdk-typescript", async importOriginal => {
   const actual = await importOriginal<typeof import("@defuse-protocol/one-click-sdk-typescript")>();
@@ -34,7 +36,8 @@ it("pins exact input, source decimals and chain direction while keeping the API 
     return Response.json(nearQuoteFixture(nearTestInput, true, response.quote));
   });
   vi.useFakeTimers();
-  const response = await preview(request(nearTestInput));
+  const { externalAddress, ...legacyInput } = nearTestInput;
+  const response = await preview(request({ ...legacyInput, evmAddress: externalAddress }));
   expect(response.status).toBe(200);
   expect(response.headers.get("cache-control")).toBe("no-store");
   expect(await response.text()).not.toContain("private-partner-key");
@@ -46,7 +49,7 @@ it("pins exact input, source decimals and chain direction while keeping the API 
 
 it.each([
   { mode: "receive" }, { routeId: "mainnet:near-miden-usdcx-to-arc-usdc" }, { amount: "5.0000001" },
-  { amount: "1e6" }, { amount: "0" }, { midenAccount: "mtst1wrongnetwork" }, { evmAddress: "0x0" },
+  { amount: "1e6" }, { amount: "0" }, { midenAccount: "mtst1wrongnetwork" }, { externalAddress: "0x0" },
   { midenAccount: `${nearTestInput.midenAccount.split("_")[0]}_qqqqqq` },
   { originAsset: "arbitrary" }, { upstream: "https://attacker.example" },
 ])("rejects invalid portal requests before upstream I/O: %j", async patch => {
@@ -76,7 +79,7 @@ it.each([
   fetcher.mockResolvedValueOnce(Response.json(nearQuoteFixture(input, true)));
   expect((await preview(request(input))).status).toBe(200);
   expect(await outgoing(...fetcher.mock.calls[0]).json()).toMatchObject({
-    amount: units, originAsset, destinationAsset, refundTo: input.evmAddress, recipient: input.midenAccount,
+    amount: units, originAsset, destinationAsset, refundTo: input.externalAddress, recipient: input.midenAccount,
     depositType: "ORIGIN_CHAIN", recipientType: "DESTINATION_CHAIN", refundType: "ORIGIN_CHAIN", confidentiality: "basic",
   });
 });
@@ -227,4 +230,69 @@ it.each([
   await vi.advanceTimersByTimeAsync(1);
   expect((await response).status).toBe(502);
   expect(fetcher).toHaveBeenCalledOnce();
+});
+
+it.each(["receive", "send"] as const)("prepares Bitcoin %s with current asset IDs, exact satoshis and the correct payment window", async mode => {
+  vi.useFakeTimers();
+  const input = { ...bitcoinReceiveInput, mode, routeId: mode === "receive"
+    ? bitcoinReceiveInput.routeId : "mainnet:near-miden-wbtc-to-bitcoin-btc" };
+  fetcher.mockResolvedValueOnce(Response.json(nearQuoteFixture(input)));
+  const response = await prepare(request(input));
+  expect(response.status).toBe(200);
+  expect(await outgoing(...fetcher.mock.calls[0]).json()).toMatchObject({
+    originAsset: mode === "receive" ? "1cs_v1:btc:native:coin" : "1cs_v1:miden:ft:0x3084d3c389ececd15fda9770d18c8a",
+    destinationAsset: mode === "send" ? "1cs_v1:btc:native:coin" : "1cs_v1:miden:ft:0x3084d3c389ececd15fda9770d18c8a",
+    amount: "100000", refundTo: mode === "receive" ? input.externalAddress : input.midenAccount,
+    recipient: mode === "receive" ? input.midenAccount : input.externalAddress,
+    deadline: new Date(Date.now() + (mode === "receive" ? 3_600_000 : 600_000)).toISOString(),
+  });
+});
+
+it.each([
+  ["mainnet:near-bitcoin-btc-to-miden-wbtc", bitcoinQuotes.receive.legacy, "ab".repeat(32)],
+  ["mainnet:near-miden-wbtc-to-bitcoin-btc", bitcoinQuotes.send.legacy, nearTxHash],
+] as const)("tracks and notifies an expired legacy Bitcoin receipt for %s with its original signed terms", async (routeId, quote, txHash) => {
+  const sdk = await vi.importActual<typeof import("@defuse-protocol/one-click-sdk-typescript")>("@defuse-protocol/one-click-sdk-typescript");
+  vi.mocked(verifyQuoteSignature).mockImplementation(sdk.verifyQuoteSignature);
+  vi.useFakeTimers(); vi.setSystemTime(Date.parse(quote.timestamp) + 7 * 86_400_000);
+  fetcher.mockImplementation(async () => Response.json({ ...nearStatus(nearQuoteSchema.parse(quote), "KNOWN_DEPOSIT_TX"),
+    swapDetails: { originChainTxHashes: [{ hash: txHash }], destinationChainTxHashes: [] } }));
+  const response = await status(request({ routeId, quote }));
+  expect(response.status).toBe(200);
+  expect((await response.json()).quoteResponse).toEqual(quote);
+  expect(new URL(outgoing(...fetcher.mock.calls[0]).url).searchParams.get("depositAddress")).toBe(quote.quote.depositAddress);
+  expect((await deposit(request({ routeId, quote, txHash }))).status).toBe(200);
+  expect(await outgoing(...fetcher.mock.calls[1]).json()).toEqual({ depositAddress: quote.quote.depositAddress, txHash });
+});
+
+it.each([
+  { destinationAsset: "nep141:miden-0x419f8f4bff72959132aa7cea15a4c1.omft.near" },
+  { originAsset: "nep141:btc.omft.near" },
+])("rejects unsupported legacy Bitcoin receipt aliases even after signature verification: %j", async patch => {
+  const quote = nearQuoteFixture(bitcoinReceiveInput);
+  Object.assign(quote.quoteRequest, patch);
+  expect((await status(request({ routeId: bitcoinReceiveInput.routeId, quote }))).status).toBe(400);
+  expect(fetcher).not.toHaveBeenCalled();
+});
+
+it.each([
+  { externalAddress: "mipcBbFg9gMiCh81Kj8tqqdgoZub1ZJRfn" },
+  { externalAddress: "1BoatSLRHtKNngkdXEeobR76b53LETtpyX" },
+  { evmAddress: nearTestInput.externalAddress },
+  { externalAddress: undefined }, { amount: "0.000000001" },
+])("rejects unsafe Bitcoin inputs before allocating a deposit: %j", async patch => {
+  expect((await prepare(request({ ...bitcoinReceiveInput, ...patch }))).status).toBe(400);
+  expect(fetcher).not.toHaveBeenCalled();
+});
+
+it("relays a Bitcoin txid and accepts its native hash in status without changing EVM hash validation", async () => {
+  const quote = nearQuoteFixture(bitcoinReceiveInput);
+  const txHash = "ab".repeat(32);
+  const body = { routeId: bitcoinReceiveInput.routeId, quote, txHash };
+  fetcher.mockResolvedValueOnce(Response.json({ ...nearStatus(quote, "KNOWN_DEPOSIT_TX"),
+    swapDetails: { originChainTxHashes: [{ hash: txHash }], destinationChainTxHashes: [] } }));
+  expect((await deposit(request(body))).status).toBe(200);
+  expect(await outgoing(...fetcher.mock.calls[0]).json()).toMatchObject({ txHash, depositAddress: quote.quote.depositAddress });
+  expect((await deposit(request({ ...body, txHash: nearTxHash }))).status).toBe(400);
+  expect(fetcher).toHaveBeenCalledTimes(1);
 });

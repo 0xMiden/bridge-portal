@@ -1,0 +1,95 @@
+diff --git a/node_modules/@reown/appkit-adapter-bitcoin/dist/esm/src/connectors/UnisatConnector/index.js b/node_modules/@reown/appkit-adapter-bitcoin/dist/esm/src/connectors/UnisatConnector/index.js
+--- a/node_modules/@reown/appkit-adapter-bitcoin/dist/esm/src/connectors/UnisatConnector/index.js
++++ b/node_modules/@reown/appkit-adapter-bitcoin/dist/esm/src/connectors/UnisatConnector/index.js
+@@ -4,7 +4,6 @@
+ import { MethodNotSupportedError } from '../../errors/MethodNotSupportedError.js';
+ import { AddressPurpose } from '../../utils/BitcoinConnector.js';
+ import { ProviderEventEmitter } from '../../utils/ProviderEventEmitter.js';
+-import { UnitsUtil } from '../../utils/UnitsUtil.js';
+ export class UnisatConnector extends ProviderEventEmitter {
+     constructor({ id, name, wallet, requestedChains, imageUrl }) {
+         super();
+@@ -17,6 +16,7 @@
+         this.wallet = wallet;
+         this.requestedChains = requestedChains;
+         this.imageUrl = imageUrl;
++        this.onAccountsChanged = this.onAccountsChanged.bind(this);
+     }
+     get chains() {
+         return this.requestedChains.filter(chain => chain.chainNamespace === ConstantsUtil.CHAIN.BITCOIN);
+@@ -35,7 +35,8 @@
+         return Promise.resolve();
+     }
+     async getAccountAddresses() {
+-        const accounts = await this.wallet.requestAccounts();
++        await this.assertNetwork();
++        const accounts = await this.wallet.getAccounts();
+         const publicKey = await this.wallet.getPublicKey();
+         const accountList = accounts.map(account => ({
+             address: account,
+@@ -49,15 +50,16 @@
+         return this.wallet.signMessage(params.message, protocol);
+     }
+     async sendTransfer(params) {
+-        const network = ChainController.getActiveCaipNetwork(ConstantsUtil.CHAIN.BITCOIN);
+-        if (!network) {
+-            throw new Error('No active network available');
+-        }
+         const from = (await this.wallet.getAccounts())[0];
+         if (!from) {
+             throw new Error('No account available');
+         }
+-        const result = await this.wallet.sendBitcoin(params.recipient, Number(UnitsUtil.parseSatoshis(params.amount, network)));
++        const satoshis = Number(params.amount);
++        if (!Number.isSafeInteger(satoshis) || satoshis <= 0) {
++            throw new Error('Invalid satoshi amount');
++        }
++        await this.assertNetwork();
++        const result = await this.wallet.sendBitcoin(params.recipient, satoshis);
+         return result;
+     }
+     async signPSBT(params) {
+@@ -89,6 +91,20 @@
+             txid
+         };
+     }
++    async assertNetwork() {
++        const network = ChainController.getActiveCaipNetwork(ConstantsUtil.CHAIN.BITCOIN);
++        if (!network) {
++            throw new Error('No active network available');
++        }
++        // UniSat can use the same payment address on Bitcoin and Fractal.
++        if (this.id === 'unisat' || typeof this.wallet.getChain === 'function') {
++            const chain = await this.wallet.getChain?.();
++            if (chain?.enum !== this.getNetwork(network.caipNetworkId)) {
++                const name = network.caipNetworkId === bitcoin.caipNetworkId ? 'Bitcoin mainnet' : network.name;
++                throw new Error(`Switch your wallet to ${name} and review the transfer again.`);
++            }
++        }
++    }
+     async switchNetwork(caipNetworkId) {
+         const network = this.getNetwork(caipNetworkId);
+         await this.wallet.switchChain(network);
+@@ -97,16 +113,19 @@
+         return Promise.reject(new MethodNotSupportedError(this.id, 'request'));
+     }
+     onAccountsChanged(account) {
+-        if (typeof account === 'object' && account && 'address' in account) {
++        if (Array.isArray(account) && account.every(address => typeof address === 'string')) {
++            this.emit('accountsChanged', account);
++        }
++        else if (typeof account === 'object' && account && 'address' in account) {
+             this.emit('accountsChanged', [account.address]);
+         }
+     }
+     bindEvents() {
+         this.unbindEvents();
+-        this.wallet.on('accountsChanged', this.onAccountsChanged.bind(this));
++        this.wallet.on('accountsChanged', this.onAccountsChanged);
+     }
+     unbindEvents() {
+-        this.wallet.removeListener('accountsChanged', this.onAccountsChanged.bind(this));
++        this.wallet.removeListener('accountsChanged', this.onAccountsChanged);
+     }
+     static getWallet(params) {
+         if (!CoreHelperUtil.isClient()) {

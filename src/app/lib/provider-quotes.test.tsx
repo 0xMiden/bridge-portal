@@ -14,7 +14,7 @@ import { availableProviderQuotes, providerQuoteRequests, transferQuoteOptions } 
 const input: QuoteRequest = {
   route: findBridgeRoute("mainnet:xreserve:ethereum:receive")!,
   amount: "100",
-  evmAddress: "0x1111111111111111111111111111111111111111",
+  externalAddress: "0x1111111111111111111111111111111111111111",
   midenAccount: "mm1aqu8zjdwvcgkeug5a67kpwmnsyv2qgp7",
 };
 let client: QueryClient;
@@ -75,7 +75,7 @@ it("starts with one provider and waits for valid terms and both wallet addresses
   const state = observe({ ...input, amount: "" });
   for (const invalid of [
     { amount: "" }, { amount: "0" }, { amount: "0.0000001" },
-    { midenAccount: "" }, { evmAddress: "" },
+    { midenAccount: "" }, { externalAddress: "" }, { externalAddress: "3J98t1WpEZ73CNmQviecrnyiWrnqRhWNLy" },
   ]) {
     state.change({ ...input, ...invalid });
     await vi.advanceTimersByTimeAsync(500);
@@ -149,10 +149,21 @@ it("cancels obsolete requests and never reuses a payout after amount or wallet c
   old.resolve(payout("100"));
   await vi.advanceTimersByTimeAsync(1);
   expect(state.offers().map(offer => offer.quote.received)).toEqual(["200"]);
-  state.change({ ...input, amount: "200", evmAddress: "0x2222222222222222222222222222222222222222" });
+  state.change({ ...input, amount: "200", externalAddress: "0x2222222222222222222222222222222222222222" });
   expect(state.offers()).toEqual([]);
   await vi.advanceTimersByTimeAsync(400);
-  expect(state.offers()[0].quote.request.evmAddress).toBe("0x2222222222222222222222222222222222222222");
+  expect(state.offers()[0].quote.request.externalAddress).toBe("0x2222222222222222222222222222222222222222");
+});
+
+it.each([
+  ["mainnet:xreserve:ethereum:receive", { externalAddress: `0x${"ab".repeat(20)}` }, { externalAddress: `0x${"AB".repeat(20)}` }, 1],
+  ["mainnet:near-bitcoin-btc-to-miden-wbtc", { externalAddress: "1BoatSLRHtKNngkdXEeobR76b53LETtpyT" }, { externalAddress: "1boatslrhtknngkdxeeobr76b53lettpyt" }, 0],
+  ["mainnet:near-bitcoin-btc-to-miden-wbtc", { externalAddress: "1BoatSLRHtKNngkdXEeobR76b53LETtpyT" }, { externalAddress: "1BoatSLRHtKNngkdXEeobR76b53LETtpyT" }, 1],
+])("binds %s offers using that chain's address rules", (routeId, accounts, quotedAccounts, count) => {
+  const route = findBridgeRoute(routeId)!;
+  const request = { ...input, route, ...accounts };
+  const data = { ...payout("1"), request: { routeId, amount: request.amount, midenAccount: request.midenAccount, ...quotedAccounts } };
+  expect(availableProviderQuotes([request], [{ isSuccess: true, data }])).toHaveLength(count);
 });
 
 it("removes a formerly successful provider when its refreshed quote fails", async () => {

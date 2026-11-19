@@ -1,7 +1,7 @@
 {
   "version": 1,
   "environment": "mainnet",
-  "evidenceDate": "2026-11-06",
+  "evidenceDate": "2026-11-10",
   "funding": {
     "noteType": "public",
     "script": "p2id",
@@ -294,6 +294,28 @@
         "decimals": 18,
         "assetId": "nep141:hood.omft.near",
         "logo": "/asset-logos/ethereum.svg"
+      }
+    },
+    {
+      "id": "mainnet:near-miden-wbtc-to-bitcoin-btc",
+      "receiveId": "mainnet:near-bitcoin-btc-to-miden-wbtc",
+      "source": {
+        "network": "miden-mainnet",
+        "kind": "miden",
+        "symbol": "wBTC",
+        "logo": "/asset-logos/wbtc.svg",
+        "name": "Wrapped BTC",
+        "decimals": 8,
+        "faucetId": "0x3084d3c389ececd15fda9770d18c8a",
+        "assetId": "1cs_v1:miden:ft:0x3084d3c389ececd15fda9770d18c8a"
+      },
+      "destination": {
+        "network": "bitcoin",
+        "kind": "native",
+        "symbol": "BTC",
+        "decimals": 8,
+        "assetId": "1cs_v1:btc:native:coin",
+        "logo": "/asset-logos/bitcoin.svg"
       }
     }
   ]

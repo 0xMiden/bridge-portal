@@ -121,7 +121,7 @@ export async function quoteTransfer(input: QuoteRequest, signal: AbortSignal): P
     recovery: input.route.recovery,
     network: input.route.source.network,
     amount: input.amount,
-    sender: input.evmAddress,
+    sender: input.externalAddress,
     recipient: input.midenAccount,
   }, "Enter a valid Circle deposit route and sender.");
   parseArcAmount(request.amount);

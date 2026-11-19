@@ -5,6 +5,7 @@ import { createWalletClient, custom, decodeFunctionData, encodeAbiParameters, en
 import { evmNetworks } from "../../../config/evm-networks";
 import { getWalletClient } from "@wagmi/core";
 import { findBridgeRoute } from "../../core/routes";
+import { isEvmAsset } from "../../core/assets";
 import { submitBridgeTransfer, type TransferSubmission } from "../../../app/lib/bridge-submission";
 import { activityPersistence, loadStoredActivities, saveActivities } from "../../../app/lib/bridge-persistence";
 import { observeActivity } from "../../tracking";
@@ -15,7 +16,7 @@ import type { EvmProvider } from "../../../wallets/evm/evm-wallet";
 // Keep the SDK, wallet client, execution, submission and persistence real. Only
 // the external wallet/RPC/HTTP, balance-cap valuation and unrelated Miden WASM boundaries are simulated.
 vi.mock("@wagmi/core", () => ({ getAccount: () => ({ address: SPONSOR, chainId: 42161 }), getWalletClient: vi.fn() }));
-vi.mock("../../../wallets/evm/appkit-config", () => ({ wagmiAdapter: { wagmiConfig: {} } }));
+vi.mock("../../../wallets/appkit-config", () => ({ wagmiAdapter: { wagmiConfig: {} } }));
 vi.mock("./miden-note", () => ({ createBridgeP2IDENoteCallback: vi.fn() }));
 vi.mock("@miden-sdk/miden-sdk", () => ({
   AccountId: {
@@ -53,7 +54,7 @@ afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 
 function setup(mode: "sequential" | "batch" | "rejected", health: unknown = epochWalletPaidHealth(COMPACT), selected = route) {
   const source = selected.source;
-  if (source.kind === "miden") throw new Error("Expected an EVM deposit");
+  if (!isEvmAsset(source)) throw new Error("Expected an EVM deposit");
   const chain = evmNetworks[source.network];
   const chainHex = `0x${chain.id.toString(16)}`;
   let claimHash: Hex;
@@ -140,14 +141,14 @@ function setup(mode: "sequential" | "batch" | "rejected", health: unknown = epoc
     throw new Error(`Unexpected HTTP request ${url}`);
   }));
   const input: TransferSubmission = {
-    routeId: selected.id, environment: "mainnet", amount: "1", insufficientBalance: false, evmBalance: "10 USDC",
-    evmAddress: SPONSOR, midenAccount: MIDEN, midenAsset: null,
-    evmWallet: { connected: true, address: SPONSOR, provider: wallet as EvmProvider },
+    routeId: selected.id, environment: "mainnet", amount: "1", insufficientBalance: false, sourceBalance: "10 USDC",
+    externalAddress: SPONSOR, midenAccount: MIDEN, midenAsset: null,
+    externalWallet: { family: "evm", connected: true, address: SPONSOR, provider: wallet as EvmProvider },
     midenWallet: { connected: true, address: MIDEN },
     quote: { kind: "epoch", received: formatUnits(918687n, selected.destination.decimals), validity: { kind: "time", expiresAt: Date.now() + 60000 },
-      request: { routeId: selected.id, recovery: selected.recovery, amount: "1", evmAddress: SPONSOR, midenAccount: MIDEN } },
+      request: { routeId: selected.id, recovery: selected.recovery, amount: "1", externalAddress: SPONSOR, midenAccount: MIDEN } },
   };
-  const effects = { openEvmWallet: vi.fn(), verifyBalanceCap: vi.fn(async () => {}), onError: vi.fn(), onSubmittingChange: vi.fn(), onPhaseChange: vi.fn(), activities: new ActivityStore(activityPersistence), navigate: vi.fn() };
+  const effects = { openExternalWallet: vi.fn(), verifyBalanceCap: vi.fn(async () => {}), onError: vi.fn(), onSubmittingChange: vi.fn(), onPhaseChange: vi.fn(), activities: new ActivityStore(activityPersistence), navigate: vi.fn() };
   return { input, effects, allocation, sent, approvals, beforeConfirmation, allocationEvidence: () => ({ activities: beforeAllocation, claimHash }) };
 }
 

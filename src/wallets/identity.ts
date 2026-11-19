@@ -10,7 +10,6 @@ export function shortAddress(value: string) {
 // name, a distinguishing accessible name, and a short state line — one source
 // of truth shared by the header pills and the From/To panels.
 
-export const SEPOLIA_WALLET_NAME = "Sepolia wallet";
 export const MIDEN_WALLET_NAME = "Bread";
 
 export type WalletControlState =
@@ -31,16 +30,15 @@ export type WalletIdentity = {
   state: WalletControlState;
 };
 
-export type EvmWalletView = {
+export type ExternalWalletView = {
   connected: boolean;
   connecting?: boolean;
   address: string;
-  networkLabel?: string;
+  networkLabel: string;
 };
 
-export function evmWalletIdentity(view: EvmWalletView): WalletIdentity {
-  const network = view.networkLabel ?? "Sepolia";
-  const name = `${network} wallet`;
+export function externalWalletIdentity(view: ExternalWalletView): WalletIdentity {
+  const name = `${view.networkLabel} wallet`;
   if (view.connecting) {
     return {
       name,

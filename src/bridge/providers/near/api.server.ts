@@ -1,6 +1,7 @@
 import { ApiError, OneClickService, OpenAPI, type CancelablePromise } from "@defuse-protocol/one-click-sdk-typescript";
-import { nearInputSchema, nearPrepareInputSchema, nearTrackingInputSchema, nearDepositInputSchema, nearStatusResponseSchema, nearQuoteSchema, nearCorrelationId } from "./schema";
-import { nearRequest, verifyNearQuote, nearTrackingInput } from "./quote";
+import { nearInputSchema, nearPrepareInputSchema, nearTrackingInputSchema, nearDepositInputSchema, nearStatusResponseSchema, nearQuoteSchema, nearCorrelationId, nearEvmAddress } from "./schema";
+import { bitcoinAddressSchema } from "../../bitcoin/address";
+import { nearRequest, verifyNearQuote, nearTrackingInput, nearDepositWindow, validateNearTxHash } from "./quote";
 import { currentBridgeConfig } from "../../../config/bridge-config";
 
 const API = "https://1click.chaindefuser.com";
@@ -67,7 +68,7 @@ async function upstream<T>(operation: "quote" | "status" | "deposit", start: () 
 
 async function quote(body: unknown, dry: boolean, signal: AbortSignal) {
   const input = dry ? nearInputSchema.parse(body) : nearPrepareInputSchema.parse(body);
-  const request = nearRequest(input, dry, new Date(Date.now() + 10 * 60_000).toISOString());
+  const request = nearRequest(input, dry, new Date(Date.now() + nearDepositWindow(input.routeId)).toISOString());
   if (!dry && currentBridgeConfig("mainnet").document.features[input.mode === "send" ? "bridgeOut" : "bridgeIn"] === false) {
     throw new NearApiError("New NEAR transfers are paused. Existing receipts continue tracking.", 503);
   }
@@ -86,6 +87,20 @@ async function quote(body: unknown, dry: boolean, signal: AbortSignal) {
   }
 }
 
+/** Accept requests from older open tabs. The strict input schema rejects multiple address fields. */
+function normalizeQuoteAccounts(body: unknown) {
+  if (!body || typeof body !== "object" || "externalAddress" in body) return body;
+  if ("evmAddress" in body) {
+    const { evmAddress, ...rest } = body;
+    return { ...rest, externalAddress: nearEvmAddress.parse(evmAddress) };
+  }
+  if ("bitcoinAddress" in body) {
+    const { bitcoinAddress, ...rest } = body;
+    return { ...rest, externalAddress: bitcoinAddressSchema.parse(bitcoinAddress) };
+  }
+  return body;
+}
+
 async function track(body: unknown, notify: boolean, signal: AbortSignal) {
   const depositInput = notify ? nearDepositInputSchema.parse(body) : undefined;
   const input = depositInput ?? nearTrackingInputSchema.parse(body);
@@ -100,6 +115,8 @@ async function track(body: unknown, notify: boolean, signal: AbortSignal) {
     : await upstream("status", () => OneClickService.getExecutionStatus(depositAddress, depositMemo), signal);
   try {
     const response = upstreamStatusSchema.parse(payload);
+    for (const tx of response.swapDetails.originChainTxHashes) validateNearTxHash(input.routeId, "source", tx.hash);
+    for (const tx of response.swapDetails.destinationChainTxHashes) validateNearTxHash(input.routeId, "destination", tx.hash);
     // /status also drops quoteWaitingTimeMs even though the original signature
     // covers it. Restore only these omitted fields from the verified receipt,
     // then verify the returned quote in full; never overwrite returned terms.
@@ -123,15 +140,17 @@ async function track(body: unknown, notify: boolean, signal: AbortSignal) {
 export async function handleNearRequest(request: Request, operation: "quote" | "prepare" | "status" | "deposit") {
   const correlationId = crypto.randomUUID();
   try {
-    const body = await boundedJson(request).catch(() => { throw new NearApiError("Invalid NEAR request.", 400); });
+    let body = await boundedJson(request).catch(() => { throw new NearApiError("Invalid NEAR request.", 400); });
     // Validate before starting a network call, preserving 400 for caller errors.
     try {
       if (operation === "quote" || operation === "prepare") {
+        body = normalizeQuoteAccounts(body);
         const input = (operation === "prepare" ? nearPrepareInputSchema : nearInputSchema).parse(body);
         nearRequest(input, true, new Date().toISOString());
       } else {
         const input = (operation === "deposit" ? nearDepositInputSchema : nearTrackingInputSchema).parse(body);
         verifyNearQuote(input.quote, nearTrackingInput(input.routeId, input.quote), false, false);
+        if ("txHash" in input && typeof input.txHash === "string") validateNearTxHash(input.routeId, "source", input.txHash);
       }
     } catch { throw new NearApiError("Invalid route, amount, accounts or signed NEAR quote.", 400); }
     const result = operation === "quote" || operation === "prepare"

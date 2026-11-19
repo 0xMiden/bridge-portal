@@ -19,8 +19,18 @@ Architecture decisions are recorded under [docs/decisions/](docs/decisions/) —
 e.g. [why we ship single-thread WASM without cross-origin isolation
 (no COOP/COEP)](docs/decisions/wasm-threading-coop-coep.md).
 
-NEAR Intents supports 13 Miden ↔ EVM pairs (26 routes). Availability follows the
-existing `bridgeIn` and `bridgeOut` configuration.
+NEAR Intents supports 13 Miden ↔ EVM pairs and native BTC on Bitcoin mainnet ↔
+wBTC on Miden. Each direction follows its `bridgeIn` or `bridgeOut` setting.
+To deposit BTC, connect a mainnet wallet that supports direct Bitcoin payments
+and approve the quoted satoshi amount. To withdraw wBTC to that account, approve the
+Miden deposit in Bread. The portal saves the receipt before either wallet prompt
+and resumes tracking after reload. Older receipts retain their signed asset IDs.
+See the [NEAR Intents asset registry](src/config/near/v1.json).
+
+The [Reown Bitcoin adapter patch](patches/@reown+appkit-adapter-bitcoin+1.8.20.patch)
+passes integer satoshis to UniSat, checks the wallet's active chain and keeps
+account-change listeners in sync on connect and disconnect. The Bitcoin browser
+tests cover these behaviors through the [UniSat wallet API](https://docs.unisat.io/developer-support/open-api-documentation/unisat-wallet).
 
 ## Prerequisites
 

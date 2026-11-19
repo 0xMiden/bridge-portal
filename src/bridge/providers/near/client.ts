@@ -21,5 +21,5 @@ export async function fetchNearQuote(input: QuoteRequest, dry: boolean, signal: 
 export async function prepareNearTransfer(input: QuoteRequest, signal: AbortSignal): Promise<TransferQuote> {
   const result = await fetchNearQuote(input, false, signal);
   return { ...result, request: { routeId: input.route.id, recovery: input.route.recovery, amount: input.amount,
-    midenAccount: input.midenAccount, evmAddress: input.evmAddress } };
+    midenAccount: input.midenAccount, externalAddress: input.externalAddress } };
 }

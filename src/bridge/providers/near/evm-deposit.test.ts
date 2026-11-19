@@ -47,7 +47,7 @@ function setup(kind: "native" | "erc20" = "native") {
   const quote = nearQuoteFixture(bound, false, kind === "native" ? {
     amountOut: "290000", minAmountOut: "287100", amountOutFormatted: "0.0029",
   } : {});
-  const wallet = { account: bound.evmAddress, chainId: "0xaa36a7", failSend: false };
+  const wallet = { account: bound.externalAddress, chainId: "0xaa36a7", failSend: false };
   const writes: WalletTx[] = [];
   const provider: EvmProvider = { request: vi.fn() };
   vi.mocked(provider.request).mockImplementation(async ({ method, params }) => {
@@ -62,12 +62,12 @@ function setup(kind: "native" | "erc20" = "native") {
     if (wallet.failSend) throw new Error("Wallet response interrupted");
     return nearTxHash;
   });
-  const input: TransferSubmission = { ...bound, environment: "mainnet", insufficientBalance: false, evmBalance: "10", midenAsset: null,
+  const input: TransferSubmission = { ...bound, environment: "mainnet", insufficientBalance: false, sourceBalance: "10", midenAsset: null,
     quote: { ...nearQuoteResult(quote, route.id), request: { ...bound, recovery: route.recovery } },
-    evmWallet: { connected: true, address: bound.evmAddress, provider },
+    externalWallet: { family: "evm", connected: true, address: bound.externalAddress, provider },
     midenWallet: { connected: true, address: bound.midenAccount, requestTransaction: vi.fn() },
   };
-  const effects = { openEvmWallet: vi.fn(), verifyBalanceCap: vi.fn(async () => {}), onError: vi.fn(), onSubmittingChange: vi.fn(), onPhaseChange: vi.fn(),
+  const effects = { openExternalWallet: vi.fn(), verifyBalanceCap: vi.fn(async () => {}), onError: vi.fn(), onSubmittingChange: vi.fn(), onPhaseChange: vi.fn(),
     activities: new ActivityStore(activityPersistence), navigate: vi.fn() };
   effects.activities.sync();
   fetcher.mockImplementation(async path => String(path).endsWith("prepare") ? Response.json(quote) : Response.json(nearStatus(quote)));
@@ -81,7 +81,7 @@ it.each(["native", "erc20"] as const)("funds a %s quote once on the source chain
   expect(test.effects.onError).not.toHaveBeenCalled();
   expect(test.writes).toHaveLength(1);
   const tx = test.writes[0];
-  expect(tx.from).toBe(nearReceiveInput.evmAddress);
+  expect(tx.from).toBe(nearReceiveInput.externalAddress);
   expect(tx.chainId).toBe(kind === "native" ? "0x1" : "0x2105");
   expect(rpc.networks).toEqual([kind === "native" ? "ethereum" : "base"]);
   if (kind === "native") {
@@ -165,7 +165,7 @@ it.each(["SUCCESS", "REFUNDED"] as const)("tracks %s with Miden output precision
     expect(activityDetailFor(saved).receipt.destinationLink).toMatchObject({ available: true, href: "https://explorer.cedar.miden.io/account/387149ae66116cf114eebd60bb7381" });
   } else {
     expect(saved.destinationTxHash).toBeUndefined();
-    expect(activityDetailFor(saved)).toMatchObject({ receipt: { receivedAmount: "0", receivedLabel: "Miden delivery", refund: "0.0029 ETH" }, guidance: { title: "Refunded to your EVM wallet" } });
+    expect(activityDetailFor(saved)).toMatchObject({ receipt: { receivedAmount: "0", receivedLabel: "Miden delivery", refund: "0.0029 ETH" }, guidance: { title: "Refunded to your source wallet" } });
   }
 });
 

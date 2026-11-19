@@ -2,7 +2,7 @@
 
 import dynamic from "next/dynamic";
 import type { ReactNode } from "react";
-import { AppKitProvider } from "../../wallets/evm/AppKitProvider";
+import { AppKitProvider } from "../../wallets/AppKitProvider";
 import { RejectionGuard } from "../../wallets/RejectionGuard";
 import { ThemeProvider } from "./ThemeProvider";
 import { BalanceProvider } from "../../bridge/BalanceProvider";

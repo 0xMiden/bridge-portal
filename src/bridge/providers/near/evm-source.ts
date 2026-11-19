@@ -1,4 +1,5 @@
 import { createPublicClient, type Hex } from "viem";
+import { isEvmAsset } from "../../core/assets";
 import type { Activity } from "../../core/models";
 import type { ActivityObservation } from "../../core/provider";
 import { activityRoute } from "../../core/routes";
@@ -10,7 +11,7 @@ import { recoverSourceTransaction } from "../../evm/source-transaction";
 export async function observeNearEvmSource(activity: Activity, signal: AbortSignal): Promise<ActivityObservation> {
   const asset = activityRoute(activity)?.source;
   const operation = activity.near;
-  if (!asset || asset.kind === "miden" || !activity.sourceTxHash || !operation || operation.submission === "confirmed") return { patch: {} };
+  if (!isEvmAsset(asset) || !activity.sourceTxHash || !operation || operation.submission === "confirmed") return { patch: {} };
   const patch: Partial<Activity> = {};
   try {
     const client = createPublicClient({ transport: evmReadTransport(asset.network) });

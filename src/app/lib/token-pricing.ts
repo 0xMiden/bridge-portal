@@ -1,4 +1,4 @@
-export type PriceSymbol = "ETH" | "USDC" | "DAI" | "USDT" | "WBTC" | "SOL" | "NEAR" | "PAXG" | "BNB" | "PYUSD" | "USDG" | "POL";
+export type PriceSymbol = "ETH" | "USDC" | "DAI" | "USDT" | "WBTC" | "BTC" | "SOL" | "NEAR" | "PAXG" | "BNB" | "PYUSD" | "USDG" | "POL";
 
 export type UsdPrice = {
   symbol: PriceSymbol;
@@ -18,6 +18,7 @@ export function priceSymbol(symbol: string): PriceSymbol | null {
     case "USDCX": return "USDC";
     case "DAI": return "DAI";
     case "USDT": return "USDT";
+    case "BTC": return "BTC";
     case "WBTC": return "WBTC";
     case "WSOL":
     case "SOL": return "SOL";

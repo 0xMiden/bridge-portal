@@ -60,12 +60,12 @@ function BridgeForm({ environment }: { environment: BridgeEnvironment }) {
   function handlePrimaryAction() {
     switch (transfer.cta.action) {
       case "connect-source":
-        if (draft.route.mode === "receive") void wallets.openEvmWallet();
+        if (draft.route.mode === "receive") void wallets.openExternalWallet();
         else connectMiden();
         break;
       case "connect-destination":
         if (draft.route.mode === "receive") connectMiden();
-        else void wallets.openEvmWallet();
+        else void wallets.openExternalWallet();
         break;
       case "review":
         transfer.openReview();
