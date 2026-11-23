@@ -48,7 +48,7 @@ npm install @epoch-protocol/epoch-intents-sdk \
 
 The snippets are type-checked against
 `@epoch-protocol/epoch-intents-sdk@2.2.0` (commons SDK `2.1.0`),
-`@miden-sdk/miden-sdk@0.17.6`, Miden wallet adapters `0.17.6`, and
+`@miden-sdk/miden-sdk@0.18.0`, Miden wallet adapters `0.18.0`, and
 `viem@2.57.11`.
 
 SDK 2.2 requires a compatible allocator `/health` response containing deployment

@@ -277,8 +277,10 @@ correctly at runtime via webpack's CJS interop.
 ### `@miden-sdk` pin
 
 `package.json` pins `@miden-sdk/miden-sdk`, `@miden-sdk/react`, and both wallet
-adapters to `0.17.6`. The core SDK pin is mirrored in `overrides` so React and
-the wallet adapters resolve to one SDK instance. The `st`
+adapters to `0.18.0`. Bread 1.18 uses this SDK to reconstruct custom output-note
+requests before approval. Guarded accounts using Bread 1.17.11 need to update
+to 1.18 for Miden withdrawals. The core SDK pin is mirrored in `overrides` so
+Epoch, React and the wallet adapters resolve to one SDK instance. The `st`
 wasm is ~20 MiB, under Cloudflare's 25 MiB
 per-asset limit. `npm run check:wasm-size` fails the PR if that regresses.
 `npm run check:usdcx-note` checks the pinned browser WASM against the preserved
