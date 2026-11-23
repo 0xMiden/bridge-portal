@@ -37,10 +37,8 @@ npm install @miden-sdk/miden-sdk \
   viem
 ```
 
-Use mutually compatible Miden SDK and wallet-adapter versions. The reference
-implementation is currently verified with `@miden-sdk/miden-sdk@0.15.7`,
-`@miden-sdk/miden-wallet-adapter-base@0.15.1`, and
-`@miden-sdk/miden-wallet-adapter-react@0.15.1`.
+The bridge portal pins the Miden SDK and both wallet adapters to `0.18.0` to
+match the custom transaction encoding used by Bread 1.18.
 
 ## Current testnet parameters
 

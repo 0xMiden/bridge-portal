@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { NoteType, TransactionRequest, type Note } from "@miden-sdk/miden-sdk";
+import { NoteArray, NoteType, TransactionRequest, TransactionRequestBuilder, type Note } from "@miden-sdk/miden-sdk";
 import { currentBridgeConfig, type BridgeConfig } from "../../../config/bridge-config";
 import { getCurrentMidenBlock } from "../../miden-rpc";
 import { createBridgeP2IDENoteCallback } from "./miden-note";
@@ -35,14 +35,26 @@ function setup(senderAddress = SENDER, recovery?: BridgeConfig) {
 describe("Epoch collateral wallet request", () => {
   afterEach(() => { vi.restoreAllMocks(); vi.clearAllMocks(); });
 
-  it("serializes the sender, allocator, faucet, exact amount, binding and reclaim height", async () => {
+  it("serializes the collateral terms in a request Bread can reconstruct for approval", async () => {
     const { callback, requestTransaction, onNoteCreated, requests } = setup();
     const amount = BigInt(Number.MAX_SAFE_INTEGER) + 2n;
     const result = await callback(FAUCET, amount.toString(), ALLOCATOR, 3500, BINDING);
     expect(result.success).toBe(true);
     expect(requestTransaction).toHaveBeenCalledOnce();
-    expect(requests[0].expectedOutputOwnNotes()).toHaveLength(1);
-    const note = requests[0].expectedOutputOwnNotes()[0];
+    const [request] = requests;
+    // Bread 1.18.1 rebuilds a guarded account's request from its own notes and salt
+    // before showing approval. Its SDK 0.18.0 encodes this P2IDE fixture in 371 bytes.
+    const transported = Buffer.from(requestTransaction.mock.calls[0][0].payload.transactionRequest, "base64");
+    const rebuilt = new TransactionRequestBuilder()
+      .withOwnOutputNotes(new NoteArray(request.expectedOutputOwnNotes()))
+      .withFeeConversionSalt(request.feeConversionSalt()!)
+      .build();
+    expect(transported).toHaveLength(371);
+    expect(transported).toEqual(Buffer.from(rebuilt.serialize()));
+
+    const notes = request.expectedOutputOwnNotes();
+    expect(notes).toHaveLength(1);
+    const [note] = notes;
     expect(note.metadata().sender().toString()).toBe(SENDER);
     expect(note.metadata().noteType()).toBe(NoteType.Public);
     const assets = note.assets().fungibleAssets();
