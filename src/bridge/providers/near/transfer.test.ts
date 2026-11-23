@@ -1,18 +1,18 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { NoteType, TransactionRequest, Address } from "@miden-sdk/miden-sdk";
+import { Address, NoteScript, NoteType, TransactionRequest } from "@miden-sdk/miden-sdk";
 import { submitBridgeTransfer, type TransferSubmission } from "../../../app/lib/bridge-submission";
 import { activityPersistence, loadStoredActivities } from "../../../app/lib/bridge-persistence";
 import { activityDetailFor } from "../../../app/lib/activity-detail-presentation";
 import { ActivityStore } from "../../activity";
 import { findBridgeRoute } from "../../core/routes";
-import { getMidenVerificationBaseFee } from "../../miden-rpc";
+import { getMidenBlockInfo } from "../../miden-rpc";
 import { nearQuoteResult } from "./quote";
 import { nearMonitor } from "./tracking";
 import { nearTestInput, bitcoinAddress, nearQuoteFixture, nearStatus, nearTxHash } from "../../../../test/near-quotes";
 
 vi.mock("@miden-sdk/miden-sdk", async () => (await import("../../../../test/miden-sdk")).browserMidenSdk());
 vi.mock("@miden-sdk/miden-wallet-adapter-base", () => import("@miden-sdk/miden-wallet-adapter-base/dist/transaction.js"));
-vi.mock("../../miden-rpc", () => ({ getMidenVerificationBaseFee: vi.fn(async () => 100) }));
+vi.mock("../../miden-rpc", () => ({ getMidenBlockInfo: vi.fn() }));
 vi.mock("@defuse-protocol/one-click-sdk-typescript", async importOriginal => {
   const actual = await importOriginal<typeof import("@defuse-protocol/one-click-sdk-typescript")>();
   return { ...actual, verifyQuoteSignature: vi.fn(() => true) };
@@ -24,7 +24,6 @@ beforeEach(() => {
   vi.stubGlobal("window", { localStorage: { getItem: (key: string) => storage.get(key) ?? null, setItem: (key: string, value: string) => storage.set(key, value) } });
   vi.stubGlobal("navigator", { locks: { request: async (_name: string, callback: () => Promise<void>) => callback() } });
   vi.stubGlobal("fetch", fetcher); fetcher.mockReset();
-  vi.mocked(getMidenVerificationBaseFee).mockResolvedValue(100);
 });
 afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 
@@ -35,6 +34,8 @@ function setup(bitcoin = false) {
   const route = findBridgeRoute(transferInput.routeId)!;
   const faucet = bitcoin ? "0x3084d3c389ececd15fda9770d18c8a" : route.recovery.derived.usdcxFaucetId;
   const amount = bitcoin ? 100_000n : 5_000_000n;
+  const blockNumber = bitcoin ? 1_000_000 : 940_790;
+  vi.mocked(getMidenBlockInfo).mockResolvedValue({ blockNumber, verificationBaseFee: 100 });
   let output: ReturnType<TransactionRequest["expectedOutputOwnNotes"]>[number];
   const requestTransaction = vi.fn<NonNullable<TransferSubmission["midenWallet"]["requestTransaction"]>>(async transaction => {
     const saved = loadStoredActivities()[0];
@@ -44,10 +45,20 @@ function setup(bitcoin = false) {
     const notes = request.expectedOutputOwnNotes();
     expect(notes).toHaveLength(1); output = notes[0];
     expect(saved.midenNoteId).toBe(output.id().toString());
+    expect(output.script().root().toHex()).toBe(NoteScript.p2ide().root().toHex());
     expect(output.metadata().noteType()).toBe(NoteType.Public);
     expect(output.metadata().tag().asU32()).toBe(Address.fromBech32(quote.quote.depositAddress!).toNoteTag().asU32());
     expect(output.assets().fungibleAssets().map(asset => [asset.faucetId().toString(), asset.amount()])).toEqual([[faucet, amount]]);
-    expect(output.recipient().storage().items().map(felt => felt.asInt())).toEqual([0x14eebd60bb738100n, 0x787149ae66116cf1n, 0n, 0n]);
+    expect(output.recipient().storage().items().map(felt => felt.asInt())).toEqual([
+      0x14eebd60bb738100n, 0x387149ae66116cf1n, // Sender can reclaim.
+      0x14eebd60bb738100n, 0x787149ae66116cf1n, // Quoted recipient can consume immediately.
+      BigInt(blockNumber) + 201_600n, 0n,
+    ]);
+    const attachments = output.attachments();
+    expect(attachments).toHaveLength(1);
+    const [attachment] = attachments;
+    expect(attachment.attachmentScheme().isNone()).toBe(true);
+    expect(attachment.toWords().map(word => Array.from(word.toU64s()))).toEqual([[0n, 0n, 0n, 0n]]);
     expect(transaction.payload.recipientAddress).toBe(quote.quote.depositAddress);
     return "near-wallet-request";
   });
@@ -74,7 +85,7 @@ function setup(bitcoin = false) {
   return { input, effects, quote, requestTransaction, waitForTransaction, requestAssets, evmRequest, assertBitcoinAccount };
 }
 
-it("persists a public P2ID and silently retries optional notifications without a second deposit", async () => {
+it("persists the public P2IDE and retries notifications without a second deposit", async () => {
   const test = setup();
   // Optional notification failure must leave the successful wallet submission intact.
   fetcher.mockImplementation(async path => String(path).endsWith("prepare") ? Response.json(test.quote) : Response.json({ error: "Temporary outage" }, { status: 503 }));
@@ -119,6 +130,15 @@ it("retains wallet acceptance across reload and treats delayed status as pending
   test.effects.activities.patch(saved.id, observed.patch);
   expect(test.effects.activities.get(saved.id)?.activity.status).toBe("source_finality");
   expect(observed.warning).toMatch(/remains pending/);
+});
+
+it("stops before requesting funds when the reclaim height would overflow the on-chain block number", async () => {
+  const test = setup();
+  vi.mocked(getMidenBlockInfo).mockResolvedValueOnce({ blockNumber: 0xffff_ffff, verificationBaseFee: 100 });
+  await submitBridgeTransfer(test.input, test.effects);
+  expect(test.effects.onError).toHaveBeenCalledWith("Invalid Miden block height for NEAR deposit recovery.");
+  expect(test.requestTransaction).not.toHaveBeenCalled();
+  expect(loadStoredActivities()).toHaveLength(0);
 });
 
 it.each(["wrong-faucet", "fee-shortfall", "wallet-change", "evm-wallet-change", "memo", "storage-failure", "expired", "preview"])("stops %s before the wallet prompt", async failure => {

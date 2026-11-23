@@ -220,9 +220,9 @@ export const bitcoinAssetFields = {
   network: z.literal("bitcoin"), kind: z.literal(["native", "bitcoin"]).transform(() => "native" as const),
   symbol: z.literal("BTC"), decimals: z.literal(8),
 };
-export const nearConfigSchema = z.object({
-  version: z.literal([1, 2]), environment: z.literal("mainnet"), evidenceDate: z.string().date(),
-  funding: z.object({ noteType: z.literal("public"), script: z.literal("p2id"), discovery: z.literal("recipient-tag"), memo: z.literal("none") }),
+const nearFunding = z.object({ noteType: z.literal("public"), discovery: z.literal("recipient-tag"), memo: z.literal("none") });
+const nearRelease = z.object({
+  environment: z.literal("mainnet"), evidenceDate: z.string().date(),
   routes: z.array(z.object({
     id: z.string().regex(/^mainnet:near-miden-[a-z0-9]+-to-[a-z]+-[a-z0-9]+$/),
     receiveId: z.string().regex(/^mainnet:near-[a-z]+-[a-z0-9]+-to-miden-[a-z0-9]+$/).optional(),
@@ -235,7 +235,13 @@ export const nearConfigSchema = z.object({
   }).refine(route => route.destination.network !== "bitcoin" || route.source.symbol === "wBTC", "Unsupported Bitcoin pair")
     .refine(route => !route.receiveId || route.receiveId === `mainnet:near-${route.destination.network}-${route.destination.symbol.toLowerCase()}-to-miden-${route.source.symbol.toLowerCase()}`,
     "NEAR deposit route identity mismatch")).min(1),
-}).refine(config => {
+});
+export const nearConfigSchema = z.discriminatedUnion("version", [
+  nearRelease.extend({ version: z.literal([1, 2]), funding: nearFunding.extend({ script: z.literal("p2id") }) }),
+  nearRelease.extend({ version: z.literal(3), funding: nearFunding.extend({
+    script: z.literal("p2ide"), reclaimBlocks: uint32.positive(),
+  }) }),
+]).refine(config => {
   const ids = config.routes.flatMap(route => route.receiveId ? [route.id, route.receiveId] : [route.id]);
   return new Set(ids).size === ids.length;
 }, "Duplicate NEAR route");
@@ -272,6 +278,7 @@ function nearSource(config: z.infer<typeof bridgeConfig>, symbol: string) {
 export function assertNearConfig(config: z.infer<typeof bridgeConfig>) {
   if (!config.near) return;
   if (config.environment !== "mainnet") throw new Error("NEAR is mainnet only");
+  if (config.near.funding.script !== "p2ide") throw new Error("New NEAR deposits require P2IDE funding");
   config.near.routes.forEach(route => {
     const known = nearSource(config, route.source.symbol);
     if (known?.faucetId !== route.source.faucetId || known?.decimals !== route.source.decimals) throw new Error("NEAR source does not match the pinned Miden deployment");

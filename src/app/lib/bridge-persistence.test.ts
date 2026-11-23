@@ -48,6 +48,7 @@ it("recovers receipts from an earlier release and keeps both networks separate",
   historical.recovery.derived.eth.faucetId = "0x179f749ee2329e317d96fe3ed5aaf9";
   historical.source = { ...historical.source, kind: "miden", network: "miden-mainnet", faucetId: historical.recovery.derived.eth.faucetId };
   const mainnet = createActivity(historical, "0.01", { id: "mainnet-transfer" });
+  expect(mainnet.routeSnapshot!.recovery.near).toBeUndefined();
   saveActivities([activity, mainnet]);
   store.sync();
   store.patch(mainnet.id, { status: "complete", claimTxHash: "0xclaim", agglayerExitHashes: [`0x${"ab".repeat(32)}`] });
@@ -70,17 +71,23 @@ it("ignores old history and malformed receipts without guessing a deployment", (
 });
 
 it.each([
-  ["send", "mainnet:near-miden-wbtc-to-bitcoin-btc", bitcoinQuotes.send.legacy],
-  ["receive", "mainnet:near-bitcoin-btc-to-miden-wbtc", bitcoinQuotes.receive.legacy],
-] as const)("keeps the original signed Bitcoin %s receipt and legacy route snapshot after the ID migration", (mode, routeId, quote) => {
+  [1, "send", "mainnet:near-miden-wbtc-to-bitcoin-btc", bitcoinQuotes.send.legacy],
+  [1, "receive", "mainnet:near-bitcoin-btc-to-miden-wbtc", bitcoinQuotes.receive.legacy],
+  [2, "send", "mainnet:near-miden-wbtc-to-bitcoin-btc", bitcoinQuotes.send.prepared],
+] as const)("restores a v%i P2ID-era Bitcoin %s receipt with its original signed terms and route", (version, mode, routeId, quote) => {
   const historical = structuredClone(findBridgeRoute(routeId)!);
+  historical.recovery.near = {
+    ...historical.recovery.near!, version,
+    evidenceDate: version === 1 ? "2026-11-10" : "2026-11-19",
+    funding: { noteType: "public", script: "p2id", discovery: "recipient-tag", memo: "none" },
+  };
   const pair = historical.recovery.near!.routes.find(pair => pair.id === routeId || pair.receiveId === routeId)!;
   pair.source.assetId = mode === "send" ? quote.quoteRequest.originAsset : quote.quoteRequest.destinationAsset;
   const receipt = createActivity(historical, "0.001", { id: `legacy-bitcoin-${mode}`, near: {
     quote: nearQuoteSchema.parse(quote), submission: mode === "send" ? "confirmed" : "awaiting_deposit", status: "PENDING_DEPOSIT", notification: "pending",
   } });
   const legacy = JSON.stringify([receipt], (_key, value) =>
-    value?.network === "bitcoin" && value.kind === "native" ? { ...value, kind: "bitcoin" } : value);
+    version === 1 && value?.network === "bitcoin" && value.kind === "native" ? { ...value, kind: "bitcoin" } : value);
   storage.set(legacyStorageKey, legacy);
   store.sync();
   storage.set(legacyStorageKey, "[]");

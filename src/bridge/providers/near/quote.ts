@@ -121,7 +121,7 @@ export function nearInput(input: QuoteRequest): NearInput {
 
 export function validateNearDeposit(quote: NearQuoteResponse) {
   if (quote.quoteRequest.dry || !quote.quote.depositAddress) throw new Error("Review an executable NEAR quote before sending.");
-  // Public P2ID deposits need no attachment. Never silently drop a provider memo.
+  // Only simple deposits are supported. Never silently drop a provider memo.
   if (quote.quote.depositMemo || quote.quote.depositAttachment || quote.quote.attachment) {
     throw new Error("This NEAR deposit requires unsupported memo or attachment instructions. Do not fund it.");
   }

@@ -6,7 +6,7 @@ import { assertRecipientAccount } from "../../../wallets/bridge-wallet";
 import { isUserRejection } from "../../../wallets/errors";
 import { prepareBitcoinDeposit } from "./bitcoin-deposit";
 import { normalizeMidenAccountHex } from "../../miden-address";
-import { getMidenVerificationBaseFee } from "../../miden-rpc";
+import { getMidenBlockInfo } from "../../miden-rpc";
 import { nearInput, nearPair, nearQuoteExpiry, validateNearDeposit, validateNearTxHash, verifyNearQuote } from "./quote";
 import { nearPost } from "./client";
 import type { NearInput, NearOperation, NearQuoteResponse } from "./schema";
@@ -15,16 +15,18 @@ async function checkBalance(context: SubmissionContext, units: bigint) {
   const { route, input } = context;
   const pair = nearPair(route.id);
   if (!input.midenWallet.requestAssets) throw new Error("Reconnect Bread to verify your source and fee balances.");
-  const [assets, baseFee] = await Promise.all([input.midenWallet.requestAssets(), getMidenVerificationBaseFee(route.recovery)]);
+  const [assets, { blockNumber, verificationBaseFee }] = await Promise.all([
+    input.midenWallet.requestAssets(), getMidenBlockInfo(route.recovery),
+  ]);
   const balance = (faucet: string) => assets.reduce((total, asset) =>
     normalizeMidenAccountHex(asset.faucetId) === normalizeMidenAccountHex(faucet) ? total + BigInt(asset.amount) : total, 0n);
-  const fee = BigInt(baseFee) * 30n;
+  const fee = BigInt(verificationBaseFee) * 30n;
   const feeFaucet = route.recovery.derived.usdcxFaucetId;
   const reserve = pair.source.faucetId === feeFaucet ? fee : 0n;
   if (balance(pair.source.faucetId) < units + reserve || balance(feeFaucet) < fee) {
     throw new Error("Not enough source tokens or USDCx for the Miden network fee.");
   }
-  return `${formatUnits(fee, 6)} USDCx`;
+  return { blockNumber, networkFee: `${formatUnits(fee, 6)} USDCx` };
 }
 
 /** Save the reviewed transfer and durably claim the attempt before opening the wallet. */
@@ -112,10 +114,10 @@ async function submitExternalDeposit(context: SubmissionContext, binding: NearIn
 async function submitMidenDeposit(context: SubmissionContext, binding: NearInput, quote: NearQuoteResponse, id: string) {
   const { input, route } = context;
   context.phase("Checking Miden balance and fee…");
-  const networkFee = await checkBalance(context, BigInt(quote.quote.amountIn));
+  const { blockNumber, networkFee } = await checkBalance(context, BigInt(quote.quote.amountIn));
   await nearPost("prepare", { ...binding, quote });
   const { buildNearDeposit } = await import("./funding");
-  const deposit = buildNearDeposit(quote, binding, route.recovery);
+  const deposit = buildNearDeposit(quote, binding, route.recovery, blockNumber);
   await assertRecipientAccount(input);
   assertBreadAccount(context);
   verifyNearQuote(quote, binding, false);

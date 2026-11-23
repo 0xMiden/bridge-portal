@@ -15,10 +15,13 @@ export type BridgeConfig = z.infer<typeof bridgeConfigSchema>;
 // transfers carry their own recovery context, independently of these files.
 const current: Record<BridgeEnvironment, BridgeConfig> = {
   testnet: bridgeConfigSchema.parse(testnet),
-  mainnet: bridgeConfigSchema.parse({ ...withPortalEpochRoutes(bridgeConfigSchema.parse(mainnet)), near: nearConfig }),
+  mainnet: bridgeConfigSchema.parse(withPortalEpochRoutes(bridgeConfigSchema.parse(mainnet))),
 };
 for (const environment of ["testnet", "mainnet"] as const) assertTokenConnections(current[environment], tokenRegistry[environment]);
-assertNearConfig(current.mainnet);
+
+// Older tabs can still read and save other providers' receipts when NEAR changes its funding script.
+export const nearMainnetConfig = { ...current.mainnet, near: nearConfig };
+assertNearConfig(nearMainnetConfig);
 export function currentBridgeConfig(environment: BridgeEnvironment): BridgeConfig {
   return current[environment];
 }

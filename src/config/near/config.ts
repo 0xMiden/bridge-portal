@@ -1,9 +1,9 @@
 import v1 from "./v1.json";
-import v2 from "./v2";
+import { activeNearRelease } from "./releases";
 import { nearConfigSchema } from "../wallet-config/schema";
 
 /** Release-owned pins. Never discover routes from the live 1Click catalog. */
-export const nearConfig = nearConfigSchema.parse(v2);
+export const nearConfig = nearConfigSchema.parse(activeNearRelease);
 
 // Retain released bindings even after a pair is retired from the active catalog.
 const firstRelease = nearConfigSchema.parse(v1);

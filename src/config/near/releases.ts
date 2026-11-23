@@ -14,4 +14,10 @@ const v2 = {
   }),
 };
 
-export default v2;
+export const activeNearRelease = {
+  ...v2,
+  version: 3,
+  evidenceDate: "2026-11-23",
+  // Bread's default for recoverable sends is seven days at an estimated three seconds per block.
+  funding: { ...v2.funding, script: "p2ide", reclaimBlocks: 201_600 },
+};

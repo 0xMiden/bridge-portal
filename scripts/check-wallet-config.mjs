@@ -1,14 +1,14 @@
 #!/usr/bin/env node
 import { withPortalEpochRoutes } from "../src/config/wallet-config/epoch-mainnet.ts";
 import { readFile } from "node:fs/promises";
-import activeNearConfig from "../src/config/near/v2.ts";
+import { activeNearRelease } from "../src/config/near/releases.ts";
 import { assertNearConfig, bridgeConfigSchema, nearConfigSchema } from "../src/config/wallet-config/schema.ts";
 import { assertTokenConnections, tokenConnectionsSchema } from "../src/config/wallet-config/token-connections.ts";
 
 const registry = tokenConnectionsSchema.parse(JSON.parse(await readFile(
   new URL("../src/config/wallet-config/token-connections.json", import.meta.url), "utf8",
 )));
-const near = nearConfigSchema.parse(activeNearConfig);
+const near = nearConfigSchema.parse(activeNearRelease);
 
 // Offline release gate: builds must use a complete, matching pair of generated files.
 let revision;

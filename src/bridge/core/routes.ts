@@ -1,6 +1,6 @@
 import { sameAsset, type BridgeAsset } from "./assets";
 import type { BridgeActivity, BridgeProvider, FlowMode } from "./models";
-import { currentBridgeConfig, type BridgeConfig } from "../../config/bridge-config";
+import { currentBridgeConfig, nearMainnetConfig, type BridgeConfig } from "../../config/bridge-config";
 import type { BridgeEnvironment } from "../../config/environment";
 import { tokenRegistry } from "../../config/token-registry";
 
@@ -38,11 +38,12 @@ function routesForConfig(config: BridgeConfig): readonly BridgeRoute[] {
       }];
     });
   });
-  return [...existing, ...(config.near?.routes ?? []).flatMap<BridgeRoute>(pair => [
-    { id: pair.id, provider: "near", mode: "send", source: pair.source, destination: pair.destination, recovery: config,
+  if (environment !== "mainnet") return existing;
+  return [...existing, ...nearMainnetConfig.near.routes.flatMap<BridgeRoute>(pair => [
+    { id: pair.id, provider: "near", mode: "send", source: pair.source, destination: pair.destination, recovery: nearMainnetConfig,
       disabled: document.features.bridgeOut === false },
     ...(pair.receiveId ? [{ id: pair.receiveId, provider: "near" as const, mode: "receive" as const,
-      source: pair.destination, destination: pair.source, recovery: config,
+      source: pair.destination, destination: pair.source, recovery: nearMainnetConfig,
       disabled: document.features.bridgeIn === false }] : []),
   ])];
 }

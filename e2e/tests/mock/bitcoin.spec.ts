@@ -195,7 +195,7 @@ test("Bitcoin withdrawal reviews the recipient, funds once through Bread and res
   await installBitcoinWallet(page, sendPrepared.quoteRequest.recipient);
   await page.clock.install({ time: new Date(sendPrepared.timestamp) });
   await selectBitcoinRoute(page, "send");
-  // Replay a real gRPC-web header so the production SDK decodes the network fee.
+  // The production SDK reads both the fee and the reclaim reference block from this header.
   await page.route(blockHeader.source, route => route.fulfill({
     contentType: "application/grpc-web+proto", body: Buffer.from(blockHeader.bodyBase64, "base64"),
     headers: { "grpc-status": "0", "access-control-allow-origin": "*", "access-control-expose-headers": "grpc-status,grpc-message" },
@@ -242,6 +242,8 @@ test("Bitcoin withdrawal reviews the recipient, funds once through Bread and res
       expect(notes[0].assets().fungibleAssets().map(asset => [asset.faucetId().toString(), asset.amount()])).toEqual([[faucetId, 100000n]]);
       const receipts = await page.evaluate(() => JSON.parse(localStorage.getItem("miden.bridge.ui.activities.v3") ?? "[]"));
       expect(receipts).toMatchObject([{ midenNoteId: notes[0].id().toString(), near: { submission: "attempted", quote: sendPrepared } }]);
+      const reclaimHeight = blockHeader.blockNumber + receipts[0].routeSnapshot.recovery.near.funding.reclaimBlocks;
+      expect(notes[0].recipient().storage().items()[4].asInt()).toBe(BigInt(reclaimHeight));
       outputNote = Buffer.from(notes[0].serialize()).toString("base64");
       return { result: { transactionId: "bitcoin-withdrawal-request" } };
     }
