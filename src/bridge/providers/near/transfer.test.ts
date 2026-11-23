@@ -52,7 +52,7 @@ function setup(bitcoin = false) {
     expect(output.recipient().storage().items().map(felt => felt.asInt())).toEqual([
       0x14eebd60bb738100n, 0x387149ae66116cf1n, // Sender can reclaim.
       0x14eebd60bb738100n, 0x787149ae66116cf1n, // Quoted recipient can consume immediately.
-      BigInt(blockNumber) + 201_600n, 0n,
+      BigInt(blockNumber) + 5_200n, 0n,
     ]);
     const attachments = output.attachments();
     expect(attachments).toHaveLength(1);
