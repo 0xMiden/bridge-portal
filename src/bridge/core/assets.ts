@@ -1,8 +1,9 @@
 import { tokenRegistry } from "../../config/token-registry";
+import { isEvmNetwork } from "../../config/evm-networks";
 
 export type EvmNetwork = "sepolia" | "arc-testnet" | "base-sepolia" | "arbitrum-sepolia" | "ethereum" | "arc" | "base" | "arbitrum" | "polygon" | "robinhood";
 export type MidenNetwork = "miden-testnet" | "miden-mainnet";
-export type BridgeNetwork = EvmNetwork | MidenNetwork;
+export type BridgeNetwork = BridgeAsset["network"];
 
 type TokenMetadata = {
   symbol: string;
@@ -15,11 +16,17 @@ type TokenMetadata = {
 export type BridgeAsset = TokenMetadata & (
   | { network: EvmNetwork; kind: "native" }
   | { network: EvmNetwork; kind: "erc20"; address: `0x${string}` }
+  | { network: "bitcoin"; kind: "native" }
   | { network: MidenNetwork; kind: "miden"; faucetId: string }
 );
 
 export type MidenAsset = Extract<BridgeAsset, { kind: "miden" }>;
-export type EvmAsset = Exclude<BridgeAsset, MidenAsset>;
+export type EvmAsset = Extract<BridgeAsset, { network: EvmNetwork }>;
+
+/** Native assets on other chains are not EVM assets. */
+export function isEvmAsset(asset: BridgeAsset | undefined): asset is EvmAsset {
+  return Boolean(asset && isEvmNetwork(asset.network));
+}
 
 // Compatibility exports for faucet actions and fixtures. Values come from the same
 // token connections used to build routes; no token addresses are maintained here.

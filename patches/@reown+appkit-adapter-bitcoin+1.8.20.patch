@@ -1,0 +1,247 @@
+diff --git a/node_modules/@reown/appkit-adapter-bitcoin/dist/esm/src/connectors/LeatherConnector.js b/node_modules/@reown/appkit-adapter-bitcoin/dist/esm/src/connectors/LeatherConnector.js
+--- a/node_modules/@reown/appkit-adapter-bitcoin/dist/esm/src/connectors/LeatherConnector.js
++++ b/node_modules/@reown/appkit-adapter-bitcoin/dist/esm/src/connectors/LeatherConnector.js
+@@ -1,7 +1,11 @@
+ import { ConstantsUtil } from '@reown/appkit-common';
+ import { ChainController } from '@reown/appkit-controllers';
+ import { bitcoin, bitcoinSignet, bitcoinTestnet } from '@reown/appkit/networks';
++import { AddressPurpose } from '../utils/BitcoinConnector.js';
+ import { SatsConnectConnector } from './SatsConnectConnector.js';
++function signingAccountError(message) {
++    return Object.assign(new Error(message), { code: 'LEATHER_SIGNING_ACCOUNT' });
++}
+ export class LeatherConnector extends SatsConnectConnector {
+     constructor({ connector }) {
+         if (connector.wallet.id !== LeatherConnector.ProviderId) {
+@@ -16,27 +20,57 @@
+         return this.wallet?.icon?.replace('data:image/svg', 'data:image/svg+xml');
+     }
+     async getAccountAddresses() {
+-        // Keep the connected accounts in memory to avoid repeated requests because Leather doesn't have a connect method
+-        if (this.connectedAccounts) {
+-            return this.connectedAccounts;
++        // Leather identifies its active Bitcoin accounts by script type, in no guaranteed order.
++        const { addresses } = await this.internalRequest('getAddresses', {});
++        const payment = addresses.find(a => a.symbol === 'BTC' && a.type === 'p2wpkh');
++        if (!payment) {
++            throw new Error('No Bitcoin payment account available');
+         }
+-        this.connectedAccounts = await super.getAccountAddresses();
+-        return this.connectedAccounts;
++        const ordinal = addresses.find(a => a.symbol === 'BTC' && a.type === 'p2tr');
++        return [
++            { ...payment, purpose: AddressPurpose.Payment, path: payment.derivationPath },
++            ...(ordinal ? [{ ...ordinal, purpose: AddressPurpose.Ordinal, path: ordinal.derivationPath }] : [])
++        ];
+     }
+     disconnect() {
+         // Leather doesn't have disconnect method
+-        this.connectedAccounts = undefined;
++        this.unbindEvents();
+         return Promise.resolve();
+     }
+-    async sendTransfer({ amount, recipient }) {
++    async sendTransfer(params) {
++        const send = await this.prepareTransfer(params);
++        return send();
++    }
++    async prepareTransfer({ amount, recipient }, reviewedSender, verifiedPayment) {
++        const payment = verifiedPayment ?? (await this.getAccountAddresses()).find(a => a.purpose === AddressPurpose.Payment);
++        if (!payment || payment.purpose !== AddressPurpose.Payment ||
++            (reviewedSender !== undefined && payment.address !== reviewedSender)) {
++            throw new Error('Your Bitcoin payment account changed. Review the transfer again.');
++        }
++        const network = this.getNetwork();
++        const path = /^m\/84'\/([01])'\/(0|[1-9]\d{0,9})'\/0\/0$/.exec(payment.path ?? '');
++        const account = Number(path?.[2]);
++        if (!path || path[1] !== (network === 'mainnet' ? '0' : '1') || account >= 2 ** 31) {
++            throw signingAccountError('Leather did not provide a valid signing account for this payment.');
++        }
++        // Leather sendTransfer omits accountIndex for zero. Mobile uses the connected account.
++        if (account === 0) {
++            throw signingAccountError('Leather cannot pin Account 1 for this payment. Choose another Leather account or Bitcoin wallet.');
++        }
++        // Before leather-io/mono#2384, the extension overwrote even a nonzero requested account.
++        const product = this.getWalletProvider().getProductInfo?.();
++        const version = /^(\d+)\.(\d+)\.(\d+)$/.exec(product?.version ?? '');
++        const [major, minor, patch] = version ? version.slice(1).map(Number) : [];
++        const honorsAccount = major > 6 || (major === 6 && (minor > 103 || (minor === 103 && patch >= 1)));
++        if (window.ReactNativeWebView || !honorsAccount) {
++            throw signingAccountError('Use the Leather browser extension 6.103.1 or later, or choose another Bitcoin wallet for this payment.');
++        }
+         const params = {
+             recipients: [{ address: recipient, amount }],
+-            network: this.getNetwork()
++            network,
++            account
+         };
+-        const res = await this.internalRequest('sendTransfer',
+-        // @ts-expect-error - expected LeatherWallet params don't match sats-connect
+-        params);
+-        return res.txid;
++        return async () => (await this.internalRequest('sendTransfer', params)).txid;
+     }
+     async signPSBT({ psbt, broadcast = false, signInputs }) {
+         const signInputObj = signInputs?.[0];
+diff --git a/node_modules/@reown/appkit-adapter-bitcoin/dist/esm/src/connectors/SatsConnectConnector.js b/node_modules/@reown/appkit-adapter-bitcoin/dist/esm/src/connectors/SatsConnectConnector.js
+--- a/node_modules/@reown/appkit-adapter-bitcoin/dist/esm/src/connectors/SatsConnectConnector.js
++++ b/node_modules/@reown/appkit-adapter-bitcoin/dist/esm/src/connectors/SatsConnectConnector.js
+@@ -1,5 +1,5 @@
+-import { BitcoinNetworkType, MessageSigningProtocols, AddressPurpose as SatsConnectAddressPurpose, getProviderById, getProviders } from 'sats-connect';
+-import { ConstantsUtil, PresetsUtil } from '@reown/appkit-common';
++import { BitcoinNetworkType, MessageSigningProtocols, RpcErrorCode, AddressPurpose as SatsConnectAddressPurpose, getProviderById, getProviders } from 'sats-connect';
++import { ConstantsUtil, PresetsUtil, UserRejectedRequestError } from '@reown/appkit-common';
+ import { ChainController, CoreHelperUtil } from '@reown/appkit-controllers';
+ import { HelpersUtil } from '@reown/appkit-utils';
+ import { mapSatsConnectAddressPurpose } from '../utils/BitcoinConnector.js';
+@@ -126,6 +126,11 @@
+         }
+         const res = await this.internalRequest('sendTransfer', {
+             recipients: [{ address: recipient, amount: parsedAmount }]
++        }).catch(error => {
++            if (error?.code === RpcErrorCode.USER_REJECTION) {
++                throw new UserRejectedRequestError(error);
++            }
++            throw error;
+         });
+         return res.txid;
+     }
+diff --git a/node_modules/@reown/appkit-adapter-bitcoin/dist/esm/src/connectors/UnisatConnector/index.js b/node_modules/@reown/appkit-adapter-bitcoin/dist/esm/src/connectors/UnisatConnector/index.js
+--- a/node_modules/@reown/appkit-adapter-bitcoin/dist/esm/src/connectors/UnisatConnector/index.js
++++ b/node_modules/@reown/appkit-adapter-bitcoin/dist/esm/src/connectors/UnisatConnector/index.js
+@@ -4,7 +4,6 @@
+ import { MethodNotSupportedError } from '../../errors/MethodNotSupportedError.js';
+ import { AddressPurpose } from '../../utils/BitcoinConnector.js';
+ import { ProviderEventEmitter } from '../../utils/ProviderEventEmitter.js';
+-import { UnitsUtil } from '../../utils/UnitsUtil.js';
+ export class UnisatConnector extends ProviderEventEmitter {
+     constructor({ id, name, wallet, requestedChains, imageUrl }) {
+         super();
+@@ -17,6 +16,7 @@
+         this.wallet = wallet;
+         this.requestedChains = requestedChains;
+         this.imageUrl = imageUrl;
++        this.onAccountsChanged = this.onAccountsChanged.bind(this);
+     }
+     get chains() {
+         return this.requestedChains.filter(chain => chain.chainNamespace === ConstantsUtil.CHAIN.BITCOIN);
+@@ -35,7 +35,8 @@
+         return Promise.resolve();
+     }
+     async getAccountAddresses() {
+-        const accounts = await this.wallet.requestAccounts();
++        await this.assertNetwork();
++        const accounts = await this.wallet.getAccounts();
+         const publicKey = await this.wallet.getPublicKey();
+         const accountList = accounts.map(account => ({
+             address: account,
+@@ -49,16 +50,24 @@
+         return this.wallet.signMessage(params.message, protocol);
+     }
+     async sendTransfer(params) {
+-        const network = ChainController.getActiveCaipNetwork(ConstantsUtil.CHAIN.BITCOIN);
+-        if (!network) {
+-            throw new Error('No active network available');
++        const send = await this.prepareTransfer(params);
++        return send();
++    }
++    async prepareTransfer(params, reviewedSender) {
++        const satoshis = Number(params.amount);
++        if (!Number.isSafeInteger(satoshis) || satoshis <= 0) {
++            throw new Error('Invalid satoshi amount');
+         }
+-        const from = (await this.wallet.getAccounts())[0];
++        const wallet = this.wallet;
++        await this.assertNetwork();
++        const from = (await wallet.getAccounts())[0];
+         if (!from) {
+             throw new Error('No account available');
+         }
+-        const result = await this.wallet.sendBitcoin(params.recipient, Number(UnitsUtil.parseSatoshis(params.amount, network)));
+-        return result;
++        if (reviewedSender !== undefined && from !== reviewedSender) {
++            throw new Error('Your Bitcoin payment account changed. Review the transfer again.');
++        }
++        return () => wallet.sendBitcoin(params.recipient, satoshis);
+     }
+     async signPSBT(params) {
+         const psbtHex = Buffer.from(params.psbt, 'base64').toString('hex');
+@@ -89,6 +98,20 @@
+             txid
+         };
+     }
++    async assertNetwork() {
++        const network = ChainController.getActiveCaipNetwork(ConstantsUtil.CHAIN.BITCOIN);
++        if (!network) {
++            throw new Error('No active network available');
++        }
++        // UniSat can use the same payment address on Bitcoin and Fractal.
++        if (this.id === 'unisat' || typeof this.wallet.getChain === 'function') {
++            const chain = await this.wallet.getChain?.();
++            if (chain?.enum !== this.getNetwork(network.caipNetworkId)) {
++                const name = network.caipNetworkId === bitcoin.caipNetworkId ? 'Bitcoin mainnet' : network.name;
++                throw new Error(`Switch your wallet to ${name} and review the transfer again.`);
++            }
++        }
++    }
+     async switchNetwork(caipNetworkId) {
+         const network = this.getNetwork(caipNetworkId);
+         await this.wallet.switchChain(network);
+@@ -97,16 +120,19 @@
+         return Promise.reject(new MethodNotSupportedError(this.id, 'request'));
+     }
+     onAccountsChanged(account) {
+-        if (typeof account === 'object' && account && 'address' in account) {
++        if (Array.isArray(account) && account.every(address => typeof address === 'string')) {
++            this.emit('accountsChanged', account);
++        }
++        else if (typeof account === 'object' && account && 'address' in account) {
+             this.emit('accountsChanged', [account.address]);
+         }
+     }
+     bindEvents() {
+         this.unbindEvents();
+-        this.wallet.on('accountsChanged', this.onAccountsChanged.bind(this));
++        this.wallet.on('accountsChanged', this.onAccountsChanged);
+     }
+     unbindEvents() {
+-        this.wallet.removeListener('accountsChanged', this.onAccountsChanged.bind(this));
++        this.wallet.removeListener('accountsChanged', this.onAccountsChanged);
+     }
+     static getWallet(params) {
+         if (!CoreHelperUtil.isClient()) {
+diff --git a/node_modules/@reown/appkit-adapter-bitcoin/dist/esm/src/connectors/OKXConnector.js b/node_modules/@reown/appkit-adapter-bitcoin/dist/esm/src/connectors/OKXConnector.js
+--- a/node_modules/@reown/appkit-adapter-bitcoin/dist/esm/src/connectors/OKXConnector.js
++++ b/node_modules/@reown/appkit-adapter-bitcoin/dist/esm/src/connectors/OKXConnector.js
+@@ -54,20 +54,24 @@
+         return this.wallet.signMessage(params.message, protocol);
+     }
+     async sendTransfer(params) {
++        const send = await this.prepareTransfer(params);
++        return send();
++    }
++    async prepareTransfer(params, reviewedSender) {
+         const network = ChainController.getActiveCaipNetwork(ConstantsUtil.CHAIN.BITCOIN);
+         if (!network) {
+             throw new Error('No active network available');
+         }
+-        const from = (await this.wallet.getAccounts())[0];
++        const wallet = this.wallet;
++        const from = (await wallet.getAccounts())[0];
+         if (!from) {
+             throw new Error('No account available');
+         }
+-        const result = await this.wallet.send({
+-            from,
+-            to: params.recipient,
+-            value: UnitsUtil.parseSatoshis(params.amount, network)
+-        });
+-        return result.txhash;
++        if (reviewedSender !== undefined && from !== reviewedSender) {
++            throw new Error('Your Bitcoin payment account changed. Review the transfer again.');
++        }
++        const payment = { from, to: params.recipient, value: UnitsUtil.parseSatoshis(params.amount, network) };
++        return async () => (await wallet.send(payment)).txhash;
+     }
+     async signPSBT(params) {
+         const psbtHex = Buffer.from(params.psbt, 'base64').toString('hex');

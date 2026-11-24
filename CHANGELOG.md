@@ -35,6 +35,7 @@
 
 ### Fixes
 
+- [FIX] **Miden withdrawals use Bread 1.18's transaction encoding.** The portal now builds Epoch, Agglayer and USDCx requests with Miden SDK 0.18.0 so the wallet can reconstruct the output notes for approval.
 - [FIX] **Epoch mainnet uses `https://mainnet-api.epochprotocol.xyz`.** New quotes and transfers use Epoch's updated Smallocator API host; saved receipts retain compatibility with the previous service root.
 - [FIX] **DAI, USDT and WBTC display token logos.** Epoch token selectors and selected-token displays show the corresponding logo on both Sepolia and Miden.
 - [FIX] **Epoch rejects missing, zero or malformed output estimates before signing.** Preview and execution validate the allocator's output even when the SDK reports success, including the fresh quote requested immediately before collateral signing.

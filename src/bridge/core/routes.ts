@@ -1,6 +1,6 @@
 import { sameAsset, type BridgeAsset } from "./assets";
 import type { BridgeActivity, BridgeProvider, FlowMode } from "./models";
-import { currentBridgeConfig, type BridgeConfig } from "../../config/bridge-config";
+import { currentBridgeConfig, nearMainnetConfig, type BridgeConfig } from "../../config/bridge-config";
 import type { BridgeEnvironment } from "../../config/environment";
 import { tokenRegistry } from "../../config/token-registry";
 
@@ -15,9 +15,13 @@ export type BridgeRoute = {
   recovery: BridgeConfig;
 };
 
+export function externalAsset(route: Pick<BridgeRoute, "mode" | "source" | "destination">) {
+  return route.mode === "receive" ? route.source : route.destination;
+}
+
 function routesForConfig(config: BridgeConfig): readonly BridgeRoute[] {
   const { environment, document } = config;
-  return tokenRegistry[environment].flatMap(connection => {
+  const existing = tokenRegistry[environment].flatMap(connection => {
     const { provider, evm, miden } = connection;
     const bridge = document.supportedEvmChains[evm.network]?.bridges[provider === "xreserve" ? "usdcx" : provider];
     return (["receive", "send"] as const).flatMap(mode => {
@@ -34,6 +38,14 @@ function routesForConfig(config: BridgeConfig): readonly BridgeRoute[] {
       }];
     });
   });
+  if (environment !== "mainnet") return existing;
+  return [...existing, ...nearMainnetConfig.near.routes.flatMap<BridgeRoute>(pair => [
+    { id: pair.id, provider: "near", mode: "send", source: pair.source, destination: pair.destination, recovery: nearMainnetConfig,
+      disabled: document.features.bridgeOut === false },
+    ...(pair.receiveId ? [{ id: pair.receiveId, provider: "near" as const, mode: "receive" as const,
+      source: pair.destination, destination: pair.source, recovery: nearMainnetConfig,
+      disabled: document.features.bridgeIn === false }] : []),
+  ])];
 }
 
 // Release configuration is fixed for the page lifetime; derive routes once.

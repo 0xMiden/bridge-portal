@@ -72,8 +72,9 @@ function setup(overrides: Partial<TransferSubmission> = {}) {
     routeId: "epoch-test-usdc-to-miden",
     amount: "0.123456",
     insufficientBalance: false,
-    evmBalance: "1 USDC",
-    evmWallet: {
+    sourceBalance: "1 USDC",
+    externalWallet: {
+      family: "evm",
       connected: true,
       address: EVM_ADDRESS,
       provider: { request: evmRequest as EvmProvider["request"] },
@@ -85,18 +86,18 @@ function setup(overrides: Partial<TransferSubmission> = {}) {
       waitForTransaction: vi.fn(),
     },
     midenAsset: { faucetId: "0x7c6d1dc7fb7045913d524bbef017f5", decimals: 8, amountRaw: 100_000_000n, symbol: "ETH" },
-    evmAddress: EVM_ADDRESS,
+    externalAddress: EVM_ADDRESS,
     midenAccount: MIDEN_ACCOUNT,
     ...overrides,
   };
   if (findBridgeRoute(input.routeId)?.provider === "epoch" && !("quote" in overrides)) {
     input.quote = {
       kind: "epoch", received: "0.12", validity: { kind: "time", expiresAt: Date.now() + 60_000 },
-      request: { recovery: findBridgeRoute(input.routeId)?.recovery, routeId: input.routeId, amount: input.amount, evmAddress: input.evmAddress, midenAccount: input.midenAccount },
+      request: { recovery: findBridgeRoute(input.routeId)?.recovery, routeId: input.routeId, amount: input.amount, externalAddress: input.externalAddress, midenAccount: input.midenAccount },
     };
   }
   const effects = {
-    openEvmWallet: vi.fn(async () => {}),
+    openExternalWallet: vi.fn(async () => {}),
     verifyBalanceCap: vi.fn(async () => {}),
     onError: vi.fn(),
     onSubmittingChange: vi.fn(),
@@ -123,7 +124,7 @@ function setupCctp() {
     routeId: route.id, amount: "1",
     quote: {
       kind: "cctp", received: "1", fee: "0.25", validity: { kind: "provider" }, authorization,
-      request: { recovery: route.recovery, routeId: route.id, amount: "1", evmAddress: EVM_ADDRESS, midenAccount: MIDEN_ACCOUNT },
+      request: { recovery: route.recovery, routeId: route.id, amount: "1", externalAddress: EVM_ADDRESS, midenAccount: MIDEN_ACCOUNT },
     },
   });
 }
@@ -193,8 +194,8 @@ describe("submission validation", () => {
   });
 
   it.each([
-    ...(["missing", "expired", "amount", "routeId", "recovery", "midenAccount", "evmAddress"] as const).map(change => ({ kind: "epoch", change })),
-    ...(["missing", "amount", "routeId", "recovery", "midenAccount", "evmAddress"] as const).map(change => ({ kind: "cctp", change })),
+    ...(["missing", "expired", "amount", "routeId", "recovery", "midenAccount", "externalAddress"] as const).map(change => ({ kind: "epoch", change })),
+    ...(["missing", "amount", "routeId", "recovery", "midenAccount", "externalAddress"] as const).map(change => ({ kind: "cctp", change })),
   ])(
     "requires another review when the $kind quote has changed $change", async ({ kind, change }) => {
       const { input, effects } = kind === "cctp" ? setupCctp() : setup();
@@ -217,7 +218,7 @@ describe("submission validation", () => {
     ["disconnected Miden source", { routeId: "epoch-test-usdc-to-sepolia", midenWallet: { connected: false, address: "" } }, /Connect your Bread wallet/],
     ["disconnected Miden destination with a stale address", { routeId: "agglayer-eth-to-miden", midenWallet: { connected: false, address: MIDEN_ACCOUNT } }, /Connect your Bread wallet/],
     ["Miden recipient differs from the connected wallet", { midenAccount: "0x4e6fb40fd2f6a55140df2c42dfb5b7" }, /wallet changed.*review/i],
-    ["EVM recipient differs from the connected wallet", { routeId: "epoch-test-usdc-to-sepolia", evmAddress: `0x${"22".repeat(20)}` }, /wallet changed.*review/i],
+    ["EVM recipient differs from the connected wallet", { routeId: "epoch-test-usdc-to-sepolia", externalAddress: `0x${"22".repeat(20)}` }, /wallet changed.*review/i],
   ] satisfies Array<[string, Partial<TransferSubmission>, RegExp]>)("rejects %s before signing or creating an activity", async (_name, overrides, message) => {
     const { input, effects, evmRequest } = setup(overrides);
     await submitBridgeTransfer(input, effects);
@@ -232,10 +233,10 @@ describe("submission validation", () => {
   });
 
   it.each(["epoch-test-usdc-to-miden", "agglayer-eth-to-miden", "epoch-test-usdc-to-sepolia"])("requests the EVM connection for a disconnected source or destination on %s", async (routeId) => {
-    const { input, effects } = setup({ routeId, evmWallet: { connected: false, address: EVM_ADDRESS } });
+    const { input, effects } = setup({ routeId, externalWallet: { family: "evm", connected: false, address: EVM_ADDRESS } });
     await submitBridgeTransfer(input, effects);
 
-    expect(effects.openEvmWallet).toHaveBeenCalledOnce();
+    expect(effects.openExternalWallet).toHaveBeenCalledOnce();
     expect(effects.onSubmittingChange).toHaveBeenLastCalledWith(false);
     expect(runEpochTransfer).not.toHaveBeenCalled();
     expect(loadStoredActivities()).toMatchObject([history]);
@@ -461,13 +462,13 @@ describe("USDCx withdrawal submission", () => {
   const reviewedQuote = () => ({
     kind: "withdrawal" as const, received: "1.9836", fee: "0.0164",
     validity: { kind: "time" as const, expiresAt: Date.now() + 60_000 }, authorization: estimate(),
-    request: { recovery: findBridgeRoute("xreserve-usdc-to-arc")!.recovery, routeId: "xreserve-usdc-to-arc", amount: "2", evmAddress: EVM_ADDRESS, midenAccount: MIDEN_ACCOUNT },
+    request: { recovery: findBridgeRoute("xreserve-usdc-to-arc")!.recovery, routeId: "xreserve-usdc-to-arc", amount: "2", externalAddress: EVM_ADDRESS, midenAccount: MIDEN_ACCOUNT },
   });
   beforeEach(() => vi.mocked(fetchWithdrawalQuote).mockResolvedValue(estimate()));
   it.each([false, true])("retains the burn note across wallet settlement (failure: %s)", async (fails) => {
     const { input, effects, evmRequest } = setup({
-      routeId: "xreserve-usdc-to-arc", amount: "2", evmAddress: EVM_ADDRESS, quote: reviewedQuote(),
-      evmWallet: { connected: true, address: EVM_ADDRESS },
+      routeId: "xreserve-usdc-to-arc", amount: "2", externalAddress: EVM_ADDRESS, quote: reviewedQuote(),
+      externalWallet: { family: "evm", connected: true, address: EVM_ADDRESS },
     });
     // A failed deposit valuation must never keep users from withdrawing funds.
     effects.verifyBalanceCap.mockRejectedValue(new Error("Balance limit exceeded"));
@@ -485,7 +486,7 @@ describe("USDCx withdrawal submission", () => {
     });
     expect(loadStoredActivities()[0].sourceTxHash).toBe(fails ? undefined : TX_HASH);
     expect(effects.navigate).toHaveBeenCalledOnce();
-    expect(effects.openEvmWallet).not.toHaveBeenCalled();
+    expect(effects.openExternalWallet).not.toHaveBeenCalled();
     expect(effects.verifyBalanceCap).not.toHaveBeenCalled();
     expect(evmRequest).not.toHaveBeenCalled();
     if (fails) expect(effects.onError).toHaveBeenCalledWith(expect.stringContaining("do not submit again"));

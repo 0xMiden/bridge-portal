@@ -8,12 +8,14 @@ import type { BridgeAsset } from "../../../bridge/core/assets";
 import { routeEnvironment } from "../../../bridge/core/routes";
 import { bridgeProviders } from "../../../bridge/providers/registry";
 import { shortAddress } from "../../../wallets/identity";
-import { networkLabels } from "../../lib/bridge-presentation";
+import { networkLabels, sourceAccountLabel } from "../../lib/bridge-presentation";
 import { NetworkLogo } from "../AssetLogo";
 import { FiatAmount } from "../FiatAmount";
+import { TokenAmount } from "../TokenAmount";
 import type { BridgeQuote } from "./use-bridge-quote";
 import type { ReviewedTransfer } from "./use-bridge-transfer";
 import { Dialog } from "../ui/Dialog";
+import { isQuoteReviewable } from "../../../bridge/core/quote";
 
 export function TransferReview({ review, quote, walletsChanged, onCancel, onConfirm }: {
   review: ReviewedTransfer;
@@ -25,6 +27,15 @@ export function TransferReview({ review, quote, walletsChanged, onCancel, onConf
   const { route, amount, accounts } = review;
   const confirmRef = useRef<HTMLButtonElement>(null);
   const { fees, received, estimate } = quote;
+  const [, expire] = useState(0);
+  const expiresAt = review.quote?.validity.kind === "time" ? review.quote.validity.expiresAt : undefined;
+  useEffect(() => {
+    if (expiresAt === undefined) return;
+    const timer = setTimeout(() => expire(value => value + 1), Math.max(0, expiresAt - Date.now()) + 1);
+    return () => clearTimeout(timer);
+  }, [expiresAt]);
+  const expired = Boolean(review.quote && !isQuoteReviewable(review.quote));
+  const minimumReceived = review.quote?.minimumReceived ?? estimate.minReceived;
   const total = fees.charging === "additional" && review.quote?.fee !== undefined && Number(review.quote.fee) > 0
     ? formatUnits(parseUnits(amount, route.source.decimals) + parseUnits(review.quote.fee, route.source.decimals), route.source.decimals) : undefined;
 
@@ -42,29 +53,30 @@ export function TransferReview({ review, quote, walletsChanged, onCancel, onConf
           <div className="preflight-path gap-7 mb-3 grid">
             {(["source", "destination"] as const).map(side => (
               <ReviewAccount key={side} side={side} asset={route[side]}
-                account={route[side].kind === "miden" ? accounts.midenAccount : accounts.evmAddress} />
+                account={route[side].kind === "miden" ? accounts.midenAccount : accounts.externalAddress} />
             ))}
           </div>
           <DetailsList items={[
             (route.source.symbol !== route.destination.symbol || Number(amount) !== Number(received)) && {
-              label: fees.estimated ? "Estimated received" : "You receive", value: `${received} ${route.destination.symbol}`,
+              label: fees.estimated ? "Estimated received" : "You receive", value: <TokenAmount amount={received} symbol={route.destination.symbol} />,
             },
-            (estimate.minReceived !== "Not quoted" && Number(estimate.minReceived) !== Number(received)) && {
-              label: "Minimum received", value: `${estimate.minReceived} ${route.destination.symbol}`,
+            (minimumReceived !== "Not quoted" && Number(minimumReceived) !== Number(received)) && {
+              label: "Minimum received", value: <TokenAmount amount={minimumReceived} symbol={route.destination.symbol} roundDown />,
             },
             { label: "Provider", value: bridgeProviders[route.provider].label },
-            fees.showEta && { label: "Estimated time", value: estimate.eta },
+            fees.showEta && { label: "Estimated time", value: review.quote?.estimatedSeconds !== undefined ? `About ${review.quote.estimatedSeconds} seconds` : estimate.eta },
             { label: "Network fee", value: quote.networkFee },
             { label: fees.label, value: quote.fee },
             total !== undefined && { label: `Total ${route.source.symbol}`, value: `${total} ${route.source.symbol}` },
           ]} />
           {route.provider === "xreserve" ? <p className="preflight-note rounded-md bg-surface-muted p-3 text-xs text-muted-foreground">{estimate.warning}</p> : null}
           {walletsChanged ? <FormAlert role="alert">Your connected wallet changed. Close this review and review the transfer again.</FormAlert> : null}
+          {expired ? <FormAlert role="alert">This quote expired. Close this review and review a fresh quote.</FormAlert> : null}
           {quote.capError ? <FormAlert role="alert">{quote.capError}</FormAlert> : null}
         </div>
         <div className="preflight-actions shrink-0 mobile:border-t mobile:border-border mobile:pt-3 mobile:pb-[max(12px,env(safe-area-inset-bottom))]">
           <Button type="button" variant="primary" className="primary-button preflight-confirm" ref={confirmRef}
-            disabled={walletsChanged || quote.capBlocked} onClick={onConfirm}>
+            disabled={walletsChanged || quote.capBlocked || expired} onClick={onConfirm}>
             Confirm in wallet<ArrowRight size={18} aria-hidden="true" />
           </Button>
         </div>
@@ -97,12 +109,12 @@ function ReviewAccount({ side, asset, account }: { side: "source" | "destination
       <div className="min-w-0">
         <strong className="block text-sm font-medium leading-6">{networkLabels[asset.network]}</strong>
         <div className="preflight-address mt-1 flex flex-wrap items-center gap-1 text-sm text-muted-foreground">
-          <span>{side === "source" ? "From" : "To"}</span>
-          <button type="button" id={`preflight-${side}-value`} className={`preflight-account max-w-full text-left text-foreground wrap-anywhere ${addressButtonClasses}`} title={account}
+          <span>{side === "source" ? sourceAccountLabel(asset) : "To"}</span>
+          {asset.network === "bitcoin" ? <span className="text-foreground wrap-anywhere">{account}</span> : <button type="button" id={`preflight-${side}-value`} className={`preflight-account max-w-full text-left text-foreground wrap-anywhere ${addressButtonClasses}`} title={account}
             aria-label={`${expanded ? "Hide" : "Show full"} ${side} address: ${account}`}
             aria-expanded={expanded} onClick={() => setExpanded(current => !current)}>
             {expanded ? account : shortAddress(account)}
-          </button>
+          </button>}
           {side === "destination" ? (
             <button type="button" className={`preflight-copy grid place-items-center ${addressButtonClasses}`} aria-label={copied ? "Destination copied" : "Copy destination"} onClick={copyAddress}>
               {copied ? <Check size={14} aria-hidden="true" /> : <Copy size={14} aria-hidden="true" />}

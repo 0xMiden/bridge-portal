@@ -6,11 +6,11 @@ import type { BridgeActivity } from "../../core/models";
 import { cctpConfig, arcConfig } from "./config";
 const CCTP = cctpConfig();
 
-const original = `0x${"11".repeat(32)}`;
+const original = `0x${"11".repeat(32)}` as const;
 const replacement = `0x${"22".repeat(32)}`;
-const sender = `0x${"33".repeat(20)}`;
+const sender = `0x${"33".repeat(20)}` as const;
 const recipient = "0x4e6fb40fd2f6a55140df2c42dfb5b7";
-const transaction = { hash: original, from: sender, nonce: 7, to: arcConfig().xReserve, input: "0x1234", value: "0" };
+const transaction = { hash: original, from: sender, nonce: 7, to: arcConfig().xReserve, input: "0x1234", value: "0" } as const;
 const activity: BridgeActivity = {
   id: "replacement", provider: "xreserve", routeSnapshot: findBridgeRoute("xreserve-usdc-to-miden")!, routeId: "xreserve-usdc-to-miden", mode: "receive",
   amount: "1", asset: "USDC", status: "source_finality", xreserveStatus: "submitted",
@@ -18,6 +18,30 @@ const activity: BridgeActivity = {
 };
 vi.mock("./delivery", () => ({ checkArcDelivery: async () => ({ noteId: `0x${"aa".repeat(32)}`, block: 42 }) }));
 afterEach(() => vi.unstubAllGlobals());
+
+it("stops the pending xReserve nonce search when its receipt closes", async () => {
+  const receipt = new AbortController();
+  const nonceReads: string[] = [];
+  let activeRead: AbortSignal | null | undefined;
+  vi.stubGlobal("fetch", async (url: string, init: RequestInit) => {
+    if (url.includes("/status?")) return Response.json({ status: "submitted" });
+    const { method, params, id } = JSON.parse(String(init.body));
+    if (method === "eth_getTransactionByHash") return Response.json({ jsonrpc: "2.0", id, result: null });
+    if (method === "eth_blockNumber") return Response.json({ jsonrpc: "2.0", id, result: "0x20" });
+    if (method !== "eth_getTransactionCount") throw new Error(`Unexpected RPC ${method}`);
+    nonceReads.push(params[1]);
+    if (nonceReads.length === 1) {
+      activeRead = init.signal;
+      receipt.abort();
+    }
+    return Response.json({ jsonrpc: "2.0", id, result: params[1] === "0x20" ? "0x8" : "0x7" });
+  });
+  await observeXreserveDeposit({ ...activity, sourceTransaction: transaction }, receipt.signal).catch(error => {
+    if (error !== receipt.signal.reason) throw error;
+  });
+  expect(nonceReads).toEqual(["0x20"]);
+  expect(activeRead?.aborted).toBe(true);
+});
 
 it.each([
   ["repriced", "arc-testnet"], ["cancelled", "arc-testnet"], ["replaced", "arc-testnet"],

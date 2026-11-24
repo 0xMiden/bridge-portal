@@ -1,13 +1,14 @@
 import { describe, expect, it } from "vitest";
-import { evmWalletIdentity, midenWalletIdentity } from "./identity";
+import { externalWalletIdentity, midenWalletIdentity } from "./identity";
 
 const EVM_ADDRESS = "0x1234567890abcdef1234567890abcdef12345678";
 const MIDEN_ADDRESS = "mcst1q........................abcdef";
 
-describe("evmWalletIdentity (issue #54 chain-specific identity)", () => {
+describe("externalWalletIdentity (issue #54 chain-specific identity)", () => {
   it("names the Sepolia wallet when disconnected, not a generic label", () => {
-    const id = evmWalletIdentity({
+    const id = externalWalletIdentity({
       connected: false,
+      networkLabel: "Sepolia",
       address: "",
     });
     expect(id.pillLabel).toBe("Sepolia wallet");
@@ -17,8 +18,9 @@ describe("evmWalletIdentity (issue #54 chain-specific identity)", () => {
   });
 
   it("shows a short address and a menu accessible name when connected", () => {
-    const id = evmWalletIdentity({
+    const id = externalWalletIdentity({
       connected: true,
+      networkLabel: "Sepolia",
       address: EVM_ADDRESS,
     });
     expect(id.pillLabel).toBe("0x1234...345678");

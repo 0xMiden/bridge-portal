@@ -214,10 +214,43 @@ export const walletDocumentSchema = walletDocument.superRefine((doc, ctx) => {
   }
 });
 
-export const bridgeConfigSchema = z.object({
+const nearMetadata = { symbol: z.string().min(1).max(11), decimals, logo: z.string().regex(/^\/asset-logos\/[\w-]+\.svg$/), assetId: z.string().min(1).max(200) };
+// Older receipt snapshots used the network name as the asset kind.
+export const bitcoinAssetFields = {
+  network: z.literal("bitcoin"), kind: z.literal(["native", "bitcoin"]).transform(() => "native" as const),
+  symbol: z.literal("BTC"), decimals: z.literal(8),
+};
+const nearFunding = z.object({ noteType: z.literal("public"), discovery: z.literal("recipient-tag"), memo: z.literal("none") });
+const nearRelease = z.object({
+  environment: z.literal("mainnet"), evidenceDate: z.string().date(),
+  routes: z.array(z.object({
+    id: z.string().regex(/^mainnet:near-miden-[a-z0-9]+-to-[a-z]+-[a-z0-9]+$/),
+    receiveId: z.string().regex(/^mainnet:near-[a-z]+-[a-z0-9]+-to-miden-[a-z0-9]+$/).optional(),
+    source: z.object({ ...nearMetadata, network: z.literal("miden-mainnet"), kind: z.literal("miden"), faucetId: account }),
+    destination: z.union([
+      z.object({ ...nearMetadata, ...bitcoinAssetFields, assetId: z.literal("1cs_v1:btc:native:coin") }),
+      z.object({ ...nearMetadata, network: z.enum(["ethereum", "base", "arbitrum", "polygon", "robinhood"]), kind: z.literal("native") }),
+      z.object({ ...nearMetadata, network: z.enum(["ethereum", "base", "arbitrum", "polygon", "robinhood"]), kind: z.literal("erc20"), address }),
+    ]),
+  }).refine(route => route.destination.network !== "bitcoin" || route.source.symbol === "wBTC", "Unsupported Bitcoin pair")
+    .refine(route => !route.receiveId || route.receiveId === `mainnet:near-${route.destination.network}-${route.destination.symbol.toLowerCase()}-to-miden-${route.source.symbol.toLowerCase()}`,
+    "NEAR deposit route identity mismatch")).min(1),
+});
+export const nearConfigSchema = z.discriminatedUnion("version", [
+  nearRelease.extend({ version: z.literal([1, 2]), funding: nearFunding.extend({ script: z.literal("p2id") }) }),
+  nearRelease.extend({ version: z.literal(3), funding: nearFunding.extend({
+    script: z.literal("p2ide"), reclaimBlocks: uint32.positive(),
+  }) }),
+]).refine(config => {
+  const ids = config.routes.flatMap(route => route.receiveId ? [route.id, route.receiveId] : [route.id]);
+  return new Set(ids).size === ids.length;
+}, "Duplicate NEAR route");
+
+const bridgeConfig = z.object({
   schemaVersion: z.literal(1),
   id: z.string().max(80),
   environment: environmentSchema,
+  near: nearConfigSchema.optional(),
   document: walletDocumentSchema,
   derived: z.object({
     rollupId: z.int().positive().max(0xffffffff),
@@ -232,7 +265,33 @@ export const bridgeConfigSchema = z.object({
       midenDecimals: decimals,
     })).max(32).optional(),
   }),
-}).superRefine((config, ctx) => {
+});
+
+function nearSource(config: z.infer<typeof bridgeConfig>, symbol: string) {
+  if (symbol === "USDCx") return { faucetId: config.derived.usdcxFaucetId, decimals: 6 };
+  if (symbol === "ETH") return config.derived.eth;
+  const token = config.derived.agglayerTokens?.find(token => token.symbol.toLowerCase() === symbol.toLowerCase());
+  return token && { faucetId: token.faucetId, decimals: token.midenDecimals };
+}
+
+/** Release validation is separate from historic recovery schemas for unrelated providers. */
+export function assertNearConfig(config: z.infer<typeof bridgeConfig>) {
+  if (!config.near) return;
+  if (config.environment !== "mainnet") throw new Error("NEAR is mainnet only");
+  if (config.near.funding.script !== "p2ide") throw new Error("New NEAR deposits require P2IDE funding");
+  config.near.routes.forEach(route => {
+    const known = nearSource(config, route.source.symbol);
+    if (known?.faucetId !== route.source.faucetId || known?.decimals !== route.source.decimals) throw new Error("NEAR source does not match the pinned Miden deployment");
+    if (route.destination.network !== "bitcoin" && !config.document.supportedEvmChains[route.destination.network]) throw new Error("Unsupported NEAR destination");
+    const sourceId = route.destination.network === "bitcoin"
+      ? `1cs_v1:miden:ft:${route.source.faucetId}`
+      : `nep141:miden-${route.source.faucetId}.omft.near`;
+    if (route.source.assetId !== sourceId) throw new Error("NEAR faucet/asset ID mismatch");
+  });
+}
+
+export const bridgeConfigSchema = bridgeConfig.superRefine((config, ctx) => {
+  if (config.near && config.environment !== "mainnet") invalid(ctx, ["near"], "NEAR is mainnet only");
   if (config.environment !== config.document.network) {
     invalid(ctx, ["environment"], "Configuration identity mismatch");
   }

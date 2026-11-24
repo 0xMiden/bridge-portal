@@ -44,7 +44,7 @@ export function presentActivity(activity: BridgeActivity): ProviderActivityPrese
     direction.steps.map((step) => ({ ...step, detail: step.detail.replaceAll("{asset}", asset) })),
     { consumeNote: direction.consumeNote },
   );
-  progress.canRefresh = progress.live;
+  progress.canRefresh = progress.live || Boolean(details.settlementPending);
   progress.deliveryWarningAt =
     progress.live && direction.deliveryWarningMs
       ? activityStartedAt(activity) + direction.deliveryWarningMs

@@ -54,7 +54,7 @@ export async function stubNetwork(
   // Unconfigured quote providers are unavailable; individual scenarios supply
   // their responses without contacting the live allocators.
   await page.route(/epochprotocol\.xyz/, (route) => route.abort());
-  await page.route(/\/api\/xreserve\/(?:quote|withdrawal-quote)$/, route =>
+  await page.route(/\/api\/(?:xreserve\/(?:quote|withdrawal-quote)|near\/quote)$/, route =>
     route.fulfill({ status: 503, json: { error: "Quote unavailable" } }));
   // Faucet metadata is unavailable in these UI scenarios; production fallback
   // uses configured precision. WASM canonicalization still runs normally.

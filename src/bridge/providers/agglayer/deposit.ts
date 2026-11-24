@@ -1,6 +1,6 @@
 import { createPublicClient, erc20Abi, parseUnits, toHex, type Hex } from "viem";
 import type { BridgeRoute } from "../../core/routes";
-import type { EvmAsset } from "../../core/assets";
+import { isEvmAsset, type EvmAsset } from "../../core/assets";
 import { suggestEvmFees } from "../../evm/fee-suggestions";
 import { evmReadTransport } from "../../evm/transport";
 import type { EvmProvider } from "../../../wallets/evm/evm-wallet";
@@ -60,7 +60,7 @@ export async function submitAgglayerDeposit(request: DepositRequest) {
   const { route, amount, destination, provider, phase } = request;
   const config = agglayerConfig(route.recovery);
   const asset = route.source;
-  if (asset.kind === "miden" || asset.network !== config.evmNetwork) throw new Error("Invalid Agglayer deposit route.");
+  if (!isEvmAsset(asset) || asset.network !== config.evmNetwork) throw new Error("Invalid Agglayer deposit route.");
   const transaction = buildDepositTransaction({ amount, asset, midenAccountId: destination }, route.recovery);
   const wallet = depositWallet(request, config);
   await ensureEvmNetwork(provider, config.chain);

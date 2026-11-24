@@ -1,3 +1,4 @@
+import { requireEvmWallet } from "../../../wallets/bridge-wallet";
 import { activityRoute } from "../../core/routes";
 import { epochRouteAssets } from "./bridgeable-token";
 import { MIDEN_DESTINATION_CHAIN_ID } from "./config";
@@ -34,8 +35,7 @@ export const flows: ProviderFlows = {
       return quoteEpochReceive(input);
     },
     async submit(context) {
-      const provider = context.input.evmWallet.provider;
-      if (!provider) throw new Error("Connect your Ethereum wallet.");
+      const { provider } = requireEvmWallet(context.input.externalWallet);
       if (!context.input.midenAccount)
         throw new Error("Connect your Bread wallet or paste a Miden account to receive into.");
       await ensureEvmNetwork(provider, epochRouteAssets(context.route).chain);
@@ -49,9 +49,9 @@ export const flows: ProviderFlows = {
       return quoteEpochSend(input);
     },
     async submit(context) {
-      if (!/^0x[0-9a-fA-F]{40}$/.test(context.input.evmAddress))
+      if (!/^0x[0-9a-fA-F]{40}$/.test(context.input.externalAddress))
         throw new Error("Enter a valid EVM (0x…) address, or connect your wallet.");
-      await execute(context, context.input.evmAddress);
+      await execute(context, context.input.externalAddress);
     },
     monitor: intentMonitor(),
   },
@@ -66,9 +66,9 @@ async function execute(
   const accounts = {
     destination,
     midenAccount: input.midenAccount,
-    evmAddress: input.evmAddress,
+    evmAddress: input.externalAddress,
     midenAccountHex: route.mode === "receive" ? midenAccountLink(destination) : undefined,
-    epochSponsor: input.evmAddress,
+    epochSponsor: input.externalAddress,
   };
   let submitted = false;
   let pendingRequestId: string | undefined;
@@ -77,7 +77,7 @@ async function execute(
     amount: input.amount,
     minReceived: input.quote.received,
     midenAccount: input.midenAccount,
-    evmAddress: input.evmAddress,
+    evmAddress: input.externalAddress,
     requestTransaction: input.midenWallet.requestTransaction,
     waitForTransaction: input.midenWallet.waitForTransaction,
     onSubmitted: (source) => {
