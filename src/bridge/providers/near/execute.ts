@@ -8,7 +8,7 @@ import { prepareBitcoinDeposit } from "./bitcoin-deposit";
 import { normalizeMidenAccountHex } from "../../miden-address";
 import { getMidenBlockInfo } from "../../miden-rpc";
 import { nearInput, nearPair, nearQuoteExpiry, validateNearDeposit, validateNearTxHash, verifyNearQuote } from "./quote";
-import { nearPost } from "./client";
+import { nearPost, notifyNearDeposit } from "./client";
 import type { NearInput, NearOperation, NearQuoteResponse } from "./schema";
 
 async function checkBalance(context: SubmissionContext, units: bigint) {
@@ -72,11 +72,14 @@ async function requestFunding(context: SubmissionContext, operation: NearOperati
   }
 }
 
-async function notifyDeposit(context: SubmissionContext, operation: NearOperation, txHash: string) {
-  try {
-    await nearPost("deposit/submit", { routeId: context.route.id, quote: operation.quote, txHash });
-    context.update({ near: { ...operation, notification: "sent" } });
-  } catch { /* The monitor retries this notification without requesting another payment. */ }
+function fundedOperation(operation: NearOperation, submission: "accepted" | "confirmed") {
+  // Save the retry time with the wallet hash so receipt polling cannot race the first notification.
+  return { ...operation, submission, notificationRetryAt: Date.now() + 30_000 };
+}
+
+async function notifyDeposit(context: SubmissionContext, operation: ReturnType<typeof fundedOperation>, txHash: string) {
+  const result = await notifyNearDeposit({ routeId: context.route.id, quote: operation.quote, txHash }, operation.notificationRetryAt);
+  context.update({ near: { ...operation, ...result } });
 }
 
 async function prepareExternalDeposit(context: SubmissionContext, quote: NearQuoteResponse) {
@@ -99,7 +102,7 @@ async function submitExternalDeposit(context: SubmissionContext, binding: NearIn
   context.phase(deposit.prompt);
   const hash = await requestFunding(context, operation, deposit.prepareSend);
   const sourceTxHash = validateNearTxHash(context.route.source, hash);
-  const accepted = { ...operation, submission: "accepted" as const };
+  const accepted = fundedOperation(operation, "accepted");
   await context.persist({ sourceTxHash, near: accepted });
   const source = context.route.source;
   async function saveEvmIdentity() {
@@ -133,7 +136,7 @@ async function submitMidenDeposit(context: SubmissionContext, binding: NearInput
   if (!confirmed.outputNotes?.some(note => note.id().toString() === deposit.noteId) || !/^0x[\da-f]{64}$/i.test(confirmed.txHash)) {
     throw new Error("The wallet response could not confirm this deposit. Keep the receipt and check its status.");
   }
-  const funded = { ...operation, submission: "confirmed" as const };
+  const funded = fundedOperation(operation, "confirmed");
   context.update({ sourceTxHash: confirmed.txHash, midenTxId: confirmed.txHash, near: funded });
   await notifyDeposit(context, funded, confirmed.txHash);
 }

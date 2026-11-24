@@ -165,6 +165,18 @@ it("sanitizes authorization errors and preserves the service correlation ID", as
   expect(await response.json()).toEqual({ correlationId: "near-reference-123", error: "NEAR could not authorize this quote. Contact support with the reference." });
 });
 
+it.each([[400, 422], [503, 502]])("reports a 1Click deposit notification failure (%i) with its reference", async (upstreamStatus, expectedStatus) => {
+  const diagnostic = vi.spyOn(console, "warn").mockImplementation(() => {});
+  const quote = nearQuoteFixture();
+  fetcher.mockResolvedValueOnce(Response.json({ message: "private upstream details", correlationId: "near-submit-ref" }, { status: upstreamStatus }));
+  const response = await deposit(request({ routeId: nearTestInput.routeId, quote, txHash: nearTxHash }));
+  expect(response.status).toBe(expectedStatus);
+  expect(await response.json()).toEqual({ error: expect.stringContaining("deposit notification"), correlationId: "near-submit-ref" });
+  expect(diagnostic).toHaveBeenCalledWith("[near] deposit notification failed", {
+    reason: "upstream_http", upstreamStatus, correlationId: "near-submit-ref",
+  });
+});
+
 it.each([
   [400, "No liquidity available", 422, "NEAR has no liquidity for this route right now. Try another provider or retry later."],
   [400, "Unrecognized upstream details containing private credentials", 502, "NEAR has no available quote for this transfer. Try another amount or provider."],

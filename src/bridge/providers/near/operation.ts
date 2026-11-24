@@ -31,6 +31,8 @@ export function mergeNearActivityPatch(activity: Activity, patch: Partial<Activi
     submission: submissionOrder[current.submission] > submissionOrder[incoming.submission] ? current.submission : incoming.submission,
     fundingIssue: incoming.fundingIssue ?? current.fundingIssue,
     notification: current.notification === "sent" ? "sent" : incoming.notification,
+    notificationRetryAt: current.notificationRetryAt === null || incoming.notificationRetryAt === null
+      ? null : current.notificationRetryAt ?? incoming.notificationRetryAt,
     finalizedEvmTxHash: observation.finalizedEvmTxHash ?? current.finalizedEvmTxHash,
     originTxHashes: observation.originTxHashes?.length ? observation.originTxHashes : current.originTxHashes,
     destinationTxHashes: observation.destinationTxHashes?.length ? observation.destinationTxHashes : current.destinationTxHashes,

@@ -18,7 +18,7 @@ const upstreamStatusSchema = nearStatusResponseSchema.extend({
 });
 
 class NearApiError extends Error {
-  constructor(message: string, readonly status: number, readonly correlationId?: string) { super(message); }
+  constructor(message: string, readonly status: number, readonly correlationId?: string, readonly upstreamStatus?: number) { super(message); }
 }
 
 async function boundedJson(message: Request): Promise<unknown> {
@@ -52,6 +52,12 @@ async function upstream<T>(operation: "quote" | "status" | "deposit", start: () 
   } catch (error) {
     if (!(error instanceof ApiError)) throw error;
     const id = nearCorrelationId.safeParse(error.body?.correlationId);
+    if (operation === "deposit") {
+      const rejected = [400, 409, 422].includes(error.status);
+      const message = rejected ? "NEAR declined the deposit notification. Tracking continues from this receipt."
+        : "NEAR could not acknowledge the deposit notification. Tracking continues from this receipt.";
+      throw new NearApiError(message, rejected ? 422 : 502, id.data, error.status);
+    }
     if (operation === "quote" && error.status === 400 && error.body?.message === "No liquidity available") {
       throw new NearApiError("NEAR has no liquidity for this route right now. Try another provider or retry later.", 422, id.success ? id.data : undefined);
     }
@@ -158,7 +164,14 @@ export async function handleNearRequest(request: Request, operation: "quote" | "
     return Response.json(result, { headers });
   } catch (error) {
     const known = error instanceof NearApiError ? error : undefined;
+    const reference = known?.correlationId ?? correlationId;
+    if (operation === "deposit" && known?.status !== 400 && !request.signal.aborted) {
+      console.warn("[near] deposit notification failed", {
+        reason: known?.upstreamStatus ? "upstream_http" : known ? "invalid_response" : "transport",
+        upstreamStatus: known?.upstreamStatus, correlationId: reference,
+      });
+    }
     return Response.json({ error: known?.message ?? "NEAR is unavailable. Keep this receipt and retry; do not deposit again.",
-      correlationId: known?.correlationId ?? correlationId }, { status: known?.status ?? 502, headers });
+      correlationId: reference }, { status: known?.status ?? 502, headers });
   }
 }

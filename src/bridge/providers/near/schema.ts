@@ -61,6 +61,8 @@ export const nearOperationSchema = z.object({
   fundingIssue: z.literal("leather_signing_account").optional(),
   status: nearStatusSchema,
   notification: z.enum(["pending", "sent"]),
+  // Legacy receipts have no retry time. Null closes automatic notification attempts.
+  notificationRetryAt: z.number().int().nonnegative().nullable().optional(),
   networkFee: z.string().max(100).optional(),
   statusUpdatedAt: z.iso.datetime().optional(),
   finalizedEvmTxHash: z.string().regex(/^0x[\da-f]{64}$/i).optional(),

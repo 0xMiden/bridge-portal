@@ -53,6 +53,7 @@ function setup(binding = bitcoinReceiveInput) {
 }
 
 it("saves the attempt before one Bitcoin payment, resumes after reload and tracks native hashes through delivery", async () => {
+  vi.useFakeTimers({ toFake: ["Date"] });
   const test = setup();
   test.sendTransfer.mockImplementation(async () => {
     expect(loadStoredActivities()[0]).toMatchObject({ near: { submission: "attempted", status: "PENDING_DEPOSIT" } });
@@ -75,6 +76,7 @@ it("saves the attempt before one Bitcoin payment, resumes after reload and track
   expect(loadStoredActivities()).toHaveLength(1);
   expect(test.sendTransfer).toHaveBeenCalledTimes(1);
   fetcher.mockImplementation(async path => String(path).endsWith("status") ? Response.json(nearStatus(test.quote)) : Response.json({}));
+  vi.setSystemTime(Date.now() + 30_000);
   const notified = await nearMonitor.observe(saved, new AbortController().signal);
   test.effects.activities.patch(saved.id, notified.patch);
   expect(loadStoredActivities()[0].near?.notification).toBe("sent");

@@ -25,7 +25,7 @@ beforeEach(() => {
   vi.stubGlobal("navigator", { locks: { request: async (_name: string, callback: () => Promise<void>) => callback() } });
   vi.stubGlobal("fetch", fetcher); fetcher.mockReset();
 });
-afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); });
+afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); vi.useRealTimers(); });
 
 function setup(bitcoin = false) {
   const transferInput = bitcoin ? { ...nearTestInput, externalAddress: bitcoinAddress, amount: "0.001",
@@ -85,33 +85,48 @@ function setup(bitcoin = false) {
   return { input, effects, quote, requestTransaction, waitForTransaction, requestAssets, evmRequest, assertBitcoinAccount };
 }
 
-it("persists the public P2IDE and retries notifications without a second deposit", async () => {
+it.each([
+  { first: 502, retry: 200, attempts: 2, notification: "sent" },
+  { first: 502, retry: 502, attempts: 2, notification: "pending" },
+  { first: 422, retry: 200, attempts: 1, notification: "pending" },
+])("keeps tracking one P2IDE deposit after notification responses $first/$retry", async ({ first, retry, attempts, notification }) => {
+  vi.useFakeTimers({ toFake: ["Date"] });
   const test = setup();
-  // Optional notification failure must leave the successful wallet submission intact.
-  fetcher.mockImplementation(async path => String(path).endsWith("prepare") ? Response.json(test.quote) : Response.json({ error: "Temporary outage" }, { status: 503 }));
+  let notifications = 0;
+  let statusPolls = 0;
+  fetcher.mockImplementation(async path => {
+    if (String(path).endsWith("prepare")) return Response.json(test.quote);
+    if (String(path).endsWith("status")) {
+      statusPolls++;
+      return Response.json(nearStatus(test.quote));
+    }
+    const status = ++notifications === 1 ? first : retry;
+    return Response.json({}, { status });
+  });
   await submitBridgeTransfer(test.input, test.effects);
   expect(test.effects.onError).not.toHaveBeenCalled();
   const saved = loadStoredActivities()[0];
   expect(saved).toMatchObject({ sourceTxHash: nearTxHash, destination: nearTestInput.externalAddress, midenWalletRequestId: "near-wallet-request", near: { submission: "confirmed", notification: "pending", networkFee: "0.003 USDCx" } });
+  expect(notifications).toBe(1);
   test.effects.activities = new ActivityStore(activityPersistence); test.effects.activities.sync();
   await submitBridgeTransfer(test.input, test.effects);
-  expect(test.requestTransaction).toHaveBeenCalledTimes(1);
 
-  fetcher.mockImplementation(async path => String(path).endsWith("status")
-    ? Response.json(nearStatus(test.quote)) : Response.json({ error: "Temporary outage" }, { status: 503 }));
-  const observed = await nearMonitor.observe(saved, new AbortController().signal);
-  expect(observed.warning).toBeUndefined();
-  test.effects.activities.patch(saved.id, observed.patch);
-  const pending = loadStoredActivities()[0];
-  expect(pending).toMatchObject({ status: "source_finality", sourceTxHash: nearTxHash, near: { notification: "pending" } });
-  expect(nearMonitor.canPoll(pending)).toBe(true);
-
-  fetcher.mockImplementation(async path => String(path).endsWith("status")
-    ? Response.json(nearStatus(test.quote)) : Response.json({}));
-  const retried = await nearMonitor.observe(pending, new AbortController().signal);
-  expect(retried.warning).toBeUndefined();
-  test.effects.activities.patch(saved.id, retried.patch);
-  expect(loadStoredActivities()[0].near?.notification).toBe("sent");
+  const submittedAt = Date.now();
+  for (const elapsed of [5_000, 25_000, 30_000, 60_000, 120_000]) {
+    vi.setSystemTime(submittedAt + elapsed);
+    const observed = await nearMonitor.observe(loadStoredActivities()[0], new AbortController().signal);
+    expect(observed.warning).toBeUndefined();
+    test.effects.activities.patch(saved.id, observed.patch);
+    expect(notifications).toBe(elapsed < 30_000 ? 1 : attempts);
+  }
+  expect(statusPolls).toBe(5);
+  expect(loadStoredActivities()[0]).toMatchObject({ status: "source_finality", sourceTxHash: nearTxHash, near: { notification } });
+  fetcher.mockResolvedValueOnce(Response.json({ ...nearStatus(test.quote, "SUCCESS"), swapDetails: {
+    originChainTxHashes: [{ hash: nearTxHash }], destinationChainTxHashes: [{ hash: `0x${"cd".repeat(32)}` }], amountOut: "4970000",
+  } }));
+  const delivered = await nearMonitor.observe(loadStoredActivities()[0], new AbortController().signal);
+  test.effects.activities.patch(saved.id, delivered.patch);
+  expect(loadStoredActivities()[0]).toMatchObject({ status: "complete", receivedAmount: "4.97" });
   expect(test.requestTransaction).toHaveBeenCalledTimes(1);
 });
 

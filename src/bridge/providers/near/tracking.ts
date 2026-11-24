@@ -1,6 +1,6 @@
 import { formatUnits } from "viem";
 import type { ActivityMonitor } from "../../core/provider";
-import { nearPost } from "./client";
+import { nearPost, notifyNearDeposit } from "./client";
 import { nearStatusResponseSchema } from "./schema";
 import { nearReceiptAssets, nearTrackingInput, verifySignedNearQuote, validateNearTxHash } from "./quote";
 import { observeNearEvmSource } from "./evm-source";
@@ -17,7 +17,6 @@ export const nearMonitor: ActivityMonitor = {
     if (!activity.near || !activity.routeId) return { patch: {} };
     const operation = activity.near;
     const body = { routeId: activity.routeId, quote: operation.quote };
-    let notification = operation.notification;
     try {
       const status = nearStatusResponseSchema.parse(await nearPost("status", body, signal));
       const pair = nearReceiptAssets(body.routeId, body.quote);
@@ -35,12 +34,12 @@ export const nearMonitor: ActivityMonitor = {
       const source = activity.mode === "receive" && waiting && awaitsNearDeposit(operation.status)
         ? await observeNearEvmSource(sourceActivity, signal) : { patch: {} };
       if (source.patch.failureLeg === "source") return { ...source, patch: { sourceTxHash: detected, ...source.patch } };
-      // Detection is authoritative. Retry the optional notification silently
-      // until NEAR detects the deposit.
-      if (status.status === "PENDING_DEPOSIT" && activity.sourceTxHash && notification === "pending") {
-        try { await nearPost("deposit/submit", { ...body, txHash: source.patch.sourceTxHash ?? activity.sourceTxHash }, signal); notification = "sent"; }
-        catch { signal.throwIfAborted(); }
-      }
+      // A pending receipt gets one delayed notification retry. Only status establishes delivery.
+      const retryAt = operation.notificationRetryAt;
+      const txHash = source.patch.sourceTxHash ?? activity.sourceTxHash;
+      const notification = status.status === "PENDING_DEPOSIT" && operation.status === "PENDING_DEPOSIT" && txHash &&
+        operation.notification === "pending" && retryAt !== null && (retryAt ?? 0) <= Date.now()
+        ? await notifyNearDeposit({ ...body, txHash }, null, signal) : undefined;
       const destinationTxHash = status.status === "SUCCESS" ? status.swapDetails.destinationChainTxHashes[0]?.hash : undefined;
       return { warning: source.warning, patch: {
         ...source.patch,
@@ -49,7 +48,7 @@ export const nearMonitor: ActivityMonitor = {
         midenTxId: activity.mode === "receive" ? destinationTxHash : undefined,
         receivedAmount: status.status === "SUCCESS" && status.swapDetails.amountOut !== undefined
           ? formatUnits(BigInt(status.swapDetails.amountOut), pair.destination.decimals) : undefined,
-        near: { ...(source.patch.near ?? operation), notification, status: status.status, statusUpdatedAt: status.updatedAt,
+        near: { ...(source.patch.near ?? operation), ...notification, status: status.status, statusUpdatedAt: status.updatedAt,
           originTxHashes: status.swapDetails.originChainTxHashes.map(tx => tx.hash),
           destinationTxHashes: status.swapDetails.destinationChainTxHashes.map(tx => tx.hash),
           submission: !waiting && status.status !== "FAILED" ? "confirmed" : source.patch.near?.submission ?? operation.submission,
@@ -63,7 +62,7 @@ export const nearMonitor: ActivityMonitor = {
       const source = activity.mode === "receive" && awaitsNearDeposit(operation.status)
         ? await observeNearEvmSource(activity, signal) : { patch: {} };
       if (source.patch.failureLeg === "source") return source;
-      return { patch: { ...source.patch, near: { ...(source.patch.near ?? operation), notification } },
+      return { patch: source.patch,
         warning: operation.status === "SUCCESS" ? "Delivery was confirmed. The settled amount could not be refreshed."
           : `${error instanceof Error ? error.message : "NEAR status is unavailable."} Transfer remains pending. Retry here; do not send another deposit.` };
     }
