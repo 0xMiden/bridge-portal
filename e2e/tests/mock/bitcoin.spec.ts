@@ -203,6 +203,8 @@ test("Bitcoin withdrawal reviews the recipient, funds once through Bread and res
   let allocations = 0;
   let funded = false;
   let delivered = false;
+  let outputNoteId: string;
+  const notifiedHashes: string[] = [];
   await page.route("**/api/near/quote", route => route.fulfill({ json: sendPreview }));
   await page.route("**/api/near/prepare", route => {
     const body = route.request().postDataJSON();
@@ -213,7 +215,9 @@ test("Bitcoin withdrawal reviews the recipient, funds once through Bread and res
     return route.fulfill({ json: sendPrepared });
   });
   await page.route("**/api/near/deposit/submit", route => {
-    expect(route.request().postDataJSON()).toMatchObject({ quote: sendPrepared, txHash: SOURCE_TX });
+    const body = route.request().postDataJSON();
+    expect(body.quote).toEqual(sendPrepared);
+    notifiedHashes.push(body.txHash);
     return route.fulfill({ json: {} });
   });
   await page.route("**/api/near/status", route => {
@@ -221,7 +225,7 @@ test("Bitcoin withdrawal reviews the recipient, funds once through Bread and res
     return route.fulfill({ json: {
       correlationId: "bitcoin-withdrawal-browser-status", quoteResponse: sendPrepared,
       status: delivered ? "SUCCESS" : funded ? "KNOWN_DEPOSIT_TX" : "PENDING_DEPOSIT", updatedAt: sendPrepared.timestamp,
-      swapDetails: { originChainTxHashes: funded ? [{ hash: SOURCE_TX }] : [],
+      swapDetails: { originChainTxHashes: funded ? [{ hash: outputNoteId }] : [],
         destinationChainTxHashes: delivered ? [{ hash: "cd".repeat(32) }] : [], amountOut: delivered ? "97848" : null },
     } });
   });
@@ -238,10 +242,11 @@ test("Bitcoin withdrawal reviews the recipient, funds once through Bread and res
       } });
       const notes = sdk.TransactionRequest.deserialize(Buffer.from(transaction.payload.transactionRequest, "base64")).expectedOutputOwnNotes();
       expect(notes).toHaveLength(1);
+      outputNoteId = notes[0].id().toString();
       expect(notes[0].metadata().noteType()).toBe(sdk.NoteType.Public);
       expect(notes[0].assets().fungibleAssets().map(asset => [asset.faucetId().toString(), asset.amount()])).toEqual([[faucetId, 100000n]]);
       const receipts = await page.evaluate(() => JSON.parse(localStorage.getItem("miden.bridge.ui.activities.v3") ?? "[]"));
-      expect(receipts).toMatchObject([{ midenNoteId: notes[0].id().toString(), near: { submission: "attempted", quote: sendPrepared } }]);
+      expect(receipts).toMatchObject([{ midenNoteId: outputNoteId, near: { submission: "attempted", quote: sendPrepared } }]);
       const reclaimHeight = blockHeader.blockNumber + receipts[0].routeSnapshot.recovery.near.funding.reclaimBlocks;
       expect(notes[0].recipient().storage().items()[4].asInt()).toBe(BigInt(reclaimHeight));
       outputNote = Buffer.from(notes[0].serialize()).toString("base64");
@@ -269,6 +274,7 @@ test("Bitcoin withdrawal reviews the recipient, funds once through Bread and res
   await expect.poll(() => requests.map(request => request.method)).toEqual(["requestTransaction", "waitForTransaction"]);
   await expect(page).toHaveURL(/\/activity\//);
   await expect(page.getByRole("link", { name: "View on Midenscan" })).toHaveAttribute("href", new RegExp(SOURCE_TX));
+  await expect.poll(() => notifiedHashes).toEqual([outputNoteId!]);
   const receiptUrl = page.url();
   await page.reload();
   await expect(page).toHaveURL(receiptUrl);

@@ -28,7 +28,8 @@ export const nearMonitor: ActivityMonitor = {
       // A refund may also appear on the origin chain. Only a single deposit is unambiguous.
       const funded = status.status === "PROCESSING" || status.status === "SUCCESS";
       const singleDeposit = status.status !== "REFUNDED" && status.swapDetails.originChainTxHashes.length === 1;
-      const detected = singleDeposit && (!activity.sourceTxHash || (activity.mode === "receive" && funded))
+      // A Miden origin hash in 1Click identifies a note. Only Bread supplies its transaction ID.
+      const detected = activity.mode === "receive" && singleDeposit && (!activity.sourceTxHash || funded)
         ? status.swapDetails.originChainTxHashes[0].hash : undefined;
       const sourceActivity = !activity.sourceTxHash && detected ? { ...activity, sourceTxHash: detected } : activity;
       const source = activity.mode === "receive" && waiting && awaitsNearDeposit(operation.status)
@@ -36,10 +37,12 @@ export const nearMonitor: ActivityMonitor = {
       if (source.patch.failureLeg === "source") return { ...source, patch: { sourceTxHash: detected, ...source.patch } };
       // A pending receipt gets one delayed notification retry. Only status establishes delivery.
       const retryAt = operation.notificationRetryAt;
-      const txHash = source.patch.sourceTxHash ?? activity.sourceTxHash;
-      const notification = status.status === "PENDING_DEPOSIT" && operation.status === "PENDING_DEPOSIT" && txHash &&
+      const sourceHash = source.patch.sourceTxHash ?? activity.sourceTxHash;
+      const depositHash = activity.mode === "send" ? activity.midenNoteId : sourceHash;
+      // The note ID is saved before the wallet prompt. Wait for the source transaction before notifying.
+      const notification = status.status === "PENDING_DEPOSIT" && operation.status === "PENDING_DEPOSIT" && sourceHash && depositHash &&
         operation.notification === "pending" && retryAt !== null && (retryAt ?? 0) <= Date.now()
-        ? await notifyNearDeposit({ ...body, txHash }, null, signal) : undefined;
+        ? await notifyNearDeposit({ ...body, txHash: depositHash }, null, signal) : undefined;
       const destinationTxHash = status.status === "SUCCESS" ? status.swapDetails.destinationChainTxHashes[0]?.hash : undefined;
       return { warning: source.warning, patch: {
         ...source.patch,

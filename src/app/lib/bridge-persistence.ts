@@ -12,6 +12,7 @@ import { nearMidenAddress, nearOperationSchema } from "../../bridge/providers/ne
 import { awaitsNearDeposit, nearExpectedAmount } from "../../bridge/providers/near/operation";
 import { isEvmAsset } from "../../bridge/core/assets";
 import { normalizeMidenAccountHex } from "../../bridge/miden-address";
+import { shortAddress } from "../../wallets/identity";
 
 export const activityStorageKey = "miden.bridge.ui.activities.v3";
 const legacyActivityStorageKey = "miden.bridge.ui.activities.v2";
@@ -106,6 +107,11 @@ function normalizeStoredActivity(activity: Activity): Activity | undefined {
     const operation = nearOperationSchema.safeParse(activity.near);
     if (!operation.success) return;
     const near = operation.data;
+    // Earlier monitors could save 1Click's Miden note ID as the wallet transaction hash.
+    if (activity.mode === "send" && activity.midenNoteId && activity.sourceTxHash === activity.midenNoteId) {
+      const walletTx = activity.midenTxId !== activity.midenNoteId ? activity.midenTxId : undefined;
+      activity = { ...activity, sourceTxHash: walletTx, txHash: walletTx ? shortAddress(walletTx) : "0xpending" };
+    }
     if (isEvmAsset(routeSnapshot.source) && (typeof activity.sourceTxHash !== "string" ||
         near.finalizedEvmTxHash?.toLowerCase() !== activity.sourceTxHash.toLowerCase())) {
       // Older receipts could stop tracking on an unfinalized cancellation or revert.

@@ -92,22 +92,23 @@ it.each([
 ])("keeps tracking one P2IDE deposit after notification responses $first/$retry", async ({ first, retry, attempts, notification }) => {
   vi.useFakeTimers({ toFake: ["Date"] });
   const test = setup();
-  let notifications = 0;
+  const notifiedHashes: string[] = [];
   let statusPolls = 0;
-  fetcher.mockImplementation(async path => {
+  fetcher.mockImplementation(async (path, init) => {
     if (String(path).endsWith("prepare")) return Response.json(test.quote);
     if (String(path).endsWith("status")) {
       statusPolls++;
       return Response.json(nearStatus(test.quote));
     }
-    const status = ++notifications === 1 ? first : retry;
+    notifiedHashes.push(JSON.parse(String(init?.body)).txHash);
+    const status = notifiedHashes.length === 1 ? first : retry;
     return Response.json({}, { status });
   });
   await submitBridgeTransfer(test.input, test.effects);
   expect(test.effects.onError).not.toHaveBeenCalled();
   const saved = loadStoredActivities()[0];
   expect(saved).toMatchObject({ sourceTxHash: nearTxHash, destination: nearTestInput.externalAddress, midenWalletRequestId: "near-wallet-request", near: { submission: "confirmed", notification: "pending", networkFee: "0.003 USDCx" } });
-  expect(notifications).toBe(1);
+  expect(notifiedHashes).toEqual([saved.midenNoteId]);
   test.effects.activities = new ActivityStore(activityPersistence); test.effects.activities.sync();
   await submitBridgeTransfer(test.input, test.effects);
 
@@ -117,16 +118,17 @@ it.each([
     const observed = await nearMonitor.observe(loadStoredActivities()[0], new AbortController().signal);
     expect(observed.warning).toBeUndefined();
     test.effects.activities.patch(saved.id, observed.patch);
-    expect(notifications).toBe(elapsed < 30_000 ? 1 : attempts);
+    expect(notifiedHashes).toEqual(Array(elapsed < 30_000 ? 1 : attempts).fill(saved.midenNoteId));
   }
   expect(statusPolls).toBe(5);
   expect(loadStoredActivities()[0]).toMatchObject({ status: "source_finality", sourceTxHash: nearTxHash, near: { notification } });
   fetcher.mockResolvedValueOnce(Response.json({ ...nearStatus(test.quote, "SUCCESS"), swapDetails: {
-    originChainTxHashes: [{ hash: nearTxHash }], destinationChainTxHashes: [{ hash: `0x${"cd".repeat(32)}` }], amountOut: "4970000",
+    originChainTxHashes: [{ hash: saved.midenNoteId }], destinationChainTxHashes: [{ hash: `0x${"cd".repeat(32)}` }], amountOut: "4970000",
   } }));
   const delivered = await nearMonitor.observe(loadStoredActivities()[0], new AbortController().signal);
   test.effects.activities.patch(saved.id, delivered.patch);
-  expect(loadStoredActivities()[0]).toMatchObject({ status: "complete", receivedAmount: "4.97" });
+  expect(loadStoredActivities()[0]).toMatchObject({ status: "complete", receivedAmount: "4.97", sourceTxHash: nearTxHash,
+    near: { originTxHashes: [saved.midenNoteId] } });
   expect(test.requestTransaction).toHaveBeenCalledTimes(1);
 });
 
@@ -145,6 +147,18 @@ it("retains wallet acceptance across reload and treats delayed status as pending
   test.effects.activities.patch(saved.id, observed.patch);
   expect(test.effects.activities.get(saved.id)?.activity.status).toBe("source_finality");
   expect(observed.warning).toMatch(/remains pending/);
+  fetcher.mockClear();
+  fetcher.mockResolvedValueOnce(Response.json(nearStatus(test.quote)));
+  await nearMonitor.observe(saved, new AbortController().signal);
+  expect(fetcher).toHaveBeenCalledOnce();
+  fetcher.mockResolvedValueOnce(Response.json({ ...nearStatus(test.quote, "KNOWN_DEPOSIT_TX"),
+    swapDetails: { originChainTxHashes: [{ hash: saved.midenNoteId }], destinationChainTxHashes: [] } }));
+  const detected = await nearMonitor.observe(saved, new AbortController().signal);
+  test.effects.activities.patch(saved.id, detected.patch);
+  const tracked = loadStoredActivities()[0];
+  expect(tracked.near?.originTxHashes).toEqual([saved.midenNoteId]);
+  expect(tracked.sourceTxHash).toBeUndefined();
+  expect(activityDetailFor(tracked).receipt.sourceLink.available).toBe(false);
 });
 
 it("stops before requesting funds when the reclaim height would overflow the on-chain block number", async () => {

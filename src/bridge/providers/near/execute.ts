@@ -138,7 +138,8 @@ async function submitMidenDeposit(context: SubmissionContext, binding: NearInput
   }
   const funded = fundedOperation(operation, "confirmed");
   context.update({ sourceTxHash: confirmed.txHash, midenTxId: confirmed.txHash, near: funded });
-  await notifyDeposit(context, funded, confirmed.txHash);
+  // 1Click indexes Miden deposits by public note ID. Bread's transaction ID is the explorer reference.
+  await notifyDeposit(context, funded, deposit.noteId);
 }
 
 /** Once a wallet attempt is durably claimed, only tracking may resume it. */

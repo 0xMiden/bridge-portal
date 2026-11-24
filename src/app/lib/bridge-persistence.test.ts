@@ -104,6 +104,21 @@ it.each([null, "", "null", "{}"])("returns no receipts for absent or non-array d
   expect(loadStoredActivities()).toEqual([]);
 });
 
+it.each([undefined, `0x${"ab".repeat(32)}`])("restores a Miden withdrawal whose old source hash was the note ID (wallet tx %s)", walletTx => {
+  const noteId = `0x${"cd".repeat(32)}`;
+  const route = findBridgeRoute("mainnet:near-miden-wbtc-to-bitcoin-btc")!;
+  const receipt = createActivity(route, "0.001", {
+    midenNoteId: noteId, sourceTxHash: noteId, midenTxId: walletTx,
+    near: { quote: nearQuoteSchema.parse(bitcoinQuotes.send.prepared), submission: "confirmed",
+      status: "SUCCESS", notification: "sent", originTxHashes: [noteId] },
+  });
+  storage.set(activityStorageKey, JSON.stringify([receipt]));
+  const [restored] = loadStoredActivities();
+  expect(restored.sourceTxHash).toBe(walletTx);
+  expect(restored.midenNoteId).toBe(noteId);
+  expect(restored.status).toBe("complete");
+});
+
 describe("route preferences", () => {
   it.each([
     "mainnet:agglayer:ethereum:0x2260fac5e5542a773aa44fbcfedf7c193bc2c599:receive",
