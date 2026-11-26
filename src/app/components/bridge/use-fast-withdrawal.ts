@@ -64,28 +64,28 @@ export function useFastWithdrawal(route: BridgeRoute, wallets: BridgeWallets) {
   }
 
   async function verify() {
-    if (!asset || !sponsor) return;
+    if (!asset || !sponsor) return true;
     let deposit: LockedDeposit;
     try {
       const { data } = await health.refetch({ throwOnError: true });
       if (!data) throw new Error("Missing Epoch configuration.");
       const currentLock = configuredRecoveryLock(asset, data);
-      const queryKey = ["compact-recovery", environment, sponsor, recoveryLockKey(currentLock)];
-      deposit = await readLockedDeposit(currentLock, sponsor);
-      queryClient.setQueryData(queryKey, deposit);
+      deposit = await queryClient.fetchQuery({
+        queryKey: ["compact-recovery", environment, sponsor, recoveryLockKey(currentLock)],
+        queryFn: () => readLockedDeposit(currentLock, sponsor),
+        retry: false,
+        staleTime: 0,
+      });
     } catch {
-      throw new Error("Could not check withdrawal status. Try again.");
+      // The transfer action reads the failed check from the query state.
+      return false;
     }
     if (deposit.status !== 0) throw new Error("Cancel the withdrawal to make a Fast deposit.");
-  }
-
-  async function refresh() {
-    if (health.isError || !lock) await health.refetch();
-    else await query.refetch();
+    return true;
   }
 
   const error = cancelError?.key === cancellationKey ? cancelError.message : "";
-  return { enabled, active, blocked, pending, error, failed, checking, disable, verify, refresh };
+  return { active, blocked, pending, error, failed, disable, verify };
 }
 
 export type FastWithdrawal = ReturnType<typeof useFastWithdrawal>;

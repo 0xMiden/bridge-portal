@@ -100,7 +100,7 @@ export function useBridgeTransfer(draft: { route: BridgeRoute; amount: string },
     const midenAsset = wallets.miden.balance.balance;
     const unlockNetworkSelection = lockNetworkSelection();
     try {
-      await withdrawal.verify();
+      if (!await withdrawal.verify()) return;
       await submitBridgeTransfer({
         routeId: reviewed.route.id, environment, amount: reviewed.amount, quote: reviewed.quote,
         ...reviewed.accounts,
